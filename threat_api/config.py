@@ -64,6 +64,9 @@ ENABLE_RSS = _get_bool("ENABLE_RSS", True)
 ENABLE_DARKWEB_OSINT = _get_bool("ENABLE_DARKWEB_OSINT", True)
 ENABLE_SOCIAL_OSINT = _get_bool("ENABLE_SOCIAL_OSINT", True)
 
+# CORS
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+
 # Files
 BUNDLE_PATH = os.getenv("BUNDLE_PATH", "stix_bundle.json")
 TRUST_CONFIG_PATH = os.getenv("TRUST_CONFIG_PATH", "source_trust_config.json")

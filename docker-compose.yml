@@ -1,22 +1,57 @@
 version: "3.9"
 
+# Copy .env.example to .env and fill in your values before running.
+
 services:
   threat_api:
     build:
       context: ./threat_api
     container_name: threat_api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
+      - threat_data:/app
       - ./threat_api:/app
+    environment:
+      - APP_API_KEY=${APP_API_KEY:?APP_API_KEY is required — copy .env.example to .env}
+      - OTX_API_KEY=${OTX_API_KEY:-}
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY:-}
+      - OPENCTI_URL=${OPENCTI_URL:-http://localhost:8080}
+      - OPENCTI_API_KEY=${OPENCTI_API_KEY:-}
+      - OPENCTI_ENABLED=${OPENCTI_ENABLED:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-120}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
     command: python main.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   log_api:
     build:
       context: ./log_api
     container_name: log_api
+    restart: unless-stopped
     ports:
       - "8001:8000"
     volumes:
+      - log_data:/app
       - ./log_api:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - LOG_DB_PATH=${LOG_DB_PATH:-log_api.db}
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  threat_data:
+  log_data:

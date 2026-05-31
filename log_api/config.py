@@ -37,3 +37,5 @@ REPORT_OUTPUT_PATH = os.getenv("REPORT_OUTPUT_PATH", "anomaly_report.html")
 MAX_EVENTS_PER_ALERT_IN_REPORT = int(os.getenv("MAX_EVENTS_PER_ALERT_IN_REPORT", "5"))
 
 SUPPORTED_FORMATS = ["syslog", "apache", "windows_event", "generic"]
+
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
