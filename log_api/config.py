@@ -8,6 +8,18 @@ def _get_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+# API auth — uses the same env vars as threat_api so a single .env covers both services.
+# USER_API_KEY  — analysts: submit logs, view results, view reports
+# ADMIN_API_KEY — admins: everything above (log_api has no write-only admin ops yet)
+#                 Falls back to USER_API_KEY when not set.
+USER_API_KEY = os.getenv("APP_API_KEY")
+if not USER_API_KEY:
+    raise ValueError(
+        "APP_API_KEY environment variable is required but not set."
+    )
+
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY") or USER_API_KEY
+
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 

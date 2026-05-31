@@ -15,6 +15,7 @@ services:
       - ./threat_api:/app
     environment:
       - APP_API_KEY=${APP_API_KEY:?APP_API_KEY is required — copy .env.example to .env}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - OTX_API_KEY=${OTX_API_KEY:-}
       - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY:-}
       - OPENCTI_URL=${OPENCTI_URL:-http://localhost:8080}

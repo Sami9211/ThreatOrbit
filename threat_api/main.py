@@ -13,7 +13,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from threat_api.config import (
-    API_HOST, API_PORT, APP_API_KEY, BUNDLE_PATH, CORS_ORIGINS, FLASK_DEBUG,
+    ADMIN_API_KEY, API_HOST, API_PORT, APP_API_KEY, BUNDLE_PATH, CORS_ORIGINS, FLASK_DEBUG,
     ENABLE_ABUSECH, ENABLE_DARKWEB_OSINT, ENABLE_OTX, ENABLE_RSS, ENABLE_SCHEDULER,
     ENABLE_SOCIAL_OSINT, OPENCTI_API_KEY, OPENCTI_ENABLED, OPENCTI_URL,
     PIPELINE_MAX_ENRICH, PIPELINE_MAX_IOCS_PER_SOURCE, PIPELINE_MAX_TOTAL_IOCS,
@@ -78,11 +78,26 @@ def handle_unhandled_exception(e):
 # ---------------------------------------------------------------------------
 
 def require_api_key(fn):
+    """Standard user access — accepts USER key or ADMIN key."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
         key = request.headers.get("X-API-Key")
-        if not key or key != APP_API_KEY:
+        if not key or key not in (APP_API_KEY, ADMIN_API_KEY):
             return jsonify({"error": "Unauthorized"}), 401
+        client = request.remote_addr or "unknown"
+        if not limiter.allow(client):
+            return jsonify({"error": "Rate limit exceeded"}), 429
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def require_admin_key(fn):
+    """Admin-only access — only the ADMIN key is accepted."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        key = request.headers.get("X-API-Key")
+        if not key or key != ADMIN_API_KEY:
+            return jsonify({"error": "Admin access required"}), 403
         client = request.remote_addr or "unknown"
         if not limiter.allow(client):
             return jsonify({"error": "Rate limit exceeded"}), 429
@@ -171,7 +186,7 @@ def get_trust_config():
 
 
 @app.post("/fetch")
-@require_api_key
+@require_admin_key
 def fetch():
     enrich_raw = request.args.get("enrich", "true").lower()
     if enrich_raw not in ("true", "false"):
@@ -279,7 +294,7 @@ def iocs():
 
 
 @app.post("/stix/export")
-@require_api_key
+@require_admin_key
 def export_stix():
     with _store_lock:
         store_copy = _store[:]
@@ -293,7 +308,7 @@ def export_stix():
 
 
 @app.post("/opencti/push")
-@require_api_key
+@require_admin_key
 def opencti_push():
     if not OPENCTI_ENABLED:
         return jsonify({"ok": False, "error": "OpenCTI push disabled (OPENCTI_ENABLED=false)"}), 400

@@ -7,13 +7,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from log_api.config import CORS_ORIGINS, REPORT_OUTPUT_PATH, SUPPORTED_FORMATS
+from log_api.config import ADMIN_API_KEY, CORS_ORIGINS, REPORT_OUTPUT_PATH, SUPPORTED_FORMATS, USER_API_KEY
 from log_api.models import AnomalyFinding, AnalysisResult, LogFormat
 from log_api.parsers.syslog import parse_syslog
 from log_api.parsers.apache import parse_apache
@@ -45,6 +46,24 @@ app.add_middleware(
 
 _results: dict = {}
 metrics = LogMetrics()
+
+# ---------------------------------------------------------------------------
+# Auth dependencies
+# ---------------------------------------------------------------------------
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def require_user_key(api_key: str = Security(_api_key_header)):
+    """Standard analyst access — accepts USER key or ADMIN key."""
+    if not api_key or api_key not in (USER_API_KEY, ADMIN_API_KEY):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def require_admin_key(api_key: str = Security(_api_key_header)):
+    """Admin-only access — only the ADMIN key is accepted."""
+    if not api_key or api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +119,7 @@ def get_metrics():
     return metrics.to_dict()
 
 
-@app.get("/trends/severity")
+@app.get("/trends/severity", dependencies=[Depends(require_user_key)])
 def severity_trends():
     buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
     for r in _results.values():
@@ -119,7 +138,7 @@ def root():
 # Core analysis endpoint
 # ---------------------------------------------------------------------------
 
-@app.post("/analyse")
+@app.post("/analyse", dependencies=[Depends(require_user_key)])
 async def analyse(
     file: UploadFile = File(...),
     log_format: LogFormat = Query(LogFormat.APACHE),
@@ -173,7 +192,7 @@ async def _analyse_background(job_id: str, lines: list, log_format: str, generat
 # Job / result endpoints
 # ---------------------------------------------------------------------------
 
-@app.get("/jobs/{job_id}")
+@app.get("/jobs/{job_id}", dependencies=[Depends(require_user_key)])
 def job_status(job_id: str):
     with get_conn() as conn:
         row = conn.execute(
@@ -197,7 +216,7 @@ def job_status(job_id: str):
     return resp
 
 
-@app.get("/report", response_class=HTMLResponse)
+@app.get("/report", response_class=HTMLResponse, dependencies=[Depends(require_user_key)])
 def report():
     if not os.path.exists(REPORT_OUTPUT_PATH):
         raise HTTPException(status_code=404, detail="No report generated yet.")
@@ -205,14 +224,14 @@ def report():
         return HTMLResponse(content=f.read())
 
 
-@app.get("/results/{result_id}")
+@app.get("/results/{result_id}", dependencies=[Depends(require_user_key)])
 def get_result(result_id: str):
     if result_id not in _results:
         raise HTTPException(status_code=404, detail="Result not found")
     return _results[result_id]
 
 
-@app.get("/results/{result_id}/stix")
+@app.get("/results/{result_id}/stix", dependencies=[Depends(require_user_key)])
 def export_result_stix(result_id: str):
     if result_id not in _results:
         raise HTTPException(status_code=404, detail="Result not found")
