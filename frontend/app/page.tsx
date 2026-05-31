@@ -1,6 +1,7 @@
-import dynamic from 'next/dynamic'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
+import SmoothScroll from '@/components/effects/SmoothScroll'
+import CursorGlow from '@/components/effects/CursorGlow'
 import Hero from '@/components/sections/Hero'
 import StatsBar from '@/components/sections/StatsBar'
 import Features from '@/components/sections/Features'
@@ -10,9 +11,6 @@ import LogAnalysisSection from '@/components/sections/LogAnalysisSection'
 import OpenCTISection from '@/components/sections/OpenCTISection'
 import DashboardPreview from '@/components/sections/DashboardPreview'
 import CTA from '@/components/sections/CTA'
-
-const SmoothScroll = dynamic(() => import('@/components/effects/SmoothScroll'), { ssr: false })
-const CursorGlow = dynamic(() => import('@/components/effects/CursorGlow'), { ssr: false })
 
 export default function Home() {
   return (
