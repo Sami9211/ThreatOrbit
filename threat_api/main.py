@@ -44,6 +44,15 @@ _last_source_health = {}
 _fetch_in_progress = False
 
 
+@app.errorhandler(Exception)
+def handle_unhandled_exception(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    logging.exception("Unhandled exception")
+    return jsonify({"error": "Internal server error", "detail": str(e)}), 500
+
+
 def require_api_key(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):

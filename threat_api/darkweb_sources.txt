@@ -1,1 +1,7 @@
-# One source URL per line
+# One source URL per line. Lines starting with # are ignored.
+# Add RSS/Atom feeds from dark web monitoring services or OSINT aggregators.
+# Most dark web monitoring services require authentication or subscriptions.
+#
+# Examples of the expected format:
+#   https://your-darkweb-monitor.example.com/feed.xml
+#   https://osint-aggregator.example.com/leaks/rss

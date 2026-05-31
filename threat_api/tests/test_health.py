@@ -1,4 +1,5 @@
-from main import app
+from threat_api.main import app
+
 
 def test_health():
     c = app.test_client()

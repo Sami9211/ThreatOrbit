@@ -1,7 +1,10 @@
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
 from log_api.models import ParsedLogEntry
+
+logger = logging.getLogger(__name__)
 
 EVENT_ID_MAP: Dict[str, str] = {
     "4624": "Successful Logon",
@@ -35,8 +38,8 @@ def parse_windows_event(lines: List[str]) -> Tuple[List[ParsedLogEntry], int]:
                 else:
                     errors += 1
             return entries, errors
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.debug("Windows Event log is not a JSON array, falling back to line-by-line: %s", e)
 
     for raw in lines:
         raw = raw.rstrip()
