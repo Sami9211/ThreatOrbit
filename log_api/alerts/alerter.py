@@ -59,7 +59,7 @@ def _correlate(findings: List[AnomalyFinding]) -> List[AnomalyFinding]:
             f = f.model_copy(update={
                 "severity_score": new_score,
                 "severity": _score_to_severity(new_score),
-                "description": f.description + f" [Corroborated by {num_detectors} detectors — score boosted]",
+                "description": f.description + f" [Corroborated by {num_detectors} detectors, score boosted]",
             })
 
         boosted.append(f)

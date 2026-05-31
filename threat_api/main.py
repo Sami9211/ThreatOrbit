@@ -46,7 +46,7 @@ limiter = SimpleRateLimiter(RATE_LIMIT_PER_MINUTE)
 metrics = ThreatMetrics()
 scheduler = None
 
-# In-memory IOC store — restored from DB on startup, updated after each pipeline run
+# In-memory IOC store: restored from DB on startup, updated after each pipeline run
 _store: list = []
 _store_lock = threading.Lock()
 _last_fetch: datetime | None = None
@@ -78,7 +78,7 @@ def handle_unhandled_exception(e):
 # ---------------------------------------------------------------------------
 
 def require_api_key(fn):
-    """Standard user access — accepts USER key or ADMIN key."""
+    """Standard user access: accepts USER key or ADMIN key."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
         key = request.headers.get("X-API-Key")
@@ -92,7 +92,7 @@ def require_api_key(fn):
 
 
 def require_admin_key(fn):
-    """Admin-only access — only the ADMIN key is accepted."""
+    """Admin-only access: only the ADMIN key is accepted."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
         key = request.headers.get("X-API-Key")
@@ -198,7 +198,7 @@ def fetch():
     except ValueError:
         return jsonify({"error": "max_enrich must be an integer"}), 400
     if not (0 <= max_enrich <= PIPELINE_MAX_ENRICH):
-        return jsonify({"error": f"max_enrich must be 0–{PIPELINE_MAX_ENRICH}"}), 400
+        return jsonify({"error": f"max_enrich must be between 0 and {PIPELINE_MAX_ENRICH}"}), 400
 
     # ?wait=true keeps the old blocking behaviour (useful for CLI / scripts)
     wait = request.args.get("wait", "false").lower() == "true"
@@ -492,7 +492,7 @@ def _run_pipeline(enrich: bool, max_enrich: int, job_id: str = None):
             _update_job(job_id, "running", stage=label, **kw)
         logging.info("[pipeline] %s", label)
 
-    # ── 1. Parallel source fetching ──────────────────────────────────────
+    # 1. Parallel source fetching
     _stage("fetching sources")
     fetcher_map = {}
     if ENABLE_OTX:           fetcher_map["otx"] = fetch_otx_iocs
@@ -515,7 +515,7 @@ def _run_pipeline(enrich: bool, max_enrich: int, job_id: str = None):
     for name in ("otx", "abusech", "rss", "darkweb_osint", "social_osint"):
         fetch_results.setdefault(name, _empty_result(name))
 
-    # ── 2. Aggregate & normalise ─────────────────────────────────────────
+    # 2. Aggregate and normalise
     _stage("normalizing and deduplicating")
     all_iocs = []
     for name in ("otx", "abusech", "rss", "darkweb_osint", "social_osint"):
@@ -541,7 +541,7 @@ def _run_pipeline(enrich: bool, max_enrich: int, job_id: str = None):
             "tags": (i.tags or [])[:8],
         }
 
-    # ── 3. Enrichment ────────────────────────────────────────────────────
+    # 3. Enrichment
     if enrich:
         _stage("enriching with VirusTotal", total=len(correlated), max_enrich=max_enrich)
         enriched = enrich_iocs(correlated, max_enrichments=max_enrich)
@@ -552,7 +552,7 @@ def _run_pipeline(enrich: bool, max_enrich: int, job_id: str = None):
             for i in correlated
         ]
 
-    # ── 4. Persist & publish ─────────────────────────────────────────────
+    # 4. Persist and publish
     _stage("persisting to database")
     with _store_lock:
         _store = enriched

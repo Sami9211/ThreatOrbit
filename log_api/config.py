@@ -8,9 +8,9 @@ def _get_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
-# API auth — uses the same env vars as threat_api so a single .env covers both services.
-# USER_API_KEY  — analysts: submit logs, view results, view reports
-# ADMIN_API_KEY — admins: everything above (log_api has no write-only admin ops yet)
+# API auth: uses the same env vars as threat_api so a single .env covers both services.
+# USER_API_KEY:  analysts, submit logs, view results, view reports
+# ADMIN_API_KEY: admins, everything above (log_api has no write-only admin ops yet)
 #                 Falls back to USER_API_KEY when not set.
 USER_API_KEY = os.getenv("APP_API_KEY")
 if not USER_API_KEY:

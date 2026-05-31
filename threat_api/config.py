@@ -9,8 +9,8 @@ def _get_bool(name: str, default: bool) -> bool:
 
 
 # API auth
-# APP_API_KEY  — standard user: read access to IOCs, jobs, OpenCTI read endpoints
-# ADMIN_API_KEY — admin: everything above + trigger fetch, export STIX, push to OpenCTI
+# APP_API_KEY:   standard user, read access to IOCs, jobs, OpenCTI read endpoints
+# ADMIN_API_KEY: admin, everything above plus trigger fetch, export STIX, push to OpenCTI
 #                 Falls back to APP_API_KEY when not set so single-key setups keep working.
 APP_API_KEY = os.getenv("APP_API_KEY")
 if not APP_API_KEY:

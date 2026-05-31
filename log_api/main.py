@@ -55,13 +55,13 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 def require_user_key(api_key: str = Security(_api_key_header)):
-    """Standard analyst access — accepts USER key or ADMIN key."""
+    """Standard analyst access: accepts USER key or ADMIN key."""
     if not api_key or api_key not in (USER_API_KEY, ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def require_admin_key(api_key: str = Security(_api_key_header)):
-    """Admin-only access — only the ADMIN key is accepted."""
+    """Admin-only access: only the ADMIN key is accepted."""
     if not api_key or api_key != ADMIN_API_KEY:
         raise HTTPException(status_code=403, detail="Admin access required")
 

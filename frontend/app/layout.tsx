@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'ThreatOrbit — Enterprise Threat Intelligence Platform',
+  title: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
   description:
     'Enterprise-grade threat intelligence ingestion, log anomaly detection, and OpenCTI integration. Detect. Analyze. Neutralize.',
   keywords: [
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     'SIEM',
   ],
   openGraph: {
-    title: 'ThreatOrbit — Enterprise Threat Intelligence Platform',
+    title: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
     description: 'Detect. Analyze. Neutralize. Enterprise-grade threat intelligence built for the modern security team.',
     type: 'website',
   },
@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="bg-bg text-slate-100 overflow-x-hidden">
+      <body className="bg-bg text-ink-100 overflow-x-hidden">
         {children}
       </body>
     </html>

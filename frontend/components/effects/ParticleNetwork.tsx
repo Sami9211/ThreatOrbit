@@ -32,10 +32,10 @@ function buildNodes(): NodeData[] {
 }
 
 const TYPE_COLORS: Record<NodeData['type'], THREE.Color> = {
-  ip: new THREE.Color('#00D4FF'),
-  domain: new THREE.Color('#7B2FBE'),
-  hash: new THREE.Color('#FF3366'),
-  url: new THREE.Color('#00FF88'),
+  ip: new THREE.Color('#FF2E97'),
+  domain: new THREE.Color('#7A3CFF'),
+  hash: new THREE.Color('#FFB23E'),
+  url: new THREE.Color('#2DD4BF'),
 }
 
 function Network() {
