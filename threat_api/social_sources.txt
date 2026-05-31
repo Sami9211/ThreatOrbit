@@ -1,1 +1,7 @@
-# One source URL per line
+# One source URL per line. Lines starting with # are ignored.
+# Add RSS/Atom feeds from social media aggregators or OSINT community feeds.
+# Many social OSINT sources require API keys or authentication.
+#
+# Examples of the expected format:
+#   https://your-osint-aggregator.example.com/community/feed.xml
+#   https://threat-share.example.com/social/rss

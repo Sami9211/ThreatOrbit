@@ -1,1 +1,15 @@
-# One feed URL per line
+# One feed URL per line. Lines starting with # are ignored.
+# These are public threat intelligence RSS feeds.
+# Add your own sources below.
+
+# CISA Cybersecurity Advisories
+https://www.cisa.gov/cybersecurity-advisories/all.xml
+
+# SANS Internet Storm Center
+https://isc.sans.edu/rssfeed_full.xml
+
+# BleepingComputer Security News
+https://www.bleepingcomputer.com/feed/
+
+# SecurityWeek
+https://feeds.feedburner.com/securityweek

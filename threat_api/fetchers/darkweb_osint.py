@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from threat_api.models import IOC, FetchResult
-from fetchers.rss import _fetch_feed, _read_sources
+from threat_api.fetchers.rss import _fetch_feed, _read_sources
 
 DARKWEB_SOURCES_FILE = "darkweb_sources.txt"
 

@@ -1,11 +1,14 @@
 import time
 import uuid
 import os
+import logging
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from log_api.config import REPORT_OUTPUT_PATH, SUPPORTED_FORMATS
 from log_api.models import LogFormat, AnalysisResult, AnomalyFinding
@@ -23,9 +26,28 @@ from log_api.stix_from_findings import findings_to_stix_bundle
 from log_api.metrics import LogMetrics
 from log_api.db import init_db, get_conn
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Log Anomaly API", version="1.2.0")
 _results = {}
 metrics = LogMetrics()
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=422, content={"error": "Validation error", "detail": exc.errors()})
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "detail": str(exc)})
 
 
 @app.on_event("startup")

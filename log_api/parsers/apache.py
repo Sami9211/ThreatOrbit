@@ -1,7 +1,10 @@
 import re
+import logging
 from datetime import datetime, timezone
 from typing import List, Tuple
 from log_api.models import ParsedLogEntry
+
+logger = logging.getLogger(__name__)
 
 COMBINED_RE = re.compile(
     r'^(?P<ip>[\d.a-fA-F:]+)\s+'
@@ -94,8 +97,8 @@ def _parse_error_line(raw: str) -> ParsedLogEntry | None:
     try:
         ts_clean = m.group("time").rsplit(".", 1)[0]
         ts = datetime.strptime(ts_clean, "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to parse Apache error log timestamp %r: %s", m.group("time"), e)
 
     return ParsedLogEntry(
         raw=raw,

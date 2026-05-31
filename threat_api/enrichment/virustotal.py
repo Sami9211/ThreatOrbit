@@ -1,5 +1,6 @@
 import time
 import requests
+from datetime import datetime, timezone
 from typing import List
 
 from threat_api.config import VIRUSTOTAL_API_KEY, VT_RATE_LIMIT_SECONDS
@@ -55,11 +56,15 @@ def _enrich_single(ioc: IOC) -> EnrichedIOC:
     undetected = int(stats.get("undetected", 0))
     total = malicious + harmless + suspicious + undetected
 
+    last_analysis_ts = attrs.get("last_analysis_date")
+    vt_last_analysis = datetime.fromtimestamp(last_analysis_ts, tz=timezone.utc) if last_analysis_ts else None
+
     return EnrichedIOC(
         **ioc.model_dump(),
         vt_malicious_count=malicious,
         vt_total_engines=total if total > 0 else None,
         vt_permalink=f"https://www.virustotal.com/gui/{_gui_path(ioc)}",
+        vt_last_analysis=vt_last_analysis,
         enrichment_status="ok",
     )
 

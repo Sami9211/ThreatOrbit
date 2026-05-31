@@ -9,7 +9,12 @@ def _get_bool(name: str, default: bool) -> bool:
 
 
 # API auth
-APP_API_KEY = os.getenv("APP_API_KEY", "YOUR_APP_API_KEY_HERE")
+APP_API_KEY = os.getenv("APP_API_KEY")
+if not APP_API_KEY:
+    raise ValueError(
+        "APP_API_KEY environment variable is required but not set. "
+        "Set it before starting the service: export APP_API_KEY=<your-secret-key>"
+    )
 
 # Server
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
@@ -21,10 +26,10 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///threat_api.db")
 DB_PATH = os.getenv("DB_PATH", "threat_api.db")
 
 # External sources / enrichment
-OTX_API_KEY = os.getenv("OTX_API_KEY", "YOUR_OTX_API_KEY_HERE")
+OTX_API_KEY = os.getenv("OTX_API_KEY", "")
 OTX_DAYS_BACK = int(os.getenv("OTX_DAYS_BACK", "14"))
 
-VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "YOUR_VIRUSTOTAL_API_KEY_HERE")
+VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 VT_RATE_LIMIT_SECONDS = int(os.getenv("VT_RATE_LIMIT_SECONDS", "15"))
 
 ABUSECH_URLHAUS_URL = os.getenv("ABUSECH_URLHAUS_URL", "https://urlhaus-api.abuse.ch/v1/urls/recent/")
@@ -37,7 +42,7 @@ STIX_IDENTITY_CLASS = os.getenv("STIX_IDENTITY_CLASS", "organization")
 
 # OpenCTI
 OPENCTI_URL = os.getenv("OPENCTI_URL", "http://localhost:8080")
-OPENCTI_API_KEY = os.getenv("OPENCTI_API_KEY", "YOUR_OPENCTI_API_KEY_HERE")
+OPENCTI_API_KEY = os.getenv("OPENCTI_API_KEY", "")
 OPENCTI_ENABLED = _get_bool("OPENCTI_ENABLED", False)
 
 # Scheduler

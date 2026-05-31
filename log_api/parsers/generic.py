@@ -1,8 +1,11 @@
 import json
 import re
+import logging
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
 from log_api.models import ParsedLogEntry
+
+logger = logging.getLogger(__name__)
 
 KV_RE = re.compile(r'(\w+)=(?:"([^"]*?)"|(\S+))')
 IP_RE = re.compile(r'\b((?:\d{1,3}\.){3}\d{1,3})\b')
@@ -25,8 +28,8 @@ def parse_generic(lines: List[str]) -> Tuple[List[ParsedLogEntry], int]:
                 obj = json.loads(raw)
                 entries.append(_from_json(obj, raw))
                 continue
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.debug("Failed to parse line as JSON, falling back to KV/plaintext: %s", e)
 
         kv = _extract_kv(raw)
         if len(kv) >= 2:
