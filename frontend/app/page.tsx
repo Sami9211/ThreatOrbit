@@ -12,6 +12,7 @@ import ExpandingShowcase from '@/components/sections/ExpandingShowcase'
 import ThreatIntelSection from '@/components/sections/ThreatIntelSection'
 import LogAnalysisSection from '@/components/sections/LogAnalysisSection'
 import OpenCTISection from '@/components/sections/OpenCTISection'
+import GlobalThreatMap from '@/components/sections/GlobalThreatMap'
 import DashboardPreview from '@/components/sections/DashboardPreview'
 import Pricing from '@/components/sections/Pricing'
 import About from '@/components/sections/About'
@@ -33,6 +34,7 @@ export default function Home() {
         <ThreatIntelSection />
         <LogAnalysisSection />
         <OpenCTISection />
+        <GlobalThreatMap />
         <DashboardPreview />
         <Pricing />
         <About />
