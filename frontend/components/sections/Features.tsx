@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Reveal from '@/components/ui/Reveal'
+import TiltCard from '@/components/ui/TiltCard'
 
 const FEATURES = [
   {
@@ -84,24 +85,27 @@ function FeatureCard({ feat, index }: { feat: (typeof FEATURES)[number]; index: 
       initial={{ opacity: 0, scale: 0.85, y: 40, filter: 'blur(8px)' }}
       animate={inView ? { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' } : {}}
       transition={{ duration: 0.7, delay: (index % 3) * 0.08, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -6 }}
-      className={cn(
-        'group relative rounded-2xl p-6 glass border border-white/6 transition-colors duration-300 cursor-default',
-        styles.border
-      )}
     >
-      <div className={cn('w-10 h-10 rounded-xl border flex items-center justify-center mb-4', styles.icon)}>
-        <Icon className="w-5 h-5" strokeWidth={1.5} />
-      </div>
-      <h3 className="font-display font-semibold text-white text-[15px] mb-2 leading-snug">
-        {feat.title}
-      </h3>
-      <p className="text-sm text-ink-400 leading-relaxed">{feat.desc}</p>
+      <TiltCard
+        intensity={8}
+        className={cn(
+          'group relative rounded-2xl p-6 glass border border-white/6 transition-colors duration-300 cursor-default h-full',
+          styles.border
+        )}
+      >
+        <div className={cn('w-10 h-10 rounded-xl border flex items-center justify-center mb-4', styles.icon)}>
+          <Icon className="w-5 h-5" strokeWidth={1.5} />
+        </div>
+        <h3 className="font-display font-semibold text-white text-[15px] mb-2 leading-snug">
+          {feat.title}
+        </h3>
+        <p className="text-sm text-ink-400 leading-relaxed">{feat.desc}</p>
 
-      <div
-        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-        style={{ background: 'radial-gradient(circle at 50% 0%, rgba(255,46,151,0.05), transparent 60%)' }}
-      />
+        <div
+          className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+          style={{ background: 'radial-gradient(circle at 50% 0%, rgba(255,46,151,0.05), transparent 60%)' }}
+        />
+      </TiltCard>
     </motion.div>
   )
 }

@@ -3,6 +3,7 @@
 import { Check, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Reveal from '@/components/ui/Reveal'
+import TiltCard from '@/components/ui/TiltCard'
 
 const TIERS = [
   {
@@ -80,7 +81,8 @@ export default function Pricing() {
       <div className="grid md:grid-cols-3 gap-5">
         {TIERS.map((tier, i) => (
           <Reveal key={tier.name} variant="bloom" delay={i * 0.08}>
-            <div
+            <TiltCard
+              intensity={6}
               className={cn(
                 'relative h-full rounded-3xl p-7 glass border transition-colors duration-300',
                 tier.highlighted ? 'border-amber/30' : 'border-white/8 hover:border-white/15'
@@ -126,7 +128,7 @@ export default function Pricing() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </TiltCard>
           </Reveal>
         ))}
       </div>

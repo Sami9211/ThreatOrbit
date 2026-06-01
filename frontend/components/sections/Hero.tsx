@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { motion, useScroll, useTransform, useMotionValue, useSpring, MotionValue } from 'framer-motion'
 import { ArrowRight, Terminal, Shield, Zap } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import MagneticButton from '@/components/ui/MagneticButton'
@@ -47,26 +47,69 @@ function TerminalWidget() {
   )
 }
 
+// Floating 3D depth orb — shifts with cursor parallax at a given depth factor
+function DepthOrb({
+  cx, cy, size, color, depth, mouseX, mouseY,
+}: {
+  cx: string; cy: string; size: number; color: string; depth: number
+  mouseX: MotionValue<number>
+  mouseY: MotionValue<number>
+}) {
+  const x = useSpring(useTransform(mouseX, [-0.5, 0.5], [-depth, depth]), { stiffness: 80, damping: 20 })
+  const y = useSpring(useTransform(mouseY, [-0.5, 0.5], [-depth * 0.6, depth * 0.6]), { stiffness: 80, damping: 20 })
+  return (
+    <motion.div
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        left: cx, top: cy,
+        width: size, height: size,
+        background: `radial-gradient(circle, ${color}22 0%, ${color}00 70%)`,
+        filter: 'blur(2px)',
+        x, y,
+        translateX: '-50%',
+        translateY: '-50%',
+      }}
+    />
+  )
+}
+
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ['start start', 'end start'],
   })
-  // Parallax: content drifts up and fades as you scroll past the hero
   const contentY = useTransform(scrollYProgress, [0, 1], [0, 120])
   const contentOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0])
   const bgScale = useTransform(scrollYProgress, [0, 1], [1, 1.15])
+
+  // Mouse tracking for 3D depth layers
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    const r = sectionRef.current?.getBoundingClientRect()
+    if (!r) return
+    mouseX.set((e.clientX - r.left) / r.width - 0.5)
+    mouseY.set((e.clientY - r.top) / r.height - 0.5)
+  }
 
   return (
     <section
       ref={sectionRef}
       className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden"
+      onMouseMove={handleMouseMove}
     >
       {/* Particle network background */}
       <motion.div style={{ scale: bgScale }} className="absolute inset-0 z-0 opacity-70">
         <ParticleNetwork className="absolute inset-0" />
       </motion.div>
+
+      {/* 3D depth orbs — each at different z-depth, parallaxes at different rates */}
+      <DepthOrb cx="15%" cy="25%" size={320} color="#FF2E97" depth={28} mouseX={mouseX} mouseY={mouseY} />
+      <DepthOrb cx="80%" cy="70%" size={260} color="#7A3CFF" depth={18} mouseX={mouseX} mouseY={mouseY} />
+      <DepthOrb cx="65%" cy="20%" size={180} color="#FFB23E" depth={36} mouseX={mouseX} mouseY={mouseY} />
+      <DepthOrb cx="20%" cy="75%" size={200} color="#2DD4BF" depth={22} mouseX={mouseX} mouseY={mouseY} />
 
       {/* Plasma vignettes */}
       <div className="absolute inset-0 bg-radial-magenta z-0 pointer-events-none" />
@@ -130,7 +173,7 @@ export default function Hero() {
               <ArrowRight className="w-4 h-4" />
             </MagneticButton>
             <MagneticButton
-              href="#docs"
+              href="/docs"
               className="px-6 py-3 rounded-xl glass border border-white/10 text-ink-200 font-medium text-sm hover:border-magenta/30 hover:text-white transition-colors duration-300"
             >
               <Terminal className="w-4 h-4" />
@@ -157,11 +200,15 @@ export default function Hero() {
           </motion.div>
         </div>
 
-        {/* Right */}
+        {/* Right — floats toward camera relative to cursor */}
         <motion.div
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.9, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          style={{
+            x: useSpring(useTransform(mouseX, [-0.5, 0.5], [10, -10]), { stiffness: 100, damping: 25 }),
+            y: useSpring(useTransform(mouseY, [-0.5, 0.5], [8, -8]),  { stiffness: 100, damping: 25 }),
+          }}
           className="flex flex-col gap-4"
         >
           <TerminalWidget />

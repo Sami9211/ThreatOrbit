@@ -156,6 +156,35 @@ body {
   pointer-events: none;
 }
 
+/* Docs typography */
+.prose-docs h1 { @apply font-display text-4xl font-bold text-white mb-4; }
+.prose-docs h2 { @apply font-display text-xl font-semibold text-white mt-10 mb-3; }
+.prose-docs p { @apply text-sm text-ink-300 leading-relaxed mb-3; }
+.prose-docs p.lead { @apply text-base text-ink-300 leading-relaxed mb-8; }
+.prose-docs ul { @apply list-disc pl-5 text-sm text-ink-300 mb-4; }
+.prose-docs li { @apply leading-relaxed mb-1.5; }
+.prose-docs code {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #E0D8F0;
+}
+.prose-docs pre code { background: transparent; border: 0; padding: 0; }
+.prose-docs strong { @apply text-ink-200; }
+.prose-docs a { @apply text-magenta hover:underline; }
+.prose-docs .callout {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255,46,151,0.15);
+  background: rgba(255,46,151,0.05);
+  font-size: 0.875rem;
+  color: #B8A8CC;
+}
+
 /* Terminal cursor blink */
 .cursor-blink::after {
   content: '_';

@@ -11,10 +11,10 @@ type MenuGroup = {
 }
 
 const PRIMARY = [
-  { label: 'Home', href: '#' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'About', href: '#about' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Home', href: '/' },
+  { label: 'Docs', href: '/docs' },
+  { label: 'Pricing', href: '/#pricing' },
+  { label: 'Contact', href: '/#contact' },
 ]
 
 const GROUPS: MenuGroup[] = [
@@ -39,19 +39,21 @@ const GROUPS: MenuGroup[] = [
   {
     heading: 'Developers',
     items: [
-      { label: 'API Docs', href: '#docs' },
-      { label: 'Quick Start', href: '#docs' },
-      { label: 'Authentication', href: '#docs' },
-      { label: 'Docker Deploy', href: '#docs' },
+      { label: 'API Docs', href: '/docs' },
+      { label: 'Quick Start', href: '/docs/quick-start', desc: 'Up and running in 5 minutes' },
+      { label: 'Authentication', href: '/docs/authentication', desc: 'API keys and roles' },
+      { label: 'Docker Deploy', href: '/docs/docker-deploy', desc: 'Self-host with one command' },
+      { label: 'Changelog', href: '/docs/changelog' },
     ],
   },
   {
     heading: 'Company',
     items: [
-      { label: 'About ThreatOrbit', href: '#about' },
-      { label: 'Contact Sales', href: '#contact' },
-      { label: 'Security', href: '#' },
-      { label: 'Careers', href: '#' },
+      { label: 'About ThreatOrbit', href: '/#about' },
+      { label: 'Contact Sales', href: '/#contact' },
+      { label: 'Security', href: '/security' },
+      { label: 'Privacy Policy', href: '/privacy' },
+      { label: 'Terms of Service', href: '/terms' },
     ],
   },
 ]
@@ -127,11 +129,11 @@ export default function MegaMenu({ open, onClose }: { open: boolean; onClose: ()
                     Get Started
                   </a>
                   <a
-                    href="#docs"
+                    href="/docs"
                     onClick={onClose}
                     className="px-5 py-2.5 rounded-xl glass border border-white/10 text-ink-200 font-medium text-sm hover:text-white transition-colors"
                   >
-                    Log In
+                    View Docs
                   </a>
                 </div>
               </motion.nav>

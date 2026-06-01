@@ -2,9 +2,27 @@ import { Github, ExternalLink } from 'lucide-react'
 import Logo from '@/components/ui/Logo'
 
 const LINKS = {
-  Platform: ['Threat Intelligence', 'Log Analysis', 'OpenCTI Integration', 'STIX Export', 'API Reference'],
-  Developers: ['Quick Start', 'Authentication', 'REST API', 'Docker Deploy', 'Changelog'],
-  Company: ['About', 'Security', 'Privacy Policy', 'Terms of Service', 'Contact'],
+  Platform: [
+    { label: 'Threat Intelligence', href: '/#threat-intel' },
+    { label: 'Log Analysis', href: '/#log-analysis' },
+    { label: 'OpenCTI Integration', href: '/#opencti' },
+    { label: 'STIX Export', href: '/#features' },
+    { label: 'API Reference', href: '/docs/rest-api' },
+  ],
+  Developers: [
+    { label: 'Quick Start', href: '/docs/quick-start' },
+    { label: 'Authentication', href: '/docs/authentication' },
+    { label: 'REST API', href: '/docs/rest-api' },
+    { label: 'Docker Deploy', href: '/docs/docker-deploy' },
+    { label: 'Changelog', href: '/docs/changelog' },
+  ],
+  Company: [
+    { label: 'About', href: '/#about' },
+    { label: 'Security', href: '/security' },
+    { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Terms of Service', href: '/terms' },
+    { label: 'Contact', href: '/#contact' },
+  ],
 }
 
 export default function Footer() {
@@ -15,7 +33,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-10 mb-14">
           <div className="col-span-2">
-            <a href="#" className="flex items-center gap-2.5 mb-4 group w-fit">
+            <a href="/" className="flex items-center gap-2.5 mb-4 group w-fit">
               <Logo size={26} />
               <span className="font-display font-semibold text-base">
                 <span className="text-white">Threat</span>
@@ -28,7 +46,7 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-3 mt-5">
               <a
-                href="https://github.com"
+                href="https://github.com/Sami9211/ThreatOrbit-V2"
                 target="_blank"
                 rel="noreferrer"
                 className="p-2 rounded-lg border border-white/8 text-ink-500 hover:text-white hover:border-magenta/30 transition-all duration-200"
@@ -37,7 +55,7 @@ export default function Footer() {
                 <Github className="w-4 h-4" />
               </a>
               <a
-                href="#docs"
+                href="/docs"
                 className="p-2 rounded-lg border border-white/8 text-ink-500 hover:text-white hover:border-magenta/30 transition-all duration-200"
                 aria-label="Documentation"
               >
@@ -51,9 +69,9 @@ export default function Footer() {
               <h4 className="text-xs font-semibold text-ink-400 uppercase tracking-widest mb-4">{title}</h4>
               <ul className="space-y-2.5">
                 {items.map((item) => (
-                  <li key={item}>
-                    <a href="#" className="text-sm text-ink-500 hover:text-ink-200 transition-colors duration-200">
-                      {item}
+                  <li key={item.label}>
+                    <a href={item.href} className="text-sm text-ink-500 hover:text-ink-200 transition-colors duration-200">
+                      {item.label}
                     </a>
                   </li>
                 ))}
