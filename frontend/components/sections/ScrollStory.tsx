@@ -1,15 +1,14 @@
 'use client'
 
 import { useRef } from 'react'
-import { motion, useScroll, useTransform, type MotionValue } from 'framer-motion'
+import {
+  motion, useScroll, useTransform, useSpring,
+  useMotionValue, type MotionValue,
+} from 'framer-motion'
 
-/* A beat of background narrative that fades through its scroll window. */
+/* ─── Narrative beat ─────────────────────────────────────────────── */
 function Beat({
-  progress,
-  range,
-  yFrom = 40,
-  children,
-  className = '',
+  progress, range, yFrom = 40, children, className = '',
 }: {
   progress: MotionValue<number>
   range: [number, number]
@@ -17,10 +16,10 @@ function Beat({
   children: React.ReactNode
   className?: string
 }) {
-  const [start, end] = range
+  const [s, e] = range
   const pad = 0.05
-  const opacity = useTransform(progress, [start - pad, start, end, end + pad], [0, 1, 1, 0])
-  const y = useTransform(progress, [start - pad, start, end, end + pad], [yFrom, 0, 0, -yFrom])
+  const opacity = useTransform(progress, [s - pad, s, e, e + pad], [0, 1, 1, 0])
+  const y       = useTransform(progress, [s - pad, s, e, e + pad], [yFrom, 0, 0, -yFrom])
   return (
     <motion.div style={{ opacity, y }} className={`absolute inset-x-0 px-6 ${className}`}>
       <div className="max-w-3xl mx-auto text-center">{children}</div>
@@ -28,90 +27,195 @@ function Beat({
   )
 }
 
-/* The orbital object at the centre of the stage, driven by scroll. */
-function OrbitalStage({ progress }: { progress: MotionValue<number> }) {
-  const scale = useTransform(progress, [0, 0.5, 1], [0.72, 1.05, 1.3])
-  const rotate = useTransform(progress, [0, 1], [0, 200])
-
-  // Each ring brightens during its narrative beat.
-  const cti = useTransform(progress, [0.18, 0.3, 0.42], [0.25, 1, 0.45])
-  const siem = useTransform(progress, [0.42, 0.54, 0.66], [0.25, 1, 0.45])
-  const soar = useTransform(progress, [0.66, 0.78, 0.9], [0.25, 1, 0.45])
-  const coreGlow = useTransform(progress, [0, 0.85, 1], [0.4, 0.6, 1])
-
+/* ─── Single CSS-3D orbital ring ─────────────────────────────────── */
+function Ring({
+  color, rotateZ, opacity, label,
+}: {
+  color: string
+  rotateZ: MotionValue<number>
+  opacity: MotionValue<number>
+  label: string
+}) {
   return (
     <motion.div
-      style={{ scale, rotate }}
-      className="relative w-[min(80vw,560px)] aspect-square"
+      aria-label={label}
+      style={{
+        position: 'absolute', inset: '6%',
+        borderRadius: '50%',
+        border: `1.5px solid ${color}`,
+        /* rotateX tilts the circle into an orbital plane */
+        rotateX: 72,
+        rotateZ,
+        opacity,
+        transformStyle: 'preserve-3d',
+      }}
     >
-      <svg viewBox="0 0 400 400" className="w-full h-full" fill="none">
-        <defs>
-          <radialGradient id="story-core" cx="50%" cy="45%" r="60%">
-            <stop offset="0%" stopColor="#FFD08A" />
-            <stop offset="40%" stopColor="#FF2E97" />
-            <stop offset="100%" stopColor="#7A3CFF" />
-          </radialGradient>
-        </defs>
-
-        {/* CTI ring */}
-        <motion.g style={{ opacity: cti }}>
-          <ellipse cx="200" cy="200" rx="180" ry="64" stroke="#FF2E97" strokeWidth="1.5" transform="rotate(0 200 200)" />
-          <circle cx="380" cy="200" r="5" fill="#FF2E97" />
-        </motion.g>
-        {/* SIEM ring */}
-        <motion.g style={{ opacity: siem }}>
-          <ellipse cx="200" cy="200" rx="180" ry="64" stroke="#7A3CFF" strokeWidth="1.5" transform="rotate(60 200 200)" />
-          <circle cx="200" cy="20" r="5" fill="#7A3CFF" transform="rotate(60 200 200)" />
-        </motion.g>
-        {/* SOAR ring */}
-        <motion.g style={{ opacity: soar }}>
-          <ellipse cx="200" cy="200" rx="180" ry="64" stroke="#FFB23E" strokeWidth="1.5" transform="rotate(120 200 200)" />
-          <circle cx="200" cy="380" r="5" fill="#FFB23E" transform="rotate(120 200 200)" />
-        </motion.g>
-
-        {/* Shielded hexagon core */}
-        <motion.path
-          style={{ opacity: coreGlow }}
-          d="M200 150 L243 175 L243 225 L200 250 L157 225 L157 175 Z"
-          fill="url(#story-core)"
-        />
-        <path
-          d="M200 150 L243 175 L243 225 L200 250 L157 225 L157 175 Z"
-          fill="url(#story-core)"
-          opacity="0.3"
-          style={{ filter: 'blur(14px)' }}
-        />
-      </svg>
-
-      {/* Soft plasma halo */}
-      <div className="absolute inset-0 -z-10 rounded-full blur-3xl bg-magenta/10" />
+      {/* Glowing node riding the ring */}
+      <div style={{
+        position: 'absolute', right: -5, top: '50%',
+        transform: 'translateY(-50%)',
+        width: 10, height: 10, borderRadius: '50%',
+        background: color,
+        boxShadow: `0 0 14px 3px ${color}88, 0 0 4px ${color}`,
+      }} />
     </motion.div>
   )
 }
 
+/* ─── 3D hexagon core ────────────────────────────────────────────── */
+function HexCore({ opacity }: { opacity: MotionValue<number> }) {
+  return (
+    <motion.div style={{
+      position: 'absolute', inset: '26%',
+      opacity,
+      translateZ: 28,           /* float in front of rings */
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+        <defs>
+          {/* Teal-amber-white tri-stop — distinct from the logo */}
+          <radialGradient id="hex3d-fill" cx="38%" cy="30%" r="72%">
+            <stop offset="0%"   stopColor="#E8FFF9" />
+            <stop offset="28%"  stopColor="#2DD4BF" />
+            <stop offset="65%"  stopColor="#FFB23E" />
+            <stop offset="100%" stopColor="#FF2E97" />
+          </radialGradient>
+          {/* Top-left highlight sheen */}
+          <linearGradient id="hex3d-sheen" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"  stopColor="rgba(255,255,255,0.30)" />
+            <stop offset="45%" stopColor="rgba(255,255,255,0.00)" />
+          </linearGradient>
+          <filter id="hex-glow">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Outer glow layer */}
+        <path
+          d="M50 8 L87 29 L87 71 L50 92 L13 71 L13 29 Z"
+          fill="url(#hex3d-fill)" opacity="0.25"
+          style={{ filter: 'blur(12px)', transform: 'scale(1.15)', transformOrigin: '50px 50px' }}
+        />
+        {/* Main body */}
+        <path d="M50 8 L87 29 L87 71 L50 92 L13 71 L13 29 Z" fill="url(#hex3d-fill)" />
+        {/* Top-left bright facet (upper-left panel of the hex) */}
+        <path d="M50 8 L87 29 L50 50 Z" fill="url(#hex3d-sheen)" />
+        {/* Left dimmer facet */}
+        <path d="M50 8 L13 29 L50 50 Z" fill="rgba(255,255,255,0.04)" />
+        {/* Inner highlight ring */}
+        <path
+          d="M50 20 L78 35 L78 65 L50 80 L22 65 L22 35 Z"
+          fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.8"
+        />
+        {/* Center dot */}
+        <circle cx="50" cy="50" r="4" fill="rgba(255,255,255,0.5)" />
+      </svg>
+
+      {/* Ambient halo behind the hex */}
+      <div style={{
+        position: 'absolute', inset: '-50%',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(45,212,191,0.20) 0%, rgba(255,178,62,0.12) 40%, transparent 70%)',
+        filter: 'blur(18px)',
+        zIndex: -1,
+        pointerEvents: 'none',
+      }} />
+    </motion.div>
+  )
+}
+
+/* ─── Full 3D orbital stage ──────────────────────────────────────── */
+function OrbitalStage({
+  progress, mouseX, mouseY,
+}: {
+  progress: MotionValue<number>
+  mouseX: MotionValue<number>
+  mouseY: MotionValue<number>
+}) {
+  const sp = { stiffness: 55, damping: 18 }
+  const tiltX = useSpring(useTransform(mouseY, [-0.5, 0.5], [ 20, -20]), sp)
+  const tiltY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-20,  20]), sp)
+
+  const scale    = useTransform(progress, [0, 0.5, 1], [0.72, 1.05, 1.3])
+  const scrollRot = useTransform(progress, [0, 1], [0, 360])
+
+  /* Each ring is offset 120° around the axis */
+  const r1 = useTransform(scrollRot, v => v)
+  const r2 = useTransform(scrollRot, v => v + 120)
+  const r3 = useTransform(scrollRot, v => v + 240)
+
+  const cti      = useTransform(progress, [0.18, 0.3, 0.42], [0.28, 1, 0.38])
+  const siem     = useTransform(progress, [0.42, 0.54, 0.66], [0.28, 1, 0.38])
+  const soar     = useTransform(progress, [0.66, 0.78, 0.9 ], [0.28, 1, 0.38])
+  const coreGlow = useTransform(progress, [0, 0.85, 1], [0.55, 0.72, 1])
+
+  return (
+    <motion.div
+      style={{ scale }}
+      className="relative w-[min(80vw,520px)] aspect-square"
+    >
+      {/* perspective on a plain div so it doesn't fight Framer Motion */}
+      <div style={{ perspective: '900px', width: '100%', height: '100%' }}>
+        <motion.div style={{
+          rotateX: tiltX, rotateY: tiltY,
+          transformStyle: 'preserve-3d',
+          width: '100%', height: '100%',
+          position: 'relative',
+        }}>
+          <Ring color="#FF2E97" rotateZ={r1} opacity={cti}  label="CTI ring"  />
+          <Ring color="#7A3CFF" rotateZ={r2} opacity={siem} label="SIEM ring" />
+          <Ring color="#FFB23E" rotateZ={r3} opacity={soar} label="SOAR ring" />
+          <HexCore opacity={coreGlow} />
+        </motion.div>
+      </div>
+
+      {/* Ambient backdrop glow */}
+      <div className="absolute inset-0 -z-10 rounded-full blur-3xl"
+        style={{ background: 'radial-gradient(circle, rgba(45,212,191,0.08) 0%, rgba(255,46,151,0.08) 50%, transparent 70%)' }}
+      />
+    </motion.div>
+  )
+}
+
+/* ─── Section ────────────────────────────────────────────────────── */
 export default function ScrollStory() {
-  const ref = useRef<HTMLElement>(null)
+  const ref    = useRef<HTMLElement>(null)
+  const stickyRef = useRef<HTMLDivElement>(null)
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
   const { scrollYProgress } = useScroll({
     target: ref,
     offset: ['start start', 'end end'],
   })
 
+  const handleMove = (e: React.MouseEvent) => {
+    const el = stickyRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    mouseX.set((e.clientX - r.left)  / r.width  - 0.5)
+    mouseY.set((e.clientY - r.top)   / r.height - 0.5)
+  }
+  const handleLeave = () => { mouseX.set(0); mouseY.set(0) }
+
   return (
     <section ref={ref} className="relative" style={{ height: '460vh' }}>
-      <div className="sticky top-0 h-screen overflow-hidden flex items-center justify-center bg-bg">
-        {/* Ambient background */}
+      <div
+        ref={stickyRef}
+        className="sticky top-0 h-screen overflow-hidden flex items-center justify-center bg-bg"
+        onMouseMove={handleMove}
+        onMouseLeave={handleLeave}
+      >
         <div className="absolute inset-0 plasma-mesh opacity-50" />
         <div className="absolute inset-0 bg-grid-dim opacity-20" />
 
-        {/* Central object */}
-        <OrbitalStage progress={scrollYProgress} />
+        <OrbitalStage progress={scrollYProgress} mouseX={mouseX} mouseY={mouseY} />
 
-        {/* Narrative beats layered over the object */}
         <Beat progress={scrollYProgress} range={[0.0, 0.14]} className="top-[16%]">
           <p className="text-xs tracking-[0.3em] text-magenta uppercase mb-4">This is ThreatOrbit</p>
           <h2 className="font-display text-4xl md:text-6xl font-bold text-white leading-tight">
-            A Super SOC,
-            <br />
+            A Super SOC,<br />
             <span className="text-gradient-plasma">in one platform.</span>
           </h2>
         </Beat>
@@ -133,8 +237,8 @@ export default function ScrollStory() {
           </p>
           <h3 className="font-display text-3xl md:text-5xl font-bold text-white mb-3">It detects.</h3>
           <p className="text-ink-300 text-lg max-w-xl mx-auto">
-            Every log line passes through four detectors, pattern, statistical, machine learning, and
-            temporal, surfacing the anomalies that matter.
+            Every log line passes through four detectors — pattern, statistical, machine learning, and
+            temporal — surfacing the anomalies that matter.
           </p>
         </Beat>
 
@@ -151,16 +255,14 @@ export default function ScrollStory() {
 
         <Beat progress={scrollYProgress} range={[0.88, 1.0]} className="top-[16%]">
           <h2 className="font-display text-4xl md:text-6xl font-bold text-white leading-tight mb-4">
-            One core.
-            <br />
+            One core.<br />
             <span className="text-gradient-animate">Total visibility.</span>
           </h2>
           <p className="text-ink-300 text-lg max-w-xl mx-auto">
-            CTI, SIEM, and SOAR, locked in orbit around a single source of truth.
+            CTI, SIEM, and SOAR locked in orbit around a single source of truth.
           </p>
         </Beat>
 
-        {/* Progress hint */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[10px] text-ink-500 uppercase tracking-widest">
           <span className="w-1.5 h-1.5 rounded-full bg-magenta animate-pulse" />
           Keep scrolling

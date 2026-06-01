@@ -39,7 +39,7 @@ export default function Navbar() {
         )}
       >
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-          <a href="#" className="flex items-center gap-2.5 group">
+          <a href="/" className="flex items-center gap-2.5 group">
             <Logo size={30} className="transition-transform duration-500 group-hover:scale-110" />
             <span className="font-display font-semibold text-lg tracking-tight">
               <span className="text-white">Threat</span>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
-import { Radio, Activity, GitMerge, ArrowUpRight } from 'lucide-react'
+import { Radio, Activity, GitMerge, ArrowUpRight, ExternalLink } from 'lucide-react'
 import Reveal from '@/components/ui/Reveal'
 
 const PANELS = [
@@ -13,6 +13,7 @@ const PANELS = [
     tag: 'threat_api',
     accent: '#FF2E97',
     blurb: 'Five OSINT sources, one unified feed.',
+    href: '/platform/threat-intelligence',
     points: [
       'Parallel fetch across OTX, abuse.ch, RSS, dark-web, and social OSINT',
       'VirusTotal enrichment with reputation scores and category tags',
@@ -27,6 +28,7 @@ const PANELS = [
     tag: 'log_api',
     accent: '#7A3CFF',
     blurb: 'Four detectors run on every line.',
+    href: '/platform/log-analysis',
     points: [
       'Parsers for Apache, syslog, Windows Event XML, and generic logs',
       'Pattern, statistical, ML, and temporal detection layers',
@@ -41,6 +43,7 @@ const PANELS = [
     tag: 'stix 2.1',
     accent: '#FFB23E',
     blurb: 'Push enriched intelligence downstream.',
+    href: '/platform/opencti',
     points: [
       'Bundle any indicator set as standards-compliant STIX 2.1',
       'Push directly to OpenCTI over its GraphQL API',
@@ -138,7 +141,7 @@ export default function ExpandingShowcase() {
                           <p className="text-xl md:text-2xl font-display text-white/90 mb-6 max-w-md">
                             {panel.blurb}
                           </p>
-                          <ul className="space-y-3 max-w-lg">
+                          <ul className="space-y-3 max-w-lg mb-6">
                             {panel.points.map((pt) => (
                               <li key={pt} className="flex items-start gap-3">
                                 <span
@@ -149,6 +152,14 @@ export default function ExpandingShowcase() {
                               </li>
                             ))}
                           </ul>
+                          <a
+                            href={panel.href}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+                            style={{ color: panel.accent }}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Full platform details
+                          </a>
                         </motion.div>
                       )}
                     </AnimatePresence>

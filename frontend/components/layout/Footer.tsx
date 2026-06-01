@@ -3,25 +3,31 @@ import Logo from '@/components/ui/Logo'
 
 const LINKS = {
   Platform: [
-    { label: 'Threat Intelligence', href: '/#threat-intel' },
-    { label: 'Log Analysis', href: '/#log-analysis' },
-    { label: 'OpenCTI Integration', href: '/#opencti' },
-    { label: 'STIX Export', href: '/#features' },
-    { label: 'API Reference', href: '/docs/rest-api' },
+    { label: 'Threat Intelligence', href: '/platform/threat-intelligence' },
+    { label: 'Log Analysis',        href: '/platform/log-analysis' },
+    { label: 'OpenCTI Integration', href: '/platform/opencti' },
+    { label: 'STIX Export',         href: '/platform/opencti' },
+    { label: 'API Reference',       href: '/docs/rest-api' },
+  ],
+  Products: [
+    { label: 'Super SOC',           href: '/products/super-soc' },
+    { label: 'CTI Library',         href: '/products/cti-library' },
+    { label: 'SIEM + SOAR',         href: '/products/siem-soar' },
+    { label: 'Pricing',             href: '/#pricing' },
   ],
   Developers: [
-    { label: 'Quick Start', href: '/docs/quick-start' },
+    { label: 'Quick Start',    href: '/docs/quick-start' },
     { label: 'Authentication', href: '/docs/authentication' },
-    { label: 'REST API', href: '/docs/rest-api' },
-    { label: 'Docker Deploy', href: '/docs/docker-deploy' },
-    { label: 'Changelog', href: '/docs/changelog' },
+    { label: 'REST API',       href: '/docs/rest-api' },
+    { label: 'Docker Deploy',  href: '/docs/docker-deploy' },
+    { label: 'Changelog',      href: '/docs/changelog' },
   ],
   Company: [
-    { label: 'About', href: '/#about' },
-    { label: 'Security', href: '/security' },
-    { label: 'Privacy Policy', href: '/privacy' },
-    { label: 'Terms of Service', href: '/terms' },
-    { label: 'Contact', href: '/#contact' },
+    { label: 'About',           href: '/#about' },
+    { label: 'Security',        href: '/security' },
+    { label: 'Privacy Policy',  href: '/privacy' },
+    { label: 'Terms of Service',href: '/terms' },
+    { label: 'Contact',         href: '/#contact' },
   ],
 }
 
@@ -31,7 +37,7 @@ export default function Footer() {
       <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-magenta/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-10 mb-14">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-10 mb-14">
           <div className="col-span-2">
             <a href="/" className="flex items-center gap-2.5 mb-4 group w-fit">
               <Logo size={26} />
@@ -42,7 +48,7 @@ export default function Footer() {
             </a>
             <p className="text-sm text-ink-500 leading-relaxed max-w-xs">
               Enterprise threat intelligence ingestion, log anomaly detection, and OpenCTI
-              integration, built for the modern security team.
+              integration — built for the modern security team.
             </p>
             <div className="flex items-center gap-3 mt-5">
               <a

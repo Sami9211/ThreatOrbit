@@ -21,19 +21,19 @@ const GROUPS: MenuGroup[] = [
   {
     heading: 'Products',
     items: [
-      { label: 'Super SOC', href: '#pricing', desc: 'CTI + SIEM + SOAR, unified' },
-      { label: 'CTI Library', href: '#threat-intel', desc: 'Threat intelligence ingestion' },
-      { label: 'SIEM', href: '#log-analysis', desc: 'Log analysis and detection' },
-      { label: 'SOAR', href: '#how-it-works', desc: 'Automated response pipeline' },
+      { label: 'Super SOC',   href: '/products/super-soc',  desc: 'CTI + SIEM + SOAR, unified' },
+      { label: 'CTI Library', href: '/products/cti-library', desc: 'Threat intelligence ingestion' },
+      { label: 'SIEM + SOAR', href: '/products/siem-soar',   desc: 'Detection and automated response' },
+      { label: 'Pricing',     href: '/#pricing',             desc: 'Plans and pricing' },
     ],
   },
   {
     heading: 'Platform',
     items: [
-      { label: 'OpenCTI Integration', href: '#opencti' },
-      { label: 'STIX 2.1 Export', href: '#features' },
-      { label: 'Dashboard', href: '#features' },
-      { label: 'Capabilities', href: '#features' },
+      { label: 'Threat Intelligence', href: '/platform/threat-intelligence', desc: 'OSINT ingestion and enrichment' },
+      { label: 'Log Analysis',        href: '/platform/log-analysis',        desc: 'Four-layer anomaly detection' },
+      { label: 'OpenCTI Integration', href: '/platform/opencti',             desc: 'STIX 2.1 push and sync' },
+      { label: 'API Reference',       href: '/docs/rest-api',                desc: 'All endpoints documented' },
     ],
   },
   {
