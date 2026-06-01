@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import { Check, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Reveal from '@/components/ui/Reveal'
@@ -80,16 +81,28 @@ export default function Pricing() {
 
       <div className="grid md:grid-cols-3 gap-5">
         {TIERS.map((tier, i) => (
-          <Reveal key={tier.name} variant="bloom" delay={i * 0.08}>
+          <Reveal key={tier.name} variant="bloom" delay={i * 0.08} className={cn('relative', tier.highlighted && 'md:-mt-3 md:mb-3')}>
+            {/* Spinning conic gradient ring behind the flagship tier */}
+            {tier.highlighted && (
+              <div className="absolute -inset-px rounded-3xl overflow-hidden pointer-events-none">
+                <div
+                  className="absolute -inset-[40%] animate-spin-slow"
+                  style={{
+                    background: 'conic-gradient(from 0deg, transparent 0deg, #FFB23E 60deg, #FF2E97 120deg, transparent 200deg, #7A3CFF 300deg, transparent 360deg)',
+                    opacity: 0.5,
+                  }}
+                />
+              </div>
+            )}
             <TiltCard
               intensity={6}
               className={cn(
                 'relative h-full rounded-3xl p-7 glass border transition-colors duration-300',
-                tier.highlighted ? 'border-amber/30' : 'border-white/8 hover:border-white/15'
+                tier.highlighted ? 'border-amber/30 bg-surface/95' : 'border-white/8 hover:border-white/15'
               )}
             >
               {tier.highlighted && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-plasma text-white text-[10px] font-semibold tracking-wide uppercase">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-plasma text-white text-[10px] font-semibold tracking-wide uppercase z-10">
                   Most complete
                 </span>
               )}
@@ -121,11 +134,18 @@ export default function Pricing() {
               </a>
 
               <ul className="space-y-3">
-                {tier.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5">
+                {tier.features.map((f, fi) => (
+                  <motion.li
+                    key={f}
+                    initial={{ opacity: 0, x: -8 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, margin: '-40px' }}
+                    transition={{ delay: 0.2 + fi * 0.06 }}
+                    className="flex items-start gap-2.5"
+                  >
                     <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: tier.accent }} />
                     <span className="text-sm text-ink-300">{f}</span>
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
             </TiltCard>
