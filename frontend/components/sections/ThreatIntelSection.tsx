@@ -1,17 +1,18 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import { motion, useInView } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import { motion, AnimatePresence, useInView } from 'framer-motion'
 import { Globe, Radio, AlertTriangle, Hash, Link2, Server } from 'lucide-react'
+import { usePerfProfile } from '@/lib/usePerf'
 
-const MOCK_IOCS = [
-  { type: 'ip', value: '185.234.218.xxx', score: 94, source: 'OTX', tags: ['C2', 'botnet'] },
-  { type: 'domain', value: 'malware-c2.xyz', score: 87, source: 'abuse.ch', tags: ['malware'] },
-  { type: 'hash', value: 'a3f1b2c9d8e7...', score: 76, source: 'VT', tags: ['trojan', 'dropper'] },
-  { type: 'url', value: 'http://phish.ru/auth', score: 91, source: 'RSS', tags: ['phishing'] },
-  { type: 'ip', value: '45.12.34.xxx', score: 62, source: 'OSINT', tags: ['scanner'] },
-  { type: 'domain', value: 'update-mirror.cc', score: 83, source: 'OTX', tags: ['C2'] },
-]
+type IOC = {
+  id: number
+  type: 'ip' | 'domain' | 'hash' | 'url'
+  value: string
+  score: number
+  source: string
+  tags: string[]
+}
 
 const TYPE_CONFIG = {
   ip: { icon: Server, color: 'text-magenta', bg: 'bg-magenta/10' },
@@ -19,6 +20,39 @@ const TYPE_CONFIG = {
   hash: { icon: Hash, color: 'text-amber', bg: 'bg-amber/10' },
   url: { icon: Link2, color: 'text-safe', bg: 'bg-safe/10' },
 }
+
+/* ── Procedural IOC generator for the live feed ── */
+const SOURCES = ['OTX', 'abuse.ch', 'VT', 'RSS', 'OSINT', 'URLhaus', 'MalwareBazaar']
+const TLDS = ['xyz', 'ru', 'cc', 'top', 'info', 'su', 'tk', 'biz']
+const TAG_POOL = {
+  ip: [['C2', 'botnet'], ['scanner'], ['bruteforce'], ['C2'], ['proxy', 'tor']],
+  domain: [['malware'], ['C2'], ['phishing'], ['fastflux'], ['dga']],
+  hash: [['trojan', 'dropper'], ['ransomware'], ['stealer'], ['loader'], ['rat']],
+  url: [['phishing'], ['exploit-kit'], ['credential-harvest'], ['malware']],
+}
+const HEX = '0123456789abcdef'
+const rnd = (n: number) => Math.floor(Math.random() * n)
+const pick = <T,>(a: T[]): T => a[rnd(a.length)]
+const hex = (n: number) => Array.from({ length: n }, () => HEX[rnd(16)]).join('')
+
+function makeIOC(id: number): IOC {
+  const type = pick(['ip', 'domain', 'hash', 'url'] as const)
+  let value = ''
+  if (type === 'ip') value = `${rnd(223) + 1}.${rnd(255)}.${rnd(255)}.xxx`
+  else if (type === 'domain') value = `${pick(['secure', 'update', 'cdn', 'login', 'mail', 'api'])}-${hex(4)}.${pick(TLDS)}`
+  else if (type === 'hash') value = `${hex(12)}...`
+  else value = `http://${hex(5)}.${pick(TLDS)}/${pick(['auth', 'login', 'pay', 'verify', 'cmd'])}`
+  return {
+    id,
+    type,
+    value,
+    score: 55 + rnd(45),
+    source: pick(SOURCES),
+    tags: pick(TAG_POOL[type]),
+  }
+}
+
+const INITIAL: IOC[] = Array.from({ length: 6 }, (_, i) => makeIOC(i))
 
 function ScoreBadge({ score }: { score: number }) {
   const color =
@@ -37,7 +71,27 @@ function ScoreBadge({ score }: { score: number }) {
 export default function ThreatIntelSection() {
   const ref = useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { once: true, margin: '-80px' })
-  const [activeRow, setActiveRow] = useState<string | null>(null)
+  const liveRef = useRef<HTMLDivElement>(null)
+  const feedVisible = useInView(liveRef, { margin: '-40px' })
+  const [activeRow, setActiveRow] = useState<number | null>(null)
+  const { prefersReducedMotion } = usePerfProfile()
+
+  const [feed, setFeed] = useState<IOC[]>(INITIAL)
+  const [count, setCount] = useState(2_148_392)
+  const idRef = useRef(INITIAL.length)
+
+  // Stream new IOCs while the feed is on-screen
+  useEffect(() => {
+    if (prefersReducedMotion || !feedVisible) return
+    const t = setInterval(() => {
+      setFeed((prev) => {
+        const next = makeIOC(idRef.current++)
+        return [next, ...prev].slice(0, 7)
+      })
+      setCount((c) => c + 1 + rnd(4))
+    }, 1900)
+    return () => clearInterval(t)
+  }, [prefersReducedMotion, feedVisible])
 
   return (
     <section id="threat-intel" ref={ref} className="py-28 max-w-7xl mx-auto px-6">
@@ -95,6 +149,7 @@ export default function ThreatIntelSection() {
         </motion.div>
 
         <motion.div
+          ref={liveRef}
           initial={{ opacity: 0, x: 32 }}
           animate={inView ? { opacity: 1, x: 0 } : {}}
           transition={{ duration: 0.7, delay: 0.15 }}
@@ -103,45 +158,60 @@ export default function ThreatIntelSection() {
           <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/2">
             <AlertTriangle className="w-3.5 h-3.5 text-threat" strokeWidth={1.5} />
             <span className="text-xs text-ink-300 font-medium">Live IOC Feed</span>
-            <span className="ml-auto w-2 h-2 rounded-full bg-safe animate-pulse" />
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] text-safe">
+              <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
+              streaming
+            </span>
           </div>
 
-          <div className="divide-y divide-white/4">
-            {MOCK_IOCS.map((ioc, i) => {
-              const cfg = TYPE_CONFIG[ioc.type as keyof typeof TYPE_CONFIG]
-              const Icon = cfg.icon
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={inView ? { opacity: 1, x: 0 } : {}}
-                  transition={{ delay: 0.2 + i * 0.07 }}
-                  onMouseEnter={() => setActiveRow(ioc.value)}
-                  onMouseLeave={() => setActiveRow(null)}
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors duration-200 cursor-default ${
-                    activeRow === ioc.value ? 'bg-white/3' : ''
-                  }`}
-                >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${cfg.bg}`}>
-                    <Icon className={`w-3.5 h-3.5 ${cfg.color}`} strokeWidth={1.5} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-mono text-ink-200 truncate">{ioc.value}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {ioc.tags.map((t) => (
-                        <span key={t} className="text-[9px] text-ink-500 bg-white/5 px-1.5 py-0.5 rounded">
-                          {t}
-                        </span>
-                      ))}
+          {/* total counter */}
+          <div className="flex items-baseline justify-between px-4 py-2.5 border-b border-white/5">
+            <span className="text-[10px] text-ink-500 uppercase tracking-widest">Indicators tracked</span>
+            <span className="font-mono text-sm font-bold text-magenta tabular-nums">
+              {count.toLocaleString()}
+            </span>
+          </div>
+
+          <div className="divide-y divide-white/4 min-h-[336px]">
+            <AnimatePresence initial={false}>
+              {feed.map((ioc) => {
+                const cfg = TYPE_CONFIG[ioc.type]
+                const Icon = cfg.icon
+                return (
+                  <motion.div
+                    key={ioc.id}
+                    layout
+                    initial={{ opacity: 0, height: 0, backgroundColor: 'rgba(255,46,151,0.10)' }}
+                    animate={{ opacity: 1, height: 'auto', backgroundColor: 'rgba(255,46,151,0)' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                    onMouseEnter={() => setActiveRow(ioc.id)}
+                    onMouseLeave={() => setActiveRow(null)}
+                    className={`flex items-center gap-3 px-4 py-3 overflow-hidden cursor-default ${
+                      activeRow === ioc.id ? 'bg-white/3' : ''
+                    }`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${cfg.bg}`}>
+                      <Icon className={`w-3.5 h-3.5 ${cfg.color}`} strokeWidth={1.5} />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] text-ink-500">{ioc.source}</span>
-                    <ScoreBadge score={ioc.score} />
-                  </div>
-                </motion.div>
-              )
-            })}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-mono text-ink-200 truncate">{ioc.value}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {ioc.tags.map((t) => (
+                          <span key={t} className="text-[9px] text-ink-500 bg-white/5 px-1.5 py-0.5 rounded">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-ink-500">{ioc.source}</span>
+                      <ScoreBadge score={ioc.score} />
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
           </div>
 
           <div className="px-4 py-3 border-t border-white/5 text-[10px] text-ink-500 font-mono">
