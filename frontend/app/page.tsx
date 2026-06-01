@@ -2,6 +2,7 @@ import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
 import SmoothScroll from '@/components/effects/SmoothScroll'
 import CursorGlow from '@/components/effects/CursorGlow'
+import Preloader from '@/components/effects/Preloader'
 import ScrollProgress from '@/components/ui/ScrollProgress'
 import Chatbot from '@/components/ui/Chatbot'
 import Hero from '@/components/sections/Hero'
@@ -22,6 +23,7 @@ import CTA from '@/components/sections/CTA'
 export default function Home() {
   return (
     <SmoothScroll>
+      <Preloader />
       <ScrollProgress />
       <CursorGlow />
       <Navbar />
