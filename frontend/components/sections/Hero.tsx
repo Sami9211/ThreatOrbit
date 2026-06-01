@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic'
 import MagneticButton from '@/components/ui/MagneticButton'
 import CountUp from '@/components/ui/CountUp'
 
-const ParticleNetwork = dynamic(() => import('@/components/effects/ParticleNetwork'), { ssr: false })
+const HeroScene = dynamic(() => import('@/components/effects/HeroScene'), { ssr: false })
 
 const TERMINAL_LINES = [
   { text: '> Ingesting OSINT feeds...', color: 'text-magenta' },
@@ -100,9 +100,9 @@ export default function Hero() {
       className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden"
       onMouseMove={handleMouseMove}
     >
-      {/* Particle network background */}
-      <motion.div style={{ scale: bgScale }} className="absolute inset-0 z-0 opacity-70">
-        <ParticleNetwork className="absolute inset-0" />
+      {/* 3D floating geometry background — Three.js + bloom */}
+      <motion.div style={{ scale: bgScale }} className="absolute inset-0 z-0 opacity-85">
+        <HeroScene mouseX={mouseX} mouseY={mouseY} />
       </motion.div>
 
       {/* 3D depth orbs — each at different z-depth, parallaxes at different rates */}
