@@ -52,7 +52,16 @@ function makeIOC(id: number): IOC {
   }
 }
 
-const INITIAL: IOC[] = Array.from({ length: 6 }, (_, i) => makeIOC(i))
+/* Static seed so server and client render identically (no hydration mismatch).
+   The procedural generator only kicks in after mount. */
+const INITIAL: IOC[] = [
+  { id: 0, type: 'ip',     value: '185.234.218.xxx',     score: 94, source: 'OTX',      tags: ['C2', 'botnet'] },
+  { id: 1, type: 'domain', value: 'secure-9a3f.xyz',     score: 87, source: 'abuse.ch', tags: ['malware'] },
+  { id: 2, type: 'hash',   value: 'a3f1b2c9d8e7...',     score: 76, source: 'VT',       tags: ['trojan', 'dropper'] },
+  { id: 3, type: 'url',    value: 'http://b2c9f.ru/auth',score: 91, source: 'RSS',      tags: ['phishing'] },
+  { id: 4, type: 'ip',     value: '45.12.34.xxx',        score: 62, source: 'OSINT',    tags: ['scanner'] },
+  { id: 5, type: 'domain', value: 'update-7e1a.cc',      score: 83, source: 'URLhaus',  tags: ['C2'] },
+]
 
 function ScoreBadge({ score }: { score: number }) {
   const color =
