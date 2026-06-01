@@ -12,7 +12,7 @@ const NAV_LINKS = [
   { label: 'Products', href: '#pricing' },
   { label: 'Threat Intel', href: '#threat-intel' },
   { label: 'About', href: '#about' },
-  { label: 'Docs', href: '#docs' },
+  { label: 'Docs', href: '/docs' },
 ]
 
 export default function Navbar() {

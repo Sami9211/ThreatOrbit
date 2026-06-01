@@ -34,14 +34,14 @@ export default function CTA() {
 
             <div className="flex flex-wrap items-center justify-center gap-4 mb-10">
               <MagneticButton
-                href="#docs"
+                href="/docs/docker-deploy"
                 className="px-8 py-3.5 rounded-xl bg-plasma text-white font-semibold text-sm transition-shadow duration-300 hover:shadow-magenta-lg"
               >
                 Deploy Now
                 <ArrowRight className="w-4 h-4" />
               </MagneticButton>
               <MagneticButton
-                href="https://github.com"
+                href="https://github.com/Sami9211/ThreatOrbit-V2"
                 className="px-8 py-3.5 rounded-xl glass border border-white/10 text-ink-200 font-medium text-sm hover:border-white/25 hover:text-white transition-colors duration-300"
               >
                 <Github className="w-4 h-4" />
