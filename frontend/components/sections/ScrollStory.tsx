@@ -1,10 +1,14 @@
 'use client'
 
 import { useRef } from 'react'
+import dynamic from 'next/dynamic'
 import {
   motion, useScroll, useTransform, useSpring,
   useMotionValue, type MotionValue,
 } from 'framer-motion'
+
+/* Three.js hex prism — client-only (no SSR) */
+const HexPrism = dynamic(() => import('@/components/effects/HexPrism'), { ssr: false })
 
 /* ─── Narrative beat ─────────────────────────────────────────────── */
 function Beat({
@@ -27,7 +31,7 @@ function Beat({
   )
 }
 
-/* ─── Single CSS-3D orbital ring ─────────────────────────────────── */
+/* ─── CSS-3D orbital ring ────────────────────────────────────────── */
 function Ring({
   color, rotateZ, opacity, label,
 }: {
@@ -60,77 +64,7 @@ function Ring({
   )
 }
 
-/* ─── 3D spinning hexagon core ───────────────────────────────────── */
-function HexCore({
-  opacity,
-  rotateY,
-}: {
-  opacity: MotionValue<number>
-  rotateY: MotionValue<number>
-}) {
-  return (
-    <motion.div style={{
-      position: 'absolute', inset: '30%',
-      opacity,
-      translateZ: 28,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      transformStyle: 'preserve-3d',
-    }}>
-      {/* Inner wrapper receives the Y-spin — uses the outer 900px perspective */}
-      <motion.div style={{
-        width: '100%', height: '100%',
-        rotateY,
-      }}>
-        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-          <defs>
-            <radialGradient id="hex3d-fill" cx="38%" cy="30%" r="72%">
-              <stop offset="0%"   stopColor="rgba(255,255,255,0.95)" />
-              <stop offset="22%"  stopColor="#FF2E97" />
-              <stop offset="62%"  stopColor="#7A3CFF" />
-              <stop offset="100%" stopColor="#2D0553" />
-            </radialGradient>
-            <linearGradient id="hex3d-sheen" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%"  stopColor="rgba(255,255,255,0.35)" />
-              <stop offset="45%" stopColor="rgba(255,255,255,0.00)" />
-            </linearGradient>
-          </defs>
-
-          {/* Outer glow layer */}
-          <path
-            d="M50 8 L87 29 L87 71 L50 92 L13 71 L13 29 Z"
-            fill="url(#hex3d-fill)" opacity="0.22"
-            style={{ filter: 'blur(12px)', transform: 'scale(1.15)', transformOrigin: '50px 50px' }}
-          />
-          {/* Main body */}
-          <path d="M50 8 L87 29 L87 71 L50 92 L13 71 L13 29 Z" fill="url(#hex3d-fill)" />
-          {/* Top-left bright facet */}
-          <path d="M50 8 L87 29 L50 50 Z" fill="url(#hex3d-sheen)" />
-          {/* Left dimmer facet */}
-          <path d="M50 8 L13 29 L50 50 Z" fill="rgba(255,255,255,0.04)" />
-          {/* Inner ring */}
-          <path
-            d="M50 20 L78 35 L78 65 L50 80 L22 65 L22 35 Z"
-            fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.8"
-          />
-          {/* Center dot */}
-          <circle cx="50" cy="50" r="4" fill="rgba(255,255,255,0.6)" />
-        </svg>
-      </motion.div>
-
-      {/* Ambient halo */}
-      <div style={{
-        position: 'absolute', inset: '-50%',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(255,46,151,0.20) 0%, rgba(122,60,255,0.12) 40%, transparent 70%)',
-        filter: 'blur(18px)',
-        zIndex: -1,
-        pointerEvents: 'none',
-      }} />
-    </motion.div>
-  )
-}
-
-/* ─── Full 3D orbital stage ──────────────────────────────────────── */
+/* ─── Orbital stage (rings only — hex handled by WebGL) ──────────── */
 function OrbitalStage({
   progress, smoothProgress, mouseX, mouseY,
 }: {
@@ -150,13 +84,9 @@ function OrbitalStage({
   const r2 = useTransform(scrollRot, v => v + 120)
   const r3 = useTransform(scrollRot, v => v + 240)
 
-  /* Hexagon spins in 3D as sections change — driven by smoothed progress */
-  const hexRotY = useTransform(smoothProgress, [0, 1], [0, 360])
-
-  const cti      = useTransform(progress, [0.18, 0.3, 0.42], [0.28, 1, 0.38])
-  const siem     = useTransform(progress, [0.42, 0.54, 0.66], [0.28, 1, 0.38])
-  const soar     = useTransform(progress, [0.66, 0.78, 0.9 ], [0.28, 1, 0.38])
-  const coreGlow = useTransform(progress, [0, 0.85, 1], [0.55, 0.72, 1])
+  const cti  = useTransform(progress, [0.18, 0.3, 0.42], [0.28, 1, 0.38])
+  const siem = useTransform(progress, [0.42, 0.54, 0.66], [0.28, 1, 0.38])
+  const soar = useTransform(progress, [0.66, 0.78, 0.9 ], [0.28, 1, 0.38])
 
   return (
     <motion.div
@@ -174,10 +104,10 @@ function OrbitalStage({
           <Ring color="#FF2E97" rotateZ={r1} opacity={cti}  label="CTI ring"  />
           <Ring color="#7A3CFF" rotateZ={r2} opacity={siem} label="SIEM ring" />
           <Ring color="#FFB23E" rotateZ={r3} opacity={soar} label="SOAR ring" />
-          <HexCore opacity={coreGlow} rotateY={hexRotY} />
         </motion.div>
       </div>
 
+      {/* Ambient backdrop */}
       <div className="absolute inset-0 -z-10 rounded-full blur-3xl"
         style={{ background: 'radial-gradient(circle, rgba(255,46,151,0.08) 0%, rgba(122,60,255,0.08) 50%, transparent 70%)' }}
       />
@@ -197,12 +127,15 @@ export default function ScrollStory() {
     offset: ['start start', 'end end'],
   })
 
-  /* Spring-smoothed progress — text beats stay smooth regardless of scroll speed */
+  /* Spring-smoothed — text beats stay smooth at any scroll speed */
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 28,
     restDelta: 0.001,
   })
+
+  /* Hex prism spin: 0 → 360° over full scroll, driven by smooth progress */
+  const hexRotY = useTransform(smoothProgress, [0, 1], [0, 360])
 
   const handleMove = (e: React.MouseEvent) => {
     const el = stickyRef.current
@@ -224,12 +157,21 @@ export default function ScrollStory() {
         <div className="absolute inset-0 plasma-mesh opacity-50" />
         <div className="absolute inset-0 bg-grid-dim opacity-20" />
 
+        {/* CSS 3D orbital rings */}
         <OrbitalStage
           progress={scrollYProgress}
           smoothProgress={smoothProgress}
           mouseX={mouseX}
           mouseY={mouseY}
         />
+
+        {/* Real 3D hex prism — WebGL, transparent background, layered above rings */}
+        <div
+          className="absolute pointer-events-none"
+          style={{ width: 'min(38vw, 220px)', height: 'min(38vw, 220px)', zIndex: 10 }}
+        >
+          <HexPrism scrollY={hexRotY} mouseX={mouseX} mouseY={mouseY} />
+        </div>
 
         <Beat progress={smoothProgress} range={[0.0, 0.14]} className="top-[16%]">
           <p className="text-xs tracking-[0.3em] text-magenta uppercase mb-4">This is ThreatOrbit</p>
