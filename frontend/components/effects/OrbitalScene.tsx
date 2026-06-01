@@ -2,9 +2,11 @@
 
 import { useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
+import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
+import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 
 /* ── Ring config ── */
 const RING_R = 1.85  // torus major radius
@@ -20,11 +22,11 @@ const RINGS: RingDef[] = [
 ]
 
 /* ── Single torus ring + riding node ── */
-function Ring({ rot, color, speed }: RingDef) {
+function Ring({ rot, color, speed, animate }: RingDef & { animate: boolean }) {
   const spinRef = useRef<THREE.Group>(null)
 
   useFrame((_, dt) => {
-    if (spinRef.current) spinRef.current.rotation.z += dt * speed
+    if (spinRef.current && animate) spinRef.current.rotation.z += dt * speed
   })
 
   return (
@@ -37,7 +39,6 @@ function Ring({ rot, color, speed }: RingDef) {
             emissiveIntensity={1.4} toneMapped={false}
           />
         </mesh>
-        {/* glowing node riding the ring's edge */}
         <mesh position={[RING_R, 0, 0]}>
           <sphereGeometry args={[0.085, 16, 16]} />
           <meshStandardMaterial
@@ -50,33 +51,28 @@ function Ring({ rot, color, speed }: RingDef) {
   )
 }
 
-/* ── Full orbital (rings + hex, scroll + mouse reactive) ── */
-function Orbital({ scrollY, mouseX, mouseY }: {
+function Orbital({ scrollY, mouseX, mouseY, animate }: {
   scrollY: MotionValue<number>
   mouseX:  MotionValue<number>
   mouseY:  MotionValue<number>
+  animate: boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
   const hexRef   = useRef<THREE.Mesh>(null)
 
   useFrame((_, dt) => {
     if (!groupRef.current) return
-    /* scroll drives Y rotation of the whole cluster */
     groupRef.current.rotation.y = (scrollY.get() * Math.PI) / 180
-    /* mouse tilts X and Z gently */
     groupRef.current.rotation.x +=
       (mouseY.get() * 0.55 - groupRef.current.rotation.x) * 0.06
     groupRef.current.rotation.z +=
       (mouseX.get() * -0.3 - groupRef.current.rotation.z) * 0.06
-    /* hex spins on its own Y axis */
-    if (hexRef.current) hexRef.current.rotation.y += dt * 0.38
+    if (hexRef.current && animate) hexRef.current.rotation.y += dt * 0.38
   })
 
   return (
     <group ref={groupRef}>
-      {RINGS.map((r, i) => <Ring key={i} {...r} />)}
-
-      {/* central hexagonal prism */}
+      {RINGS.map((r, i) => <Ring key={i} {...r} animate={animate} />)}
       <mesh ref={hexRef}>
         <cylinderGeometry args={[0.44, 0.44, 0.26, 6, 1]} />
         <meshStandardMaterial
@@ -89,31 +85,43 @@ function Orbital({ scrollY, mouseX, mouseY }: {
   )
 }
 
-/* ── Canvas export ── */
 export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   scrollY: MotionValue<number>
   mouseX:  MotionValue<number>
   mouseY:  MotionValue<number>
 }) {
+  const { prefersReducedMotion, isLowPower } = usePerfProfile()
+  const { ref, visible } = useInViewport<HTMLDivElement>('200px')
+
+  const animate = !prefersReducedMotion
+  const enableBloom = !isLowPower
+
   return (
-    <Canvas
-      camera={{ position: [0, 1.4, 5.6], fov: 44 }}
-      gl={{ alpha: true, antialias: true }}
-      dpr={[1, 2]}
-      style={{ background: 'transparent', width: '100%', height: '100%' }}
-    >
-      <ambientLight intensity={0.06} />
-      <pointLight position={[4,  4, 4]}  intensity={1.8} color="#FF2E97" />
-      <pointLight position={[-4, -2, 2]} intensity={1.2} color="#7A3CFF" />
-      <Orbital scrollY={scrollY} mouseX={mouseX} mouseY={mouseY} />
-      <EffectComposer>
-        <Bloom
-          intensity={2.2}
-          luminanceThreshold={0.12}
-          luminanceSmoothing={0.88}
-          mipmapBlur
-        />
-      </EffectComposer>
-    </Canvas>
+    <div ref={ref} className="w-full h-full">
+      <Canvas
+        frameloop={visible ? 'always' : 'demand'}
+        camera={{ position: [0, 1.4, 5.6], fov: 44 }}
+        gl={{ alpha: true, antialias: !isLowPower, powerPreference: 'high-performance' }}
+        dpr={isLowPower ? [1, 1.5] : [1, 2]}
+        style={{ background: 'transparent', width: '100%', height: '100%' }}
+      >
+        <ambientLight intensity={0.06} />
+        <pointLight position={[4,  4, 4]}  intensity={1.8} color="#FF2E97" />
+        <pointLight position={[-4, -2, 2]} intensity={1.2} color="#7A3CFF" />
+        <Orbital scrollY={scrollY} mouseX={mouseX} mouseY={mouseY} animate={animate} />
+        {enableBloom && (
+          <EffectComposer>
+            <Bloom
+              intensity={2.2}
+              luminanceThreshold={0.12}
+              luminanceSmoothing={0.88}
+              mipmapBlur
+            />
+          </EffectComposer>
+        )}
+        <PerformanceMonitor />
+        <AdaptiveDpr pixelated />
+      </Canvas>
+    </div>
   )
 }
