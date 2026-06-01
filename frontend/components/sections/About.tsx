@@ -1,7 +1,10 @@
 'use client'
 
-import { Radio, Activity, Zap } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { motion, useInView } from 'framer-motion'
+import { Radio, Activity, Zap, ArrowDown } from 'lucide-react'
 import Reveal from '@/components/ui/Reveal'
+import { usePerfProfile } from '@/lib/usePerf'
 
 const PILLARS = [
   {
@@ -28,6 +31,17 @@ const PILLARS = [
 ]
 
 export default function About() {
+  const colRef = useRef<HTMLDivElement>(null)
+  const colView = useInView(colRef, { margin: '-80px' })
+  const { prefersReducedMotion } = usePerfProfile()
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    if (prefersReducedMotion || !colView) return
+    const t = setInterval(() => setActive((a) => (a + 1) % PILLARS.length), 2200)
+    return () => clearInterval(t)
+  }, [prefersReducedMotion, colView])
+
   return (
     <section id="about" className="py-28 bg-surface overflow-hidden">
       <div className="max-w-7xl mx-auto px-6">
@@ -53,30 +67,62 @@ export default function About() {
             </p>
           </Reveal>
 
-          <Reveal variant="right" className="space-y-4">
-            {PILLARS.map((p) => {
-              const Icon = p.icon
-              return (
-                <div
-                  key={p.name}
-                  className="glass border border-white/8 rounded-2xl p-5 flex gap-4 hover:border-white/15 transition-colors"
-                >
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border"
-                    style={{ color: p.color, backgroundColor: `${p.color}1a`, borderColor: `${p.color}33` }}
-                  >
-                    <Icon className="w-5 h-5" strokeWidth={1.5} />
+          <Reveal variant="right">
+            <div ref={colRef} className="relative">
+              {PILLARS.map((p, i) => {
+                const Icon = p.icon
+                const isActive = active === i
+                return (
+                  <div key={p.name}>
+                    <motion.div
+                      onMouseEnter={() => setActive(i)}
+                      animate={{
+                        borderColor: isActive ? `${p.color}55` : 'rgba(255,255,255,0.08)',
+                        backgroundColor: isActive ? `${p.color}0c` : 'rgba(255,255,255,0.02)',
+                      }}
+                      transition={{ duration: 0.4 }}
+                      className="glass border rounded-2xl p-5 flex gap-4 cursor-default"
+                    >
+                      <motion.div
+                        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border relative"
+                        style={{ color: p.color, backgroundColor: `${p.color}1a`, borderColor: `${p.color}33` }}
+                        animate={isActive ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <Icon className="w-5 h-5" strokeWidth={1.5} />
+                        {isActive && (
+                          <motion.span
+                            className="absolute inset-0 rounded-xl"
+                            style={{ boxShadow: `0 0 20px ${p.color}66` }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                          />
+                        )}
+                      </motion.div>
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-display font-bold text-white">{p.name}</span>
+                          <span className="text-[11px] text-ink-500">{p.full}</span>
+                        </div>
+                        <p className="text-sm text-ink-400 leading-relaxed mt-1">{p.desc}</p>
+                      </div>
+                    </motion.div>
+
+                    {/* flowing connector between pillars */}
+                    {i < PILLARS.length - 1 && (
+                      <div className="flex justify-center py-2">
+                        <motion.div
+                          animate={active === i ? { y: [0, 4, 0], opacity: 1 } : { opacity: 0.35 }}
+                          transition={{ duration: 1, repeat: active === i ? Infinity : 0 }}
+                        >
+                          <ArrowDown className="w-4 h-4" style={{ color: PILLARS[i].color }} strokeWidth={2} />
+                        </motion.div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-display font-bold text-white">{p.name}</span>
-                      <span className="text-[11px] text-ink-500">{p.full}</span>
-                    </div>
-                    <p className="text-sm text-ink-400 leading-relaxed mt-1">{p.desc}</p>
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </Reveal>
         </div>
       </div>
