@@ -4,9 +4,10 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 /**
- * ThreatOrbit mark: a luminous plasma core with nodes orbiting on two
- * tilted elliptical rings. Pure SVG, animated with Framer Motion so it
- * stays crisp at any size and ties into the hero particle field.
+ * ThreatOrbit mark: a shielded hexagon core (the unified Super SOC) wrapped
+ * by three orbital rings that stand for the three disciplines converging into
+ * it: CTI (magenta), SIEM (violet), and SOAR (amber). Nodes on the rings are
+ * threats under continuous watch. Pure animated SVG, crisp at any size.
  */
 export default function Logo({
   size = 28,
@@ -17,6 +18,12 @@ export default function Logo({
   className?: string
   animate?: boolean
 }) {
+  const rings = [
+    { rotate: 0, color: '#FF2E97', dur: 13, node: { cx: 44, cy: 24 } }, // CTI
+    { rotate: 60, color: '#7A3CFF', dur: 17, node: { cx: 4, cy: 24 } }, // SIEM
+    { rotate: 120, color: '#FFB23E', dur: 21, node: { cx: 24, cy: 44 } }, // SOAR
+  ]
+
   return (
     <svg
       width={size}
@@ -27,65 +34,49 @@ export default function Logo({
       aria-label="ThreatOrbit logo"
     >
       <defs>
-        <radialGradient id="to-core" cx="50%" cy="50%" r="50%">
+        <radialGradient id="to-core" cx="50%" cy="40%" r="65%">
           <stop offset="0%" stopColor="#FFC76B" />
           <stop offset="45%" stopColor="#FF2E97" />
           <stop offset="100%" stopColor="#7A3CFF" />
         </radialGradient>
-        <linearGradient id="to-ring" x1="0" y1="0" x2="48" y2="48">
-          <stop offset="0%" stopColor="#FF2E97" />
-          <stop offset="100%" stopColor="#7A3CFF" />
-        </linearGradient>
       </defs>
 
-      {/* Ring 1 */}
-      <motion.g
-        style={{ transformOrigin: '24px 24px' }}
-        animate={animate ? { rotate: 360 } : undefined}
-        transition={{ duration: 14, repeat: Infinity, ease: 'linear' }}
-      >
-        <ellipse
-          cx="24"
-          cy="24"
-          rx="20"
-          ry="8"
-          stroke="url(#to-ring)"
-          strokeWidth="1.5"
-          opacity="0.6"
-        />
-        <circle cx="44" cy="24" r="2.4" fill="#FF2E97" />
-      </motion.g>
+      {rings.map((ring, i) => (
+        <motion.g
+          key={i}
+          style={{ transformOrigin: '24px 24px' }}
+          initial={false}
+          animate={animate ? { rotate: i % 2 === 0 ? 360 : -360 } : undefined}
+          transition={{ duration: ring.dur, repeat: Infinity, ease: 'linear' }}
+        >
+          <g transform={`rotate(${ring.rotate} 24 24)`}>
+            <ellipse
+              cx="24"
+              cy="24"
+              rx="20"
+              ry="7.5"
+              stroke={ring.color}
+              strokeWidth="1.5"
+              opacity="0.5"
+            />
+            <circle cx={ring.node.cx} cy={ring.node.cy} r="2.2" fill={ring.color} />
+          </g>
+        </motion.g>
+      ))}
 
-      {/* Ring 2 (tilted opposite) */}
-      <motion.g
-        style={{ transformOrigin: '24px 24px' }}
-        animate={animate ? { rotate: -360 } : undefined}
-        transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
-        transform="rotate(60 24 24)"
-      >
-        <ellipse
-          cx="24"
-          cy="24"
-          rx="20"
-          ry="8"
-          stroke="url(#to-ring)"
-          strokeWidth="1.5"
-          opacity="0.4"
-        />
-        <circle cx="4" cy="24" r="2" fill="#2DD4BF" />
-      </motion.g>
-
-      {/* Core */}
-      <motion.circle
-        cx="24"
-        cy="24"
-        r="6.5"
+      {/* Shielded hexagon core */}
+      <motion.path
+        d="M24 16.5 L30.5 20.25 L30.5 27.75 L24 31.5 L17.5 27.75 L17.5 20.25 Z"
         fill="url(#to-core)"
-        animate={animate ? { opacity: [0.85, 1, 0.85], scale: [1, 1.08, 1] } : undefined}
+        animate={animate ? { opacity: [0.9, 1, 0.9] } : undefined}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ transformOrigin: '24px 24px' }}
       />
-      <circle cx="24" cy="24" r="6.5" fill="url(#to-core)" opacity="0.35" filter="blur(3px)" />
+      <path
+        d="M24 16.5 L30.5 20.25 L30.5 27.75 L24 31.5 L17.5 27.75 L17.5 20.25 Z"
+        fill="url(#to-core)"
+        opacity="0.3"
+        filter="blur(2.5px)"
+      />
     </svg>
   )
 }
