@@ -1,8 +1,10 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import { motion, useInView } from 'framer-motion'
 import { GitMerge, Upload, BarChart2, CheckCircle2 } from 'lucide-react'
 import Reveal from '@/components/ui/Reveal'
+import { usePerfProfile } from '@/lib/usePerf'
 
 const INTEGRATIONS = [
   { label: 'STIX 2.1 bundles', status: 'active' },
@@ -13,7 +15,26 @@ const INTEGRATIONS = [
   { label: 'MISP integration', status: 'planned' },
 ]
 
+const ENDPOINTS = [
+  { endpoint: 'GET /opencti/status', label: 'Health check' },
+  { endpoint: 'GET /opencti/indicators', label: 'Query indicators' },
+  { endpoint: 'POST /opencti/push', label: 'Push bundle' },
+]
+
 export default function OpenCTISection() {
+  const flowRef = useRef<HTMLDivElement>(null)
+  const flowView = useInView(flowRef, { margin: '-60px' })
+  const { prefersReducedMotion } = usePerfProfile()
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    if (prefersReducedMotion || !flowView) return
+    const t = setInterval(() => setActive((a) => (a + 1) % ENDPOINTS.length), 2000)
+    return () => clearInterval(t)
+  }, [prefersReducedMotion, flowView])
+
+  const animateFlow = !prefersReducedMotion && flowView
+
   return (
     <section id="opencti" className="py-28 max-w-7xl mx-auto px-6">
       <Reveal variant="rise" className="text-center mb-16">
@@ -34,30 +55,39 @@ export default function OpenCTISection() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         <Reveal variant="bloom" className="lg:col-span-2">
-          <div className="glass border border-white/8 rounded-2xl p-8 relative overflow-hidden h-full">
+          <div ref={flowRef} className="glass border border-white/8 rounded-2xl p-8 relative overflow-hidden h-full">
             <div className="absolute inset-0 bg-grid-dim opacity-40" />
 
             <div className="relative flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-16 h-16 rounded-2xl bg-magenta/10 border border-magenta/20 flex items-center justify-center">
+                <motion.div
+                  className="w-16 h-16 rounded-2xl bg-magenta/10 border border-magenta/20 flex items-center justify-center"
+                  animate={animateFlow ? { boxShadow: ['0 0 0px #FF2E9700', '0 0 24px #FF2E9755', '0 0 0px #FF2E9700'] } : {}}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
                   <BarChart2 className="w-7 h-7 text-magenta" strokeWidth={1.5} />
-                </div>
+                </motion.div>
                 <div className="text-sm font-semibold text-white">ThreatOrbit</div>
                 <div className="text-[10px] text-ink-500 text-center max-w-[100px]">
                   Ingestion and enrichment
                 </div>
               </div>
 
-              <div className="flex flex-col items-center gap-1">
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
+              {/* Animated connection with a traveling STIX packet */}
+              <div className="flex flex-col items-center gap-1 flex-1 max-w-[220px]">
+                <div className="relative w-full h-6 flex items-center">
+                  <div className="absolute inset-x-0 h-px bg-gradient-to-r from-magenta/30 via-white/15 to-violet/30" />
+                  {animateFlow && (
                     <motion.div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-magenta/50"
-                      animate={{ opacity: [0.2, 1, 0.2] }}
-                      transition={{ duration: 1.5, delay: i * 0.2, repeat: Infinity }}
-                    />
-                  ))}
+                      className="absolute w-7 h-7 -mt-px rounded-lg bg-magenta/15 border border-magenta/40 flex items-center justify-center"
+                      style={{ top: '50%', translateY: '-50%' }}
+                      initial={{ left: '0%', opacity: 0 }}
+                      animate={{ left: ['0%', '100%'], opacity: [0, 1, 1, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <Upload className="w-3.5 h-3.5 text-magenta" />
+                    </motion.div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-ink-500 mt-1">
                   <Upload className="w-3 h-3 text-magenta" />
@@ -66,25 +96,39 @@ export default function OpenCTISection() {
               </div>
 
               <div className="flex flex-col items-center gap-3">
-                <div className="w-16 h-16 rounded-2xl bg-violet/10 border border-violet/20 flex items-center justify-center">
+                <motion.div
+                  className="w-16 h-16 rounded-2xl bg-violet/10 border border-violet/20 flex items-center justify-center"
+                  animate={animateFlow ? { boxShadow: ['0 0 0px #7A3CFF00', '0 0 24px #7A3CFF55', '0 0 0px #7A3CFF00'] } : {}}
+                  transition={{ duration: 2, repeat: Infinity, delay: 1 }}
+                >
                   <GitMerge className="w-7 h-7 text-violet" strokeWidth={1.5} />
-                </div>
+                </motion.div>
                 <div className="text-sm font-semibold text-white">OpenCTI</div>
                 <div className="text-[10px] text-ink-500 text-center max-w-[100px]">CTI platform</div>
               </div>
             </div>
 
             <div className="relative mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { endpoint: 'GET /opencti/status', label: 'Health check' },
-                { endpoint: 'GET /opencti/indicators', label: 'Query indicators' },
-                { endpoint: 'POST /opencti/push', label: 'Push bundle' },
-              ].map((item) => (
-                <div key={item.endpoint} className="bg-white/3 border border-white/6 rounded-xl p-3">
-                  <div className="font-mono text-[10px] text-magenta mb-1">{item.endpoint}</div>
-                  <div className="text-[10px] text-ink-500">{item.label}</div>
-                </div>
-              ))}
+              {ENDPOINTS.map((item, i) => {
+                const live = active === i && animateFlow
+                return (
+                  <motion.div
+                    key={item.endpoint}
+                    animate={{
+                      borderColor: live ? 'rgba(255,46,151,0.4)' : 'rgba(255,255,255,0.06)',
+                      backgroundColor: live ? 'rgba(255,46,151,0.06)' : 'rgba(255,255,255,0.03)',
+                    }}
+                    transition={{ duration: 0.4 }}
+                    className="border rounded-xl p-3"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="font-mono text-[10px] text-magenta">{item.endpoint}</div>
+                      {live && <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />}
+                    </div>
+                    <div className="text-[10px] text-ink-500">{item.label}</div>
+                  </motion.div>
+                )
+              })}
             </div>
           </div>
         </Reveal>
