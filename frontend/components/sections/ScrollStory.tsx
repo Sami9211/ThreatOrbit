@@ -27,7 +27,10 @@ function Beat({
   )
 }
 
-/* ─── Orbital ring ───────────────────────────────────────────────── */
+/* ─── Egg-shaped orbital ring ────────────────────────────────────── */
+/* A flat ellipse (oval). Each ring carries a different angle via its
+   rotateZ value, so the set looks like overlapping orbits — atom style.
+   A node dot rides each oval's edge.                                   */
 function Ring({ color, rotateZ, opacity, label }: {
   color: string
   rotateZ: MotionValue<number>
@@ -38,19 +41,20 @@ function Ring({ color, rotateZ, opacity, label }: {
     <motion.div
       aria-label={label}
       style={{
-        position: 'absolute', inset: '6%',
+        position: 'absolute',
+        /* wide + short = egg/oval orbit path */
+        left: '2%', right: '2%', top: '32%', bottom: '32%',
         borderRadius: '50%',
         border: `1.5px solid ${color}`,
-        rotateX: 72,
-        rotateZ,
+        rotate: rotateZ,
         opacity,
-        transformStyle: 'preserve-3d',
       }}
     >
+      {/* node riding the oval's edge */}
       <div style={{
         position: 'absolute', right: -5, top: '50%',
         transform: 'translateY(-50%)',
-        width: 10, height: 10, borderRadius: '50%',
+        width: 9, height: 9, borderRadius: '50%',
         background: color,
         boxShadow: `0 0 14px 3px ${color}88, 0 0 4px ${color}`,
       }} />
@@ -121,13 +125,17 @@ function OrbitalStage({ progress, hexRotate, mouseX, mouseY }: {
   const scale     = useTransform(progress, [0, 0.5, 1], [0.72, 1.05, 1.3])
   const scrollRot = useTransform(progress, [0, 1], [0, 360])
 
+  /* Five overlapping oval orbits, evenly spread 36° apart, all spinning */
   const r1 = useTransform(scrollRot, v => v)
-  const r2 = useTransform(scrollRot, v => v + 120)
-  const r3 = useTransform(scrollRot, v => v + 240)
+  const r2 = useTransform(scrollRot, v => v + 36)
+  const r3 = useTransform(scrollRot, v => v + 72)
+  const r4 = useTransform(scrollRot, v => v + 108)
+  const r5 = useTransform(scrollRot, v => v + 144)
 
-  const cti  = useTransform(progress, [0.18, 0.3, 0.42], [0.28, 1, 0.38])
-  const siem = useTransform(progress, [0.42, 0.54, 0.66], [0.28, 1, 0.38])
-  const soar = useTransform(progress, [0.66, 0.78, 0.9 ], [0.28, 1, 0.38])
+  const cti  = useTransform(progress, [0.18, 0.3, 0.42], [0.32, 1, 0.42])
+  const siem = useTransform(progress, [0.42, 0.54, 0.66], [0.32, 1, 0.42])
+  const soar = useTransform(progress, [0.66, 0.78, 0.9 ], [0.32, 1, 0.42])
+  const dim  = useTransform(progress, [0, 0.5, 1], [0.22, 0.5, 0.6])
   const core = useTransform(progress, [0, 0.85, 1], [0.5, 0.75, 1])
 
   return (
@@ -138,9 +146,11 @@ function OrbitalStage({ progress, hexRotate, mouseX, mouseY }: {
           transformStyle: 'preserve-3d',
           width: '100%', height: '100%', position: 'relative',
         }}>
-          <Ring color="#FF2E97" rotateZ={r1} opacity={cti}  label="CTI ring"  />
-          <Ring color="#7A3CFF" rotateZ={r2} opacity={siem} label="SIEM ring" />
-          <Ring color="#FFB23E" rotateZ={r3} opacity={soar} label="SOAR ring" />
+          <Ring color="#FF2E97" rotateZ={r1} opacity={cti}  label="CTI ring"   />
+          <Ring color="#7A3CFF" rotateZ={r2} opacity={siem} label="SIEM ring"  />
+          <Ring color="#FFB23E" rotateZ={r3} opacity={soar} label="SOAR ring"  />
+          <Ring color="#2DD4BF" rotateZ={r4} opacity={dim}  label="orbit four" />
+          <Ring color="#FF6FB5" rotateZ={r5} opacity={dim}  label="orbit five" />
           <HexCore opacity={core} rotate={hexRotate} />
         </motion.div>
       </div>
