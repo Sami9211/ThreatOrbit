@@ -76,7 +76,8 @@ export default function Footer() {
               <ul className="space-y-2.5">
                 {items.map((item) => (
                   <li key={item.label}>
-                    <a href={item.href} className="text-sm text-ink-500 hover:text-ink-200 transition-colors duration-200">
+                    <a href={item.href} className="group inline-flex items-center text-sm text-ink-500 hover:text-ink-200 transition-colors duration-200">
+                      <span className="w-0 group-hover:w-2.5 h-px bg-magenta mr-0 group-hover:mr-1.5 transition-all duration-300" />
                       {item.label}
                     </a>
                   </li>

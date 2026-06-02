@@ -49,10 +49,10 @@ export default function StatsBar() {
             initial={{ opacity: 0, y: 20 }}
             animate={inView ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.5, delay: i * 0.07 }}
-            className="flex flex-col items-center gap-1 px-4 text-center border-r border-white/5 last:border-0"
+            className="group flex flex-col items-center gap-1 px-4 text-center border-r border-white/5 last:border-0 transition-transform duration-300 hover:-translate-y-1"
           >
-            <StatValue s={stat} className={`font-display text-2xl font-bold ${stat.color}`} />
-            <span className="text-xs text-ink-400">{stat.label}</span>
+            <StatValue s={stat} className={`font-display text-2xl font-bold ${stat.color} transition-transform duration-300 group-hover:scale-110`} />
+            <span className="text-xs text-ink-400 group-hover:text-ink-200 transition-colors">{stat.label}</span>
           </motion.div>
         ))}
       </div>
