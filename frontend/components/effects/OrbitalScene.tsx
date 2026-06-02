@@ -166,12 +166,16 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   // brighten materials whenever bloom is off, so the scene stays visible
   const bright    = !bloomOn
   const orbits    = isLowPower ? ORBITS.slice(0, 3).map(o => ({ ...o, count: Math.round(o.count * 0.6) })) : ORBITS
+  // Pull the camera back far enough that the outermost orbit clears the canvas
+  // edge with margin (otherwise the orbit ring is hard-clipped into a visible
+  // box). Low-power shows only 3 orbits, so it can sit closer / look larger.
+  const camZ = isLowPower ? 6.0 : 7.4
 
   return (
     <div ref={ref} className="w-full h-full">
       <Canvas
         frameloop={visible ? 'always' : 'demand'}
-        camera={{ position: [0, 1.2, 5.4], fov: 46 }}
+        camera={{ position: [0, 0.8, camZ], fov: 46 }}
         gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
         dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
         style={{ background: 'transparent', width: '100%', height: '100%' }}

@@ -70,8 +70,10 @@ export default function ScrollStory() {
         <div className="absolute inset-0 plasma-mesh opacity-50" />
         <div className="absolute inset-0 bg-grid-dim opacity-20" />
 
-        {/* Real 3D orbital — Three.js torus rings + hex prism + bloom */}
-        <div className="w-[min(80vw,520px)] aspect-square relative">
+        {/* Real 3D orbital — a planet circled by rings of orbiting dots.
+           Sized generously so the outermost orbit never reaches the canvas
+           edge (which would hard-clip it into a visible box). */}
+        <div className="w-[min(94vw,760px)] aspect-square relative">
           <OrbitalScene scrollY={scrollDeg} mouseX={mouseX} mouseY={mouseY} />
         </div>
 
