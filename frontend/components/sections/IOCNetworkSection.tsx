@@ -6,7 +6,12 @@ import { motion, useInView, AnimatePresence } from 'framer-motion'
 import { Network, Activity, RefreshCw } from 'lucide-react'
 import { usePerfProfile } from '@/lib/usePerf'
 
-const IOCNetworkScene = dynamic(() => import('@/components/effects/IOCNetworkScene'), { ssr: false })
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
+
+const IOCNetworkScene = dynamic(() => import('@/components/effects/IOCNetworkScene'), {
+  ssr: false,
+  loading: () => <ScenePlaceholder />,
+})
 
 const IOC_TYPES = [
   { label: 'IP Address',   color: '#FF2E97', dot: 'bg-magenta'  },

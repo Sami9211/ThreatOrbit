@@ -7,7 +7,12 @@ import {
   useMotionValue, type MotionValue,
 } from 'framer-motion'
 
-const OrbitalScene = dynamic(() => import('@/components/effects/OrbitalScene'), { ssr: false })
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
+
+const OrbitalScene = dynamic(() => import('@/components/effects/OrbitalScene'), {
+  ssr: false,
+  loading: () => <ScenePlaceholder />,
+})
 
 /* ─── Narrative beat ─────────────────────────────────────────────── */
 function Beat({
@@ -73,7 +78,7 @@ export default function ScrollStory() {
         {/* Real 3D orbital — a planet circled by rings of orbiting dots.
            Sized generously so the outermost orbit never reaches the canvas
            edge (which would hard-clip it into a visible box). */}
-        <div className="w-[min(94vw,760px)] aspect-square relative">
+        <div className="w-[min(94vw,760px)] aspect-square relative" aria-hidden>
           <OrbitalScene scrollY={scrollDeg} mouseX={mouseX} mouseY={mouseY} />
         </div>
 

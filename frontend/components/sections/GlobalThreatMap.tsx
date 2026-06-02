@@ -5,8 +5,12 @@ import dynamic from 'next/dynamic'
 import { motion, useInView } from 'framer-motion'
 import { Globe2, Activity, ShieldAlert } from 'lucide-react'
 import { usePerfProfile } from '@/lib/usePerf'
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
-const ThreatGlobe = dynamic(() => import('@/components/effects/ThreatGlobe'), { ssr: false })
+const ThreatGlobe = dynamic(() => import('@/components/effects/ThreatGlobe'), {
+  ssr: false,
+  loading: () => <ScenePlaceholder />,
+})
 
 const REGIONS = [
   { name: 'North America', pct: 34, color: '#FF2E97' },

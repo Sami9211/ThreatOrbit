@@ -7,7 +7,12 @@ import dynamic from 'next/dynamic'
 import MagneticButton from '@/components/ui/MagneticButton'
 import CountUp from '@/components/ui/CountUp'
 
-const HeroScene = dynamic(() => import('@/components/effects/HeroScene'), { ssr: false })
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
+
+const HeroScene = dynamic(() => import('@/components/effects/HeroScene'), {
+  ssr: false,
+  loading: () => <ScenePlaceholder />,
+})
 
 const TERMINAL_LINES = [
   { text: '> Ingesting OSINT feeds...', color: 'text-magenta' },
@@ -115,8 +120,8 @@ export default function Hero() {
       className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden"
       onMouseMove={handleMouseMove}
     >
-      {/* 3D floating geometry background — Three.js + bloom */}
-      <motion.div style={{ scale: bgScale }} className="absolute inset-0 z-0 opacity-85">
+      {/* 3D floating geometry background — Three.js + bloom (decorative) */}
+      <motion.div style={{ scale: bgScale }} className="absolute inset-0 z-0 opacity-85" aria-hidden>
         <HeroScene mouseX={mouseX} mouseY={mouseY} />
       </motion.div>
 
