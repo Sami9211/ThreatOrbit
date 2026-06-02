@@ -21,9 +21,14 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
+  metadataBase: new URL('https://threatorbit.io'),
+  title: {
+    default: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
+    template: '%s · ThreatOrbit',
+  },
   description:
     'Enterprise-grade threat intelligence ingestion, log anomaly detection, and OpenCTI integration. Detect. Analyze. Neutralize.',
+  applicationName: 'ThreatOrbit',
   keywords: [
     'threat intelligence',
     'STIX',
@@ -33,11 +38,21 @@ export const metadata: Metadata = {
     'cybersecurity platform',
     'IOC',
     'SIEM',
+    'SOAR',
+    'OSINT',
   ],
+  authors: [{ name: 'ThreatOrbit' }],
+  robots: { index: true, follow: true },
   openGraph: {
     title: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
     description: 'Detect. Analyze. Neutralize. Enterprise-grade threat intelligence built for the modern security team.',
     type: 'website',
+    siteName: 'ThreatOrbit',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
+    description: 'Detect. Analyze. Neutralize. Enterprise-grade threat intelligence.',
   },
 }
 
