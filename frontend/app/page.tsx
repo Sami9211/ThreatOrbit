@@ -27,7 +27,7 @@ export default function Home() {
       <ScrollProgress />
       <CursorGlow />
       <Navbar />
-      <main>
+      <main id="main-content">
         <Hero />
         <StatsBar />
         <ScrollStory />

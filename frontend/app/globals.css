@@ -41,6 +41,41 @@ body {
 /* Selection */
 ::selection { background: rgba(255,46,151,0.25); color: #fff; }
 
+/* Keyboard focus — visible ring only for keyboard users */
+:focus-visible {
+  outline: 2px solid rgba(255,46,151,0.7);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Skip-to-content link (visible only when focused) */
+.skip-link {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -120%);
+  z-index: 300;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0 0 0.6rem 0.6rem;
+  background: #FF2E97;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: transform 0.2s ease;
+}
+.skip-link:focus { transform: translate(-50%, 0); }
+
+/* Respect reduced-motion for CSS-driven animations site-wide */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer utilities {
   /* Gradient text */
   .text-gradient-plasma {

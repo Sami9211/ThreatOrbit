@@ -63,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
     >
       <body className="bg-bg text-ink-100 overflow-x-hidden">
+        <a href="#main-content" className="skip-link">Skip to content</a>
         {children}
       </body>
     </html>
