@@ -47,7 +47,7 @@ const KB: { keys: string[]; reply: string }[] = [
   {
     keys: ['deploy', 'docker', 'install', 'setup', 'self-host'],
     reply:
-      'Deployment is a single command: `docker compose up -d` brings up both APIs (ports 8000 and 8001). The frontend deploys on Vercel with the Root Directory set to `frontend`.',
+      'Deployment is a single command: `docker compose up -d` brings up both APIs (ports 8000 and 8001). The frontend is a static Next.js export, so it hosts on any static platform — Netlify, Cloudflare Pages, Vercel, or your own CDN.',
   },
   {
     keys: ['api', 'key', 'auth', 'token'],
@@ -87,18 +87,23 @@ export default function Chatbot() {
   const [msgs, setMsgs] = useState<Msg[]>([
     { from: 'bot', text: 'Hi, I am the Orbit Assistant. Ask me anything about ThreatOrbit.' },
   ])
+  const [typing, setTyping] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [msgs, open])
+  }, [msgs, open, typing])
 
   const send = (text: string) => {
     const t = text.trim()
-    if (!t) return
+    if (!t || typing) return
     setMsgs((m) => [...m, { from: 'user', text: t }])
     setInput('')
-    setTimeout(() => setMsgs((m) => [...m, { from: 'bot', text: answer(t) }]), 380)
+    setTyping(true)
+    setTimeout(() => {
+      setTyping(false)
+      setMsgs((m) => [...m, { from: 'bot', text: answer(t) }])
+    }, 650)
   }
 
   return (
@@ -166,7 +171,22 @@ export default function Chatbot() {
                 </div>
               ))}
 
-              {msgs.length <= 1 && (
+              {typing && (
+                <div className="flex justify-start">
+                  <div className="bg-white/5 border border-white/8 rounded-2xl rounded-bl-sm px-3.5 py-3 flex items-center gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <motion.span
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-ink-300"
+                        animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
+                        transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {msgs.length <= 1 && !typing && (
                 <div className="flex flex-wrap gap-2 pt-2">
                   {SUGGESTIONS.map((s) => (
                     <button
