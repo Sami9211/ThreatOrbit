@@ -65,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-bg text-ink-100 overflow-x-hidden">
         <a href="#main-content" className="skip-link">Skip to content</a>
         {children}
+        <div className="grain-overlay" aria-hidden />
       </body>
     </html>
   )
