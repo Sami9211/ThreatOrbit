@@ -4,6 +4,7 @@ import SmoothScroll from '@/components/effects/SmoothScroll'
 import CursorGlow from '@/components/effects/CursorGlow'
 import Preloader from '@/components/effects/Preloader'
 import ScrollProgress from '@/components/ui/ScrollProgress'
+import ScrollToTop from '@/components/ui/ScrollToTop'
 import Chatbot from '@/components/ui/Chatbot'
 import Hero from '@/components/sections/Hero'
 import StatsBar from '@/components/sections/StatsBar'
@@ -44,6 +45,7 @@ export default function Home() {
         <CTA />
       </main>
       <Footer />
+      <ScrollToTop />
       <Chatbot />
     </SmoothScroll>
   )
