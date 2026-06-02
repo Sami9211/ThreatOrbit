@@ -52,7 +52,7 @@ export default function Contact() {
             </div>
             <div className="flex items-center gap-3 text-sm text-ink-300">
               <Mail className="w-4 h-4 text-magenta" />
-              hello@threatorbit.io
+              hello@threatorbit.space
             </div>
           </div>
         </Reveal>

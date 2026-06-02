@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://threatorbit.io'),
+  metadataBase: new URL('https://threatorbit.space'),
   title: {
     default: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
     template: '%s · ThreatOrbit',
@@ -43,11 +43,13 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'ThreatOrbit' }],
   robots: { index: true, follow: true },
+  alternates: { canonical: '/' },
   openGraph: {
     title: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
     description: 'Detect. Analyze. Neutralize. Enterprise-grade threat intelligence built for the modern security team.',
     type: 'website',
     siteName: 'ThreatOrbit',
+    url: 'https://threatorbit.space',
   },
   twitter: {
     card: 'summary_large_image',

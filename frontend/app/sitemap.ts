@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 
-const BASE = 'https://threatorbit.io'
+const BASE = 'https://threatorbit.space'
 
 const ROUTES = [
   '',

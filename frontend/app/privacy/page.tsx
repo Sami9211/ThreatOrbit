@@ -110,8 +110,8 @@ export default function PrivacyPage() {
             </ul>
             <p>
               To exercise these rights, contact us at{' '}
-              <a href="mailto:hello@threatorbit.io" className="text-magenta hover:underline">
-                hello@threatorbit.io
+              <a href="mailto:hello@threatorbit.space" className="text-magenta hover:underline">
+                hello@threatorbit.space
               </a>.
             </p>
           </Section>
@@ -126,8 +126,8 @@ export default function PrivacyPage() {
           <Section title="10. Contact">
             <p>
               Privacy questions or requests:{' '}
-              <a href="mailto:hello@threatorbit.io" className="text-magenta hover:underline">
-                hello@threatorbit.io
+              <a href="mailto:hello@threatorbit.space" className="text-magenta hover:underline">
+                hello@threatorbit.space
               </a>
             </p>
           </Section>

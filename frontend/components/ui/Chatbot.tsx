@@ -57,7 +57,7 @@ const KB: { keys: string[]; reply: string }[] = [
   {
     keys: ['contact', 'sales', 'demo', 'talk', 'human'],
     reply:
-      'Happy to connect you. Scroll to the Contact section and send an inquiry, or email hello@threatorbit.io. For the Super SOC we usually start with a short demo.',
+      'Happy to connect you. Scroll to the Contact section and send an inquiry, or email hello@threatorbit.space. For the Super SOC we usually start with a short demo.',
   },
   {
     keys: ['hi', 'hello', 'hey', 'help', 'start'],

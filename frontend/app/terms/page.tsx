@@ -113,8 +113,8 @@ export default function TermsPage() {
           <Section title="10. Contact">
             <p>
               For questions about these terms, contact us at{' '}
-              <a href="mailto:hello@threatorbit.io" className="text-magenta hover:underline">
-                hello@threatorbit.io
+              <a href="mailto:hello@threatorbit.space" className="text-magenta hover:underline">
+                hello@threatorbit.space
               </a>.
             </p>
           </Section>

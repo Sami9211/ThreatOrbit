@@ -69,8 +69,8 @@ export default function SecurityPage() {
             </p>
             <p>
               <strong>How to report:</strong> email{' '}
-              <a href="mailto:security@threatorbit.io" className="text-magenta hover:underline">
-                security@threatorbit.io
+              <a href="mailto:security@threatorbit.space" className="text-magenta hover:underline">
+                security@threatorbit.space
               </a>{' '}
               with a description of the vulnerability, steps to reproduce, and the potential impact.
               Include &ldquo;[SECURITY]&rdquo; in the subject line.
@@ -86,7 +86,7 @@ export default function SecurityPage() {
             <ul>
               <li>The ThreatOrbit Threat API (port 8000)</li>
               <li>The ThreatOrbit Log API (port 8001)</li>
-              <li>The ThreatOrbit web application (threatorbit.io)</li>
+              <li>The ThreatOrbit web application (threatorbit.space)</li>
             </ul>
             <p>The following are out of scope:</p>
             <ul>
