@@ -11,15 +11,21 @@ import Logo from '@/components/ui/Logo'
 export default function Preloader() {
   const [show, setShow] = useState(false)
 
+  // Decide whether to show (idempotent — safe under StrictMode double-invoke)
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const seen = sessionStorage.getItem('to-intro')
-    if (reduce || seen) return
-    setShow(true)
+    if (!reduce && !seen) setShow(true)
+  }, [])
+
+  // Hide timer lives in its own effect keyed on `show`, so a StrictMode
+  // cleanup that clears the timeout always reschedules a fresh one.
+  useEffect(() => {
+    if (!show) return
     sessionStorage.setItem('to-intro', '1')
     const t = setTimeout(() => setShow(false), 1700)
     return () => clearTimeout(t)
-  }, [])
+  }, [show])
 
   return (
     <AnimatePresence>
