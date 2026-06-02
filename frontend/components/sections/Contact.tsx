@@ -2,24 +2,30 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, CheckCircle2, Mail, MessageSquare } from 'lucide-react'
+import { Send, CheckCircle2, Mail, MessageSquare, Loader2, Check } from 'lucide-react'
 import Reveal from '@/components/ui/Reveal'
 
 const INTERESTS = ['Super SOC', 'CTI Library', 'SIEM + SOAR', 'General inquiry']
 
 export default function Contact() {
   const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
   const [interest, setInterest] = useState(INTERESTS[0])
   const [form, setForm] = useState({ name: '', email: '', company: '', message: '' })
 
-  const valid = form.name.trim() && /\S+@\S+\.\S+/.test(form.email) && form.message.trim()
+  const emailValid = /\S+@\S+\.\S+/.test(form.email)
+  const valid = form.name.trim() && emailValid && form.message.trim()
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!valid) return
-    // No backend yet: this shows a success state locally. Wire to an API route
+    if (!valid || sending) return
+    // No backend yet: simulate a send, then show success. Wire to an API route
     // or a service like Formspree to actually deliver the message.
-    setSent(true)
+    setSending(true)
+    setTimeout(() => {
+      setSending(false)
+      setSent(true)
+    }, 900)
   }
 
   return (
@@ -82,6 +88,7 @@ export default function Contact() {
                       value={form.name}
                       onChange={(v) => setForm({ ...form, name: v })}
                       placeholder="Jane Doe"
+                      valid={!!form.name.trim()}
                     />
                     <Field
                       label="Work email"
@@ -89,6 +96,8 @@ export default function Contact() {
                       value={form.email}
                       onChange={(v) => setForm({ ...form, email: v })}
                       placeholder="jane@company.com"
+                      valid={emailValid}
+                      invalid={form.email.length > 3 && !emailValid}
                     />
                   </div>
                   <Field
@@ -131,11 +140,20 @@ export default function Contact() {
 
                   <button
                     type="submit"
-                    disabled={!valid}
+                    disabled={!valid || sending}
                     className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-plasma text-white font-semibold text-sm transition-all hover:shadow-magenta-md disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Send inquiry
-                    <Send className="w-4 h-4" />
+                    {sending ? (
+                      <>
+                        Sending
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      </>
+                    ) : (
+                      <>
+                        Send inquiry
+                        <Send className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 </motion.form>
               )}
@@ -153,23 +171,45 @@ function Field({
   onChange,
   placeholder,
   type = 'text',
+  valid = false,
+  invalid = false,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
   type?: string
+  valid?: boolean
+  invalid?: boolean
 }) {
   return (
     <div>
       <label className="block text-xs text-ink-400 mb-1.5">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl bg-white/3 border border-white/10 px-3.5 py-2.5 text-sm text-white placeholder:text-ink-600 focus:border-magenta/40 focus:outline-none transition-colors"
-      />
+      <div className="relative">
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`w-full rounded-xl bg-white/3 border px-3.5 py-2.5 pr-9 text-sm text-white placeholder:text-ink-600 focus:outline-none transition-colors ${
+            invalid
+              ? 'border-threat/50 focus:border-threat/60'
+              : 'border-white/10 focus:border-magenta/40'
+          }`}
+        />
+        <AnimatePresence>
+          {valid && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-safe"
+            >
+              <Check className="w-4 h-4" strokeWidth={2.5} />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
