@@ -1,19 +1,19 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import { motion, useInView } from 'framer-motion'
+import { motion, useInView, useReducedMotion } from 'framer-motion'
 import { ArrowRight, Terminal, Github, Zap } from 'lucide-react'
 import Reveal from '@/components/ui/Reveal'
 import MagneticButton from '@/components/ui/MagneticButton'
 import Logo from '@/components/ui/Logo'
 
-function ParticleBurst({ inView }: { inView: boolean }) {
+function ParticleBurst({ run }: { run: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef   = useRef<number>(0)
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !inView) return
+    if (!canvas || !run) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -73,7 +73,7 @@ function ParticleBurst({ inView }: { inView: boolean }) {
 
     animRef.current = requestAnimationFrame(draw)
     return () => { cancelAnimationFrame(animRef.current); clearTimeout(t) }
-  }, [inView])
+  }, [run])
 
   return (
     <canvas
@@ -132,6 +132,11 @@ function AnimatedTerminal({ inView }: { inView: boolean }) {
 export default function CTA() {
   const ref    = useRef<HTMLElement>(null)
   const inView = useInView(ref, { once: true, margin: '-80px' })
+  // Separate, non-sticky visibility for the canvas so the rAF loop pauses when
+  // the section scrolls off-screen (and never starts under reduced-motion).
+  const liveView = useInView(ref, { margin: '-80px' })
+  const reduce   = useReducedMotion()
+  const runBurst = liveView && !reduce
 
   return (
     <section ref={ref} id="cta" className="relative py-28 overflow-hidden">
@@ -147,7 +152,7 @@ export default function CTA() {
           <div className="absolute inset-0 bg-grid-dim opacity-40" />
           <div className="absolute inset-0 plasma-mesh" />
           <div className="absolute inset-0 rounded-3xl border-animated" />
-          <ParticleBurst inView={inView} />
+          <ParticleBurst run={runBurst} />
 
           <div className="relative px-8 py-16 lg:py-20 grid lg:grid-cols-2 gap-12 items-center">
             {/* Left: CTA content */}
