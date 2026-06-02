@@ -10,6 +10,9 @@
   --teal: #2DD4BF;
   --threat: #FF4D6D;
   --safe: #34F5C5;
+  /* Render native form controls, scrollbars, etc. in dark mode so inputs
+     don't fall back to a white UA background. */
+  color-scheme: dark;
 }
 
 * {
