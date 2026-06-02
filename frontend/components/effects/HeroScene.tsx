@@ -7,6 +7,7 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 /* ── Floating solid objects ── */
 const OBJECTS = [
@@ -107,7 +108,10 @@ export default function HeroScene({ mouseX, mouseY }: {
   mouseY: MotionValue<number>
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  const { ref, visible } = useInViewport<HTMLDivElement>('150px')
+  // Generous margin so the canvas mounts just before it scrolls into view and
+  // unmounts (freeing its WebGL context) once well off-screen — keeps the page
+  // from holding several live GL contexts at once.
+  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
   const [degraded, setDegraded] = useState(false)
 
   const objects   = isLowPower ? OBJECTS.slice(0, 6) : OBJECTS
@@ -120,28 +124,32 @@ export default function HeroScene({ mouseX, mouseY }: {
 
   return (
     <div ref={ref} className="w-full h-full">
-      <Canvas
-        frameloop={visible && animate ? 'always' : 'demand'}
-        camera={{ position: [0, 0, 6.5], fov: 56 }}
-        gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-        dpr={dpr}
-        style={{ background: 'transparent', width: '100%', height: '100%' }}
-      >
-        <ambientLight intensity={0.06} />
-        <pointLight position={[ 5,  5,  5]} intensity={2.6} color="#FF2E97" />
-        <pointLight position={[-5, -3,  3]} intensity={2.0} color="#7A3CFF" />
-        <pointLight position={[ 0,  0, -5]} intensity={1.0} color="#FFB23E" />
-        <Stars count={starCount} />
-        {!isLowPower && <BackdropKnot animate={animate} />}
-        <SceneMesh mouseX={mouseX} mouseY={mouseY} animate={animate} objects={objects} bright={bright} />
-        {bloomOn && (
-          <EffectComposer>
-            <Bloom intensity={1.5} luminanceThreshold={0.2} luminanceSmoothing={0.85} mipmapBlur />
-          </EffectComposer>
-        )}
-        <PerformanceMonitor onDecline={() => setDegraded(true)} />
-        <AdaptiveDpr pixelated />
-      </Canvas>
+      {visible ? (
+        <Canvas
+          frameloop={animate ? 'always' : 'demand'}
+          camera={{ position: [0, 0, 6.5], fov: 56 }}
+          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+          dpr={dpr}
+          style={{ background: 'transparent', width: '100%', height: '100%' }}
+        >
+          <ambientLight intensity={0.06} />
+          <pointLight position={[ 5,  5,  5]} intensity={2.6} color="#FF2E97" />
+          <pointLight position={[-5, -3,  3]} intensity={2.0} color="#7A3CFF" />
+          <pointLight position={[ 0,  0, -5]} intensity={1.0} color="#FFB23E" />
+          <Stars count={starCount} />
+          {!isLowPower && <BackdropKnot animate={animate} />}
+          <SceneMesh mouseX={mouseX} mouseY={mouseY} animate={animate} objects={objects} bright={bright} />
+          {bloomOn && (
+            <EffectComposer>
+              <Bloom intensity={1.5} luminanceThreshold={0.2} luminanceSmoothing={0.85} mipmapBlur />
+            </EffectComposer>
+          )}
+          <PerformanceMonitor onDecline={() => setDegraded(true)} />
+          <AdaptiveDpr pixelated />
+        </Canvas>
+      ) : (
+        <ScenePlaceholder />
+      )}
     </div>
   )
 }

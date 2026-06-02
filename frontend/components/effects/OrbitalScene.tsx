@@ -7,6 +7,7 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 /* ── Orbit definitions: a planet circled by rings of dots ── */
 type OrbitDef = {
@@ -158,7 +159,8 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   mouseY:  MotionValue<number>
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  const { ref, visible } = useInViewport<HTMLDivElement>('200px')
+  // Mount the GL context only near the viewport; unmount well off-screen.
+  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
   const [degraded, setDegraded] = useState(false)
 
   const animate   = !prefersReducedMotion
@@ -173,29 +175,33 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
 
   return (
     <div ref={ref} className="w-full h-full">
-      <Canvas
-        frameloop={visible ? 'always' : 'demand'}
-        camera={{ position: [0, 0.8, camZ], fov: 46 }}
-        gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-        dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
-        style={{ background: 'transparent', width: '100%', height: '100%' }}
-      >
-        <ambientLight intensity={0.12} />
-        <pointLight position={[4,  4, 4]}  intensity={2.2} color="#FF2E97" />
-        <pointLight position={[-4, -2, 2]} intensity={1.5} color="#7A3CFF" />
-        <pointLight position={[0, 0, -4]}  intensity={0.9} color="#FFB23E" />
-        <PlanetSystem
-          scrollY={scrollY} mouseX={mouseX} mouseY={mouseY}
-          animate={animate} orbits={orbits} bright={bright}
-        />
-        {bloomOn && (
-          <EffectComposer>
-            <Bloom intensity={1.9} luminanceThreshold={0.15} luminanceSmoothing={0.9} mipmapBlur />
-          </EffectComposer>
-        )}
-        <PerformanceMonitor onDecline={() => setDegraded(true)} />
-        <AdaptiveDpr pixelated />
-      </Canvas>
+      {visible ? (
+        <Canvas
+          frameloop="always"
+          camera={{ position: [0, 0.8, camZ], fov: 46 }}
+          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+          dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
+          style={{ background: 'transparent', width: '100%', height: '100%' }}
+        >
+          <ambientLight intensity={0.12} />
+          <pointLight position={[4,  4, 4]}  intensity={2.2} color="#FF2E97" />
+          <pointLight position={[-4, -2, 2]} intensity={1.5} color="#7A3CFF" />
+          <pointLight position={[0, 0, -4]}  intensity={0.9} color="#FFB23E" />
+          <PlanetSystem
+            scrollY={scrollY} mouseX={mouseX} mouseY={mouseY}
+            animate={animate} orbits={orbits} bright={bright}
+          />
+          {bloomOn && (
+            <EffectComposer>
+              <Bloom intensity={1.9} luminanceThreshold={0.15} luminanceSmoothing={0.9} mipmapBlur />
+            </EffectComposer>
+          )}
+          <PerformanceMonitor onDecline={() => setDegraded(true)} />
+          <AdaptiveDpr pixelated />
+        </Canvas>
+      ) : (
+        <ScenePlaceholder />
+      )}
     </div>
   )
 }

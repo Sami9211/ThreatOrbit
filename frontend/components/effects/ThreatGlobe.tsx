@@ -6,6 +6,7 @@ import { OrbitControls, AdaptiveDpr, PerformanceMonitor } from '@react-three/dre
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
+import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 const R = 2
 const ARC_COLORS = ['#FF2E97', '#7A3CFF', '#FFB23E', '#2DD4BF']
@@ -226,7 +227,8 @@ function GlobeGroup({ arcCount, nodeCount, animate }: {
 
 export default function ThreatGlobe() {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  const { ref, visible } = useInViewport<HTMLDivElement>('200px')
+  // Mount the GL context only near the viewport; unmount well off-screen.
+  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
   const [degraded, setDegraded] = useState(false)
 
   const animate   = !prefersReducedMotion
@@ -236,24 +238,28 @@ export default function ThreatGlobe() {
 
   return (
     <div ref={ref} className="w-full h-full">
-      <Canvas
-        frameloop={visible && animate ? 'always' : 'demand'}
-        camera={{ position: [0, 0, 6.2], fov: 42 }}
-        gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-        dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
-        style={{ background: 'transparent', width: '100%', height: '100%' }}
-      >
-        <ambientLight intensity={0.5} />
-        <GlobeGroup arcCount={arcCount} nodeCount={nodeCount} animate={animate} />
-        <OrbitControls enableZoom={false} enablePan={false} autoRotate={false} rotateSpeed={0.5} />
-        {bloomOn && (
-          <EffectComposer>
-            <Bloom intensity={2.0} luminanceThreshold={0.08} luminanceSmoothing={0.9} mipmapBlur />
-          </EffectComposer>
-        )}
-        <PerformanceMonitor onDecline={() => setDegraded(true)} />
-        <AdaptiveDpr pixelated />
-      </Canvas>
+      {visible ? (
+        <Canvas
+          frameloop={animate ? 'always' : 'demand'}
+          camera={{ position: [0, 0, 6.2], fov: 42 }}
+          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+          dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
+          style={{ background: 'transparent', width: '100%', height: '100%' }}
+        >
+          <ambientLight intensity={0.5} />
+          <GlobeGroup arcCount={arcCount} nodeCount={nodeCount} animate={animate} />
+          <OrbitControls enableZoom={false} enablePan={false} autoRotate={false} rotateSpeed={0.5} />
+          {bloomOn && (
+            <EffectComposer>
+              <Bloom intensity={2.0} luminanceThreshold={0.08} luminanceSmoothing={0.9} mipmapBlur />
+            </EffectComposer>
+          )}
+          <PerformanceMonitor onDecline={() => setDegraded(true)} />
+          <AdaptiveDpr pixelated />
+        </Canvas>
+      ) : (
+        <ScenePlaceholder />
+      )}
     </div>
   )
 }
