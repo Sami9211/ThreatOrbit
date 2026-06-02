@@ -9,13 +9,16 @@ import Chatbot from '@/components/ui/Chatbot'
 import Hero from '@/components/sections/Hero'
 import StatsBar from '@/components/sections/StatsBar'
 import ScrollStory from '@/components/sections/ScrollStory'
+import IntegrationsBar from '@/components/sections/IntegrationsBar'
 import Features from '@/components/sections/Features'
 import ExpandingShowcase from '@/components/sections/ExpandingShowcase'
 import ThreatIntelSection from '@/components/sections/ThreatIntelSection'
 import LogAnalysisSection from '@/components/sections/LogAnalysisSection'
 import OpenCTISection from '@/components/sections/OpenCTISection'
 import GlobalThreatMap from '@/components/sections/GlobalThreatMap'
+import IOCNetworkSection from '@/components/sections/IOCNetworkSection'
 import DashboardPreview from '@/components/sections/DashboardPreview'
+import HowItWorks from '@/components/sections/HowItWorks'
 import Pricing from '@/components/sections/Pricing'
 import About from '@/components/sections/About'
 import Contact from '@/components/sections/Contact'
@@ -31,6 +34,7 @@ export default function Home() {
       <main id="main-content">
         <Hero />
         <StatsBar />
+        <IntegrationsBar />
         <ScrollStory />
         <Features />
         <ExpandingShowcase />
@@ -38,7 +42,9 @@ export default function Home() {
         <LogAnalysisSection />
         <OpenCTISection />
         <GlobalThreatMap />
+        <IOCNetworkSection />
         <DashboardPreview />
+        <HowItWorks />
         <Pricing />
         <About />
         <Contact />

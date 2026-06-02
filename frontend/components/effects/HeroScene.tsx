@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Float, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -22,7 +22,9 @@ const OBJECTS = [
   { p: [-2.0,  0.1, -1.6], s: 0.11, g: 'hex',  c: '#7A3CFF', fs: 1.7, wire: true  },
 ]
 
-function SceneObject({ p, s, g, c, fs, wire, animate }: typeof OBJECTS[0] & { animate: boolean }) {
+function SceneObject({ p, s, g, c, fs, wire, animate, bright }: typeof OBJECTS[0] & { animate: boolean; bright: boolean }) {
+  // When bloom is off (phone / degraded), push emissive up so shapes stay visible.
+  const emissive = wire ? (bright ? 1.6 : 0.9) : (bright ? 1.0 : 0.45)
   return (
     <Float speed={animate ? fs : 0} floatIntensity={animate ? 0.7 : 0} rotationIntensity={animate ? 0.6 : 0}>
       <mesh position={p as [number, number, number]} scale={s}>
@@ -31,7 +33,7 @@ function SceneObject({ p, s, g, c, fs, wire, animate }: typeof OBJECTS[0] & { an
         {g === 'ico' && <icosahedronGeometry args={[1, 0]} />}
         <meshStandardMaterial
           color={c} metalness={0.78} roughness={0.14}
-          emissive={c} emissiveIntensity={wire ? 0.9 : 0.45}
+          emissive={c} emissiveIntensity={emissive}
           wireframe={wire} flatShading toneMapped={false}
         />
       </mesh>
@@ -50,7 +52,7 @@ function BackdropKnot({ animate }: { animate: boolean }) {
   })
   return (
     <mesh ref={ref} position={[0, 0, -3]} scale={2.4}>
-      <torusKnotGeometry args={[1, 0.18, 120, 16]} />
+      <torusKnotGeometry args={[1, 0.18, 64, 12]} />
       <meshStandardMaterial
         color="#7A3CFF" emissive="#7A3CFF" emissiveIntensity={0.4}
         wireframe transparent opacity={0.12} toneMapped={false}
@@ -80,11 +82,12 @@ function Stars({ count }: { count: number }) {
   )
 }
 
-function SceneMesh({ mouseX, mouseY, animate, objects }: {
+function SceneMesh({ mouseX, mouseY, animate, objects, bright }: {
   mouseX: MotionValue<number>
   mouseY: MotionValue<number>
   animate: boolean
   objects: typeof OBJECTS
+  bright: boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
   useFrame(() => {
@@ -94,7 +97,7 @@ function SceneMesh({ mouseX, mouseY, animate, objects }: {
   })
   return (
     <group ref={groupRef}>
-      {objects.map((o, i) => <SceneObject key={i} {...o} animate={animate} />)}
+      {objects.map((o, i) => <SceneObject key={i} {...o} animate={animate} bright={bright} />)}
     </group>
   )
 }
@@ -105,34 +108,38 @@ export default function HeroScene({ mouseX, mouseY }: {
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
   const { ref, visible } = useInViewport<HTMLDivElement>('150px')
+  const [degraded, setDegraded] = useState(false)
 
-  const objects = isLowPower ? OBJECTS.slice(0, 5) : OBJECTS
-  const animate = !prefersReducedMotion
-  const enableBloom = !isLowPower
-  const starCount = isLowPower ? 60 : 140
+  const objects   = isLowPower ? OBJECTS.slice(0, 6) : OBJECTS
+  const animate   = !prefersReducedMotion
+  const bloomOn   = !isLowPower && !degraded
+  const bright    = !bloomOn   // brighten emissive when bloom can't carry the glow
+  const starCount = isLowPower ? 50 : 120
+  // Full-screen canvas → keep pixel count modest; bloom cost scales with pixels².
+  const dpr: [number, number] | number = degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]
 
   return (
     <div ref={ref} className="w-full h-full">
       <Canvas
         frameloop={visible && animate ? 'always' : 'demand'}
         camera={{ position: [0, 0, 6.5], fov: 56 }}
-        gl={{ alpha: true, antialias: !isLowPower, powerPreference: 'high-performance' }}
-        dpr={isLowPower ? [1, 1.5] : [1, 2]}
+        gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+        dpr={dpr}
         style={{ background: 'transparent', width: '100%', height: '100%' }}
       >
-        <ambientLight intensity={0.04} />
-        <pointLight position={[ 5,  5,  5]} intensity={2.4} color="#FF2E97" />
-        <pointLight position={[-5, -3,  3]} intensity={1.8} color="#7A3CFF" />
-        <pointLight position={[ 0,  0, -5]} intensity={0.9} color="#FFB23E" />
+        <ambientLight intensity={0.06} />
+        <pointLight position={[ 5,  5,  5]} intensity={2.6} color="#FF2E97" />
+        <pointLight position={[-5, -3,  3]} intensity={2.0} color="#7A3CFF" />
+        <pointLight position={[ 0,  0, -5]} intensity={1.0} color="#FFB23E" />
         <Stars count={starCount} />
         {!isLowPower && <BackdropKnot animate={animate} />}
-        <SceneMesh mouseX={mouseX} mouseY={mouseY} animate={animate} objects={objects} />
-        {enableBloom && (
+        <SceneMesh mouseX={mouseX} mouseY={mouseY} animate={animate} objects={objects} bright={bright} />
+        {bloomOn && (
           <EffectComposer>
-            <Bloom intensity={1.8} luminanceThreshold={0.18} luminanceSmoothing={0.88} mipmapBlur />
+            <Bloom intensity={1.5} luminanceThreshold={0.2} luminanceSmoothing={0.85} mipmapBlur />
           </EffectComposer>
         )}
-        <PerformanceMonitor />
+        <PerformanceMonitor onDecline={() => setDegraded(true)} />
         <AdaptiveDpr pixelated />
       </Canvas>
     </div>

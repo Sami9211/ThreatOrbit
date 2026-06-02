@@ -53,14 +53,15 @@ lib/
 
 ### 3D scenes (`components/effects/`)
 
-| Scene            | Where        | What |
-|------------------|--------------|------|
-| `HeroScene`      | Hero         | Floating polyhedra + wireframes, drifting torus knot, starfield, bloom |
-| `OrbitalScene`   | ScrollStory  | Three torus rings + hex prism, scroll-driven rotation, bloom |
-| `ThreatGlobe`    | GlobalThreatMap | Wireframe globe, animated attack arcs, drag-to-rotate (OrbitControls), bloom |
+| Scene             | Where           | What |
+|-------------------|-----------------|------|
+| `HeroScene`       | Hero            | Floating polyhedra + wireframes, drifting torus knot, starfield, bloom |
+| `OrbitalScene`    | ScrollStory     | A glowing **planet circled by rings of orbiting dots** (tilted dot-orbits + moons), scroll-driven rotation, bloom |
+| `ThreatGlobe`     | GlobalThreatMap | Wireframe globe w/ lat-lon grid + pulsing city hotspots, animated attack arcs, drag-to-rotate (OrbitControls), bloom |
+| `IOCNetworkScene` | IOCNetwork      | Clustered IOC graph — type-coloured nodes + correlation edges, slow auto-rotate, bloom |
 
-All three are `dynamic(..., { ssr: false })` so three.js loads in a lazy
-chunk **after** first paint — initial First Load JS stays ~170 kB.
+All four are `dynamic(..., { ssr: false })` so three.js loads in a lazy
+chunk **after** first paint — initial First Load JS stays ~176 kB.
 
 ### Performance & accessibility strategy
 
@@ -72,7 +73,11 @@ chunk **after** first paint — initial First Load JS stays ~170 kB.
 Every WebGL canvas uses these to:
 
 - **Pause off-screen** — `frameloop` drops to `'demand'` when not visible.
-- **Degrade on low-power devices** — fewer objects, no bloom, antialias off, capped DPR.
+- **Degrade on low-power devices** — fewer objects, no bloom, antialias off, capped DPR (≤1.5).
+- **Runtime FPS degradation** — drei `PerformanceMonitor`'s `onDecline` drops a
+  `degraded` flag that kills bloom and pins DPR to 1. This catches the case a
+  static heuristic misses: a many-core laptop with a *weak GPU* (CPU cores ≠ GPU
+  power). When bloom is off, emissive materials are brightened so shapes stay visible.
 - **Respect reduced-motion** — autonomous animation freezes (scroll/drag still work).
 - **Auto-adapt** — drei `AdaptiveDpr` + `PerformanceMonitor` lower resolution under load.
 

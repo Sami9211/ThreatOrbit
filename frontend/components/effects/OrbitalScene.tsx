@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -8,79 +8,146 @@ import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 
-/* ── Ring config ── */
-const RING_R = 1.85  // torus major radius
-const TUBE   = 0.022  // torus tube radius
+/* ── Orbit definitions: a planet circled by rings of dots ── */
+type OrbitDef = {
+  radius: number
+  count:  number
+  tilt:   [number, number, number]
+  color:  string
+  speed:  number
+  dot:    number
+  moon?:  boolean
+}
 
-type RingDef = { rot: [number, number, number]; color: string; speed: number }
-
-const RINGS: RingDef[] = [
-  /* plane rotation,                          color,     spin speed */
-  { rot: [0,              0,            0], color: '#FF2E97', speed:  0.55 },
-  { rot: [Math.PI / 2,    0,            0], color: '#7A3CFF', speed: -0.38 },
-  { rot: [Math.PI * 0.35, Math.PI * 0.4, 0], color: '#FFB23E', speed:  0.46 },
+const ORBITS: OrbitDef[] = [
+  { radius: 1.15, count: 40, tilt: [Math.PI * 0.5,  0,            0],            color: '#FF2E97', speed:  0.42, dot: 0.028, moon: true },
+  { radius: 1.55, count: 56, tilt: [Math.PI * 0.42, Math.PI * 0.18, 0],         color: '#7A3CFF', speed: -0.30, dot: 0.024, moon: true },
+  { radius: 1.95, count: 72, tilt: [Math.PI * 0.58, -Math.PI * 0.22, 0],        color: '#FFB23E', speed:  0.24, dot: 0.020 },
+  { radius: 2.35, count: 88, tilt: [Math.PI * 0.46, Math.PI * 0.35,  Math.PI * 0.1], color: '#2DD4BF', speed: -0.18, dot: 0.018, moon: true },
 ]
 
-/* ── Single torus ring + riding node ── */
-function Ring({ rot, color, speed, animate }: RingDef & { animate: boolean }) {
+/* ── A ring of dots orbiting in its own tilted plane ── */
+function DotOrbit({ radius, count, tilt, color, speed, dot, moon, animate }: OrbitDef & { animate: boolean }) {
   const spinRef = useRef<THREE.Group>(null)
 
+  // Dots laid out in the XZ plane; the group rotation around Y makes them orbit.
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3)
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2
+      arr[i * 3]     = Math.cos(a) * radius
+      arr[i * 3 + 1] = 0
+      arr[i * 3 + 2] = Math.sin(a) * radius
+    }
+    return arr
+  }, [count, radius])
+
   useFrame((_, dt) => {
-    if (spinRef.current && animate) spinRef.current.rotation.z += dt * speed
+    if (spinRef.current && animate) spinRef.current.rotation.y += dt * speed
   })
 
   return (
-    <group rotation={rot}>
+    <group rotation={tilt}>
+      {/* faint orbit path */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[radius, 0.0035, 8, 160]} />
+        <meshBasicMaterial color={color} transparent opacity={0.22} toneMapped={false} />
+      </mesh>
+
+      {/* the orbiting dots */}
       <group ref={spinRef}>
-        <mesh>
-          <torusGeometry args={[RING_R, TUBE, 20, 128]} />
-          <meshStandardMaterial
-            color={color} emissive={color}
-            emissiveIntensity={1.4} toneMapped={false}
-          />
-        </mesh>
-        <mesh position={[RING_R, 0, 0]}>
-          <sphereGeometry args={[0.085, 16, 16]} />
-          <meshStandardMaterial
-            color={color} emissive={color}
-            emissiveIntensity={5} toneMapped={false}
-          />
-        </mesh>
+        <points>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+          </bufferGeometry>
+          <pointsMaterial size={dot} color={color} sizeAttenuation toneMapped={false} />
+        </points>
+
+        {/* a brighter "moon" riding the orbit */}
+        {moon && (
+          <mesh position={[radius, 0, 0]}>
+            <sphereGeometry args={[0.06, 16, 16]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={5} toneMapped={false} />
+          </mesh>
+        )}
       </group>
     </group>
   )
 }
 
-function Orbital({ scrollY, mouseX, mouseY, animate }: {
+/* ── The central planet ── */
+function Planet({ animate, bright }: { animate: boolean; bright: boolean }) {
+  const shellRef = useRef<THREE.Mesh>(null)
+  const coreRef  = useRef<THREE.Mesh>(null)
+  const t = useRef(0)
+
+  useFrame((_, dt) => {
+    if (!animate) return
+    t.current += dt
+    if (shellRef.current) shellRef.current.rotation.y += dt * 0.08
+    if (coreRef.current) {
+      const s = 0.97 + 0.03 * Math.sin(t.current * 1.6)
+      coreRef.current.scale.setScalar(s)
+    }
+  })
+
+  return (
+    <group>
+      {/* glowing core */}
+      <mesh ref={coreRef}>
+        <sphereGeometry args={[0.62, 48, 48]} />
+        <meshStandardMaterial
+          color="#2A1244"
+          emissive="#FF2E97"
+          emissiveIntensity={bright ? 1.1 : 0.6}
+          metalness={0.7}
+          roughness={0.25}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* wireframe latitude shell */}
+      <mesh ref={shellRef}>
+        <icosahedronGeometry args={[0.67, 2]} />
+        <meshBasicMaterial color="#FF6FC0" wireframe transparent opacity={0.3} toneMapped={false} />
+      </mesh>
+
+      {/* inner atmosphere */}
+      <mesh>
+        <sphereGeometry args={[0.75, 32, 32]} />
+        <meshBasicMaterial color="#7A3CFF" transparent opacity={0.07} side={THREE.BackSide} />
+      </mesh>
+
+      {/* outer halo */}
+      <mesh>
+        <sphereGeometry args={[0.92, 32, 32]} />
+        <meshBasicMaterial color="#FF2E97" transparent opacity={0.03} side={THREE.BackSide} />
+      </mesh>
+    </group>
+  )
+}
+
+function PlanetSystem({ scrollY, mouseX, mouseY, animate, orbits, bright }: {
   scrollY: MotionValue<number>
   mouseX:  MotionValue<number>
   mouseY:  MotionValue<number>
   animate: boolean
+  orbits:  OrbitDef[]
+  bright:  boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
-  const hexRef   = useRef<THREE.Mesh>(null)
 
-  useFrame((_, dt) => {
+  useFrame(() => {
     if (!groupRef.current) return
     groupRef.current.rotation.y = (scrollY.get() * Math.PI) / 180
-    groupRef.current.rotation.x +=
-      (mouseY.get() * 0.55 - groupRef.current.rotation.x) * 0.06
-    groupRef.current.rotation.z +=
-      (mouseX.get() * -0.3 - groupRef.current.rotation.z) * 0.06
-    if (hexRef.current && animate) hexRef.current.rotation.y += dt * 0.38
+    groupRef.current.rotation.x += (mouseY.get() * 0.5 - groupRef.current.rotation.x) * 0.06
+    groupRef.current.rotation.z += (mouseX.get() * -0.28 - groupRef.current.rotation.z) * 0.06
   })
 
   return (
     <group ref={groupRef}>
-      {RINGS.map((r, i) => <Ring key={i} {...r} animate={animate} />)}
-      <mesh ref={hexRef}>
-        <cylinderGeometry args={[0.44, 0.44, 0.26, 6, 1]} />
-        <meshStandardMaterial
-          color="#FF2E97" metalness={0.88} roughness={0.08}
-          emissive="#7A3CFF" emissiveIntensity={0.55}
-          flatShading toneMapped={false}
-        />
-      </mesh>
+      <Planet animate={animate} bright={bright} />
+      {orbits.map((o, i) => <DotOrbit key={i} {...o} animate={animate} />)}
     </group>
   )
 }
@@ -92,34 +159,37 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
   const { ref, visible } = useInViewport<HTMLDivElement>('200px')
+  const [degraded, setDegraded] = useState(false)
 
-  const animate = !prefersReducedMotion
-  const enableBloom = !isLowPower
+  const animate   = !prefersReducedMotion
+  const bloomOn   = !isLowPower && !degraded
+  // brighten materials whenever bloom is off, so the scene stays visible
+  const bright    = !bloomOn
+  const orbits    = isLowPower ? ORBITS.slice(0, 3).map(o => ({ ...o, count: Math.round(o.count * 0.6) })) : ORBITS
 
   return (
     <div ref={ref} className="w-full h-full">
       <Canvas
         frameloop={visible ? 'always' : 'demand'}
-        camera={{ position: [0, 1.4, 5.6], fov: 44 }}
-        gl={{ alpha: true, antialias: !isLowPower, powerPreference: 'high-performance' }}
-        dpr={isLowPower ? [1, 1.5] : [1, 2]}
+        camera={{ position: [0, 1.2, 5.4], fov: 46 }}
+        gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+        dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
         style={{ background: 'transparent', width: '100%', height: '100%' }}
       >
-        <ambientLight intensity={0.06} />
-        <pointLight position={[4,  4, 4]}  intensity={1.8} color="#FF2E97" />
-        <pointLight position={[-4, -2, 2]} intensity={1.2} color="#7A3CFF" />
-        <Orbital scrollY={scrollY} mouseX={mouseX} mouseY={mouseY} animate={animate} />
-        {enableBloom && (
+        <ambientLight intensity={0.12} />
+        <pointLight position={[4,  4, 4]}  intensity={2.2} color="#FF2E97" />
+        <pointLight position={[-4, -2, 2]} intensity={1.5} color="#7A3CFF" />
+        <pointLight position={[0, 0, -4]}  intensity={0.9} color="#FFB23E" />
+        <PlanetSystem
+          scrollY={scrollY} mouseX={mouseX} mouseY={mouseY}
+          animate={animate} orbits={orbits} bright={bright}
+        />
+        {bloomOn && (
           <EffectComposer>
-            <Bloom
-              intensity={2.2}
-              luminanceThreshold={0.12}
-              luminanceSmoothing={0.88}
-              mipmapBlur
-            />
+            <Bloom intensity={1.9} luminanceThreshold={0.15} luminanceSmoothing={0.9} mipmapBlur />
           </EffectComposer>
         )}
-        <PerformanceMonitor />
+        <PerformanceMonitor onDecline={() => setDegraded(true)} />
         <AdaptiveDpr pixelated />
       </Canvas>
     </div>

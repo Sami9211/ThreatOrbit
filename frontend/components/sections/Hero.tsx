@@ -87,9 +87,24 @@ export default function Hero() {
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
 
+  // Cache the section rect so we don't force a layout reflow on every mousemove
+  // (reading getBoundingClientRect per-move is a known INP/jank source). We
+  // refresh it on mount, resize, and scroll instead.
+  const rectRef = useRef<DOMRect | null>(null)
+  useEffect(() => {
+    const measure = () => { rectRef.current = sectionRef.current?.getBoundingClientRect() ?? null }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, { passive: true })
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure)
+    }
+  }, [])
+
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
-    const r = sectionRef.current?.getBoundingClientRect()
-    if (!r) return
+    const r = rectRef.current
+    if (!r || r.width === 0) return
     mouseX.set((e.clientX - r.left) / r.width - 0.5)
     mouseY.set((e.clientY - r.top) / r.height - 0.5)
   }
