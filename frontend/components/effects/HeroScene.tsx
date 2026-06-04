@@ -24,19 +24,25 @@ const OBJECTS = [
 ]
 
 function SceneObject({ p, s, g, c, fs, wire, animate, bright }: typeof OBJECTS[0] & { animate: boolean; bright: boolean }) {
-  // When bloom is off (phone / degraded), push emissive up so shapes stay visible.
-  const emissive = wire ? (bright ? 1.6 : 0.9) : (bright ? 1.0 : 0.45)
+  // On mobile / degraded (bright=true): use meshBasicMaterial so shapes are always
+  // visible regardless of lighting. When bloom is on, use meshStandardMaterial for
+  // metallic sheen + emissive glow that bloom amplifies.
+  const emissiveIntensity = wire ? 0.9 : 0.45
   return (
     <Float speed={animate ? fs : 0} floatIntensity={animate ? 0.7 : 0} rotationIntensity={animate ? 0.6 : 0}>
       <mesh position={p as [number, number, number]} scale={s}>
         {g === 'hex' && <cylinderGeometry args={[1, 1, 0.5, 6, 1]} />}
         {g === 'oct' && <octahedronGeometry args={[1, 0]} />}
         {g === 'ico' && <icosahedronGeometry args={[1, 0]} />}
-        <meshStandardMaterial
-          color={c} metalness={0.78} roughness={0.14}
-          emissive={c} emissiveIntensity={emissive}
-          wireframe={wire} flatShading toneMapped={false}
-        />
+        {bright ? (
+          <meshBasicMaterial color={c} wireframe={wire} toneMapped={false} />
+        ) : (
+          <meshStandardMaterial
+            color={c} metalness={0.78} roughness={0.14}
+            emissive={c} emissiveIntensity={emissiveIntensity}
+            wireframe={wire} flatShading toneMapped={false}
+          />
+        )}
       </mesh>
     </Float>
   )
@@ -137,7 +143,7 @@ export default function HeroScene({ mouseX, mouseY }: {
           <pointLight position={[-5, -3,  3]} intensity={2.0} color="#7A3CFF" />
           <pointLight position={[ 0,  0, -5]} intensity={1.0} color="#FFB23E" />
           <Stars count={starCount} />
-          {!isLowPower && <BackdropKnot animate={animate} />}
+          <BackdropKnot animate={animate} />
           <SceneMesh mouseX={mouseX} mouseY={mouseY} animate={animate} objects={objects} bright={bright} />
           {bloomOn && (
             <EffectComposer>

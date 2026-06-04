@@ -14,6 +14,18 @@ const OrbitalScene = dynamic(() => import('@/components/effects/OrbitalScene'), 
   loading: () => <ScenePlaceholder />,
 })
 
+// Preload the OrbitalScene chunk before the section is reached so the user
+// never waits 5-10s for the WebGL canvas to appear.
+if (typeof window !== 'undefined') {
+  // Fire after the page has settled (fonts, images, hero loaded)
+  const preload = () => import('@/components/effects/OrbitalScene')
+  if (document.readyState === 'complete') {
+    setTimeout(preload, 800)
+  } else {
+    window.addEventListener('load', () => setTimeout(preload, 800), { once: true })
+  }
+}
+
 /* ─── Narrative beat ─────────────────────────────────────────────── */
 function Beat({
   progress, range, yFrom = 40, children, className = '',

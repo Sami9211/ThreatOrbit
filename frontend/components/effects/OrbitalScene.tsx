@@ -160,7 +160,9 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
   // Mount the GL context only near the viewport; unmount well off-screen.
-  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
+  // Use a large margin so the canvas mounts well before the user scrolls here,
+  // eliminating the visible 5-10s delay caused by shader compilation on first render.
+  const { ref, visible } = useInViewport<HTMLDivElement>('800px')
   const [degraded, setDegraded] = useState(false)
 
   const animate   = !prefersReducedMotion

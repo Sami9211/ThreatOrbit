@@ -1,4 +1,5 @@
 import Navbar from '@/components/layout/Navbar'
+import LandingSidebar from '@/components/layout/LandingSidebar'
 import Footer from '@/components/layout/Footer'
 import SmoothScroll from '@/components/effects/SmoothScroll'
 import CursorGlow from '@/components/effects/CursorGlow'
@@ -30,6 +31,7 @@ export default function Home() {
       <Preloader />
       <ScrollProgress />
       <CursorGlow />
+      <LandingSidebar />
       <Navbar />
       <main id="main-content">
         <Hero />

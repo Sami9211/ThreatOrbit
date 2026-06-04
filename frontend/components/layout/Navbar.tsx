@@ -92,6 +92,12 @@ export default function Navbar() {
 
           <div className="flex items-center gap-3">
             <a
+              href="/dashboard"
+              className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 text-ink-200 font-medium text-sm hover:border-magenta/30 hover:text-white transition-all duration-300"
+            >
+              Dashboard
+            </a>
+            <a
               href="#cta"
               className="group hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-lg bg-plasma text-white font-medium text-sm transition-all duration-300 hover:shadow-magenta-sm"
             >
