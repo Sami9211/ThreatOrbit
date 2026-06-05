@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Filter, X, RefreshCw, ExternalLink, ChevronDown,
-  AlertTriangle, Globe, Hash, Link, Zap, Shield,
+  AlertTriangle, Globe, Hash, Link, Zap, Shield, Download,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -543,6 +543,30 @@ export default function ThreatFeedsPage() {
 
   const hasFilters = filterAttack !== 'All' || filterSev !== 'All' || filterSector !== 'All' || filterCountry !== 'All' || search
 
+  function exportCSV() {
+    const header = 'CVE,Title,Attack Type,Severity,Source Country,Dest Country,CVSS Score,Tags'
+    const rows = filtered.map((f) =>
+      [
+        f.cve ?? '',
+        `"${f.title.replace(/"/g, '""')}"`,
+        f.attackType,
+        f.severity,
+        f.sourceCountry,
+        f.destCountry,
+        f.cvssScore ?? '',
+        `"${f.tags.join(', ')}"`,
+      ].join(','),
+    )
+    const csv = [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `threatorbit-feeds-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -552,6 +576,15 @@ export default function ThreatFeedsPage() {
           <p className="text-xs text-ink-500 mt-0.5">Real-time threat feed aggregation · hover any row for details</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Export CSV */}
+          <button
+            onClick={exportCSV}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors"
+            aria-label="Export as CSV"
+          >
+            <Download className="w-3 h-3" />
+            Export CSV
+          </button>
           {/* Live toggle */}
           <button
             onClick={() => setLive((l) => !l)}
