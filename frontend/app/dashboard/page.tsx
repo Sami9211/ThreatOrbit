@@ -1,41 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, Shield, Activity, Zap, Globe, TrendingUp,
-  TrendingDown, ArrowUpRight, Clock, Eye,
+  TrendingDown, ArrowUpRight, Clock, Eye, Radio, Filter,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-/* ── Sample attack data for the world map ───────────────────────── */
-const ATTACKS = [
-  { id: 1, sx: 72, sy: 36, dx: 22, dy: 38, color: '#FF2E97', type: 'RCE',       severity: 'critical' },
-  { id: 2, sx: 58, sy: 28, dx: 46, dy: 31, color: '#FF4D6D', type: 'DDoS',      severity: 'high'     },
-  { id: 3, sx: 76, sy: 38, dx: 47, dy: 32, color: '#FFB23E', type: 'Phishing',  severity: 'medium'   },
-  { id: 4, sx: 60, sy: 27, dx: 22, dy: 37, color: '#FF2E97', type: 'Ransomware',severity: 'critical' },
-  { id: 5, sx: 75, sy: 52, dx: 47, dy: 33, color: '#7A3CFF', type: 'C2 Beacon', severity: 'high'     },
-  { id: 6, sx: 20, sy: 38, dx: 46, dy: 31, color: '#2DD4BF', type: 'Scan',      severity: 'low'      },
-  { id: 7, sx: 65, sy: 44, dx: 22, dy: 38, color: '#FFB23E', type: 'BEC',       severity: 'high'     },
-  { id: 8, sx: 49, sy: 53, dx: 46, dy: 31, color: '#FF4D6D', type: 'Exploit',   severity: 'critical' },
-  { id: 9, sx: 81, sy: 67, dx: 23, dy: 39, color: '#7A3CFF', type: 'APT',       severity: 'high'     },
-  { id: 10, sx: 30, sy: 61, dx: 46, dy: 30, color: '#2DD4BF', type: 'Scan',     severity: 'low'      },
-]
-
-const CITY_DOTS = [
-  { x: 22, y: 37, label: 'New York',   color: '#FF4D6D', intensity: 1.0,  pulseDelay: 0.0 },
-  { x: 46, y: 31, label: 'London',     color: '#7A3CFF', intensity: 0.9,  pulseDelay: 0.4 },
-  { x: 58, y: 27, label: 'Moscow',     color: '#FF2E97', intensity: 1.0,  pulseDelay: 0.8 },
-  { x: 75, y: 37, label: 'Beijing',    color: '#FF2E97', intensity: 0.95, pulseDelay: 1.2 },
-  { x: 82, y: 36, label: 'Tokyo',      color: '#FFB23E', intensity: 0.8,  pulseDelay: 1.6 },
-  { x: 75, y: 52, label: 'Singapore',  color: '#7A3CFF', intensity: 0.75, pulseDelay: 0.2 },
-  { x: 65, y: 44, label: 'Mumbai',     color: '#FFB23E', intensity: 0.7,  pulseDelay: 0.6 },
-  { x: 50, y: 31, label: 'Berlin',     color: '#2DD4BF', intensity: 0.65, pulseDelay: 1.0 },
-  { x: 54, y: 43, label: 'Cairo',      color: '#FFB23E', intensity: 0.6,  pulseDelay: 1.4 },
-  { x: 30, y: 61, label: 'São Paulo',  color: '#2DD4BF', intensity: 0.55, pulseDelay: 1.8 },
-  { x: 80, y: 64, label: 'Sydney',     color: '#7A3CFF', intensity: 0.5,  pulseDelay: 0.3 },
-  { x: 49, y: 53, label: 'Lagos',      color: '#FF2E97', intensity: 0.6,  pulseDelay: 0.9 },
-]
+import WorldMap from '@/components/dashboard/WorldMap'
 
 const SEVERITY_COLOR = {
   critical: '#FF2E97',
@@ -43,136 +15,6 @@ const SEVERITY_COLOR = {
   medium:   '#FFB23E',
   low:      '#2DD4BF',
 } as const
-
-/* ── World Attack Map ────────────────────────────────────────────── */
-function WorldMap() {
-  function arc(sx: number, sy: number, dx: number, dy: number) {
-    const mx = (sx + dx) / 2
-    const my = Math.min(sy, dy) - Math.abs(dx - sx) * 0.25 - 8
-    return `M ${sx} ${sy} Q ${mx} ${my} ${dx} ${dy}`
-  }
-
-  return (
-    <div className="relative w-full h-full bg-[#080613] rounded-xl overflow-hidden border border-white/5">
-      {/* Grid background */}
-      <div className="absolute inset-0 opacity-20"
-        style={{
-          backgroundImage: 'linear-gradient(rgba(122,60,255,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(122,60,255,0.15) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
-
-      {/* Continent silhouettes (simplified blobs) */}
-      <svg
-        viewBox="0 0 100 75"
-        className="absolute inset-0 w-full h-full"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <filter id="glow-map">
-            <feGaussianBlur stdDeviation="0.5" result="coloredBlur" />
-            <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <radialGradient id="pulse-grad" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-
-        {/* Simplified continent fills */}
-        {/* North America */}
-        <path d="M 8 24 L 12 20 L 18 22 L 26 22 L 30 28 L 28 36 L 22 42 L 16 40 L 10 34 Z"
-          fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
-        {/* South America */}
-        <path d="M 24 45 L 30 44 L 35 48 L 34 62 L 28 68 L 24 65 L 22 55 Z"
-          fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
-        {/* Europe */}
-        <path d="M 42 22 L 52 20 L 56 25 L 50 32 L 44 30 Z"
-          fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
-        {/* Africa */}
-        <path d="M 44 36 L 56 35 L 60 44 L 58 58 L 50 65 L 43 58 L 42 48 Z"
-          fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
-        {/* Asia */}
-        <path d="M 56 18 L 88 20 L 90 38 L 82 45 L 68 48 L 58 40 L 54 30 Z"
-          fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
-        {/* Australia */}
-        <path d="M 74 58 L 88 58 L 90 68 L 80 70 L 73 65 Z"
-          fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
-
-        {/* Attack arcs — infinite looping travel animation */}
-        {ATTACKS.map((a) => (
-          <path
-            key={`arc-${a.id}`}
-            d={arc(a.sx, a.sy, a.dx, a.dy)}
-            fill="none"
-            stroke={a.color}
-            strokeWidth="0.4"
-            strokeDasharray="12"
-            strokeDashoffset="12"
-            style={{ animation: `drawArc 2.8s ease-in-out ${a.id * 0.3}s infinite` }}
-          />
-        ))}
-
-        {/* Attack destination markers */}
-        {ATTACKS.map((a) => (
-          <circle
-            key={`dst-${a.id}`}
-            cx={a.dx}
-            cy={a.dy}
-            r="0.8"
-            fill={a.color}
-            opacity="0.9"
-            filter="url(#glow-map)"
-          />
-        ))}
-
-        {/* City dots with pulse rings */}
-        {CITY_DOTS.map((c) => (
-          <g key={c.label}>
-            {/* outer pulse ring */}
-            <circle cx={c.x} cy={c.y} r="2.5" fill="none" stroke={c.color}
-              strokeWidth="0.4" opacity="0.3"
-              style={{ animation: `pulseRing 2.5s ease-out infinite ${c.pulseDelay}s` }}
-            />
-            {/* core dot */}
-            <circle cx={c.x} cy={c.y} r="0.9" fill={c.color} opacity={c.intensity}
-              filter="url(#glow-map)" />
-          </g>
-        ))}
-      </svg>
-
-      {/* CSS keyframes via style tag */}
-      <style>{`
-        @keyframes drawArc {
-          0%   { stroke-dashoffset: 12; opacity: 0; }
-          15%  { opacity: 0.7; }
-          80%  { stroke-dashoffset: 0; opacity: 0.5; }
-          100% { stroke-dashoffset: 0; opacity: 0; }
-        }
-        @keyframes pulseRing {
-          0%   { r: 1;   opacity: 0.8; }
-          100% { r: 4;   opacity: 0; }
-        }
-      `}</style>
-
-      {/* Legend */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-4 text-[10px] text-ink-500">
-        {(['critical', 'high', 'medium', 'low'] as const).map((s) => (
-          <div key={s} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ background: SEVERITY_COLOR[s] }} />
-            <span className="capitalize">{s}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Live indicator */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 text-[10px] text-safe">
-        <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
-        Live Attack Feed
-      </div>
-    </div>
-  )
-}
 
 /* ── KPI Card ────────────────────────────────────────────────────── */
 function KPICard({
@@ -380,6 +222,139 @@ function EventTimeline() {
   )
 }
 
+/* ── Live Threat Feed (with filters) ─────────────────────────────── */
+type Feed = {
+  id: number
+  type: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  region: string
+  ip: string
+  detail: string
+}
+
+const FEED_SEED: Omit<Feed, 'id'>[] = [
+  { type: 'RCE Exploit',   severity: 'critical', region: 'Europe',   ip: '45.95.147.236',  detail: 'CVE-2024-6387 OpenSSH attempt' },
+  { type: 'C2 Beacon',     severity: 'critical', region: 'N. America', ip: '185.220.101.42', detail: 'Lazarus Group callback' },
+  { type: 'Ransomware',    severity: 'critical', region: 'Asia',     ip: '103.224.182.0',  detail: 'LockBit encryption pattern' },
+  { type: 'Phishing',      severity: 'high',     region: 'N. America', ip: '192.3.45.18',   detail: 'Credential harvest page' },
+  { type: 'Brute Force',   severity: 'high',     region: 'Europe',   ip: '91.92.251.103',  detail: 'SSH 4,200 attempts / min' },
+  { type: 'SQL Injection', severity: 'medium',   region: 'Asia',     ip: '23.184.48.200',  detail: 'WAF blocked union-based' },
+  { type: 'Port Scan',     severity: 'low',      region: 'S. America', ip: '177.54.144.9',  detail: 'Full TCP sweep' },
+  { type: 'DDoS',          severity: 'high',     region: 'Africa',   ip: '105.112.20.4',   detail: 'SYN flood 48 Gbps' },
+  { type: 'Supply Chain',  severity: 'critical', region: 'Europe',   ip: '195.123.246.0',  detail: 'Malicious npm package' },
+  { type: 'BEC',           severity: 'medium',   region: 'Oceania',  ip: '110.232.76.5',   detail: 'CEO impersonation' },
+  { type: 'Crypto Miner',  severity: 'low',      region: 'Asia',     ip: '47.241.0.88',    detail: 'XMRig on K8s pod' },
+  { type: 'Data Exfil',    severity: 'critical', region: 'N. America', ip: '198.51.100.7', detail: '4.2 GB to external host' },
+]
+
+const REGIONS = ['All', 'N. America', 'S. America', 'Europe', 'Africa', 'Asia', 'Oceania']
+const SEVS = ['All', 'critical', 'high', 'medium', 'low'] as const
+
+let feedId = 100
+function randFeed(): Feed {
+  const base = FEED_SEED[Math.floor(Math.random() * FEED_SEED.length)]
+  return { ...base, id: ++feedId }
+}
+
+function LiveThreatFeed() {
+  const [feeds, setFeeds] = useState<Feed[]>(() =>
+    FEED_SEED.map((f, i) => ({ ...f, id: i })),
+  )
+  const [paused, setPaused] = useState(false)
+  const [region, setRegion] = useState('All')
+  const [sev, setSev] = useState<string>('All')
+
+  useEffect(() => {
+    if (paused) return
+    const id = setInterval(() => {
+      setFeeds((prev) => [randFeed(), ...prev].slice(0, 40))
+    }, 2200)
+    return () => clearInterval(id)
+  }, [paused])
+
+  const filtered = useMemo(
+    () =>
+      feeds.filter(
+        (f) =>
+          (region === 'All' || f.region === region) &&
+          (sev === 'All' || f.severity === sev),
+      ),
+    [feeds, region, sev],
+  )
+
+  return (
+    <div className="glass border border-white/5 rounded-xl overflow-hidden flex flex-col">
+      {/* header + filters */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 flex-wrap">
+        <Radio className="w-4 h-4 text-magenta" />
+        <h3 className="text-sm font-semibold text-white">Live Threat Feed</h3>
+        <button
+          onClick={() => setPaused((p) => !p)}
+          aria-label={paused ? 'Resume feed' : 'Pause feed'}
+          className={cn(
+            'ml-1 flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border',
+            paused ? 'text-ink-500 border-white/10' : 'text-safe border-safe/25 bg-safe/8',
+          )}
+        >
+          <span className={cn('w-1.5 h-1.5 rounded-full', !paused && 'bg-safe animate-pulse')} style={paused ? { background: '#665B7D' } : {}} />
+          {paused ? 'Paused' : 'Live'}
+        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Filter className="w-3 h-3 text-ink-600" />
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            aria-label="Filter by region"
+            className="bg-surface-2 border border-white/8 rounded-md text-[10px] text-ink-300 px-1.5 py-1 focus:outline-none focus:border-magenta/40"
+          >
+            {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select
+            value={sev}
+            onChange={(e) => setSev(e.target.value)}
+            aria-label="Filter by severity"
+            className="bg-surface-2 border border-white/8 rounded-md text-[10px] text-ink-300 px-1.5 py-1 capitalize focus:outline-none focus:border-magenta/40"
+          >
+            {SEVS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* rows */}
+      <div className="overflow-y-auto max-h-[300px]">
+        <AnimatePresence initial={false}>
+          {filtered.map((f) => (
+            <motion.div
+              key={f.id}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="flex items-center gap-3 px-4 py-2.5 border-b border-white/4 hover:bg-white/2"
+            >
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: SEVERITY_COLOR[f.severity] }} />
+              <span className="text-[11px] font-medium text-ink-200 w-24 shrink-0 truncate">{f.type}</span>
+              <span className="text-[11px] text-ink-400 flex-1 min-w-0 truncate">{f.detail}</span>
+              <span className="text-[10px] font-mono text-ink-600 hidden md:block w-28 truncate">{f.ip}</span>
+              <span className="text-[10px] text-ink-500 hidden sm:block w-20 text-right shrink-0">{f.region}</span>
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase shrink-0"
+                style={{ background: `${SEVERITY_COLOR[f.severity]}1a`, color: SEVERITY_COLOR[f.severity] }}
+              >
+                {f.severity}
+              </span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {filtered.length === 0 && (
+          <div className="py-10 text-center text-xs text-ink-600">No threats match the current filters</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function DashboardOverview() {
   const [count, setCount] = useState({ threats: 1842, iocs: 14671, sources: 23, score: 8.4 })
@@ -436,9 +411,12 @@ export default function DashboardOverview() {
         />
       </div>
 
-      {/* World Map */}
-      <div className="h-[340px] w-full">
-        <WorldMap />
+      {/* World Map + Live Feed */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
+        <div className="h-[360px] w-full">
+          <WorldMap />
+        </div>
+        <LiveThreatFeed />
       </div>
 
       {/* Middle row */}

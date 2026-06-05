@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Search, Activity, Zap, Brain, Radio, Settings, Home,
-  ChevronRight, AlertTriangle, Wifi,
+  ChevronRight, AlertTriangle, Wifi, Server,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
@@ -26,6 +26,7 @@ const NAV = [
   {
     section: 'Operations',
     items: [
+      { href: '/dashboard/assets', label: 'Asset Surface', icon: Server },
       { href: '/dashboard/siem', label: 'SIEM', icon: Activity },
       { href: '/dashboard/soar', label: 'SOAR', icon: Zap },
     ],

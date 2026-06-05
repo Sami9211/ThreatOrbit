@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Menu, ChevronRight } from 'lucide-react'
+import { Menu, ChevronRight, LayoutDashboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 import MegaMenu from '@/components/layout/MegaMenu'
@@ -90,19 +90,21 @@ export default function Navbar() {
             })}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* Dashboard — always visible (incl. mobile), prominent gradient */}
             <a
               href="/dashboard"
-              className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 text-ink-200 font-medium text-sm hover:border-magenta/30 hover:text-white transition-all duration-300"
+              className="group flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-lg bg-plasma text-white font-semibold text-sm shadow-magenta-sm transition-all duration-300 hover:shadow-magenta hover:scale-[1.03]"
             >
-              Dashboard
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Dashboard</span>
+              <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
             </a>
             <a
               href="#cta"
-              className="group hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-lg bg-plasma text-white font-medium text-sm transition-all duration-300 hover:shadow-magenta-sm"
+              className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/12 text-ink-200 font-medium text-sm transition-all duration-300 hover:border-magenta/30 hover:text-white"
             >
               Get Started
-              <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
             </a>
             <button
               onClick={() => setMenuOpen(true)}

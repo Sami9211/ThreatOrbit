@@ -7,6 +7,7 @@ const LABELS: Record<string, string> = {
   '/dashboard': 'Overview',
   '/dashboard/feeds': 'Threat Feeds',
   '/dashboard/scanner': 'Threat Scanner',
+  '/dashboard/assets': 'Asset Surface',
   '/dashboard/siem': 'SIEM Dashboard',
   '/dashboard/soar': 'SOAR Dashboard',
   '/dashboard/cti': 'CTI Intelligence',
@@ -14,7 +15,10 @@ const LABELS: Record<string, string> = {
 }
 
 export default function TopBar() {
-  const pathname = usePathname() ?? '/dashboard'
+  const raw = usePathname() ?? '/dashboard'
+  // trailingSlash:true means usePathname() can return "/dashboard/siem/" —
+  // normalise so the label lookup matches regardless of trailing slash.
+  const pathname = raw.length > 1 ? raw.replace(/\/$/, '') : raw
   const label = LABELS[pathname] ?? LABELS['/dashboard']
 
   return (
