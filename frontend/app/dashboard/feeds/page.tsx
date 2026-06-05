@@ -366,7 +366,7 @@ function FeedRow({ entry, idx }: { entry: FeedEntry; idx: number }) {
         </span>
 
         {/* Time */}
-        <span className="text-[10px] text-ink-600 whitespace-nowrap hidden sm:block">{timeAgo(entry.ts)}</span>
+        <span suppressHydrationWarning className="text-[10px] text-ink-600 whitespace-nowrap hidden sm:block">{timeAgo(entry.ts)}</span>
       </motion.div>
 
       {/* Hover detail panel */}

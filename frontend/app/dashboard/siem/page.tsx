@@ -52,9 +52,13 @@ function generateEvent(): LogEvent {
   }
 }
 
+// Fixed base timestamp so seeded rows render identically on server (build)
+// and client (hydration) — avoids a Date.now() hydration mismatch. The live
+// feed appends real-time events post-mount via setInterval.
+const SEED_BASE = Date.parse('2024-11-12T14:30:00Z')
 const INITIAL_EVENTS: LogEvent[] = Array.from({ length: 40 }, (_, i) => {
   const pool = LOG_POOL[i % LOG_POOL.length]
-  const d = new Date(Date.now() - (40 - i) * 38000)
+  const d = new Date(SEED_BASE - (40 - i) * 38000)
   return { ...pool, id: `init-${i}`, ts: d.toISOString() }
 })
 
@@ -212,7 +216,7 @@ export default function SIEMPage() {
                 </span>
                 <span className="text-ink-300 truncate">{e.event}</span>
                 <span className="text-ink-500">{e.source}</span>
-                <span className="text-ink-600">
+                <span suppressHydrationWarning className="text-ink-600">
                   {new Date(e.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               </motion.div>
