@@ -80,6 +80,9 @@ const RULES = [
   { id: 'AWS-3421',  name: 'Cloud IAM Privilege Escalation',  severity: 'HIGH',    hits: 1,  enabled: false  },
 ]
 
+/* ── Event rate sparkbar heights (stable, not regenerated on render) */
+const EVENT_RATE_BARS = Array.from({ length: 48 }, () => Math.random())
+
 /* ── Top sources ─────────────────────────────────────────────────── */
 const TOP_SOURCES = [
   { src: 'endpoint', count: 284 },
@@ -175,6 +178,7 @@ export default function SIEMPage() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => setLive((l) => !l)}
+                aria-label={live ? 'Pause live feed' : 'Resume live feed'}
                 className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded border',
                   live ? 'text-safe border-safe/25 bg-safe/8' : 'text-ink-500 border-white/8')}
               >
@@ -290,19 +294,16 @@ export default function SIEMPage() {
           <div className="glass border border-white/5 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-3">Event Rate</h3>
             <div className="flex items-end gap-0.5 h-16">
-              {Array.from({ length: 48 }, (_, i) => {
-                const h = Math.random()
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-sm"
-                    style={{
-                      height: `${h * 100}%`,
-                      background: h > 0.7 ? '#FF2E97' : h > 0.5 ? '#FF4D6D' : 'rgba(122,60,255,0.4)',
-                    }}
-                  />
-                )
-              })}
+              {EVENT_RATE_BARS.map((h, i) => (
+                <div
+                  key={i}
+                  className="flex-1 rounded-sm"
+                  style={{
+                    height: `${h * 100}%`,
+                    background: h > 0.7 ? '#FF2E97' : h > 0.5 ? '#FF4D6D' : 'rgba(122,60,255,0.4)',
+                  }}
+                />
+              ))}
             </div>
             <div className="flex justify-between mt-1 text-[9px] text-ink-600">
               <span>-24h</span><span>-12h</span><span>Now</span>

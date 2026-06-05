@@ -26,12 +26,12 @@ export default function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="relative p-2 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-threat" />
+        <button aria-label="Notifications" className="relative p-2 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
+          <Bell className="w-4 h-4" aria-hidden="true" />
+          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-threat" aria-hidden="true" />
         </button>
-        <button className="p-2 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
-          <RefreshCw className="w-4 h-4" />
+        <button aria-label="Refresh data" className="p-2 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
+          <RefreshCw className="w-4 h-4" aria-hidden="true" />
         </button>
         <div className="flex items-center gap-2 pl-2 border-l border-white/8">
           <div className="w-7 h-7 rounded-lg bg-plasma flex items-center justify-center">

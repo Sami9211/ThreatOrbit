@@ -555,6 +555,7 @@ export default function ThreatFeedsPage() {
           {/* Live toggle */}
           <button
             onClick={() => setLive((l) => !l)}
+            aria-label={live ? 'Pause live feed' : 'Resume live feed'}
             className={cn(
               'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors',
               live ? 'bg-safe/10 border-safe/25 text-safe' : 'bg-surface-2 border-white/8 text-ink-400',

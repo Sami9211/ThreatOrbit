@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, Play, Pause, CheckCircle, Clock, AlertTriangle,
@@ -157,6 +157,37 @@ const STATUS_STYLE: Record<PBStatus, string> = {
 /* ── Playbook card ───────────────────────────────────────────────── */
 function PlaybookCard({ pb }: { pb: Playbook }) {
   const [expanded, setExpanded] = useState(pb.status === 'running')
+  const [runStatus, setRunStatus] = useState<PBStatus>(pb.status)
+  const [activeStep, setActiveStep] = useState<number>(() => {
+    if (pb.status === 'completed') return pb.steps.length
+    if (pb.status === 'running') return 1
+    return -1
+  })
+
+  function runPlaybook() {
+    if (runStatus === 'running') return
+    setRunStatus('running')
+    setActiveStep(0)
+    setExpanded(true)
+  }
+
+  useEffect(() => {
+    if (runStatus !== 'running') return
+    if (activeStep >= pb.steps.length) {
+      setRunStatus('completed')
+      return
+    }
+    const delay = pb.steps[activeStep].type === 'action' ? 900 : 600
+    const id = setTimeout(() => setActiveStep((s) => s + 1), delay)
+    return () => clearTimeout(id)
+  }, [runStatus, activeStep, pb.steps])
+
+  function stepStatus(i: number): PBStatus {
+    if (runStatus === 'idle' || activeStep === -1) return pb.steps[i].status
+    if (i < activeStep) return 'completed'
+    if (i === activeStep && runStatus === 'running') return 'running'
+    return 'idle'
+  }
 
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
@@ -165,15 +196,15 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
         onClick={() => setExpanded((e) => !e)}
       >
         <div className={cn('mt-0.5 w-2 h-2 rounded-full shrink-0',
-          pb.status === 'running' ? 'bg-safe animate-pulse' :
-          pb.status === 'completed' ? 'bg-violet' :
-          pb.status === 'failed' ? 'bg-threat' : 'bg-ink-600',
+          runStatus === 'running' ? 'bg-safe animate-pulse' :
+          runStatus === 'completed' ? 'bg-violet' :
+          runStatus === 'failed' ? 'bg-threat' : 'bg-ink-600',
         )} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-semibold text-white">{pb.name}</span>
-            <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase', STATUS_STYLE[pb.status])}>
-              {pb.status}
+            <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase', STATUS_STYLE[runStatus])}>
+              {runStatus}
             </span>
           </div>
           <p className="text-xs text-ink-400 mb-2">{pb.description}</p>
@@ -183,11 +214,19 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
             <span>{pb.runs} runs · avg {pb.avgTime}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
-            {pb.status === 'running' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            aria-label={runStatus === 'running' ? 'Pause playbook' : 'Run playbook'}
+            onClick={runPlaybook}
+            disabled={runStatus === 'running'}
+            className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40"
+          >
+            {runStatus === 'running' ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
           </button>
-          <ChevronRight className={cn('w-3.5 h-3.5 text-ink-600 transition-transform', expanded && 'rotate-90')} />
+          <ChevronRight
+            onClick={() => setExpanded((e) => !e)}
+            className={cn('w-3.5 h-3.5 text-ink-600 transition-transform cursor-pointer', expanded && 'rotate-90')}
+          />
         </div>
       </div>
 
@@ -202,25 +241,28 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
             <div className="px-4 py-4">
               <p className="text-[9px] font-semibold uppercase tracking-widest text-ink-600 mb-3">Workflow Steps</p>
               <div className="space-y-2">
-                {pb.steps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="flex flex-col items-center">
-                      <StepIcon type={step.type} status={step.status} />
-                      {i < pb.steps.length - 1 && <div className="w-px h-4 bg-white/5 mt-1" />}
+                {pb.steps.map((step, i) => {
+                  const s = stepStatus(i)
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="flex flex-col items-center">
+                        <StepIcon type={step.type} status={s} />
+                        {i < pb.steps.length - 1 && <div className="w-px h-4 bg-white/5 mt-1" />}
+                      </div>
+                      <span className={cn(
+                        'text-xs transition-colors',
+                        s === 'completed' ? 'text-ink-400 line-through' :
+                        s === 'running' ? 'text-safe' :
+                        s === 'failed' ? 'text-threat' : 'text-ink-500',
+                      )}>
+                        {step.name}
+                      </span>
+                      {step.type === 'decision' && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-amber/10 text-amber border border-amber/20 ml-auto">Branch</span>
+                      )}
                     </div>
-                    <span className={cn(
-                      'text-xs',
-                      step.status === 'completed' ? 'text-ink-400 line-through' :
-                      step.status === 'running' ? 'text-safe' :
-                      step.status === 'failed' ? 'text-threat' : 'text-ink-500',
-                    )}>
-                      {step.name}
-                    </span>
-                    {step.type === 'decision' && (
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-amber/10 text-amber border border-amber/20 ml-auto">Branch</span>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </motion.div>

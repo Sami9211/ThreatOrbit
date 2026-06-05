@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   AlertTriangle, Shield, Activity, Zap, Globe, TrendingUp,
@@ -23,18 +23,18 @@ const ATTACKS = [
 ]
 
 const CITY_DOTS = [
-  { x: 22, y: 37, label: 'New York',   color: '#FF4D6D', intensity: 1.0 },
-  { x: 46, y: 31, label: 'London',     color: '#7A3CFF', intensity: 0.9 },
-  { x: 58, y: 27, label: 'Moscow',     color: '#FF2E97', intensity: 1.0 },
-  { x: 75, y: 37, label: 'Beijing',    color: '#FF2E97', intensity: 0.95 },
-  { x: 82, y: 36, label: 'Tokyo',      color: '#FFB23E', intensity: 0.8 },
-  { x: 75, y: 52, label: 'Singapore',  color: '#7A3CFF', intensity: 0.75 },
-  { x: 65, y: 44, label: 'Mumbai',     color: '#FFB23E', intensity: 0.7 },
-  { x: 50, y: 31, label: 'Berlin',     color: '#2DD4BF', intensity: 0.65 },
-  { x: 54, y: 43, label: 'Cairo',      color: '#FFB23E', intensity: 0.6 },
-  { x: 30, y: 61, label: 'São Paulo',  color: '#2DD4BF', intensity: 0.55 },
-  { x: 80, y: 64, label: 'Sydney',     color: '#7A3CFF', intensity: 0.5  },
-  { x: 49, y: 53, label: 'Lagos',      color: '#FF2E97', intensity: 0.6  },
+  { x: 22, y: 37, label: 'New York',   color: '#FF4D6D', intensity: 1.0,  pulseDelay: 0.0 },
+  { x: 46, y: 31, label: 'London',     color: '#7A3CFF', intensity: 0.9,  pulseDelay: 0.4 },
+  { x: 58, y: 27, label: 'Moscow',     color: '#FF2E97', intensity: 1.0,  pulseDelay: 0.8 },
+  { x: 75, y: 37, label: 'Beijing',    color: '#FF2E97', intensity: 0.95, pulseDelay: 1.2 },
+  { x: 82, y: 36, label: 'Tokyo',      color: '#FFB23E', intensity: 0.8,  pulseDelay: 1.6 },
+  { x: 75, y: 52, label: 'Singapore',  color: '#7A3CFF', intensity: 0.75, pulseDelay: 0.2 },
+  { x: 65, y: 44, label: 'Mumbai',     color: '#FFB23E', intensity: 0.7,  pulseDelay: 0.6 },
+  { x: 50, y: 31, label: 'Berlin',     color: '#2DD4BF', intensity: 0.65, pulseDelay: 1.0 },
+  { x: 54, y: 43, label: 'Cairo',      color: '#FFB23E', intensity: 0.6,  pulseDelay: 1.4 },
+  { x: 30, y: 61, label: 'São Paulo',  color: '#2DD4BF', intensity: 0.55, pulseDelay: 1.8 },
+  { x: 80, y: 64, label: 'Sydney',     color: '#7A3CFF', intensity: 0.5,  pulseDelay: 0.3 },
+  { x: 49, y: 53, label: 'Lagos',      color: '#FF2E97', intensity: 0.6,  pulseDelay: 0.9 },
 ]
 
 const SEVERITY_COLOR = {
@@ -46,15 +46,6 @@ const SEVERITY_COLOR = {
 
 /* ── World Attack Map ────────────────────────────────────────────── */
 function WorldMap() {
-  const svgRef = useRef<SVGSVGElement>(null)
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 2500)
-    return () => clearInterval(id)
-  }, [])
-
-  // Compute a quadratic bezier midpoint (arc above the line)
   function arc(sx: number, sy: number, dx: number, dy: number) {
     const mx = (sx + dx) / 2
     const my = Math.min(sy, dy) - Math.abs(dx - sx) * 0.25 - 8
@@ -73,7 +64,6 @@ function WorldMap() {
 
       {/* Continent silhouettes (simplified blobs) */}
       <svg
-        ref={svgRef}
         viewBox="0 0 100 75"
         className="absolute inset-0 w-full h-full"
         preserveAspectRatio="xMidYMid meet"
@@ -109,18 +99,17 @@ function WorldMap() {
         <path d="M 74 58 L 88 58 L 90 68 L 80 70 L 73 65 Z"
           fill="rgba(122,60,255,0.07)" stroke="rgba(122,60,255,0.18)" strokeWidth="0.3" />
 
-        {/* Attack arcs — drawn with animated dashoffset */}
+        {/* Attack arcs — infinite looping travel animation */}
         {ATTACKS.map((a) => (
           <path
-            key={`arc-${a.id}-${tick}`}
+            key={`arc-${a.id}`}
             d={arc(a.sx, a.sy, a.dx, a.dy)}
             fill="none"
             stroke={a.color}
             strokeWidth="0.4"
-            opacity="0.6"
             strokeDasharray="12"
             strokeDashoffset="12"
-            style={{ animation: `drawArc 1.8s ease-in-out ${a.id * 0.15}s forwards` }}
+            style={{ animation: `drawArc 2.8s ease-in-out ${a.id * 0.3}s infinite` }}
           />
         ))}
 
@@ -143,7 +132,7 @@ function WorldMap() {
             {/* outer pulse ring */}
             <circle cx={c.x} cy={c.y} r="2.5" fill="none" stroke={c.color}
               strokeWidth="0.4" opacity="0.3"
-              style={{ animation: `pulseRing 2.5s ease-out infinite ${Math.random() * 2}s` }}
+              style={{ animation: `pulseRing 2.5s ease-out infinite ${c.pulseDelay}s` }}
             />
             {/* core dot */}
             <circle cx={c.x} cy={c.y} r="0.9" fill={c.color} opacity={c.intensity}
@@ -155,7 +144,10 @@ function WorldMap() {
       {/* CSS keyframes via style tag */}
       <style>{`
         @keyframes drawArc {
-          to { stroke-dashoffset: 0; }
+          0%   { stroke-dashoffset: 12; opacity: 0; }
+          15%  { opacity: 0.7; }
+          80%  { stroke-dashoffset: 0; opacity: 0.5; }
+          100% { stroke-dashoffset: 0; opacity: 0; }
         }
         @keyframes pulseRing {
           0%   { r: 1;   opacity: 0.8; }
