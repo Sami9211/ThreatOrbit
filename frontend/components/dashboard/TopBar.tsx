@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, RefreshCw, User, AlertTriangle, X } from 'lucide-react'
+import { Bell, RefreshCw, User, AlertTriangle, X, Search, Command } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
@@ -75,6 +75,19 @@ export default function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Command palette trigger */}
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))}
+          aria-label="Open command palette"
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-ink-500 hover:text-ink-200 hover:border-white/15 transition-colors text-xs"
+        >
+          <Search className="w-3 h-3" />
+          <span>Jump to…</span>
+          <kbd className="flex items-center gap-0.5 ml-1 text-[9px] px-1 py-0.5 rounded bg-white/5 border border-white/10">
+            <Command className="w-2.5 h-2.5" />K
+          </kbd>
+        </button>
+
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button

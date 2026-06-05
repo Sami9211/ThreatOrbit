@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Sidebar from '@/components/dashboard/Sidebar'
 import TopBar from '@/components/dashboard/TopBar'
+import CommandPalette from '@/components/dashboard/CommandPalette'
 
 export const metadata: Metadata = {
   title: {
@@ -19,6 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+      <CommandPalette />
     </div>
   )
 }
