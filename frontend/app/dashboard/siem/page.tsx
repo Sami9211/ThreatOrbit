@@ -84,8 +84,13 @@ const RULES = [
   { id: 'AWS-3421',  name: 'Cloud IAM Privilege Escalation',  severity: 'HIGH',    hits: 1,  enabled: false  },
 ]
 
-/* ── Event rate sparkbar heights (stable, not regenerated on render) */
-const EVENT_RATE_BARS = Array.from({ length: 48 }, () => Math.random())
+/* ── Event rate sparkbar heights (deterministic seed — no Math.random) */
+const EVENT_RATE_BARS = [
+  0.22,0.31,0.18,0.27,0.41,0.35,0.52,0.61,0.48,0.73,0.82,0.67,
+  0.55,0.44,0.38,0.59,0.76,0.88,0.71,0.65,0.53,0.47,0.39,0.31,
+  0.24,0.33,0.19,0.28,0.43,0.37,0.54,0.63,0.50,0.75,0.84,0.69,
+  0.57,0.46,0.40,0.61,0.78,0.90,0.73,0.68,0.55,0.49,0.41,0.33,
+]
 
 /* ── Top sources ─────────────────────────────────────────────────── */
 const TOP_SOURCES = [

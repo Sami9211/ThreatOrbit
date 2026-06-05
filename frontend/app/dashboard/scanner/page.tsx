@@ -5,8 +5,19 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
   Globe, Hash, Link, File, ChevronDown, ExternalLink, Loader,
+  TrendingUp, Clock, Database, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+/* ── Static scan history (deterministic — no Date.now()) ─────────── */
+const SCAN_HISTORY = [
+  { target: 'http://malicious-phishing-site.xyz/login', type: 'url',  verdict: 'malicious', score: 93, engines: '62/90', time: '2m ago'  },
+  { target: '45.95.147.236',                            type: 'ip',   verdict: 'malicious', score: 81, engines: '41/90', time: '8m ago'  },
+  { target: 'a3f8e92b1d47c61e83dd2a9f7c4b5e01',        type: 'hash', verdict: 'malicious', score: 98, engines: '69/72', time: '14m ago' },
+  { target: '8.8.8.8',                                  type: 'ip',   verdict: 'clean',     score: 0,  engines: '0/90',  time: '21m ago' },
+  { target: 'https://api.acme-corp.com/v2',             type: 'url',  verdict: 'clean',     score: 2,  engines: '1/90',  time: '38m ago' },
+  { target: 'b3f1a92c8e5d47c61f83dd9b7c4a5d02',        type: 'hash', verdict: 'malicious', score: 76, engines: '54/72', time: '1h ago'  },
+]
 
 /* ── Sample results for demo ─────────────────────────────────────── */
 const DEMO_RESULTS: Record<string, ScanResult> = {
@@ -256,9 +267,30 @@ export default function ScannerPage() {
 
   return (
     <div className="p-6 max-w-5xl">
-      <div className="mb-8">
-        <h1 className="font-display text-xl font-bold text-white mb-1">Threat Scanner</h1>
-        <p className="text-xs text-ink-500">Scan URLs, IPs, file hashes, and files against 90+ threat intelligence engines</p>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+        <div>
+          <h1 className="font-display text-xl font-bold text-white mb-1">Threat Scanner</h1>
+          <p className="text-xs text-ink-500">Scan URLs, IPs, file hashes, and files against 90+ threat intelligence engines</p>
+        </div>
+        {/* Stats row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {[
+            { label: 'Scans today', value: '1,247', icon: Zap,          color: '#7A3CFF' },
+            { label: 'Malicious',   value: '324',   icon: AlertTriangle, color: '#FF2E97' },
+            { label: 'Engines',     value: '90+',   icon: Database,      color: '#2DD4BF' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="glass border border-white/5 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg" style={{ background: `${color}18` }}>
+                <Icon className="w-3.5 h-3.5" style={{ color }} />
+              </div>
+              <div>
+                <p className="text-[10px] text-ink-500">{label}</p>
+                <p className="text-sm font-bold text-white font-display">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Scanner card */}
@@ -366,6 +398,48 @@ export default function ScannerPage() {
             <div className="flex gap-2 flex-wrap justify-center">
               {['VirusTotal', 'Kaspersky', 'Cisco Talos', 'AlienVault', 'Shodan', 'AbuseIPDB'].map((e) => (
                 <span key={e} className="text-[10px] px-2 py-1 rounded-md bg-surface-2 border border-white/8 text-ink-500 animate-pulse">{e}</span>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Recent Scans — shown when idle */}
+      <AnimatePresence>
+        {!result && !scanning && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="glass border border-white/5 rounded-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-ink-500" />
+                <h3 className="text-sm font-semibold text-white">Recent Scans</h3>
+              </div>
+              <span className="text-[10px] text-ink-500">Session history</span>
+            </div>
+            <div className="divide-y divide-white/4">
+              {SCAN_HISTORY.map((s) => (
+                <div key={s.target} className="flex items-center gap-4 px-5 py-3 hover:bg-white/2 transition-colors">
+                  <div className={cn(
+                    'w-2 h-2 rounded-full shrink-0',
+                    s.verdict === 'malicious' ? 'bg-threat' : 'bg-safe',
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono text-ink-200 truncate">{s.target}</p>
+                  </div>
+                  <span className="text-[9px] text-ink-600 font-mono uppercase bg-surface-3 px-1.5 py-0.5 rounded">{s.type}</span>
+                  <span className="text-[10px] text-ink-500 font-mono w-14 text-right">{s.engines}</span>
+                  <span className={cn(
+                    'text-[10px] font-semibold w-16 text-right uppercase',
+                    s.verdict === 'malicious' ? 'text-threat' : 'text-safe',
+                  )}>
+                    {s.verdict}
+                  </span>
+                  <span className="text-[10px] text-ink-600 w-12 text-right">{s.time}</span>
+                </div>
               ))}
             </div>
           </motion.div>

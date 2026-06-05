@@ -432,27 +432,63 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <TopActors />
 
-        {/* Quick stats */}
-        <div className="glass border border-white/5 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-white">System Status</h3>
-          {[
-            { label: 'Threat API',       status: 'Healthy', color: 'safe'   },
-            { label: 'Log Ingestion',    status: 'Healthy', color: 'safe'   },
-            { label: 'OpenCTI Sync',     status: 'Healthy', color: 'safe'   },
-            { label: 'MISP Feed',        status: 'Degraded',color: 'amber'  },
-            { label: 'Shodan Integration',status:'Healthy',  color: 'safe'   },
-            { label: 'ML Engine',        status: 'Healthy', color: 'safe'   },
-          ].map(({ label, status, color }) => (
-            <div key={label} className="flex items-center justify-between">
-              <span className="text-xs text-ink-400">{label}</span>
-              <div className="flex items-center gap-1.5">
-                <span className={cn('w-1.5 h-1.5 rounded-full', color === 'safe' ? 'bg-safe' : 'bg-amber')} />
-                <span className={cn('text-xs font-medium', color === 'safe' ? 'text-safe' : 'text-amber')}>
-                  {status}
-                </span>
+        {/* Security Posture + System Status */}
+        <div className="glass border border-white/5 rounded-xl p-5 flex flex-col gap-5">
+          {/* Posture gauge */}
+          <div className="flex items-center gap-4">
+            <div className="relative w-20 h-20 shrink-0">
+              <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+                <circle cx="40" cy="40" r="33" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
+                <motion.circle
+                  cx="40" cy="40" r="33" fill="none"
+                  stroke="url(#postureGrad)"
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeDasharray={207.3}
+                  initial={{ strokeDashoffset: 207.3 }}
+                  animate={{ strokeDashoffset: 207.3 * (1 - 0.74) }}
+                  transition={{ duration: 1.4, ease: 'easeOut', delay: 0.3 }}
+                />
+                <defs>
+                  <linearGradient id="postureGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#7A3CFF" />
+                    <stop offset="100%" stopColor="#34F5C5" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="font-display text-xl font-bold text-white">74</span>
+                <span className="text-[9px] text-ink-600">/100</span>
               </div>
             </div>
-          ))}
+            <div>
+              <p className="text-xs font-semibold text-white mb-0.5">Security Posture</p>
+              <p className="text-[10px] text-safe font-medium">Good</p>
+              <p className="text-[10px] text-ink-500 mt-1">1 integration degraded</p>
+            </div>
+          </div>
+
+          <div className="border-t border-white/5 pt-4 space-y-2.5">
+            <h3 className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">System Status</h3>
+            {[
+              { label: 'Threat API',        status: 'Healthy',  color: 'safe'  },
+              { label: 'Log Ingestion',     status: 'Healthy',  color: 'safe'  },
+              { label: 'OpenCTI Sync',      status: 'Healthy',  color: 'safe'  },
+              { label: 'MISP Feed',         status: 'Degraded', color: 'amber' },
+              { label: 'Shodan',            status: 'Healthy',  color: 'safe'  },
+              { label: 'ML Engine',         status: 'Healthy',  color: 'safe'  },
+            ].map(({ label, status, color }) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-xs text-ink-400">{label}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={cn('w-1.5 h-1.5 rounded-full', color === 'safe' ? 'bg-safe' : color === 'amber' ? 'bg-amber animate-pulse' : 'bg-threat')} />
+                  <span className={cn('text-xs font-medium', color === 'safe' ? 'text-safe' : color === 'amber' ? 'text-amber' : 'text-threat')}>
+                    {status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="glass border border-white/5 rounded-xl p-5">
