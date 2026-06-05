@@ -234,13 +234,19 @@ export default function SIEMPage() {
               <div className="flex items-center gap-2 mb-2">
                 <span className={cn('font-semibold', LVL[selected.level].text)}>{selected.level}</span>
                 {selected.rule && <span className="font-mono text-ink-500">{selected.rule}</span>}
-                <span className="text-ink-600 ml-auto">{selected.ts}</span>
+                <span suppressHydrationWarning className="text-ink-600 ml-auto">{selected.ts}</span>
               </div>
               <p className="text-ink-200 mb-2">{selected.event}</p>
-              <div className="flex gap-4 text-ink-500">
+              <div className="flex items-center gap-4 text-ink-500">
                 {selected.ip && <span>IP: <span className="text-ink-300 font-mono">{selected.ip}</span></span>}
                 {selected.user && <span>User: <span className="text-ink-300 font-mono">{selected.user}</span></span>}
                 <span>Source: <span className="text-ink-300">{selected.source}</span></span>
+                <a
+                  href="/dashboard/soar"
+                  className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet/10 text-violet border border-violet/20 text-[10px] font-semibold hover:bg-violet/15 transition-colors whitespace-nowrap"
+                >
+                  <TrendingUp className="w-3 h-3" /> Create SOAR Case
+                </a>
               </div>
             </div>
           )}

@@ -301,8 +301,22 @@ export default function AssetsPage() {
         {filtered.length === 0 && (
           <div className="py-14 text-center">
             <Server className="w-7 h-7 text-ink-700 mx-auto mb-2" />
-            <p className="text-sm text-ink-500">No assets yet</p>
-            <button onClick={() => setShowAdd(true)} className="mt-3 text-xs text-magenta hover:underline">+ Add your first asset</button>
+            {assets.length === 0 ? (
+              <>
+                <p className="text-sm text-ink-500">No assets yet</p>
+                <button onClick={() => setShowAdd(true)} className="mt-3 text-xs text-magenta hover:underline">+ Add your first asset</button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-ink-500">No assets match your filters</p>
+                <button
+                  onClick={() => { setSearch(''); setTypeFilter('all') }}
+                  className="mt-3 text-xs text-magenta hover:underline"
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

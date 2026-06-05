@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
   Globe, Hash, Link, File, ChevronDown, ExternalLink, Loader,
-  TrendingUp, Clock, Database, Zap,
+  TrendingUp, Clock, Database, Zap, Bookmark, BookmarkCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -247,11 +247,13 @@ export default function ScannerPage() {
   const [query, setQuery] = useState('')
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
+  const [saved, setSaved] = useState(false)
 
   const handleScan = () => {
     if (!query.trim() && scanType !== 'file') return
     setScanning(true)
     setResult(null)
+    setSaved(false)
 
     // Simulate scan delay + pick demo result
     setTimeout(() => {
@@ -477,11 +479,25 @@ export default function ScannerPage() {
                   ))}
                 </div>
               </div>
-              <div className="text-center">
-                <div className="text-xs text-ink-500 mb-2">Community</div>
-                <div className="text-2xl font-display font-bold text-threat">{result.community.malicious}</div>
-                <div className="text-[10px] text-ink-500">malicious votes</div>
-                <div className="text-sm text-safe mt-1">{result.community.clean} clean</div>
+              <div className="text-center space-y-4">
+                <div>
+                  <div className="text-xs text-ink-500 mb-2">Community</div>
+                  <div className="text-2xl font-display font-bold text-threat">{result.community.malicious}</div>
+                  <div className="text-[10px] text-ink-500">malicious votes</div>
+                  <div className="text-sm text-safe mt-1">{result.community.clean} clean</div>
+                </div>
+                <button
+                  onClick={() => setSaved((s) => !s)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all',
+                    saved
+                      ? 'bg-violet/15 text-violet border-violet/30'
+                      : 'text-ink-400 border-white/10 hover:text-white hover:border-white/20',
+                  )}
+                >
+                  {saved ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                  {saved ? 'Saved' : 'Save IOC'}
+                </button>
               </div>
             </div>
 
