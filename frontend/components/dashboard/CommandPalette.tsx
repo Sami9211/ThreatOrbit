@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Globe, Radio, Scan, Server, Activity, Zap,
-  Brain, Settings, ChevronRight, Command,
+  Search, Globe, Radio, Server, Activity, Zap,
+  Brain, Settings, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -72,19 +72,6 @@ export default function CommandPalette() {
 
   return (
     <>
-      {/* Trigger button in TopBar (rendered here, positioned via CSS) */}
-      <button
-        onClick={() => { setOpen(true); setActiveIdx(0) }}
-        aria-label="Open command palette (⌘K)"
-        className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-ink-500 hover:text-ink-200 hover:border-white/15 transition-colors text-xs"
-      >
-        <Search className="w-3 h-3" />
-        <span>Jump to…</span>
-        <kbd className="flex items-center gap-0.5 ml-2 text-[9px] px-1 py-0.5 rounded bg-white/5 border border-white/10">
-          <Command className="w-2.5 h-2.5" />K
-        </kbd>
-      </button>
-
       <AnimatePresence>
         {open && (
           <>
