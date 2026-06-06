@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain, Globe, Hash, Target, ChevronRight, ExternalLink,
   Shield, AlertTriangle, Clock, TrendingUp, Network, Eye,
+  Search, Play, Pause, CheckCircle, Crosshair, Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
@@ -313,6 +314,134 @@ function buildGraph(actor: Actor): GraphData {
   }
 }
 
+/* ── Threat Hunt Panel ───────────────────────────────────────────── */
+type HuntStatus = 'active' | 'completed' | 'paused'
+const HUNTS = [
+  { id: 'h1', name: 'Lazarus BLINDINGCAN Sweep', hypothesis: 'Undetected BLINDINGCAN RAT samples in endpoint telemetry', status: 'active' as HuntStatus, artifacts: 3, analyst: 'Alice', progress: 62, created: '2d ago' },
+  { id: 'h2', name: 'Living-off-the-land in OT',  hypothesis: 'LOLBins used as beachhead in OT/ICS network segments',     status: 'active' as HuntStatus, artifacts: 7, analyst: 'Bob',   progress: 45, created: '3d ago' },
+  { id: 'h3', name: 'MFA fatigue campaign',        hypothesis: 'Systematic MFA prompt bombing against Azure AD accounts',   status: 'completed' as HuntStatus, artifacts: 12, analyst: 'auto',  progress: 100, created: '5d ago' },
+  { id: 'h4', name: 'C2 via DNS tunneling',        hypothesis: 'DNS-based C2 beaconing masked in legitimate DNS traffic',   status: 'paused' as HuntStatus, artifacts: 1, analyst: 'Charlie', progress: 28, created: '6d ago' },
+]
+
+const HUNT_COLOR: Record<HuntStatus, string> = { active: '#34F5C5', completed: '#7A3CFF', paused: '#FFB23E' }
+const HUNT_ICON: Record<HuntStatus, React.ElementType> = { active: Play, completed: CheckCircle, paused: Pause }
+
+function ThreatHuntPanel() {
+  const [selected, setSelected] = useState<string | null>(null)
+  return (
+    <div className="glass border border-white/5 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <Crosshair className="w-3.5 h-3.5 text-violet" />
+          <h3 className="text-sm font-semibold text-white">Threat Hunt</h3>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-safe font-medium">
+            {HUNTS.filter((h) => h.status === 'active').length} active
+          </span>
+        </div>
+        <button className="flex items-center gap-1 text-xs text-magenta hover:underline">
+          <Search className="w-3 h-3" /> New Hunt
+        </button>
+      </div>
+      <div className="divide-y divide-white/4">
+        {HUNTS.map((hunt) => {
+          const Icon = HUNT_ICON[hunt.status]
+          const color = HUNT_COLOR[hunt.status]
+          return (
+            <div
+              key={hunt.id}
+              onClick={() => setSelected((s) => (s === hunt.id ? null : hunt.id))}
+              className="px-5 py-3 cursor-pointer hover:bg-white/2 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Icon className="w-3.5 h-3.5 shrink-0" style={{ color }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-ink-200 truncate">{hunt.name}</p>
+                  <div className="flex items-center gap-3 mt-0.5 text-[10px] text-ink-600">
+                    <span>{hunt.analyst}</span>
+                    <span>{hunt.artifacts} artifacts</span>
+                    <span>{hunt.created}</span>
+                  </div>
+                </div>
+                <ChevronRight className={cn('w-3 h-3 text-ink-700 transition-transform', selected === hunt.id && 'rotate-90 text-magenta')} />
+              </div>
+              <div className="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${hunt.progress}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  className="h-full rounded-full"
+                  style={{ background: color }}
+                />
+              </div>
+              <AnimatePresence>
+                {selected === hunt.id && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-[10px] text-ink-500 mt-2 leading-snug italic"
+                  >
+                    Hypothesis: {hunt.hypothesis}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/* ── Sector Targeting ────────────────────────────────────────────── */
+const SECTOR_DATA = [
+  { sector: 'Finance',              score: 94, actors: ['Lazarus', 'FIN7'] },
+  { sector: 'Government',           score: 88, actors: ['APT29', 'Volt Typhoon'] },
+  { sector: 'Critical Infrastructure', score: 85, actors: ['Volt Typhoon'] },
+  { sector: 'Defense',              score: 82, actors: ['Lazarus', 'APT29'] },
+  { sector: 'Healthcare',           score: 71, actors: ['Lazarus', 'FIN7'] },
+  { sector: 'Technology',           score: 68, actors: ['APT29', 'FIN7'] },
+  { sector: 'Energy',               score: 62, actors: ['Volt Typhoon'] },
+  { sector: 'Telecommunications',   score: 58, actors: ['Scattered Spider'] },
+]
+
+function SectorTargeting() {
+  return (
+    <div className="glass border border-white/5 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Building2 className="w-3.5 h-3.5 text-amber" />
+        <h3 className="text-sm font-semibold text-white">Sector Targeting Heat</h3>
+      </div>
+      <div className="space-y-2.5">
+        {SECTOR_DATA.map(({ sector, score, actors }, i) => (
+          <div key={sector}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-ink-300">{sector}</span>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  {actors.map((a) => (
+                    <span key={a} className="text-[8px] px-1 py-px rounded bg-magenta/10 text-magenta font-mono border border-magenta/15">{a.split(' ')[0]}</span>
+                  ))}
+                </div>
+                <span className="text-[10px] font-mono text-ink-400 w-6">{score}</span>
+              </div>
+            </div>
+            <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${score}%` }}
+                transition={{ delay: i * 0.07, duration: 0.8, ease: 'easeOut' }}
+                className="h-full rounded-full"
+                style={{ background: score >= 80 ? '#FF2E97' : score >= 65 ? '#FF4D6D' : '#FFB23E' }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function CTIPage() {
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
@@ -438,6 +567,12 @@ export default function CTIPage() {
             </div>
           </div>
           )}
+
+          {/* Threat hunt + sector targeting */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ThreatHuntPanel />
+            <SectorTargeting />
+          </div>
 
           {/* Campaign timeline */}
           <div className="glass border border-white/5 rounded-xl p-5">
