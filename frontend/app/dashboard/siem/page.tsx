@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Activity, Search, Filter, ChevronDown, ChevronRight, X, Shield,
@@ -11,6 +11,7 @@ import {
   RefreshCw, Lock, Unlock, MessageSquare, Flag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useExperienceMode } from '@/lib/useExperienceMode'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -414,12 +415,14 @@ function fmtBytes(b: number): string {
 }
 
 /* ── Alert detail panel ───────────────────────────────────────────── */
-function AlertDetail({ alert, onClose }: { alert: SiemAlert; onClose: () => void }) {
+function AlertDetail({ alert, onClose, simplified }: { alert: SiemAlert; onClose: () => void; simplified?: boolean }) {
   const [tab, setTab] = useState<'overview' | 'network' | 'identity' | 'host' | 'raw'>('overview')
   const s = SEV[alert.severity]
   const st = STATUS_LABEL[alert.status]
 
-  const TABS = ['overview', 'network', 'identity', 'host', 'raw'] as const
+  const TABS = simplified
+    ? (['overview'] as const)
+    : (['overview', 'network', 'identity', 'host', 'raw'] as const)
 
   return (
     <motion.div
@@ -482,6 +485,7 @@ function AlertDetail({ alert, onClose }: { alert: SiemAlert; onClose: () => void
       </div>
 
       {/* Tabs */}
+      {!simplified && (
       <div className="flex border-b border-white/5 px-4 gap-4 shrink-0">
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)} className={cn('py-2.5 text-[11px] capitalize border-b-2 transition-colors',
@@ -490,6 +494,7 @@ function AlertDetail({ alert, onClose }: { alert: SiemAlert; onClose: () => void
           </button>
         ))}
       </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -645,8 +650,13 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
 
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SIEMPage() {
+  const [mode] = useExperienceMode()
+  const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources'>('queue')
   const [selectedAlert, setSelectedAlert] = useState<SiemAlert | null>(null)
+
+  // Normal mode only exposes the alert queue; force tab back if a hidden one is active
+  useEffect(() => { if (isNormal && tab !== 'queue') setTab('queue') }, [isNormal, tab])
   const [search, setSearch] = useState('')
   const [filterSev, setFilterSev] = useState<Severity | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
@@ -654,6 +664,11 @@ export default function SIEMPage() {
   const [ruleSearch, setRuleSearch] = useState('')
 
   const filteredAlerts = useMemo(() => ALERTS.filter((a) => {
+    // Normal mode: only actionable alerts — open status, critical/high severity
+    if (isNormal) {
+      if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
+      if (!['critical', 'high'].includes(a.severity)) return false
+    }
     if (filterSev !== 'all' && a.severity !== filterSev) return false
     if (filterStatus !== 'all' && a.status !== filterStatus) return false
     if (filterTactic !== 'All' && a.mitreTactic !== filterTactic) return false
@@ -661,7 +676,7 @@ export default function SIEMPage() {
         !a.ruleId.toLowerCase().includes(search.toLowerCase()) &&
         !(a.srcIp).includes(search)) return false
     return true
-  }), [search, filterSev, filterStatus, filterTactic])
+  }), [search, filterSev, filterStatus, filterTactic, isNormal])
 
   const filteredRules = useMemo(() => RULES.filter((r) =>
     !ruleSearch || r.name.toLowerCase().includes(ruleSearch.toLowerCase()) || r.id.toLowerCase().includes(ruleSearch.toLowerCase())
@@ -715,13 +730,15 @@ export default function SIEMPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex gap-6 px-6 border-b border-white/5 shrink-0">
+        <div className="flex gap-6 px-6 border-b border-white/5 shrink-0 items-center">
           {([
             ['queue',     'Alert Queue',   Activity],
             ['analytics', 'Analytics',     BarChart2],
             ['rules',     'Detection Rules', Shield],
             ['sources',   'Data Sources',  Database],
-          ] as const).map(([id, label, Icon]) => (
+          ] as const)
+            .filter(([id]) => !isNormal || id === 'queue')
+            .map(([id, label, Icon]) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={cn('flex items-center gap-2 py-3 text-xs border-b-2 transition-colors',
                 tab === id ? 'border-magenta text-white' : 'border-transparent text-ink-500 hover:text-ink-200')}>
@@ -734,6 +751,11 @@ export default function SIEMPage() {
               )}
             </button>
           ))}
+          <span className={cn('ml-auto flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',
+            isNormal ? 'border-safe/25 bg-safe/10 text-safe' : 'border-magenta/25 bg-magenta/10 text-magenta')}>
+            {isNormal ? <User className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+            {isNormal ? 'Normal mode' : 'Power User'}
+          </span>
         </div>
 
         {/* Tab content */}
@@ -986,7 +1008,7 @@ export default function SIEMPage() {
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
               onClick={() => setSelectedAlert(null)}
             />
-            <AlertDetail alert={selectedAlert} onClose={() => setSelectedAlert(null)} />
+            <AlertDetail alert={selectedAlert} onClose={() => setSelectedAlert(null)} simplified={isNormal} />
           </>
         )}
       </AnimatePresence>

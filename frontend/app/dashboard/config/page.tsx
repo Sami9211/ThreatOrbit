@@ -8,6 +8,7 @@ import {
   Zap, User, BarChart2, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useExperienceMode } from '@/lib/useExperienceMode'
 
 /* ── Shared input ────────────────────────────────────────────────── */
 function Field({ label, value, type = 'text', hint }: { label: string; value: string; type?: string; hint?: string }) {
@@ -104,7 +105,7 @@ function FeedSource({ name, url, enabled, lastSync, icon }: {
 
 /* ── Experience mode ─────────────────────────────────────────────── */
 function ExperienceModeCard() {
-  const [mode, setMode] = useState<'normal' | 'power'>('normal')
+  const [mode, setMode] = useExperienceMode()
 
   const MODES = [
     {

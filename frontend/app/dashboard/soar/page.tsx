@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, CheckCircle, Clock, AlertTriangle, X, Shield, User,
@@ -10,6 +10,7 @@ import {
   ChevronRight, MoreHorizontal, Circle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useExperienceMode } from '@/lib/useExperienceMode'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -362,9 +363,12 @@ function slaLabel(created: string, slaHours: number): string {
 }
 
 /* ── Case detail panel ────────────────────────────────────────────── */
-function CaseDetail({ c, onClose }: { c: CaseRecord; onClose: () => void }) {
+function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => void; simplified?: boolean }) {
   const [tab, setTab] = useState<'overview' | 'warroom' | 'tasks' | 'evidence'>('overview')
   const st = STATUS_STYLE[c.status]
+  const detailTabs = simplified
+    ? (['overview', 'tasks'] as const)
+    : (['overview', 'warroom', 'tasks', 'evidence'] as const)
 
   return (
     <motion.div
@@ -426,7 +430,7 @@ function CaseDetail({ c, onClose }: { c: CaseRecord; onClose: () => void }) {
 
       {/* Tabs */}
       <div className="flex gap-4 px-4 border-b border-white/5 shrink-0">
-        {(['overview','warroom','tasks','evidence'] as const).map((t) => (
+        {detailTabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('py-2.5 text-[11px] border-b-2 transition-colors capitalize',
               tab === t ? 'border-magenta text-white' : 'border-transparent text-ink-500 hover:text-ink-200')}>
@@ -561,9 +565,13 @@ function CaseDetail({ c, onClose }: { c: CaseRecord; onClose: () => void }) {
 
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SOARPage() {
+  const [mode] = useExperienceMode()
+  const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'cases' | 'playbooks' | 'metrics'>('cases')
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
   const [selectedPB, setSelectedPB] = useState<Playbook | null>(null)
+
+  useEffect(() => { if (isNormal && tab !== 'cases') setTab('cases') }, [isNormal, tab])
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -609,12 +617,14 @@ export default function SOARPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex gap-6 px-6 border-b border-white/5 shrink-0">
+        <div className="flex gap-6 px-6 border-b border-white/5 shrink-0 items-center">
           {([
             ['cases',     'Case Queue',  FileText],
             ['playbooks', 'Playbooks',   Zap],
             ['metrics',   'Metrics',     BarChart2],
-          ] as const).map(([id, label, Icon]) => (
+          ] as const)
+            .filter(([id]) => !isNormal || id === 'cases')
+            .map(([id, label, Icon]) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={cn('flex items-center gap-2 py-3 text-xs border-b-2 transition-colors',
                 tab === id ? 'border-magenta text-white' : 'border-transparent text-ink-500 hover:text-ink-200')}>
@@ -627,6 +637,11 @@ export default function SOARPage() {
               )}
             </button>
           ))}
+          <span className={cn('ml-auto flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',
+            isNormal ? 'border-safe/25 bg-safe/10 text-safe' : 'border-magenta/25 bg-magenta/10 text-magenta')}>
+            {isNormal ? <User className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+            {isNormal ? 'Normal mode' : 'Power User'}
+          </span>
         </div>
 
         <div className="flex-1 overflow-hidden">
@@ -821,7 +836,7 @@ export default function SOARPage() {
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
               onClick={() => setSelectedCase(null)}
             />
-            <CaseDetail c={selectedCase} onClose={() => setSelectedCase(null)} />
+            <CaseDetail c={selectedCase} onClose={() => setSelectedCase(null)} simplified={isNormal} />
           </>
         )}
       </AnimatePresence>
