@@ -216,7 +216,12 @@ function ActorDetail({ actor }: { actor: Actor }) {
             ))}
           </div>
         </div>
-        <a href="#" className="flex items-center gap-1 text-xs text-magenta hover:underline">
+        <a
+          href={`https://attack.mitre.org/groups/?search=${encodeURIComponent(actor.name)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-magenta hover:underline shrink-0"
+        >
           <ExternalLink className="w-3 h-3" /> MITRE ATT&CK
         </a>
       </div>

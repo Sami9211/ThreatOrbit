@@ -89,7 +89,7 @@ export default function MegaMenu({ open, onClose }: { open: boolean; onClose: ()
           <div className="relative max-w-7xl mx-auto px-6 py-6">
             {/* Top bar */}
             <div className="flex items-center justify-between mb-12">
-              <a href="#" onClick={onClose} className="flex items-center gap-2.5">
+              <a href="/" onClick={onClose} className="flex items-center gap-2.5">
                 <Logo size={30} />
                 <span className="font-display font-semibold text-lg">
                   <span className="text-white">Threat</span>
