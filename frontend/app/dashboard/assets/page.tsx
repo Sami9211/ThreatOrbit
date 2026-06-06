@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Server, Globe, Database, Cloud, Smartphone, Shield,
@@ -196,6 +196,19 @@ export default function AssetsPage() {
     if (selectedId === id) setSelectedId(null)
   }
 
+  const selectedAsset = assets.find((a) => a.id === selectedId) ?? null
+
+  // Escape closes the add-asset modal first, otherwise the detail panel.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (showAdd) setShowAdd(false)
+      else if (selectedId) setSelectedId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showAdd, selectedId])
+
   function addAsset() {
     if (!name.trim() || !formValue.trim()) return
     const a: Asset = {
@@ -221,8 +234,6 @@ export default function AssetsPage() {
       (b.cves.critical * 10 + b.cves.high * 3 + b.cves.medium) - (a.cves.critical * 10 + a.cves.high * 3 + a.cves.medium))
     return list
   }, [assets, typeFilter, critFilter, search, sortBy])
-
-  const selectedAsset = assets.find((a) => a.id === selectedId) ?? null
 
   // Stats
   const totalCves = assets.reduce((s, a) => s + a.cves.critical + a.cves.high + a.cves.medium + a.cves.low, 0)
@@ -572,8 +583,29 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* ── Right panel ─────────────────────────────────────────── */}
-      <div className="w-72 border-l border-white/5 flex flex-col overflow-hidden shrink-0 hidden xl:flex">
+      {/* Backdrop for the detail drawer on < xl screens */}
+      <AnimatePresence>
+        {selectedAsset && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setSelectedId(null)}
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm xl:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Right panel ─────────────────────────────────────────────
+          xl+: static column in normal flow.
+          below xl: fixed slide-over drawer, visible only when an asset
+          is selected (the inline column would otherwise be unreachable). */}
+      <div
+        className={cn(
+          'border-l border-white/5 flex flex-col overflow-hidden bg-[#0D0920]',
+          'xl:static xl:z-auto xl:w-72 xl:max-w-none xl:translate-x-0 xl:shadow-none',
+          'fixed right-0 top-0 bottom-0 z-[60] w-full max-w-sm shadow-2xl transition-transform duration-300 ease-in-out',
+          selectedAsset ? 'translate-x-0' : 'translate-x-full',
+        )}
+      >
         {selectedAsset ? (
           /* Asset detail panel */
           <div className="flex-1 overflow-y-auto p-4">

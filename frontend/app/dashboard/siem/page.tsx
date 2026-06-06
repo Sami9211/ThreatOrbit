@@ -992,6 +992,14 @@ export default function SIEMPage() {
 
   // Normal mode only exposes the alert queue; force tab back if a hidden one is active
   useEffect(() => { if (isNormal && tab !== 'queue') setTab('queue') }, [isNormal, tab])
+
+  // Escape closes the alert detail panel
+  useEffect(() => {
+    if (!selectedId) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setSelectedId(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedId])
   const [search, setSearch] = useState('')
   const [filterSev, setFilterSev] = useState<Severity | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
