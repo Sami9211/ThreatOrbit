@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, Shield, Activity, Zap, Globe, TrendingUp,
   TrendingDown, ArrowUpRight, Clock, Eye, Radio, Filter,
+  Bug, CheckCircle2, XCircle, Flame, BookOpen, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import WorldMap from '@/components/dashboard/WorldMap'
@@ -58,6 +59,176 @@ function KPICard({
         </div>
       )}
     </motion.div>
+  )
+}
+
+/* ── Trending CVEs ───────────────────────────────────────────────── */
+const TRENDING_CVES = [
+  { id: 'CVE-2024-6387', name: 'OpenSSH regreSSHion', cvss: 8.1,  affected: 'OpenSSH < 9.8p1', patched: false, color: '#FF2E97', tag: 'RCE' },
+  { id: 'CVE-2024-3094', name: 'XZ Utils backdoor',   cvss: 10.0, affected: 'XZ Utils 5.6.x',  patched: true,  color: '#FF2E97', tag: 'Supply Chain' },
+  { id: 'CVE-2024-21762',name: 'FortiOS SSL VPN OOB', cvss: 9.6,  affected: 'FortiOS < 7.4.2', patched: false, color: '#FF4D6D', tag: 'Auth Bypass' },
+  { id: 'CVE-2024-23897',name: 'Jenkins File Read',   cvss: 9.8,  affected: 'Jenkins < 2.442',  patched: true,  color: '#FF4D6D', tag: 'RCE' },
+  { id: 'CVE-2024-1709', name: 'ConnectWise Auth Bypass', cvss: 10.0, affected: 'ScreenConnect < 23.9.8', patched: false, color: '#FF2E97', tag: 'Auth Bypass' },
+]
+
+function TrendingCVEs() {
+  return (
+    <div className="glass border border-white/5 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <Bug className="w-3.5 h-3.5 text-threat" />
+          <h3 className="text-sm font-semibold text-white">Trending CVEs</h3>
+        </div>
+        <a href="/dashboard/feeds" className="text-xs text-magenta hover:underline">Feeds →</a>
+      </div>
+      <div className="divide-y divide-white/4">
+        {TRENDING_CVES.map((cve, i) => (
+          <motion.div
+            key={cve.id}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/2 transition-colors cursor-pointer group"
+          >
+            <span className="text-[10px] text-ink-600 w-3 shrink-0">{i + 1}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-mono text-ink-200 group-hover:text-white transition-colors">{cve.id}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: `${cve.color}1a`, color: cve.color }}>{cve.tag}</span>
+              </div>
+              <p className="text-[10px] text-ink-500 truncate">{cve.affected}</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-bold" style={{ color: cve.cvss >= 9 ? '#FF2E97' : cve.cvss >= 7 ? '#FF4D6D' : '#FFB23E' }}>{cve.cvss.toFixed(1)}</p>
+              <p className="text-[9px] text-ink-600">CVSS</p>
+            </div>
+            <div className="shrink-0">
+              {cve.patched
+                ? <CheckCircle2 className="w-3.5 h-3.5 text-safe" aria-label="Patch available" />
+                : <XCircle className="w-3.5 h-3.5 text-threat animate-pulse" aria-label="No patch" />}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Intel Brief ─────────────────────────────────────────────────── */
+const BRIEF_ITEMS = [
+  { headline: 'Lazarus Group activity surge — 3 new C2 IPs blocked', severity: 'critical', age: '2h ago', src: 'ThreatFox / MISP' },
+  { headline: 'CISA KEV updated with 2 new FortiOS exploits',        severity: 'high',     age: '5h ago', src: 'CISA KEV' },
+  { headline: 'Novel MFA-bypass technique targeting Azure AD',       severity: 'high',     age: '8h ago', src: 'Microsoft TI' },
+  { headline: 'Ransomware campaign targets EU healthcare sector',    severity: 'critical', age: '11h ago',src: 'Europol' },
+]
+
+function IntelBrief() {
+  return (
+    <div className="glass border border-white/5 rounded-xl overflow-hidden flex flex-col h-full">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-3.5 h-3.5 text-violet" />
+          <h3 className="text-sm font-semibold text-white">Today&apos;s Intel Brief</h3>
+        </div>
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-safe font-medium">Live</span>
+      </div>
+      <div className="flex-1 divide-y divide-white/4">
+        {BRIEF_ITEMS.map((item, i) => (
+          <div key={i} className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
+            <span
+              className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: SEVERITY_COLOR[item.severity as keyof typeof SEVERITY_COLOR] }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-ink-200 group-hover:text-white transition-colors leading-snug">{item.headline}</p>
+              <p className="text-[10px] text-ink-600 mt-0.5 font-mono">{item.src} · {item.age}</p>
+            </div>
+            <ChevronRight className="w-3 h-3 text-ink-700 group-hover:text-magenta transition-colors shrink-0 mt-0.5" />
+          </div>
+        ))}
+      </div>
+      <div className="px-5 py-2.5 border-t border-white/5 bg-white/1">
+        <div className="flex items-center justify-between text-[10px] text-ink-600">
+          <span>Aggregated from 23 intelligence sources</span>
+          <span className="text-magenta hover:underline cursor-pointer">View all →</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Active Incidents ────────────────────────────────────────────── */
+const INCIDENTS = [
+  { id: 'INC-0047', title: 'SSH brute force from TOR exit nodes',   severity: 'critical', status: 'active',  category: 'Brute Force',  age: '4m',  assigned: 'auto'   },
+  { id: 'INC-0046', title: 'Lateral movement attempt on DC server', severity: 'critical', status: 'active',  category: 'Lateral Move', age: '18m', assigned: 'Alice'  },
+  { id: 'INC-0045', title: 'Suspicious PowerShell encoded payload', severity: 'high',     status: 'triaged', category: 'Malware',      age: '32m', assigned: 'Bob'    },
+  { id: 'INC-0044', title: 'Large file transfer to unknown host',   severity: 'high',     status: 'active',  category: 'Exfiltration', age: '1h',  assigned: 'auto'   },
+  { id: 'INC-0043', title: 'MISP sync failure — feed offline',      severity: 'medium',   status: 'triaged', category: 'Integration',  age: '1h',  assigned: 'Charlie'},
+  { id: 'INC-0042', title: 'Repeated MFA prompt from new location', severity: 'medium',   status: 'closed',  category: 'Identity',     age: '2h',  assigned: 'auto'   },
+]
+
+const STATUS_COLOR: Record<string, string> = { active: '#FF2E97', triaged: '#FFB23E', closed: '#2DD4BF' }
+const STATUS_BG:    Record<string, string> = { active: '#FF2E9710', triaged: '#FFB23E10', closed: '#2DD4BF10' }
+
+function ActiveIncidents() {
+  return (
+    <div className="glass border border-white/5 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <Flame className="w-3.5 h-3.5 text-threat" />
+          <h3 className="text-sm font-semibold text-white">Active Incidents</h3>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-threat/10 border border-threat/20 text-threat font-semibold">
+            {INCIDENTS.filter((i) => i.status === 'active').length} open
+          </span>
+        </div>
+        <a href="/dashboard/siem" className="text-xs text-magenta hover:underline">SIEM →</a>
+      </div>
+
+      {/* Severity bar */}
+      <div className="flex h-1.5 mx-5 mt-3 rounded-full overflow-hidden gap-px">
+        {[
+          { pct: 33, color: '#FF2E97' },
+          { pct: 33, color: '#FF4D6D' },
+          { pct: 22, color: '#FFB23E' },
+          { pct: 12, color: '#2DD4BF' },
+        ].map(({ pct, color }, i) => (
+          <motion.div
+            key={i}
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.8, delay: i * 0.1, ease: 'easeOut' }}
+            className="h-full"
+            style={{ background: color }}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between px-5 pt-1 pb-3 text-[9px] text-ink-600">
+        <span>2 critical</span><span>2 high</span><span>1 med</span><span>—</span>
+      </div>
+
+      <div className="divide-y divide-white/4">
+        {INCIDENTS.map((inc) => (
+          <div key={inc.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/2 transition-colors cursor-pointer group">
+            <span className="w-1.5 h-1.5 rounded-full shrink-0 ring-2 ring-current/10"
+              style={{ background: SEVERITY_COLOR[inc.severity as keyof typeof SEVERITY_COLOR] }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-ink-200 group-hover:text-white transition-colors truncate">{inc.title}</p>
+              <p className="text-[10px] text-ink-600 mt-0.5 font-mono">{inc.id} · {inc.category} · {inc.assigned}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold capitalize"
+                style={{ background: STATUS_BG[inc.status], color: STATUS_COLOR[inc.status] }}
+              >
+                {inc.status}
+              </span>
+              <span className="text-[10px] text-ink-600">{inc.age}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -218,6 +389,66 @@ function EventTimeline() {
       </div>
       <div className="flex justify-between mt-2 text-[9px] text-ink-600">
         <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span>
+      </div>
+    </div>
+  )
+}
+
+/* ── Threat Heatmap by Category ──────────────────────────────────── */
+const HEATMAP_ROWS = [
+  { label: 'Mon', vals: [4, 12, 8, 24, 18, 6, 31] },
+  { label: 'Tue', vals: [9, 15, 22, 17, 28, 11, 19] },
+  { label: 'Wed', vals: [6, 18, 14, 31, 9, 22, 27] },
+  { label: 'Thu', vals: [14, 8, 25, 12, 34, 16, 8] },
+  { label: 'Fri', vals: [19, 24, 11, 29, 21, 33, 14] },
+  { label: 'Sat', vals: [3, 6, 8, 11, 5, 4, 7] },
+  { label: 'Sun', vals: [2, 5, 4, 7, 3, 6, 4] },
+]
+const HEATMAP_COLS = ['RCE', 'Phish', 'C2', 'SQLi', 'Brute', 'Exfil', 'DDoS']
+
+function ThreatHeatmap() {
+  const allVals = HEATMAP_ROWS.flatMap((r) => r.vals)
+  const maxV = Math.max(...allVals)
+
+  function heatColor(v: number) {
+    const t = v / maxV
+    if (t > 0.8) return '#FF2E97'
+    if (t > 0.6) return '#FF4D6D'
+    if (t > 0.4) return '#FFB23E'
+    if (t > 0.2) return '#7A3CFF'
+    return 'rgba(255,255,255,0.05)'
+  }
+
+  return (
+    <div className="glass border border-white/5 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-white">Threat Heatmap (7d)</h3>
+        <div className="flex items-center gap-1.5 text-[9px] text-ink-600">
+          {[['Low','#7A3CFF'],['Med','#FFB23E'],['High','#FF4D6D'],['Crit','#FF2E97']].map(([l,c]) => (
+            <span key={l} className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm" style={{ background: c }} />{l}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: `28px repeat(${HEATMAP_COLS.length}, 1fr)`, gap: '2px' }}>
+        <div />
+        {HEATMAP_COLS.map((c) => (
+          <div key={c} className="text-center text-[8px] text-ink-600 truncate pb-0.5">{c}</div>
+        ))}
+        {HEATMAP_ROWS.flatMap((row, ri) => [
+          <div key={`lbl-${row.label}`} className="text-[9px] text-ink-600 flex items-center">{row.label}</div>,
+          ...row.vals.map((v, ci) => (
+            <motion.div
+              key={`${row.label}-${ci}`}
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: (ri * HEATMAP_COLS.length + ci) * 0.008 }}
+              className="h-6 rounded-sm cursor-pointer hover:opacity-80 transition-opacity"
+              style={{ background: heatColor(v) }}
+            />
+          )),
+        ])}
       </div>
     </div>
   )
@@ -391,40 +622,10 @@ export default function DashboardOverview() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
-          label="Active Threats"
-          value={count.threats.toLocaleString()}
-          sub="across all sources"
-          icon={AlertTriangle}
-          color="#FF2E97"
-          trend="up"
-          trendVal="+12%"
-        />
-        <KPICard
-          label="IOCs Tracked"
-          value={count.iocs.toLocaleString()}
-          sub="last 24 hours"
-          icon={Eye}
-          color="#7A3CFF"
-          trend="up"
-          trendVal="+8%"
-        />
-        <KPICard
-          label="Sources Online"
-          value={`${count.sources}/24`}
-          sub="1 degraded"
-          icon={Globe}
-          color="#2DD4BF"
-        />
-        <KPICard
-          label="Avg CVSS Score"
-          value={count.score.toFixed(1)}
-          sub="weighted mean"
-          icon={Shield}
-          color="#FFB23E"
-          trend="up"
-          trendVal="+0.3"
-        />
+        <KPICard label="Active Threats" value={count.threats.toLocaleString()} sub="across all sources" icon={AlertTriangle} color="#FF2E97" trend="up" trendVal="+12%" />
+        <KPICard label="IOCs Tracked"   value={count.iocs.toLocaleString()}    sub="last 24 hours"     icon={Eye}           color="#7A3CFF" trend="up" trendVal="+8%" />
+        <KPICard label="Sources Online" value={`${count.sources}/24`}          sub="1 degraded"        icon={Globe}         color="#2DD4BF" />
+        <KPICard label="Avg CVSS Score" value={count.score.toFixed(1)}         sub="weighted mean"     icon={Shield}        color="#FFB23E" trend="up" trendVal="+0.3" />
       </div>
 
       {/* SOC operations metrics (Power User only) */}
@@ -447,6 +648,13 @@ export default function DashboardOverview() {
         </div>
       )}
 
+      {/* Intel Brief Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <TrendingCVEs />
+        <IntelBrief />
+        <ActiveIncidents />
+      </div>
+
       {/* World Map + Live Feed */}
       <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
         <div className="h-[360px] w-full">
@@ -463,6 +671,9 @@ export default function DashboardOverview() {
           <AttackVectors />
         </div>
       </div>
+
+      {/* Threat Heatmap */}
+      <ThreatHeatmap />
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -549,6 +760,37 @@ export default function DashboardOverview() {
                 <ArrowUpRight className="w-3 h-3 text-ink-600 ml-auto group-hover:text-magenta transition-colors" />
               </a>
             ))}
+          </div>
+
+          {/* Geopolitical risk summary */}
+          <div className="mt-4 pt-4 border-t border-white/5">
+            <h4 className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold mb-3">Geopolitical Risk</h4>
+            <div className="space-y-2">
+              {[
+                { region: 'Russia / Ukraine', level: 'Critical', color: '#FF2E97', pct: 95 },
+                { region: 'China / Taiwan', level: 'High', color: '#FF4D6D', pct: 78 },
+                { region: 'Iran / Israel', level: 'High', color: '#FF4D6D', pct: 72 },
+                { region: 'DPRK / Global', level: 'Elevated', color: '#FFB23E', pct: 65 },
+              ].map(({ region, level, color, pct }) => (
+                <div key={region} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between text-[10px] mb-0.5">
+                      <span className="text-ink-400 truncate">{region}</span>
+                      <span style={{ color }} className="font-medium shrink-0 ml-2">{level}</span>
+                    </div>
+                    <div className="h-0.5 bg-surface-3 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.8, ease: 'easeOut' }}
+                        className="h-full rounded-full"
+                        style={{ background: color }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

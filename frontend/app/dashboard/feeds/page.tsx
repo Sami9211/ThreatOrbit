@@ -527,6 +527,116 @@ function FeedStats({ feeds }: { feeds: FeedEntry[] }) {
   )
 }
 
+/* ── Volume Chart ────────────────────────────────────────────────── */
+const HOURLY_VOLUME = [
+  { h: '00', critical: 2,  high: 4,  medium: 6  },
+  { h: '01', critical: 1,  high: 2,  medium: 3  },
+  { h: '02', critical: 0,  high: 1,  medium: 4  },
+  { h: '03', critical: 1,  high: 3,  medium: 2  },
+  { h: '04', critical: 3,  high: 5,  medium: 7  },
+  { h: '05', critical: 2,  high: 4,  medium: 5  },
+  { h: '06', critical: 4,  high: 7,  medium: 9  },
+  { h: '07', critical: 6,  high: 11, medium: 14 },
+  { h: '08', critical: 9,  high: 18, medium: 22 },
+  { h: '09', critical: 12, high: 24, medium: 31 },
+  { h: '10', critical: 8,  high: 16, medium: 27 },
+  { h: '11', critical: 14, high: 28, medium: 38 },
+  { h: '12', critical: 11, high: 22, medium: 34 },
+  { h: '13', critical: 7,  high: 14, medium: 21 },
+  { h: '14', critical: 9,  high: 19, medium: 26 },
+  { h: '15', critical: 16, high: 31, medium: 44 },
+  { h: '16', critical: 18, high: 36, medium: 51 },
+  { h: '17', critical: 21, high: 42, medium: 58 },
+  { h: '18', critical: 15, high: 30, medium: 43 },
+  { h: '19', critical: 11, high: 23, medium: 31 },
+  { h: '20', critical: 8,  high: 16, medium: 24 },
+  { h: '21', critical: 6,  high: 12, medium: 18 },
+  { h: '22', critical: 4,  high: 8,  medium: 12 },
+  { h: '23', critical: 3,  high: 6,  medium: 9  },
+]
+
+function VolumeChart() {
+  const max = Math.max(...HOURLY_VOLUME.map((h) => h.critical + h.high + h.medium))
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-white">Feed Volume (24h)</span>
+        <div className="flex items-center gap-3 text-[9px] text-ink-600">
+          {[['Critical','#FF2E97'],['High','#FF4D6D'],['Medium','#FFB23E']].map(([l,c]) => (
+            <span key={l} className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm" style={{ background: c }} />{l}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-end gap-0.5 h-16">
+        {HOURLY_VOLUME.map((h, i) => {
+          const total = h.critical + h.high + h.medium
+          const pct = (total / max) * 100
+          return (
+            <div key={h.h} className="flex-1 flex flex-col items-stretch gap-px" title={`${h.h}:00 — ${total} events`}>
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: `${(h.medium / max) * 100}%` }}
+                transition={{ delay: i * 0.015, duration: 0.6, ease: 'easeOut' }}
+                className="rounded-t-sm min-h-0"
+                style={{ background: '#FFB23E80' }}
+              />
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: `${(h.high / max) * 100}%` }}
+                transition={{ delay: i * 0.015, duration: 0.6, ease: 'easeOut' }}
+                className="min-h-0"
+                style={{ background: '#FF4D6D' }}
+              />
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: `${(h.critical / max) * 100}%` }}
+                transition={{ delay: i * 0.015, duration: 0.6, ease: 'easeOut' }}
+                className="rounded-b-sm min-h-0"
+                style={{ background: '#FF2E97' }}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex justify-between mt-1 text-[8px] text-ink-700">
+        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span>
+      </div>
+    </div>
+  )
+}
+
+/* ── Source Health ────────────────────────────────────────────────── */
+const FEED_SOURCES = [
+  { name: 'MISP',        type: 'IOC', events: 2814, status: 'healthy',  latency: '120ms' },
+  { name: 'Shodan',      type: 'ASM', events: 1240, status: 'healthy',  latency: '340ms' },
+  { name: 'GreyNoise',   type: 'IP',  events: 891,  status: 'healthy',  latency: '89ms'  },
+  { name: 'AlienVault',  type: 'IOC', events: 3102, status: 'degraded', latency: '2.1s'  },
+  { name: 'AbuseIPDB',   type: 'IP',  events: 654,  status: 'healthy',  latency: '210ms' },
+  { name: 'NVD NIST',    type: 'CVE', events: 421,  status: 'healthy',  latency: '460ms' },
+]
+
+const SRC_STATUS_COLOR: Record<string, string> = { healthy: '#34F5C5', degraded: '#FFB23E', offline: '#FF4D6D' }
+
+function SourceHealth() {
+  return (
+    <div className="min-w-[220px]">
+      <span className="text-xs font-semibold text-white block mb-2">Source Health</span>
+      <div className="space-y-1">
+        {FEED_SOURCES.map((src) => (
+          <div key={src.name} className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: SRC_STATUS_COLOR[src.status] }} />
+            <span className="text-xs text-ink-300 w-20 shrink-0">{src.name}</span>
+            <span className="text-[9px] text-ink-600 shrink-0">{src.type}</span>
+            <span className="text-[9px] font-mono text-ink-600 ml-auto shrink-0">{src.latency}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function ThreatFeedsPage() {
   const [feeds, setFeeds] = useState<FeedEntry[]>(ALL_FEEDS)
@@ -620,6 +730,29 @@ export default function ThreatFeedsPage() {
             Update #{ticker}
           </div>
         </div>
+      </div>
+
+      {/* Volume + source health strip */}
+      <div className="px-6 py-4 border-b border-white/5 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-start">
+        <VolumeChart />
+        <SourceHealth />
+      </div>
+
+      {/* KPI stat pills */}
+      <div className="px-6 py-2 border-b border-white/4 flex items-center gap-6 overflow-x-auto">
+        {[
+          { label: 'Total', value: feeds.length, color: 'text-white' },
+          { label: 'Critical', value: feeds.filter((f) => f.severity === 'critical').length, color: 'text-magenta' },
+          { label: 'High',     value: feeds.filter((f) => f.severity === 'high').length,     color: 'text-threat' },
+          { label: 'Medium',   value: feeds.filter((f) => f.severity === 'medium').length,   color: 'text-amber' },
+          { label: 'Low',      value: feeds.filter((f) => f.severity === 'low').length,       color: 'text-safe' },
+          { label: 'With CVE', value: feeds.filter((f) => f.cve).length,                      color: 'text-violet' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="flex items-center gap-2 shrink-0">
+            <span className={`font-display text-lg font-bold ${color}`}>{value}</span>
+            <span className="text-[10px] text-ink-600">{label}</span>
+          </div>
+        ))}
       </div>
 
       {/* Filter bar */}
