@@ -381,6 +381,92 @@ const MITRE_DIST = [
   { tactic: 'Persistence',        count: 49,  color: '#A78BFA'  },
 ]
 
+/* ── ATT&CK coverage matrix data ─────────────────────────────────── */
+const COVERED_TECH_IDS = new Set(RULES.map((r) => r.mitreTechId))
+
+const MITRE_MATRIX = [
+  { tacticId: 'TA0001', tactic: 'Initial Access',      color: '#FF2E97', techniques: [
+    { id: 'T1190',     name: 'Exploit Public-Facing Application' },
+    { id: 'T1133',     name: 'External Remote Services' },
+    { id: 'T1566.001', name: 'Spearphishing Attachment' },
+    { id: 'T1078',     name: 'Valid Accounts' },
+    { id: 'T1566.002', name: 'Spearphishing via Service' },
+    { id: 'T1195',     name: 'Supply Chain Compromise' },
+  ]},
+  { tacticId: 'TA0002', tactic: 'Execution',            color: '#FF4D6D', techniques: [
+    { id: 'T1059.001', name: 'PowerShell' },
+    { id: 'T1059.003', name: 'Windows Command Shell' },
+    { id: 'T1204',     name: 'User Execution' },
+    { id: 'T1047',     name: 'WMI' },
+    { id: 'T1053.005', name: 'Scheduled Task/Job' },
+    { id: 'T1059.007', name: 'JavaScript' },
+  ]},
+  { tacticId: 'TA0003', tactic: 'Persistence',          color: '#A78BFA', techniques: [
+    { id: 'T1136.002', name: 'Create Domain Account' },
+    { id: 'T1098',     name: 'Account Manipulation' },
+    { id: 'T1547',     name: 'Boot Autostart Execution' },
+    { id: 'T1505',     name: 'Server Software Component' },
+    { id: 'T1053.005', name: 'Scheduled Task/Job' },
+  ]},
+  { tacticId: 'TA0004', tactic: 'Privilege Escalation', color: '#FF9B2E', techniques: [
+    { id: 'T1078.004', name: 'Valid Accounts: Cloud' },
+    { id: 'T1068',     name: 'Exploit for PrivEsc' },
+    { id: 'T1055',     name: 'Process Injection' },
+    { id: 'T1548',     name: 'Abuse Elevation Control' },
+    { id: 'T1134',     name: 'Access Token Manipulation' },
+  ]},
+  { tacticId: 'TA0005', tactic: 'Defense Evasion',      color: '#7A3CFF', techniques: [
+    { id: 'T1562.001', name: 'Impair Defenses: AMSI Bypass' },
+    { id: 'T1070',     name: 'Indicator Removal' },
+    { id: 'T1036',     name: 'Masquerading' },
+    { id: 'T1027',     name: 'Obfuscated Files / Info' },
+    { id: 'T1218',     name: 'System Binary Proxy Exec.' },
+    { id: 'T1140',     name: 'Deobfuscate / Decode' },
+  ]},
+  { tacticId: 'TA0006', tactic: 'Credential Access',    color: '#FF4D6D', techniques: [
+    { id: 'T1621',     name: 'MFA Request Generation' },
+    { id: 'T1110.003', name: 'Brute Force: Password Spray' },
+    { id: 'T1003.001', name: 'LSASS Memory' },
+    { id: 'T1555',     name: 'Credentials from Stores' },
+    { id: 'T1552',     name: 'Unsecured Credentials' },
+    { id: 'T1056',     name: 'Input Capture' },
+  ]},
+  { tacticId: 'TA0007', tactic: 'Discovery',            color: '#2DD4BF', techniques: [
+    { id: 'T1046',     name: 'Network Service Discovery' },
+    { id: 'T1083',     name: 'File & Directory Discovery' },
+    { id: 'T1082',     name: 'System Info Discovery' },
+    { id: 'T1087',     name: 'Account Discovery' },
+    { id: 'T1069',     name: 'Permission Groups Discovery' },
+  ]},
+  { tacticId: 'TA0008', tactic: 'Lateral Movement',     color: '#34F5C5', techniques: [
+    { id: 'T1021',     name: 'Remote Services' },
+    { id: 'T1550',     name: 'Use Alt. Auth Material' },
+    { id: 'T1534',     name: 'Internal Spearphishing' },
+    { id: 'T1570',     name: 'Lateral Tool Transfer' },
+  ]},
+  { tacticId: 'TA0010', tactic: 'Exfiltration',         color: '#FFB23E', techniques: [
+    { id: 'T1048',     name: 'Exfil Over Alt Protocol' },
+    { id: 'T1537',     name: 'Transfer to Cloud Account' },
+    { id: 'T1567',     name: 'Exfil Over Web Service' },
+    { id: 'T1020',     name: 'Automated Exfiltration' },
+    { id: 'T1041',     name: 'Exfil Over C2 Channel' },
+  ]},
+  { tacticId: 'TA0011', tactic: 'Command & Control',    color: '#34F5C5', techniques: [
+    { id: 'T1071.004', name: 'App Layer Protocol: DNS' },
+    { id: 'T1071.001', name: 'App Layer Protocol: HTTP' },
+    { id: 'T1573',     name: 'Encrypted Channel' },
+    { id: 'T1090',     name: 'Proxy' },
+    { id: 'T1095',     name: 'Non-App Layer Protocol' },
+  ]},
+  { tacticId: 'TA0040', tactic: 'Impact',               color: '#FF2E97', techniques: [
+    { id: 'T1486',     name: 'Data Encrypted for Impact' },
+    { id: 'T1485',     name: 'Data Destruction' },
+    { id: 'T1490',     name: 'Inhibit System Recovery' },
+    { id: 'T1499',     name: 'Endpoint Denial of Service' },
+    { id: 'T1496',     name: 'Resource Hijacking' },
+  ]},
+]
+
 /* ── Shared helpers ───────────────────────────────────────────────── */
 const SEV: Record<Severity, { bg: string; text: string; border: string; dot: string }> = {
   critical: { bg: 'bg-magenta/15', text: 'text-magenta', border: 'border-magenta/30', dot: '#FF2E97' },
@@ -794,6 +880,102 @@ function ThreatHunt() {
   )
 }
 
+/* ── ATT&CK coverage matrix component ────────────────────────────── */
+function MitreCoverageMatrix() {
+  const [hoveredTech, setHoveredTech] = useState<string | null>(null)
+  const allTechs = MITRE_MATRIX.flatMap((r) => r.techniques)
+  const totalCovered = allTechs.filter((t) => COVERED_TECH_IDS.has(t.id)).length
+  const pct = Math.round((totalCovered / allTechs.length) * 100)
+
+  return (
+    <div className="bg-surface-2/40 rounded-xl border border-white/5">
+      <div className="px-4 py-3 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-white">ATT&CK Coverage Matrix</p>
+          <p className="text-[10px] text-ink-600 mt-0.5">Detection rule coverage across MITRE ATT&CK Enterprise — hover a technique cell for detail</p>
+        </div>
+        <div className="flex items-center gap-4 text-[10px] text-ink-400">
+          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded bg-safe/20 border border-safe/50" />Covered</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded bg-threat/15 border border-threat/40" />Gap</span>
+          <span className="text-safe font-semibold">{totalCovered}/{allTechs.length} covered</span>
+        </div>
+      </div>
+      <div className="p-4 space-y-3">
+        {MITRE_MATRIX.map((row) => {
+          const rowCovered = row.techniques.filter((t) => COVERED_TECH_IDS.has(t.id)).length
+          return (
+            <div key={row.tacticId} className="flex items-start gap-4">
+              <div className="w-36 shrink-0 pt-0.5">
+                <p className="text-[10px] font-semibold leading-tight" style={{ color: row.color }}>{row.tactic}</p>
+                <p className="text-[9px] font-mono text-ink-700 mt-0.5">{row.tacticId}</p>
+                <p className="text-[9px] text-ink-600">{rowCovered}/{row.techniques.length} covered</p>
+              </div>
+              <div className="flex flex-wrap gap-1.5 flex-1">
+                {row.techniques.map((tech) => {
+                  const isCovered = COVERED_TECH_IDS.has(tech.id)
+                  const rule = isCovered ? RULES.find((r) => r.mitreTechId === tech.id) : null
+                  const isHov = hoveredTech === tech.id
+                  return (
+                    <div
+                      key={tech.id}
+                      onMouseEnter={() => setHoveredTech(tech.id)}
+                      onMouseLeave={() => setHoveredTech(null)}
+                      className="relative"
+                    >
+                      <div className={cn(
+                        'px-2 py-1 rounded text-[9px] font-mono border cursor-default select-none transition-all',
+                        isCovered
+                          ? 'bg-safe/10 border-safe/35 text-safe hover:bg-safe/20'
+                          : 'bg-threat/5 border-threat/20 text-threat/60 hover:bg-threat/15',
+                        isHov ? (isCovered ? 'ring-1 ring-safe/50' : 'ring-1 ring-threat/40') : '',
+                      )}>
+                        {tech.id}
+                      </div>
+                      {isHov && (
+                        <div className="absolute z-30 top-full left-0 mt-1 w-56 bg-[#0D0920] border border-white/15 rounded-lg p-2.5 shadow-2xl pointer-events-none">
+                          <p className="text-[10px] font-semibold text-white leading-snug">{tech.name}</p>
+                          <p className="text-[9px] font-mono text-ink-600 mt-0.5">{tech.id}</p>
+                          {rule ? (
+                            <div className="mt-2 pt-2 border-t border-white/8">
+                              <p className="text-[9px] text-safe font-semibold mb-0.5">✓ Detection active</p>
+                              <p className="text-[9px] text-ink-400">{rule.id}: {rule.name}</p>
+                              <p className="text-[9px] text-ink-600 mt-0.5">Fired {rule.firedLast7d}× last 7d · FP rate {rule.fpRate}%</p>
+                            </div>
+                          ) : (
+                            <div className="mt-2 pt-2 border-t border-white/8">
+                              <p className="text-[9px] text-threat/80 font-semibold">✗ Coverage gap</p>
+                              <p className="text-[9px] text-ink-600 mt-0.5">No active detection rule — consider adding one</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="px-4 py-3 border-t border-white/5 flex items-center gap-3">
+        <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.9, delay: 0.2 }}
+            className="h-full rounded-full bg-safe"
+          />
+        </div>
+        <p className="text-[10px] shrink-0">
+          <span className="text-safe font-semibold">{pct}% coverage</span>
+          <span className="text-ink-700 mx-1.5">·</span>
+          <span className="text-threat">{allTechs.length - totalCovered} gaps identified</span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SIEMPage() {
   const [mode] = useExperienceMode()
@@ -1090,6 +1272,9 @@ export default function SIEMPage() {
                   ))}
                 </div>
               </div>
+
+              {/* ATT&CK coverage matrix — Power User */}
+              <MitreCoverageMatrix />
             </div>
           )}
 

@@ -605,9 +605,44 @@ export default function SOARPage() {
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'cases' | 'playbooks' | 'metrics'>('cases')
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
-  const [selectedPB, setSelectedPB] = useState<Playbook | null>(null)
+  const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
+  const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOKS)
+  const selectedPB = playbooks.find((p) => p.id === selectedPBId) ?? null
 
   useEffect(() => { if (isNormal && tab !== 'cases') setTab('cases') }, [isNormal, tab])
+
+  const FAKE_DURATIONS = ['1s', '2s', '3s', '4s', '5s', '8s', '10s', '12s', '15s', '20s']
+
+  function simulateRun(id: string) {
+    const pb = playbooks.find((p) => p.id === id)
+    if (!pb || pb.status === 'running') return
+    setSelectedPBId(id)
+    // Reset all steps to idle and mark playbook as running
+    setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
+      ...p, status: 'running',
+      steps: p.steps.map((s) => ({ ...s, status: 'idle' as StepStatus, duration: undefined })),
+    }))
+    const totalSteps = pb.steps.length
+    pb.steps.forEach((_s, i) => {
+      // Mark step as running
+      setTimeout(() => {
+        setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
+          ...p,
+          steps: p.steps.map((s, j) => j === i ? { ...s, status: 'running' as StepStatus } : s),
+        }))
+      }, i * 900)
+      // Mark step as completed
+      setTimeout(() => {
+        setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
+          ...p,
+          status: i === totalSteps - 1 ? 'completed' : 'running',
+          steps: p.steps.map((s, j) =>
+            j === i ? { ...s, status: 'completed' as StepStatus, duration: FAKE_DURATIONS[i % FAKE_DURATIONS.length] } : s
+          ),
+        }))
+      }, i * 900 + 700)
+    })
+  }
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -708,9 +743,10 @@ export default function SOARPage() {
               {/* Playbook list */}
               <div className={cn('flex-1 overflow-y-auto p-4 grid gap-3 content-start', selectedPB ? 'hidden lg:grid' : 'grid')}>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                  {PLAYBOOKS.map((pb) => (
-                    <PlaybookCard key={pb.id} pb={pb} selected={selectedPB?.id === pb.id}
-                      onClick={() => setSelectedPB((prev) => prev?.id === pb.id ? null : pb)} />
+                  {playbooks.map((pb) => (
+                    <PlaybookCard key={pb.id} pb={pb} selected={selectedPBId === pb.id}
+                      onClick={() => setSelectedPBId((prev) => prev === pb.id ? null : pb.id)}
+                      onRun={(e) => { e.stopPropagation(); simulateRun(pb.id) }} />
                   ))}
                 </div>
               </div>
@@ -720,7 +756,7 @@ export default function SOARPage() {
                 <div className="w-full lg:w-80 xl:w-96 border-l border-white/5 flex flex-col overflow-hidden shrink-0">
                   <div className="p-4 border-b border-white/5 flex items-center justify-between">
                     <p className="text-xs font-semibold text-white truncate">{selectedPB.name}</p>
-                    <button onClick={() => setSelectedPB(null)} className="p-1 text-ink-500 hover:text-white">
+                    <button onClick={() => setSelectedPBId(null)} className="p-1 text-ink-500 hover:text-white">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -933,8 +969,8 @@ function CaseRow({ c, idx, selected, onClick }: {
 }
 
 /* ── Playbook card ────────────────────────────────────────────────── */
-function PlaybookCard({ pb, selected, onClick }: {
-  pb: Playbook; selected: boolean; onClick: () => void
+function PlaybookCard({ pb, selected, onClick, onRun }: {
+  pb: Playbook; selected: boolean; onClick: () => void; onRun?: (e: React.MouseEvent) => void
 }) {
   const completedSteps = pb.steps.filter((s) => s.status === 'completed').length
 
@@ -989,10 +1025,24 @@ function PlaybookCard({ pb, selected, onClick }: {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mt-3 text-[10px]">
-        <div><p className="text-ink-600">Runs</p><p className="text-ink-300 font-mono">{pb.runs}</p></div>
-        <div><p className="text-ink-600">Success</p><p className={cn('font-mono', pb.successRate >= 95 ? 'text-safe' : 'text-amber')}>{pb.successRate}%</p></div>
-        <div><p className="text-ink-600">Avg Time</p><p className="text-ink-300 font-mono">{pb.avgTime}</p></div>
+      <div className="flex items-end justify-between mt-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 text-[10px] flex-1">
+          <div><p className="text-ink-600">Runs</p><p className="text-ink-300 font-mono">{pb.runs}</p></div>
+          <div><p className="text-ink-600">Success</p><p className={cn('font-mono', pb.successRate >= 95 ? 'text-safe' : 'text-amber')}>{pb.successRate}%</p></div>
+          <div><p className="text-ink-600">Avg Time</p><p className="text-ink-300 font-mono">{pb.avgTime}</p></div>
+        </div>
+        {pb.status === 'running' ? (
+          <span className="flex items-center gap-1 text-[10px] text-violet shrink-0">
+            <RefreshCw className="w-3 h-3 animate-spin" /> Running…
+          </span>
+        ) : onRun ? (
+          <button
+            onClick={onRun}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] bg-violet/10 border border-violet/25 text-violet hover:bg-violet/20 transition-colors shrink-0 active:scale-95"
+          >
+            <Play className="w-3 h-3" /> Run
+          </button>
+        ) : null}
       </div>
     </motion.div>
   )
