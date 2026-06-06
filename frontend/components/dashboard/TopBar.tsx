@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, RefreshCw, User, AlertTriangle, X, Search, Command } from 'lucide-react'
+import { Bell, RefreshCw, User, AlertTriangle, X, Search, Command, Menu } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
@@ -67,8 +67,16 @@ export default function TopBar() {
   const unread = visible.length
 
   return (
-    <header className="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-[#0D0920]/60 backdrop-blur-sm sticky top-0 z-30">
+    <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-[#0D0920]/60 backdrop-blur-sm sticky top-0 z-30">
       <div className="flex items-center gap-2 text-sm">
+        {/* Mobile hamburger — dispatches event to Sidebar */}
+        <button
+          className="md:hidden p-1.5 -ml-1 mr-1 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"
+          onClick={() => window.dispatchEvent(new CustomEvent('sidebar-mobile-toggle'))}
+          aria-label="Open navigation"
+        >
+          <Menu className="w-4 h-4" />
+        </button>
         <span className="text-ink-500">ThreatOrbit</span>
         <span className="text-ink-600">/</span>
         <span className="text-white font-medium">{label}</span>
