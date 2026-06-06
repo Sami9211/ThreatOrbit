@@ -5,8 +5,10 @@ import { motion } from 'framer-motion'
 import {
   Settings, Key, Bell, Shield, Database, Globe, Plug,
   Eye, EyeOff, Copy, RefreshCw, CheckCircle, Save,
+  Zap, User, BarChart2, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useExperienceMode } from '@/lib/useExperienceMode'
 
 /* ── Shared input ────────────────────────────────────────────────── */
 function Field({ label, value, type = 'text', hint }: { label: string; value: string; type?: string; hint?: string }) {
@@ -101,6 +103,115 @@ function FeedSource({ name, url, enabled, lastSync, icon }: {
   )
 }
 
+/* ── Experience mode ─────────────────────────────────────────────── */
+function ExperienceModeCard() {
+  const [mode, setMode] = useExperienceMode()
+
+  const MODES = [
+    {
+      id: 'normal' as const,
+      label: 'Normal',
+      icon: User,
+      color: '#2DD4BF',
+      tagline: 'Simplified, analyst-first view',
+      features: [
+        'Top-5 most critical alerts, pre-triaged',
+        'At-a-glance KPI tiles (MTTD, open cases, risk score)',
+        'Visual heatmap and executive summaries',
+        'Simplified filter controls and guided workflows',
+        'Best for: L1 analysts, on-call, SOC managers',
+      ],
+    },
+    {
+      id: 'power' as const,
+      label: 'Power User',
+      icon: Zap,
+      color: '#FF2E97',
+      tagline: 'Full access — dense data, raw controls',
+      features: [
+        'Full alert queue with all 15+ fields',
+        'SIEM raw log view and KQL/SPL query interface',
+        'Correlation rule editor + suppression tuning',
+        'Entity risk drill-down and UEBA timeline',
+        'Best for: L2/L3 analysts, threat hunters, IR leads',
+      ],
+    },
+  ]
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-violet/25 overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, rgba(122,60,255,0.08), rgba(255,46,151,0.05))' }}>
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/8">
+        <div className="p-2 rounded-lg bg-violet/15">
+          <BarChart2 className="w-4 h-4 text-violet" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-white">Experience Mode</h2>
+          <p className="text-[11px] text-ink-500 mt-0.5">Switch between simplified and power-user dashboard layouts</p>
+        </div>
+        <div className="ml-auto px-2.5 py-1 rounded-full text-[10px] font-semibold border border-violet/30 bg-violet/10 text-violet">
+          Active: {mode === 'normal' ? 'Normal' : 'Power User'}
+        </div>
+      </div>
+
+      <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {MODES.map((m) => {
+          const Icon = m.icon
+          const active = mode === m.id
+          return (
+            <button
+              key={m.id}
+              onClick={() => setMode(m.id)}
+              className={cn(
+                'text-left p-4 rounded-xl border transition-all',
+                active
+                  ? 'border-opacity-60 shadow-lg'
+                  : 'border-white/8 hover:border-white/15 bg-surface-2/40',
+              )}
+              style={active ? {
+                borderColor: m.color + '60',
+                background: m.color + '0c',
+                boxShadow: `0 0 24px ${m.color}18`,
+              } : undefined}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-lg" style={{ background: m.color + '18' }}>
+                  <Icon className="w-4 h-4" style={{ color: m.color }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">{m.label}</p>
+                  <p className="text-[10px]" style={{ color: m.color }}>{m.tagline}</p>
+                </div>
+                {active && (
+                  <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: m.color + '20', border: `1px solid ${m.color}50` }}>
+                    <CheckCircle className="w-3 h-3" style={{ color: m.color }} />
+                  </div>
+                )}
+              </div>
+              <ul className="space-y-1.5">
+                {m.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[11px] text-ink-400">
+                    <ChevronRight className="w-3 h-3 mt-0.5 shrink-0" style={{ color: active ? m.color : '#4a4463' }} />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="px-5 pb-4">
+        <p className="text-[10px] text-ink-700">
+          Mode applies across all dashboard pages. Power User mode reveals advanced panels, raw data views, and analyst tools not shown in Normal mode.
+        </p>
+      </div>
+    </motion.div>
+  )
+}
+
 /* ── Section wrapper ─────────────────────────────────────────────── */
 function Section({ title, icon: Icon, color, children }: {
   title: string; icon: React.ElementType; color: string; children: React.ReactNode
@@ -186,6 +297,9 @@ export default function ConfigPage() {
         <div className="flex-1 space-y-5">
           {tab === 'general' && (
             <>
+              {/* ── Experience Mode ─────────────────────────────────── */}
+              <ExperienceModeCard />
+
               <Section title="Platform Settings" icon={Settings} color="#7A3CFF">
                 <div className="space-y-4">
                   <Field label="Platform Name" value="ThreatOrbit Production" />

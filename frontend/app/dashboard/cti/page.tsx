@@ -7,6 +7,8 @@ import {
   Shield, AlertTriangle, Clock, TrendingUp, Network, Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useExperienceMode } from '@/lib/useExperienceMode'
+import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
 
 /* ── Threat Actors ───────────────────────────────────────────────── */
 type Actor = {
@@ -269,12 +271,73 @@ function ActorDetail({ actor }: { actor: Actor }) {
   )
 }
 
+/* ── Per-actor campaign names (for the investigation graph) ──────── */
+const ACTOR_CAMPAIGNS: Record<string, string[]> = {
+  apt38:     ['TraderTraitor', 'AppleJeus', 'Operation Dream Job'],
+  apt29:     ['SolarWinds', 'Midnight Blizzard', 'Cozy Bear DNC'],
+  volt:      ['Living-off-the-land US grid', 'Water utility intrusion'],
+  scattered: ['MGM Resorts breach', 'Caesars extortion', '0ktapus'],
+  fin7:      ['CARBANAK POS', 'Bateleur retail', 'Carbon Spider'],
+}
+
+/* Build investigation-graph data from a selected actor */
+function buildGraph(actor: Actor): GraphData {
+  const campaigns = ACTOR_CAMPAIGNS[actor.id] ?? []
+  const hashK = Math.round(actor.iocCount * 0.55)
+  const domK = Math.round(actor.iocCount * 0.25)
+  const ipK = actor.iocCount - hashK - domK
+  return {
+    center: { label: actor.name, sub: `${actor.flag} ${actor.origin} · ${actor.type}` },
+    groups: [
+      {
+        kind: 'Campaigns', color: '#FF2E97',
+        nodes: campaigns.map((c, i) => ({ id: `c-${actor.id}-${i}`, label: c })),
+      },
+      {
+        kind: 'TTPs', color: '#7A3CFF',
+        nodes: actor.ttps.map((t) => ({ id: `t-${actor.id}-${t}`, label: t, meta: 'MITRE' })),
+      },
+      {
+        kind: 'IOCs', color: '#FFB23E',
+        nodes: [
+          { id: `i-${actor.id}-hash`, label: 'File Hashes', meta: hashK.toLocaleString() },
+          { id: `i-${actor.id}-dom`,  label: 'Domains',     meta: domK.toLocaleString() },
+          { id: `i-${actor.id}-ip`,   label: 'IP Addresses', meta: ipK.toLocaleString() },
+        ],
+      },
+      {
+        kind: 'Target Sectors', color: '#2DD4BF',
+        nodes: actor.sectors.map((s, i) => ({ id: `s-${actor.id}-${i}`, label: s })),
+      },
+    ],
+  }
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function CTIPage() {
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
+  const [mode] = useExperienceMode()
+  const isPower = mode === 'power'
+  const graph = buildGraph(selectedActor)
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header with mode pill */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-xl font-bold text-white">Cyber Threat Intelligence</h1>
+          <p className="text-xs text-ink-500 mt-0.5">
+            {ACTORS.length} tracked actors · {ACTORS.reduce((s, a) => s + a.iocCount, 0).toLocaleString()} IOCs ·
+            {' '}{ACTORS.reduce((s, a) => s + a.campaigns, 0)} campaigns
+          </p>
+        </div>
+        <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',
+          isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
+          {isPower ? <Brain className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          {isPower ? 'Power User' : 'Normal mode'}
+        </span>
+      </div>
+
       {/* IOC counts */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {IOC_TYPES.map(({ type, count, icon: Icon, color }) => (
@@ -315,7 +378,22 @@ export default function CTIPage() {
             <ActorDetail key={selectedActor.id} actor={selectedActor} />
           </AnimatePresence>
 
-          {/* MITRE mini matrix */}
+          {/* Investigation graph (Power User only) */}
+          {isPower && (
+            <div className="glass border border-white/5 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Network className="w-4 h-4 text-magenta" />
+                  <h3 className="text-sm font-semibold text-white">Investigation Graph</h3>
+                </div>
+                <span className="text-[10px] text-ink-600">hover nodes to trace relationships</span>
+              </div>
+              <EntityGraph data={graph} />
+            </div>
+          )}
+
+          {/* MITRE mini matrix (Power User only) */}
+          {isPower && (
           <div className="glass border border-white/5 rounded-xl p-5 overflow-x-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-white">MITRE ATT&CK Heatmap</h3>
@@ -359,6 +437,7 @@ export default function CTIPage() {
               ))}
             </div>
           </div>
+          )}
 
           {/* Campaign timeline */}
           <div className="glass border border-white/5 rounded-xl p-5">

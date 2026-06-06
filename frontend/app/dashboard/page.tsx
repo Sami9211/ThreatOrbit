@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import WorldMap from '@/components/dashboard/WorldMap'
+import { useExperienceMode } from '@/lib/useExperienceMode'
 
 const SEVERITY_COLOR = {
   critical: '#FF2E97',
@@ -358,6 +359,8 @@ function LiveThreatFeed() {
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function DashboardOverview() {
   const [count, setCount] = useState({ threats: 1842, iocs: 14671, sources: 23, score: 8.4 })
+  const [mode] = useExperienceMode()
+  const isPower = mode === 'power'
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -373,6 +376,19 @@ export default function DashboardOverview() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header / mode pill */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-xl font-bold text-white">Security Overview</h1>
+          <p className="text-xs text-ink-500 mt-0.5">Real-time threat posture across all monitored assets and feeds</p>
+        </div>
+        <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border shrink-0',
+          isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
+          {isPower ? <Zap className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          {isPower ? 'Power User' : 'Normal mode'}
+        </span>
+      </div>
+
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
@@ -410,6 +426,26 @@ export default function DashboardOverview() {
           trendVal="+0.3"
         />
       </div>
+
+      {/* SOC operations metrics (Power User only) */}
+      {isPower && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 glass border border-white/5 rounded-xl overflow-hidden">
+          {[
+            { label: 'MTTD',            value: '4m 12s',  sub: '↓ from 6m',     color: 'text-safe' },
+            { label: 'MTTA',            value: '8m 03s',  sub: '< 15m target',  color: 'text-safe' },
+            { label: 'MTTR',            value: '23m 41s', sub: '↑ from 19m',    color: 'text-amber' },
+            { label: 'Open Incidents',  value: '12',      sub: '1 critical',    color: 'text-magenta' },
+            { label: 'Automation Rate', value: '73%',     sub: '+5% MoM',       color: 'text-violet' },
+            { label: 'SLA Compliance',  value: '94.2%',   sub: 'P1 incidents',  color: 'text-amber' },
+          ].map((m) => (
+            <div key={m.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
+              <p className="text-[10px] text-ink-600 uppercase tracking-wide">{m.label}</p>
+              <p className={cn('text-lg font-bold mt-0.5', m.color)}>{m.value}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">{m.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* World Map + Live Feed */}
       <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">

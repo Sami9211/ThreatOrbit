@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Home, Info, DollarSign, BookOpen,
-  Activity, ChevronRight, Globe,
+  Activity, ChevronRight, Globe, Menu, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
@@ -24,9 +24,18 @@ export default function LandingSidebar() {
 
   return (
     <>
-      {/* Hover trigger strip */}
+      {/* Mobile hamburger button — visible only on small screens */}
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Open navigation"
+        className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-[#0D0920]/80 border border-white/10 text-ink-400 hover:text-white backdrop-blur-sm transition-colors"
+      >
+        <Menu className="w-4 h-4" />
+      </button>
+
+      {/* Desktop hover trigger strip */}
       <div
-        className="fixed left-0 top-0 bottom-0 z-50 w-4 cursor-pointer"
+        className="hidden md:block fixed left-0 top-0 bottom-0 z-50 w-4 cursor-pointer"
         onMouseEnter={() => setOpen(true)}
       />
 
@@ -52,13 +61,20 @@ export default function LandingSidebar() {
               className="fixed left-0 top-0 bottom-0 z-50 w-56 flex flex-col bg-[#0D0920] border-r border-white/8 shadow-[4px_0_40px_rgba(0,0,0,0.6)]"
               onMouseLeave={() => setOpen(false)}
             >
-              {/* Logo */}
+              {/* Logo + close */}
               <div className="h-14 flex items-center px-5 border-b border-white/5">
                 <Logo size={24} />
-                <span className="ml-2.5 font-display font-bold text-sm">
+                <span className="ml-2.5 font-display font-bold text-sm flex-1">
                   <span className="text-white">Threat</span>
                   <span className="text-gradient-magenta">Orbit</span>
                 </span>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors"
+                  aria-label="Close navigation"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Navigation */}

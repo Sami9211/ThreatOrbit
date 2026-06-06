@@ -303,7 +303,9 @@ function generateLiveEntry(): FeedEntry {
 /* ── Feed Entry Row ──────────────────────────────────────────────── */
 function FeedRow({ entry, idx }: { entry: FeedEntry; idx: number }) {
   const [hovered, setHovered] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
+  const panelOpen = hovered || expanded
 
   const timeAgo = (ts: string) => {
     const diff = (Date.now() - new Date(ts).getTime()) / 1000
@@ -323,9 +325,11 @@ function FeedRow({ entry, idx }: { entry: FeedEntry; idx: number }) {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: idx * 0.03, duration: 0.3 }}
+        onClick={() => setExpanded((e) => !e)}
         className={cn(
-          'grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 border-b border-white/4 transition-colors cursor-pointer',
-          hovered ? 'bg-white/3' : idx % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.012]',
+          'grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 border-b border-white/4 transition-colors cursor-pointer select-none',
+          panelOpen ? 'bg-white/3' : idx % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.012]',
+          expanded && 'border-l-2 border-l-magenta/60',
         )}
       >
         {/* Severity dot */}
@@ -369,9 +373,9 @@ function FeedRow({ entry, idx }: { entry: FeedEntry; idx: number }) {
         <span suppressHydrationWarning className="text-[10px] text-ink-600 whitespace-nowrap hidden sm:block">{timeAgo(entry.ts)}</span>
       </motion.div>
 
-      {/* Hover detail panel */}
+      {/* Detail panel — shown on hover (desktop) or click/tap (mobile) */}
       <AnimatePresence>
-        {hovered && (
+        {panelOpen && (
           <motion.div
             initial={{ opacity: 0, y: 4, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -447,19 +451,31 @@ function FeedRow({ entry, idx }: { entry: FeedEntry; idx: number }) {
 
 /* ── Filters ─────────────────────────────────────────────────────── */
 function FilterDropdown({
-  label, options, value, onChange,
+  label, options, value, onChange, open, onToggle,
 }: {
   label: string; options: string[]; value: string; onChange: (v: string) => void
+  open: boolean; onToggle: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onToggle()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open, onToggle])
+
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         className={cn(
           'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors',
           value !== 'All'
             ? 'bg-magenta/10 border-magenta/30 text-magenta'
+            : open
+            ? 'bg-surface-2 border-white/15 text-ink-200'
             : 'bg-surface-2 border-white/8 text-ink-400 hover:text-white hover:border-white/15',
         )}
       >
@@ -472,12 +488,12 @@ function FilterDropdown({
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
-            className="absolute top-full mt-1 left-0 z-50 bg-surface border border-white/10 rounded-xl overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.5)] min-w-[160px]"
+            className="absolute top-full mt-1 left-0 z-50 bg-[#100A1C] border border-white/10 rounded-xl overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.6)] min-w-[160px] max-h-60 overflow-y-auto"
           >
             {options.map((opt) => (
               <button
                 key={opt}
-                onClick={() => { onChange(opt); setOpen(false) }}
+                onClick={() => { onChange(opt); onToggle() }}
                 className={cn(
                   'w-full text-left px-3 py-2 text-xs transition-colors',
                   opt === value ? 'text-magenta bg-magenta/8' : 'text-ink-300 hover:text-white hover:bg-white/5',
@@ -521,6 +537,8 @@ export default function ThreatFeedsPage() {
   const [filterCountry, setFilterCountry] = useState('All')
   const [search, setSearch] = useState('')
   const [ticker, setTicker] = useState(0)
+  const [openFilter, setOpenFilter] = useState<string | null>(null)
+  function toggleFilter(name: string) { setOpenFilter((o) => (o === name ? null : name)) }
 
   // Live feed update every 3 seconds
   useEffect(() => {
@@ -573,7 +591,7 @@ export default function ThreatFeedsPage() {
       <div className="px-6 py-5 border-b border-white/5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="font-display text-xl font-bold text-white">Threat Intelligence Feeds</h1>
-          <p className="text-xs text-ink-500 mt-0.5">Real-time threat feed aggregation · hover any row for details</p>
+          <p className="text-xs text-ink-500 mt-0.5">Real-time threat feed aggregation · click any row for details</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Export CSV */}
@@ -617,10 +635,10 @@ export default function ThreatFeedsPage() {
           className="px-3 py-1.5 rounded-lg text-xs bg-surface-2 border border-white/8 text-ink-200 placeholder-ink-600 focus:outline-none focus:border-magenta/40 w-44"
         />
 
-        <FilterDropdown label="Attack Type" options={ATTACK_TYPES} value={filterAttack} onChange={setFilterAttack} />
-        <FilterDropdown label="Severity"    options={SEVERITIES}   value={filterSev}    onChange={setFilterSev}    />
-        <FilterDropdown label="Sector"      options={SECTORS}       value={filterSector} onChange={setFilterSector} />
-        <FilterDropdown label="Country"     options={COUNTRIES}     value={filterCountry}onChange={setFilterCountry}/>
+        <FilterDropdown label="Attack Type" options={ATTACK_TYPES} value={filterAttack} onChange={setFilterAttack} open={openFilter==='attack'}   onToggle={() => toggleFilter('attack')}  />
+        <FilterDropdown label="Severity"    options={SEVERITIES}   value={filterSev}    onChange={setFilterSev}    open={openFilter==='severity'} onToggle={() => toggleFilter('severity')}/>
+        <FilterDropdown label="Sector"      options={SECTORS}       value={filterSector} onChange={setFilterSector} open={openFilter==='sector'}   onToggle={() => toggleFilter('sector')}  />
+        <FilterDropdown label="Country"     options={COUNTRIES}     value={filterCountry}onChange={setFilterCountry}open={openFilter==='country'}  onToggle={() => toggleFilter('country')} />
 
         {hasFilters && (
           <button
