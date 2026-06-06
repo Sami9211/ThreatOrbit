@@ -365,10 +365,33 @@ function slaLabel(created: string, slaHours: number): string {
 /* ── Case detail panel ────────────────────────────────────────────── */
 function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => void; simplified?: boolean }) {
   const [tab, setTab] = useState<'overview' | 'warroom' | 'tasks' | 'evidence'>('overview')
+  const [tasks, setTasks] = useState(c.tasks)
+  const [warRoom, setWarRoom] = useState(c.warRoom)
+  const [note, setNote] = useState('')
   const st = STATUS_STYLE[c.status]
   const detailTabs = simplified
     ? (['overview', 'tasks'] as const)
     : (['overview', 'warroom', 'tasks', 'evidence'] as const)
+
+  // Advance a task through pending → in-progress → done on click
+  function cycleTask(id: string) {
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== id) return t
+      const next = t.status === 'done' ? 'pending' : t.status === 'in-progress' ? 'done' : 'in-progress'
+      return { ...t, status: next as typeof t.status }
+    }))
+  }
+
+  function addNote() {
+    const text = note.trim()
+    if (!text) return
+    const now = new Date()
+    const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+    setWarRoom((prev) => [...prev, { ts, actor: 'you', type: 'manual', content: text }])
+    setNote('')
+  }
+
+  const doneCount = tasks.filter((t) => t.status === 'done').length
 
   return (
     <motion.div
@@ -464,7 +487,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 
         {tab === 'warroom' && (
           <div className="space-y-3">
-            {c.warRoom.map((entry, i) => (
+            {warRoom.map((entry, i) => (
               <div key={i} className={cn('flex gap-3 text-xs',
                 entry.type === 'auto' ? 'opacity-80' : '')}>
                 <div className="shrink-0 w-12 text-[10px] text-ink-600 font-mono pt-0.5">{entry.ts}</div>
@@ -485,30 +508,43 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                 </div>
               </div>
             ))}
-            <div className="pt-2 border-t border-white/5">
+            <div className="pt-2 border-t border-white/5 flex gap-2">
               <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addNote() }}
                 placeholder="Add investigation note…"
-                className="w-full bg-surface-2 border border-white/8 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-white/20"
+                className="flex-1 bg-surface-2 border border-white/8 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-white/20"
               />
+              <button onClick={addNote}
+                className="px-3 py-2 rounded-lg text-xs bg-magenta/15 border border-magenta/30 text-magenta hover:bg-magenta/25 transition-colors shrink-0">
+                Post
+              </button>
             </div>
           </div>
         )}
 
         {tab === 'tasks' && (
           <div className="space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] text-ink-600">{doneCount} / {tasks.length} tasks complete · click a task to advance it</p>
+              <div className="w-24 h-1 bg-white/8 rounded-full overflow-hidden">
+                <div className="h-full bg-safe rounded-full transition-all" style={{ width: `${(doneCount / tasks.length) * 100}%` }} />
+              </div>
+            </div>
             {Object.entries(
-              c.tasks.reduce((acc, t) => {
+              tasks.reduce((acc, t) => {
                 if (!acc[t.phase]) acc[t.phase] = []
                 acc[t.phase].push(t)
                 return acc
-              }, {} as Record<string, typeof c.tasks>)
-            ).map(([phase, tasks]) => (
+              }, {} as Record<string, typeof tasks>)
+            ).map(([phase, phaseTasks]) => (
               <div key={phase}>
                 <p className="text-[10px] text-ink-600 uppercase tracking-wide mb-1.5">{phase}</p>
                 <div className="space-y-1">
-                  {tasks.map((task) => (
-                    <div key={task.id} className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors',
+                  {phaseTasks.map((task) => (
+                    <button key={task.id} onClick={() => cycleTask(task.id)} className={cn(
+                      'w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors hover:border-white/20',
                       task.status === 'done' ? 'border-safe/15 bg-safe/5' :
                       task.status === 'in-progress' ? 'border-violet/20 bg-violet/5' :
                       'border-white/5 bg-surface-2/30',
@@ -525,7 +561,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                         {task.assignee && <p className="text-[10px] text-ink-600 mt-0.5">{task.assignee}</p>}
                         {task.notes && <p className="text-[10px] text-safe/70 mt-0.5">{task.notes}</p>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -836,7 +872,7 @@ export default function SOARPage() {
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
               onClick={() => setSelectedCase(null)}
             />
-            <CaseDetail c={selectedCase} onClose={() => setSelectedCase(null)} simplified={isNormal} />
+            <CaseDetail key={selectedCase.id} c={selectedCase} onClose={() => setSelectedCase(null)} simplified={isNormal} />
           </>
         )}
       </AnimatePresence>

@@ -415,10 +415,16 @@ function fmtBytes(b: number): string {
 }
 
 /* ── Alert detail panel ───────────────────────────────────────────── */
-function AlertDetail({ alert, onClose, simplified }: { alert: SiemAlert; onClose: () => void; simplified?: boolean }) {
+function AlertDetail({ alert, onClose, simplified, onUpdate }: {
+  alert: SiemAlert; onClose: () => void; simplified?: boolean
+  onUpdate: (id: string, patch: Partial<SiemAlert>) => void
+}) {
   const [tab, setTab] = useState<'overview' | 'network' | 'identity' | 'host' | 'raw'>('overview')
+  const [toast, setToast] = useState<string | null>(null)
   const s = SEV[alert.severity]
   const st = STATUS_LABEL[alert.status]
+
+  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2200) }
 
   const TABS = simplified
     ? (['overview'] as const)
@@ -470,18 +476,64 @@ function AlertDetail({ alert, onClose, simplified }: { alert: SiemAlert; onClose
         {/* Action bar */}
         <div className="flex items-center gap-2 mt-3 flex-wrap">
           {[
-            { label: 'Assign to Me', icon: User, color: 'text-amber' },
-            { label: 'Escalate',     icon: ArrowUpRight, color: 'text-threat' },
-            { label: 'Create Case',  icon: FileText, color: 'text-violet' },
-            { label: 'Suppress',     icon: Lock, color: 'text-ink-400' },
-            { label: 'Run Playbook', icon: Zap, color: 'text-safe' },
-          ].map(({ label, icon: Icon, color }) => (
-            <button key={label} className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border border-white/8 hover:border-white/15 bg-surface-2 hover:bg-surface-3 transition-colors', color)}>
+            { label: 'Assign to Me', icon: User, color: 'text-amber',
+              run: () => { onUpdate(alert.id, { owner: 'you', status: alert.status === 'new' ? 'assigned' : alert.status }); flash('Assigned to you') } },
+            { label: 'Escalate', icon: ArrowUpRight, color: 'text-threat',
+              run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Escalated — status set to In Progress') } },
+            { label: 'Create Case', icon: FileText, color: 'text-violet',
+              run: () => flash('SOAR case created from this alert') },
+            { label: 'Suppress', icon: Lock, color: 'text-ink-400',
+              run: () => { onUpdate(alert.id, { status: 'closed', disposition: 'false-positive' }); flash(`Rule ${alert.ruleId} suppressed for this entity`) } },
+            { label: 'Run Playbook', icon: Zap, color: 'text-safe',
+              run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Playbook triggered in SOAR') } },
+          ].map(({ label, icon: Icon, color, run }) => (
+            <button key={label} onClick={run}
+              className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border border-white/8 hover:border-white/15 bg-surface-2 hover:bg-surface-3 transition-colors active:scale-95', color)}>
               <Icon className="w-3 h-3" />
               {label}
             </button>
           ))}
         </div>
+
+        {/* Triage controls — status + disposition */}
+        <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-ink-600">Status</span>
+            <select
+              value={alert.status}
+              onChange={(e) => { onUpdate(alert.id, { status: e.target.value as AlertStatus }); flash(`Status → ${STATUS_LABEL[e.target.value as AlertStatus].label}`) }}
+              className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 focus:outline-none focus:border-magenta/40 cursor-pointer"
+            >
+              {(['new','assigned','in-progress','pending','resolved','closed'] as AlertStatus[]).map((s) => (
+                <option key={s} value={s} className="bg-[#100A1C]">{STATUS_LABEL[s].label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-ink-600">Disposition</span>
+            <select
+              value={alert.disposition}
+              onChange={(e) => { onUpdate(alert.id, { disposition: e.target.value as Disposition }); flash('Disposition recorded') }}
+              className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 capitalize focus:outline-none focus:border-magenta/40 cursor-pointer"
+            >
+              {(['undetermined','true-positive','false-positive','benign','duplicate'] as Disposition[]).map((d) => (
+                <option key={d} value={d} className="bg-[#100A1C]">{d.replace('-', ' ')}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Toast */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="mt-2.5 flex items-center gap-1.5 text-[10px] text-safe bg-safe/10 border border-safe/20 rounded-lg px-2.5 py-1.5">
+              <CheckCircle className="w-3 h-3 shrink-0" />
+              {toast}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Tabs */}
@@ -648,12 +700,113 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
+/* ── Threat hunting workspace ─────────────────────────────────────── */
+const SAVED_HUNTS = [
+  { name: 'PowerShell spawned from Office apps', q: "process=powershell.exe AND parent IN (winword.exe, excel.exe, outlook.exe)", tech: 'T1059.001' },
+  { name: 'Outbound to newly-registered domains', q: "event=dns AND domain_age < 30d AND direction=outbound", tech: 'T1071' },
+  { name: 'Service account interactive logon',    q: "user LIKE 'svc-*' AND logon_type=Interactive", tech: 'T1078' },
+  { name: 'Mass file access by single process',   q: "event=file_read AND count(distinct file) > 1000 BY process", tech: 'T1486' },
+  { name: 'LSASS memory access',                  q: "event=process_access AND target=lsass.exe AND access_mask=0x1010", tech: 'T1003.001' },
+]
+
+// Deterministic mock result set so the workspace renders identically server/client
+const HUNT_RESULTS = [
+  { ts: '2024-11-12T14:15:22Z', host: 'WS-HR-045',      user: 'jdoe',     process: 'powershell.exe', parent: 'EXCEL.EXE',  detail: '-EncodedCommand (Base64, 412 bytes)', risk: 91 },
+  { ts: '2024-11-12T13:48:11Z', host: 'WS-FIN-012',     user: 'akhan',    process: 'powershell.exe', parent: 'WINWORD.EXE', detail: 'IEX (New-Object Net.WebClient).Download', risk: 88 },
+  { ts: '2024-11-12T12:30:44Z', host: 'HOST-EXEC-01',   user: 'ceo',      process: 'powershell.exe', parent: 'EXCEL.EXE',  detail: 'Invoke-Expression on macro payload', risk: 96 },
+  { ts: '2024-11-12T11:22:09Z', host: 'WS-SALES-112',   user: 'bwilson',  process: 'powershell.exe', parent: 'OUTLOOK.EXE', detail: 'DownloadString from pastebin[.]com', risk: 84 },
+  { ts: '2024-11-12T09:14:55Z', host: 'WS-DEV-088',     user: 'dev_user3',process: 'powershell.exe', parent: 'EXCEL.EXE',  detail: 'Set-MpPreference -DisableRealtimeMonitoring', risk: 79 },
+]
+
+function ThreatHunt() {
+  const [query, setQuery] = useState(SAVED_HUNTS[0].q)
+  const [ran, setRan] = useState(true)
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Query bar */}
+      <div className="p-4 border-b border-white/5 shrink-0">
+        <div className="flex items-center gap-2 mb-2">
+          <Terminal className="w-4 h-4 text-magenta" />
+          <span className="text-xs font-semibold text-white">Threat Hunting Query</span>
+          <span className="text-[10px] text-ink-600">ThreatOrbit Query Language (TQL)</span>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-start gap-2 px-3 py-2 rounded-lg bg-[#0a0612] border border-white/10 font-mono">
+            <span className="text-magenta text-xs mt-0.5 select-none">›</span>
+            <textarea
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              rows={2}
+              spellCheck={false}
+              className="flex-1 bg-transparent text-xs text-ink-100 placeholder-ink-600 focus:outline-none resize-none leading-relaxed"
+            />
+          </div>
+          <button
+            onClick={() => setRan(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-magenta/15 border border-magenta/30 text-magenta hover:bg-magenta/25 transition-colors self-stretch shrink-0"
+          >
+            <Search className="w-3.5 h-3.5" /> Run
+          </button>
+        </div>
+        {/* Saved hunts */}
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          <span className="text-[10px] text-ink-600 mr-1 self-center">Saved hunts:</span>
+          {SAVED_HUNTS.map((h) => (
+            <button key={h.name} onClick={() => { setQuery(h.q); setRan(true) }}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-white/8 bg-surface-2 text-ink-400 hover:text-white hover:border-white/15 transition-colors">
+              {h.name}
+              <span className="font-mono text-violet">{h.tech}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-[10px] text-ink-600">
+          <span>{ran ? `${HUNT_RESULTS.length} matching events · scanned 41.2M events in 0.84s` : 'Run a query to see results'}</span>
+          {ran && <span className="text-safe">MITRE T1059.001 — PowerShell</span>}
+        </div>
+        {ran && (
+          <div className="grid grid-cols-[120px_110px_90px_1fr_60px] gap-3 px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide">
+            <span>Timestamp</span><span>Host</span><span>User</span><span>Process Chain / Detail</span><span>Risk</span>
+          </div>
+        )}
+        {ran && HUNT_RESULTS.map((r, i) => (
+          <motion.div key={i}
+            initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+            className="grid grid-cols-[120px_110px_90px_1fr_60px] gap-3 px-4 py-2.5 border-b border-white/4 hover:bg-white/3 text-[11px]">
+            <span suppressHydrationWarning className="font-mono text-ink-600">{new Date(r.ts).toLocaleTimeString('en-GB')}</span>
+            <span className="font-mono text-ink-300">{r.host}</span>
+            <span className="text-ink-400">{r.user}</span>
+            <div className="min-w-0">
+              <span className="font-mono text-violet">{r.parent}</span>
+              <span className="text-ink-700 mx-1">→</span>
+              <span className="font-mono text-ink-200">{r.process}</span>
+              <p className="text-[10px] text-ink-600 truncate mt-0.5">{r.detail}</p>
+            </div>
+            <span className={cn('font-bold', r.risk >= 90 ? 'text-magenta' : r.risk >= 70 ? 'text-threat' : 'text-amber')}>{r.risk}</span>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SIEMPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
-  const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources'>('queue')
-  const [selectedAlert, setSelectedAlert] = useState<SiemAlert | null>(null)
+  const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources' | 'hunt'>('queue')
+  const [alerts, setAlerts] = useState<SiemAlert[]>(ALERTS)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selectedAlert = alerts.find((a) => a.id === selectedId) ?? null
+
+  // Mutate a single alert's triage fields (status/owner/disposition) in place
+  function updateAlert(id: string, patch: Partial<SiemAlert>) {
+    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)))
+  }
 
   // Normal mode only exposes the alert queue; force tab back if a hidden one is active
   useEffect(() => { if (isNormal && tab !== 'queue') setTab('queue') }, [isNormal, tab])
@@ -663,7 +816,7 @@ export default function SIEMPage() {
   const [filterTactic, setFilterTactic] = useState('All')
   const [ruleSearch, setRuleSearch] = useState('')
 
-  const filteredAlerts = useMemo(() => ALERTS.filter((a) => {
+  const filteredAlerts = useMemo(() => alerts.filter((a) => {
     // Normal mode: only actionable alerts — open status, critical/high severity
     if (isNormal) {
       if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
@@ -676,14 +829,14 @@ export default function SIEMPage() {
         !a.ruleId.toLowerCase().includes(search.toLowerCase()) &&
         !(a.srcIp).includes(search)) return false
     return true
-  }), [search, filterSev, filterStatus, filterTactic, isNormal])
+  }), [alerts, search, filterSev, filterStatus, filterTactic, isNormal])
 
   const filteredRules = useMemo(() => RULES.filter((r) =>
     !ruleSearch || r.name.toLowerCase().includes(ruleSearch.toLowerCase()) || r.id.toLowerCase().includes(ruleSearch.toLowerCase())
   ), [ruleSearch])
 
-  const openCount = ALERTS.filter((a) => ['new', 'assigned', 'in-progress'].includes(a.status)).length
-  const criticalOpen = ALERTS.filter((a) => a.severity === 'critical' && ['new', 'assigned', 'in-progress'].includes(a.status)).length
+  const openCount = alerts.filter((a) => ['new', 'assigned', 'in-progress'].includes(a.status)).length
+  const criticalOpen = alerts.filter((a) => a.severity === 'critical' && ['new', 'assigned', 'in-progress'].includes(a.status)).length
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -732,10 +885,11 @@ export default function SIEMPage() {
         {/* Tab bar */}
         <div className="flex gap-6 px-6 border-b border-white/5 shrink-0 items-center">
           {([
-            ['queue',     'Alert Queue',   Activity],
-            ['analytics', 'Analytics',     BarChart2],
+            ['queue',     'Alert Queue',     Activity],
+            ['hunt',      'Threat Hunting',  Terminal],
+            ['analytics', 'Analytics',       BarChart2],
             ['rules',     'Detection Rules', Shield],
-            ['sources',   'Data Sources',  Database],
+            ['sources',   'Data Sources',    Database],
           ] as const)
             .filter(([id]) => !isNormal || id === 'queue')
             .map(([id, label, Icon]) => (
@@ -803,13 +957,16 @@ export default function SIEMPage() {
                   </div>
                 ) : (
                   filteredAlerts.map((alert, i) => (
-                    <AlertRow key={alert.id} alert={alert} idx={i} selected={selectedAlert?.id === alert.id}
-                      onClick={() => setSelectedAlert((a) => a?.id === alert.id ? null : alert)} />
+                    <AlertRow key={alert.id} alert={alert} idx={i} selected={selectedId === alert.id}
+                      onClick={() => setSelectedId((id) => id === alert.id ? null : alert.id)} />
                   ))
                 )}
               </div>
             </div>
           )}
+
+          {/* ── THREAT HUNTING ─────────────────────────────────────── */}
+          {tab === 'hunt' && <ThreatHunt />}
 
           {/* ── ANALYTICS ──────────────────────────────────────────── */}
           {tab === 'analytics' && (
@@ -1006,9 +1163,9 @@ export default function SIEMPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
-              onClick={() => setSelectedAlert(null)}
+              onClick={() => setSelectedId(null)}
             />
-            <AlertDetail alert={selectedAlert} onClose={() => setSelectedAlert(null)} simplified={isNormal} />
+            <AlertDetail alert={selectedAlert} onClose={() => setSelectedId(null)} simplified={isNormal} onUpdate={updateAlert} />
           </>
         )}
       </AnimatePresence>
