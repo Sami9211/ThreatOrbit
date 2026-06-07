@@ -976,6 +976,120 @@ function MitreCoverageMatrix() {
   )
 }
 
+/* ── Normal Mode: Alert Triage Board ─────────────────────────────── */
+function NormalSIEM({
+  alerts,
+  onUpdate,
+}: {
+  alerts: SiemAlert[]
+  onUpdate: (id: string, patch: Partial<SiemAlert>) => void
+}) {
+  const open = alerts.filter((a) => ['new', 'assigned', 'in-progress'].includes(a.status))
+  const critical = open.filter((a) => a.severity === 'critical')
+  const high = open.filter((a) => a.severity === 'high')
+  const medium = open.filter((a) => a.severity === 'medium')
+
+  const COLS = [
+    { key: 'critical', label: 'Critical', items: critical, color: '#FF2E97', border: 'border-magenta/25', header: 'bg-magenta/10 text-magenta' },
+    { key: 'high',     label: 'High',     items: high,     color: '#FF4D6D', border: 'border-threat/25',  header: 'bg-threat/10 text-threat'   },
+    { key: 'medium',   label: 'Medium',   items: medium,   color: '#FFB23E', border: 'border-amber/25',   header: 'bg-amber/10 text-amber'     },
+  ]
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-white/5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
+        <div>
+          <h1 className="font-display text-xl font-bold text-white">Alert Triage</h1>
+          <p className="text-xs text-ink-500 mt-0.5">
+            {open.length} open alert{open.length !== 1 ? 's' : ''} · review and action by severity
+          </p>
+        </div>
+        <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium self-start">
+          <Eye className="w-3 h-3" /> Normal mode
+        </span>
+      </div>
+
+      {/* Board */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {COLS.map(({ key, label, items, color, border, header }) => (
+            <div key={key} className={cn('glass border rounded-xl overflow-hidden flex flex-col', border)}>
+              {/* Column header */}
+              <div className={cn('flex items-center justify-between px-4 py-3', header)}>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+                  <span className="text-sm font-semibold">{label}</span>
+                </div>
+                <span className="text-sm font-bold">{items.length}</span>
+              </div>
+
+              {/* Cards */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[180px]">
+                <AnimatePresence initial={false}>
+                  {items.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-ink-600">
+                      No {label.toLowerCase()} alerts
+                    </div>
+                  ) : (
+                    items.map((a) => (
+                      <motion.div
+                        key={a.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="glass border border-white/5 rounded-lg p-3.5 space-y-2.5 group"
+                      >
+                        <p className="text-sm text-ink-100 leading-snug group-hover:text-white transition-colors">{a.title}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-ink-500 font-mono flex-wrap">
+                          <span>{a.srcIp}</span>
+                          <span>·</span>
+                          <span suppressHydrationWarning>
+                            {new Date(a.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {a.hostname && <><span>·</span><span className="truncate">{a.hostname}</span></>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => onUpdate(a.id, { status: 'assigned', owner: 'analyst' })}
+                            className="flex-1 py-1.5 rounded-lg text-xs font-medium bg-safe/10 text-safe hover:bg-safe/20 transition-colors border border-safe/20"
+                          >
+                            Acknowledge
+                          </button>
+                          <button
+                            onClick={() => onUpdate(a.id, { status: 'closed', disposition: 'false-positive' })}
+                            className="py-1.5 px-3 rounded-lg text-xs text-ink-400 hover:text-ink-200 hover:bg-white/5 transition-colors border border-white/8"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Power mode CTA */}
+        <div className="glass border border-white/5 rounded-xl p-4 flex items-center gap-4">
+          <div className="p-2 rounded-lg bg-magenta/10 shrink-0">
+            <Zap className="w-4 h-4 text-magenta" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-white">Need deeper analysis? Switch to Power User mode</p>
+            <p className="text-[10px] text-ink-400 mt-0.5">
+              Access KQL search, raw logs, correlation rules, threat hunting, MITRE ATT&CK coverage, and detailed alert timelines
+            </p>
+          </div>
+          <span className="text-[10px] text-ink-500 shrink-0 hidden sm:block">Toggle in top bar →</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SIEMPage() {
   const [mode] = useExperienceMode()
@@ -1027,6 +1141,8 @@ export default function SIEMPage() {
 
   const openCount = alerts.filter((a) => ['new', 'assigned', 'in-progress'].includes(a.status)).length
   const criticalOpen = alerts.filter((a) => a.severity === 'critical' && ['new', 'assigned', 'in-progress'].includes(a.status)).length
+
+  if (isNormal) return <NormalSIEM alerts={alerts} onUpdate={updateAlert} />
 
   return (
     <div className="flex h-full overflow-hidden">

@@ -587,6 +587,167 @@ function LiveThreatFeed() {
   )
 }
 
+/* ── Normal Mode Dashboard ───────────────────────────────────────── */
+function NormalDashboard({ count }: { count: { threats: number; iocs: number; sources: number; score: number } }) {
+  const TOP_ALERTS = [
+    { id: 'a1', title: 'Ransomware encryption detected on DESKTOP-FIN-087', severity: 'critical' as const, age: '2m ago' },
+    { id: 'a2', title: 'Suspicious C2 beacon to known Lazarus Group IP address', severity: 'critical' as const, age: '7m ago' },
+    { id: 'a3', title: 'Multiple failed logins from 14 IPs — credential attack suspected', severity: 'high' as const, age: '12m ago' },
+  ]
+  return (
+    <div className="p-6 space-y-6 max-w-3xl mx-auto w-full">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-white">Security Status</h1>
+          <p className="text-sm text-ink-400 mt-1">Your organization's security at a glance</p>
+        </div>
+        <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
+          <Eye className="w-3 h-3" /> Normal mode
+        </span>
+      </div>
+
+      {/* Health Score */}
+      <div className="glass border border-white/5 rounded-2xl p-8 text-center relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 100%, rgb(var(--violet) / 0.08), transparent)' }} />
+        <p className="text-sm text-ink-400 mb-6 relative">Overall Security Health</p>
+        <div className="relative inline-flex">
+          <svg viewBox="0 0 160 160" className="w-44 h-44">
+            <circle cx="80" cy="80" r="68" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+            <motion.circle
+              cx="80" cy="80" r="68" fill="none"
+              stroke="url(#normalHealthGrad)"
+              strokeWidth="10"
+              strokeLinecap="round"
+              strokeDasharray={427}
+              initial={{ strokeDashoffset: 427 }}
+              animate={{ strokeDashoffset: 427 * (1 - 0.74) }}
+              transition={{ duration: 1.6, ease: 'easeOut', delay: 0.2 }}
+              transform="rotate(-90 80 80)"
+            />
+            <defs>
+              <linearGradient id="normalHealthGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgb(var(--violet))" />
+                <stop offset="100%" stopColor="rgb(var(--safe))" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-display text-5xl font-bold text-white">74</span>
+            <span className="text-sm text-ink-500 mt-0.5">/ 100</span>
+          </div>
+        </div>
+        <div className="mt-5 relative">
+          <p className="text-safe font-semibold text-xl">Good</p>
+          <p className="text-sm text-ink-400 mt-1">1 integration degraded · 2 critical alerts need review</p>
+        </div>
+        <div className="flex justify-center gap-3 mt-6 relative">
+          {[
+            { label: 'Detection',  score: 82, color: 'text-safe'  },
+            { label: 'Response',   score: 71, color: 'text-safe'  },
+            { label: 'Prevention', score: 68, color: 'text-amber' },
+          ].map((m) => (
+            <div key={m.label} className="px-4 py-2.5 rounded-xl bg-white/4 border border-white/6 text-center min-w-[72px]">
+              <p className={cn('text-base font-bold', m.color)}>{m.score}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">{m.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 3 big status cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats.toLocaleString(), sub: '↑ 12% since yesterday',     iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-threat' },
+          { icon: CheckCircle2,  label: 'Sources Online',       value: '22 / 24',                      sub: '2 integrations degraded',     iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-amber'  },
+          { icon: Clock,         label: 'Alerts Pending Review', value: '7',                            sub: '2 critical · 5 high priority', iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat' },
+        ].map((c, i) => (
+          <motion.div key={c.label}
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
+            className={cn('glass border rounded-xl p-6 text-center', c.borderCls)}>
+            <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4', c.bgCls)}>
+              <c.icon className={cn('w-7 h-7', c.iconCls)} />
+            </div>
+            <p className="font-display text-4xl font-bold text-white mb-1.5">{c.value}</p>
+            <p className="text-sm text-ink-400">{c.label}</p>
+            <p className={cn('text-xs font-medium mt-2', c.subCls)}>{c.sub}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Priority actions */}
+      <div className="glass border border-white/5 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-threat animate-pulse" />
+            <h2 className="text-base font-semibold text-white">Requires Your Attention</h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-threat/10 text-threat font-semibold border border-threat/20">3</span>
+          </div>
+          <a href="/dashboard/siem" className="text-xs text-magenta hover:underline transition-colors">View All Alerts →</a>
+        </div>
+        <div className="divide-y divide-white/4">
+          {TOP_ALERTS.map((a, i) => (
+            <motion.div key={a.id}
+              initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.07 }}
+              className="flex items-center gap-4 px-6 py-4 hover:bg-white/2 transition-colors group">
+              <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0',
+                a.severity === 'critical' ? 'bg-magenta/10' : 'bg-threat/10')}>
+                <AlertTriangle className={cn('w-5 h-5', a.severity === 'critical' ? 'text-magenta' : 'text-threat')} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-ink-100 group-hover:text-white transition-colors">{a.title}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wide',
+                    a.severity === 'critical' ? 'bg-magenta/10 text-magenta' : 'bg-threat/10 text-threat'
+                  )}>{a.severity}</span>
+                  <span className="text-[11px] text-ink-600">{a.age}</span>
+                </div>
+              </div>
+              <a href="/dashboard/siem"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-magenta/10 text-magenta hover:bg-magenta/20 transition-colors border border-magenta/20 shrink-0">
+                Investigate →
+              </a>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick Access */}
+      <div className="glass border border-white/5 rounded-xl p-6">
+        <h2 className="text-base font-semibold text-white mb-5">Quick Access</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Run Security Scan', icon: Shield,        href: '/dashboard/scanner', color: 'text-violet', bg: 'bg-violet/10', border: 'border-violet/15' },
+            { label: 'Review Alerts',     icon: AlertTriangle, href: '/dashboard/siem',    color: 'text-threat', bg: 'bg-threat/10', border: 'border-threat/15' },
+            { label: 'View Assets',       icon: Globe,         href: '/dashboard/assets',  color: 'text-teal',   bg: 'bg-teal/10',   border: 'border-teal/15'   },
+            { label: 'Threat Feeds',      icon: Radio,         href: '/dashboard/feeds',   color: 'text-amber',  bg: 'bg-amber/10',  border: 'border-amber/15'  },
+          ].map((q) => (
+            <a key={q.label} href={q.href}
+              className={cn('flex flex-col items-center gap-3 p-5 rounded-xl border hover:bg-white/3 transition-all group text-center', q.border)}>
+              <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', q.bg)}>
+                <q.icon className={cn('w-6 h-6', q.color)} />
+              </div>
+              <span className="text-sm text-ink-300 group-hover:text-white transition-colors">{q.label}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* Switch to Power Mode CTA */}
+      <div className="glass border border-white/5 rounded-xl p-5 flex items-center gap-4">
+        <div className="p-2.5 rounded-xl bg-magenta/10 shrink-0">
+          <Zap className="w-5 h-5 text-magenta" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white">Switch to Power User mode for full analyst access</p>
+          <p className="text-xs text-ink-400 mt-0.5">Unlocks SIEM console, SOAR playbooks, CTI investigation graph, MITRE ATT&CK, threat hunting, and raw log access</p>
+        </div>
+        <span className="text-xs text-ink-500 shrink-0 hidden sm:block">Toggle in top bar →</span>
+      </div>
+    </div>
+  )
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function DashboardOverview() {
   const [count, setCount] = useState({ threats: 1842, iocs: 14671, sources: 23, score: 8.4 })
@@ -604,6 +765,8 @@ export default function DashboardOverview() {
     }, 3000)
     return () => clearInterval(id)
   }, [])
+
+  if (!isPower) return <NormalDashboard count={count} />
 
   return (
     <div className="p-6 space-y-6">
@@ -645,20 +808,6 @@ export default function DashboardOverview() {
               <p className="text-[10px] text-ink-500 mt-0.5">{m.sub}</p>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Normal-mode hint — makes the gated content discoverable rather than
-          silently absent (toggle lives in the top bar). */}
-      {!isPower && (
-        <div className="flex items-center gap-3 glass border border-white/5 rounded-xl px-4 py-3">
-          <div className="p-1.5 rounded-lg bg-magenta/10 shrink-0">
-            <Zap className="w-3.5 h-3.5 text-magenta" />
-          </div>
-          <p className="text-[11px] text-ink-400 flex-1 min-w-0">
-            <span className="text-ink-200 font-medium">Power User mode</span> unlocks SOC operations metrics (MTTD/MTTR, SLA, automation rate), the CTI investigation graph, MITRE ATT&CK heatmap, and SOAR playbooks &amp; analytics.
-          </p>
-          <span className="text-[10px] text-ink-600 hidden sm:block shrink-0">Switch it on in the top bar →</span>
         </div>
       )}
 

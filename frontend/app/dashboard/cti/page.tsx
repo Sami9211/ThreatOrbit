@@ -447,12 +447,151 @@ function SectorTargeting() {
   )
 }
 
+/* ── Normal Mode: Threat Brief ───────────────────────────────────── */
+function NormalCTI() {
+  const BRIEFS = [
+    {
+      id:     'lazarus',
+      actor:  'Lazarus Group',
+      origin: 'North Korea',
+      flag:   '🇰🇵',
+      sev:    'critical' as const,
+      what:   'Nation-state APT actively targeting financial institutions and cryptocurrency exchanges. Recent campaigns use spear-phishing with malicious Office macros and trojanised software updates.',
+      action: 'Verify MFA is enabled for all remote access endpoints. Block execution of macros from internet-originated files via Group Policy.',
+      iocs:   4821,
+      color:  '#FF2E97',
+    },
+    {
+      id:     'apt29',
+      actor:  'APT29 (Cozy Bear)',
+      origin: 'Russia',
+      flag:   '🇷🇺',
+      sev:    'high' as const,
+      what:   'Ongoing espionage campaign targeting government and technology organisations via supply chain compromise and credential harvesting through phishing and OAuth token theft.',
+      action: 'Review privileged account activity logs and enforce conditional access policies on all cloud services. Rotate any recently-exposed service account credentials.',
+      iocs:   3124,
+      color:  '#FF4D6D',
+    },
+    {
+      id:     'volt',
+      actor:  'Volt Typhoon',
+      origin: 'China',
+      flag:   '🇨🇳',
+      sev:    'high' as const,
+      what:   'Pre-positioning for potential disruptive attacks on critical infrastructure sectors. Uses living-off-the-land techniques (LOLbins) to blend in with normal admin activity and evade EDR.',
+      action: 'Audit anomalous usage of LOLbins (certutil, netsh, wmic, ntdsutil). Flag admin accounts accessing systems outside normal business hours.',
+      iocs:   1892,
+      color:  '#FFB23E',
+    },
+  ]
+
+  const SEV_COLOR: Record<string, string> = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E' }
+
+  const SUMMARY = [
+    { label: 'Tracked Actors', value: '6',      icon: Target, color: '#FF2E97' },
+    { label: 'Total IOCs',     value: '14,671', icon: Hash,   color: '#7A3CFF' },
+    { label: 'Campaigns',      value: '9',      icon: Shield, color: '#FFB23E' },
+    { label: 'Threat Feeds',   value: '23',     icon: Globe,  color: '#2DD4BF' },
+  ]
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-display text-xl font-bold text-white">Threat Brief</h1>
+          <p className="text-xs text-ink-500 mt-0.5">Today's top threats — what's happening and what to do</p>
+        </div>
+        <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
+          <Eye className="w-3 h-3" /> Normal mode
+        </span>
+      </div>
+
+      {/* IOC summary strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {SUMMARY.map(({ label, value, icon: Icon, color }) => (
+          <motion.div key={label}
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            className="glass border border-white/5 rounded-xl p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl shrink-0" style={{ background: `${color}18` }}>
+              <Icon className="w-4 h-4" style={{ color }} />
+            </div>
+            <div>
+              <p className="text-xs text-ink-500">{label}</p>
+              <p className="font-display text-xl font-bold text-white">{value}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Threat Brief Cards */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-white">Active Threats Affecting Your Sector</h2>
+        {BRIEFS.map((b, i) => (
+          <motion.div key={b.id}
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+            className="glass border border-white/5 rounded-xl p-5 space-y-4">
+            {/* Actor row */}
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
+                style={{ background: `${b.color}15` }}>
+                {b.flag}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-white">{b.actor}</h3>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase"
+                    style={{ background: `${SEV_COLOR[b.sev]}1a`, color: SEV_COLOR[b.sev] }}>
+                    {b.sev}
+                  </span>
+                  <span className="text-[10px] text-ink-600">{b.origin}</span>
+                </div>
+                <p className="text-[10px] text-ink-500 mt-0.5">{b.iocs.toLocaleString()} tracked IOCs</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">What's Happening</p>
+                <p className="text-sm text-ink-300 leading-relaxed">{b.what}</p>
+              </div>
+              <div className="p-3.5 rounded-xl border border-safe/15 bg-safe/5 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-safe" />
+                  <p className="text-[10px] uppercase tracking-widest text-safe font-semibold">Recommended Action</p>
+                </div>
+                <p className="text-sm text-ink-300 leading-relaxed">{b.action}</p>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Power mode CTA */}
+      <div className="glass border border-white/5 rounded-xl p-5 flex items-center gap-4">
+        <div className="p-2.5 rounded-xl bg-magenta/10 shrink-0">
+          <Brain className="w-5 h-5 text-magenta" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white">Full CTI analysis in Power User mode</p>
+          <p className="text-xs text-ink-400 mt-0.5">
+            Investigation graph, MITRE ATT&CK coverage, IOC database, actor correlation, threat hunt panel, and campaign timeline
+          </p>
+        </div>
+        <span className="text-xs text-ink-500 shrink-0 hidden sm:block">Toggle in top bar →</span>
+      </div>
+    </div>
+  )
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function CTIPage() {
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
   const graph = buildGraph(selectedActor)
+
+  if (!isPower) return <NormalCTI />
 
   return (
     <div className="p-6 space-y-6">
