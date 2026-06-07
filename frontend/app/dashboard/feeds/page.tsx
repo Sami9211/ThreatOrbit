@@ -242,20 +242,23 @@ function timeAgo(ts: string) {
 function ConfidenceRing({ value }: { value: number }) {
   const r = 10
   const circ = 2 * Math.PI * r
-  const color = value >= 85 ? '#FF2E97' : value >= 65 ? '#FFB23E' : '#34F5C5'
+  const color = value >= 85 ? 'rgb(var(--magenta))' : value >= 65 ? 'rgb(var(--amber))' : 'rgb(var(--safe))'
   return (
-    <svg width="28" height="28" className="shrink-0 -rotate-90">
-      <circle cx="14" cy="14" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
-      <circle
-        cx="14" cy="14" r={r} fill="none"
-        stroke={color} strokeWidth="3"
-        strokeDasharray={`${(value / 100) * circ} ${circ}`}
-        strokeLinecap="round"
-      />
+    <svg width="28" height="28" viewBox="0 0 28 28" className="shrink-0">
+      {/* Only the rings are rotated so progress starts at 12 o'clock; the
+          label stays upright and perfectly centred. */}
+      <g transform="rotate(-90 14 14)">
+        <circle cx="14" cy="14" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+        <circle
+          cx="14" cy="14" r={r} fill="none"
+          stroke={color} strokeWidth="3"
+          strokeDasharray={`${(value / 100) * circ} ${circ}`}
+          strokeLinecap="round"
+        />
+      </g>
       <text
         x="14" y="14"
-        dominantBaseline="middle" textAnchor="middle"
-        className="rotate-90" style={{ transformOrigin: '14px 14px' }}
+        dominantBaseline="central" textAnchor="middle"
         fill={color} fontSize="7" fontWeight="700"
       >
         {value}
@@ -286,7 +289,7 @@ function ThreatCard({
       exit={{ opacity: 0, x: -20, scale: 0.95 }}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        'rounded-xl border bg-[#0D0920] overflow-hidden',
+        'rounded-xl border bg-surface overflow-hidden',
         entry.status === 'confirmed'
           ? 'border-white/8'
           : 'border-amber/15',

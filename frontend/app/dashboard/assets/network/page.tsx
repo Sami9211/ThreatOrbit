@@ -261,7 +261,7 @@ export default function NetworkMapPage() {
                       <animate attributeName="opacity" values="0.4;0;0.4" dur="2.4s" repeatCount="indefinite" />
                     </circle>
                   )}
-                  <circle r={r} fill="#0D0920" stroke={color} strokeWidth={isSel ? 2.5 : 1.5} />
+                  <circle r={r} fill="rgb(var(--surface))" stroke={color} strokeWidth={isSel ? 2.5 : 1.5} />
                   <circle r={r} fill={color} fillOpacity={0.12} />
                   <foreignObject x={-9} y={-9} width={18} height={18} style={{ pointerEvents: 'none' }}>
                     <div className="w-[18px] h-[18px] flex items-center justify-center">
@@ -271,7 +271,7 @@ export default function NetworkMapPage() {
                   {(hoverId === n.id || isSel) && (
                     <g>
                       <rect x={-n.hostname.length * 3.4 - 6} y={r + 5} width={n.hostname.length * 6.8 + 12} height={16} rx={4}
-                        fill="#0D0920" stroke={color} strokeOpacity={0.4} strokeWidth={0.75} />
+                        fill="rgb(var(--surface))" stroke={color} strokeOpacity={0.4} strokeWidth={0.75} />
                       <text x={0} y={r + 16} textAnchor="middle" fontSize={9} fill="#E8E0F5" fontFamily="monospace">{n.hostname}</text>
                     </g>
                   )}
@@ -282,7 +282,7 @@ export default function NetworkMapPage() {
         </svg>
 
         {/* Legend */}
-        <div className="absolute bottom-4 left-4 rounded-xl border border-white/8 bg-[#0D0920]/90 backdrop-blur-sm px-3 py-2.5 space-y-2">
+        <div className="absolute bottom-4 left-4 rounded-xl border border-white/8 bg-surface/90 backdrop-blur-sm px-3 py-2.5 space-y-2">
           <div>
             <p className="text-[9px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Layers className="w-2.5 h-2.5" /> Zones</p>
             <div className="flex flex-col gap-1">
@@ -315,7 +315,7 @@ export default function NetworkMapPage() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: '110%', opacity: 0 }}
               transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-              className="absolute top-4 right-4 bottom-4 w-72 rounded-2xl border border-white/10 bg-[#0D0920]/95 backdrop-blur-md shadow-2xl overflow-y-auto">
+              className="absolute top-4 right-4 bottom-4 w-72 rounded-2xl border border-white/10 bg-surface/95 backdrop-blur-md shadow-2xl overflow-y-auto">
               {(() => {
                 const n = selected
                 const Icon = TYPE_ICON[n.type]

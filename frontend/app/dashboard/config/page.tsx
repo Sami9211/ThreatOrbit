@@ -5,10 +5,11 @@ import { motion } from 'framer-motion'
 import {
   Settings, Key, Bell, Shield, Database, Globe, Plug,
   Eye, EyeOff, Copy, RefreshCw, CheckCircle, Save,
-  Zap, User, BarChart2, ChevronRight,
+  Zap, User, BarChart2, ChevronRight, Palette, Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 
 /* ── Shared input ────────────────────────────────────────────────── */
 function Field({ label, value, type = 'text', hint }: { label: string; value: string; type?: string; hint?: string }) {
@@ -212,6 +213,76 @@ function ExperienceModeCard() {
   )
 }
 
+/* ── Theme picker ────────────────────────────────────────────────── */
+function ThemeCard() {
+  const [theme, setTheme] = useDashboardTheme()
+  const active = THEMES.find((t) => t.id === theme) ?? THEMES[0]
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      className="glass border border-white/5 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
+        <div className="p-2 rounded-lg" style={{ background: `${active.swatch[1]}22` }}>
+          <Palette className="w-4 h-4" style={{ color: active.swatch[1] }} />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-white">Dashboard Theme</h2>
+          <p className="text-[11px] text-ink-500 mt-0.5">Recolour the entire dashboard — applies instantly, only here (not the public site)</p>
+        </div>
+        <div className="ml-auto px-2.5 py-1 rounded-full text-[10px] font-semibold border border-white/12 bg-white/5 text-ink-200">
+          {active.label}
+        </div>
+      </div>
+
+      <div className="p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {THEMES.map((t) => {
+          const isActive = t.id === theme
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTheme(t.id)}
+              className={cn(
+                'group relative text-left rounded-xl border p-3 transition-all',
+                isActive
+                  ? 'border-white/25 shadow-lg'
+                  : 'border-white/8 hover:border-white/18 hover:bg-white/3',
+              )}
+              style={isActive ? { boxShadow: `0 0 22px ${t.swatch[1]}33`, borderColor: `${t.swatch[1]}66` } : undefined}
+            >
+              {/* Preview chip */}
+              <div
+                className="relative h-14 rounded-lg overflow-hidden mb-2.5 border border-white/8"
+                style={{ background: t.swatch[0] }}
+              >
+                <div className="absolute inset-0 flex items-end gap-1.5 p-2">
+                  <span className="w-6 h-6 rounded-md" style={{ background: t.swatch[1] }} />
+                  <span className="w-4 h-5 rounded-md" style={{ background: t.swatch[2] }} />
+                  <span className="w-3 h-4 rounded-md" style={{ background: t.swatch[3] }} />
+                  <span className="ml-auto w-8 h-2 rounded-full self-center" style={{ background: `${t.swatch[1]}55` }} />
+                </div>
+                {isActive && (
+                  <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: t.swatch[1] }}>
+                    <Check className="w-3 h-3" style={{ color: t.swatch[0] }} strokeWidth={3} />
+                  </div>
+                )}
+              </div>
+              <p className="text-xs font-semibold text-white">{t.label}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">{t.desc}</p>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="px-5 pb-4">
+        <p className="text-[10px] text-ink-700">
+          Your choice is saved to this browser and syncs across open dashboard tabs. The marketing site keeps its signature Plasma Noir look.
+        </p>
+      </div>
+    </motion.div>
+  )
+}
+
 /* ── Section wrapper ─────────────────────────────────────────────── */
 function Section({ title, icon: Icon, color, children }: {
   title: string; icon: React.ElementType; color: string; children: React.ReactNode
@@ -299,6 +370,9 @@ export default function ConfigPage() {
             <>
               {/* ── Experience Mode ─────────────────────────────────── */}
               <ExperienceModeCard />
+
+              {/* ── Dashboard Theme ─────────────────────────────────── */}
+              <ThemeCard />
 
               <Section title="Platform Settings" icon={Settings} color="#7A3CFF">
                 <div className="space-y-4">

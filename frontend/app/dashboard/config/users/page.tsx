@@ -156,9 +156,9 @@ function UserPanel({ user, onClose }: { user: TeamUser; onClose: () => void }) {
         exit={{ x: 440 }}
         transition={{ type: 'tween', duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md h-full bg-[#0D0920] border-l border-white/8 overflow-y-auto"
+        className="w-full max-w-md h-full bg-surface border-l border-white/8 overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8 sticky top-0 bg-[#0D0920] z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8 sticky top-0 bg-surface z-10">
           <h2 className="text-sm font-semibold text-white">User Details</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5">
             <X className="w-4 h-4" />
@@ -348,7 +348,7 @@ export default function UsersRolesPage() {
         {tab === 'roles' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {ROLES.map((role) => (
-              <div key={role.name} className="rounded-xl border border-white/8 bg-[#0D0920] p-4">
+              <div key={role.name} className="rounded-xl border border-white/8 bg-surface p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2">

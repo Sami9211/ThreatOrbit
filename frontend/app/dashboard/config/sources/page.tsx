@@ -90,9 +90,9 @@ function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: ()
         exit={{ x: 420 }}
         transition={{ type: 'tween', duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md h-full bg-[#0D0920] border-l border-white/8 overflow-y-auto"
+        className="w-full max-w-md h-full bg-surface border-l border-white/8 overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8 sticky top-0 bg-[#0D0920] z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8 sticky top-0 bg-surface z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg" style={{ background: `${connector.color}18` }}>
               <Database className="w-4 h-4" style={{ color: connector.color }} />
@@ -183,7 +183,7 @@ function ConnectorCard({ connector, onConfigure }: { connector: Connector; onCon
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-white/8 bg-[#0D0920] p-4 hover:border-white/15 transition-colors"
+      className="rounded-xl border border-white/8 bg-surface p-4 hover:border-white/15 transition-colors"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -283,7 +283,7 @@ export default function DataSourcesPage() {
             {CUSTOM_SOURCES.map(({ id, name, description, icon: Icon }) => (
               <button
                 key={id}
-                className="flex flex-col items-start gap-2 p-4 rounded-xl border border-dashed border-white/12 bg-[#0D0920] hover:border-magenta/30 hover:bg-magenta/5 transition-colors text-left"
+                className="flex flex-col items-start gap-2 p-4 rounded-xl border border-dashed border-white/12 bg-surface hover:border-magenta/30 hover:bg-magenta/5 transition-colors text-left"
               >
                 <div className="flex items-center gap-2">
                   <Icon className="w-4 h-4 text-violet" />

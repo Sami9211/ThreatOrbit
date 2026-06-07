@@ -648,6 +648,20 @@ export default function DashboardOverview() {
         </div>
       )}
 
+      {/* Normal-mode hint — makes the gated content discoverable rather than
+          silently absent (toggle lives in the top bar). */}
+      {!isPower && (
+        <div className="flex items-center gap-3 glass border border-white/5 rounded-xl px-4 py-3">
+          <div className="p-1.5 rounded-lg bg-magenta/10 shrink-0">
+            <Zap className="w-3.5 h-3.5 text-magenta" />
+          </div>
+          <p className="text-[11px] text-ink-400 flex-1 min-w-0">
+            <span className="text-ink-200 font-medium">Power User mode</span> unlocks SOC operations metrics (MTTD/MTTR, SLA, automation rate), the CTI investigation graph, MITRE ATT&CK heatmap, and SOAR playbooks &amp; analytics.
+          </p>
+          <span className="text-[10px] text-ink-600 hidden sm:block shrink-0">Switch it on in the top bar →</span>
+        </div>
+      )}
+
       {/* Intel Brief Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <TrendingCVEs />

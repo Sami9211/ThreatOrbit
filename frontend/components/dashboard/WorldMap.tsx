@@ -192,7 +192,7 @@ function CountryTooltip({
       <div
         className="rounded-xl border p-3 text-xs shadow-2xl"
         style={{
-          background: '#0D0920F5',
+          background: 'rgb(var(--surface) / 0.96)',
           borderColor: data.color + '44',
           backdropFilter: 'blur(12px)',
         }}

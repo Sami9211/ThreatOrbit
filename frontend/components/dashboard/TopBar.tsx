@@ -2,9 +2,43 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, RefreshCw, User, AlertTriangle, X, Search, Command, Menu } from 'lucide-react'
+import { Bell, RefreshCw, User, AlertTriangle, X, Search, Command, Menu, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { useExperienceMode } from '@/lib/useExperienceMode'
+
+/* Compact segmented Normal/Power toggle — surfaces the experience mode so the
+   difference is one tap away (it was previously buried in Configuration). */
+function ModeToggle() {
+  const [mode, setMode] = useExperienceMode()
+  return (
+    <div className="hidden sm:flex items-center p-0.5 rounded-lg bg-surface-2 border border-white/8" role="group" aria-label="Experience mode">
+      {(['normal', 'power'] as const).map((m) => {
+        const active = mode === m
+        return (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            aria-pressed={active}
+            className="relative px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+          >
+            {active && (
+              <motion.span
+                layoutId="mode-toggle-pill"
+                className={cn('absolute inset-0 rounded-md', m === 'power' ? 'bg-magenta/15 border border-magenta/30' : 'bg-white/8 border border-white/12')}
+                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+              />
+            )}
+            <span className={cn('relative z-10 flex items-center gap-1', active ? (m === 'power' ? 'text-magenta' : 'text-white') : 'text-ink-500')}>
+              {m === 'power' && <Zap className="w-2.5 h-2.5" />}
+              {m === 'power' ? 'Power' : 'Normal'}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 const LABELS: Record<string, string> = {
   '/dashboard': 'Overview',
@@ -67,7 +101,7 @@ export default function TopBar() {
   const unread = visible.length
 
   return (
-    <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-[#0D0920]/60 backdrop-blur-sm sticky top-0 z-30">
+    <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/60 backdrop-blur-sm sticky top-0 z-30">
       <div className="flex items-center gap-2 text-sm">
         {/* Mobile hamburger — dispatches event to Sidebar */}
         <button
@@ -83,6 +117,9 @@ export default function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Experience mode toggle */}
+        <ModeToggle />
+
         {/* Command palette trigger */}
         <button
           onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))}
