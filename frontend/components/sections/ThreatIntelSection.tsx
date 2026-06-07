@@ -103,12 +103,13 @@ export default function ThreatIntelSection() {
   }, [prefersReducedMotion, feedVisible])
 
   return (
-    <section id="threat-intel" ref={ref} className="py-28 max-w-7xl mx-auto px-6">
+    <section id="threat-intel" ref={ref} className="py-28 max-w-7xl mx-auto px-6 overflow-x-clip">
       <div className="grid lg:grid-cols-2 gap-16 items-center">
         <motion.div
           initial={{ opacity: 0, x: -32 }}
           animate={inView ? { opacity: 1, x: 0 } : {}}
           transition={{ duration: 0.7 }}
+          className="min-w-0"
         >
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-magenta/20 bg-magenta/5 mb-6">
             <Radio className="w-3 h-3 text-magenta" />
@@ -145,7 +146,7 @@ export default function ThreatIntelSection() {
             ))}
           </div>
 
-          <div className="glass border border-white/8 rounded-xl p-4 font-mono text-xs text-ink-300">
+          <div className="glass border border-white/8 rounded-xl p-4 font-mono text-xs text-ink-300 overflow-x-auto">
             <div className="text-ink-500 mb-1"># Trigger ingestion</div>
             <div>
               <span className="text-magenta">POST</span> /api/fetch{' '}

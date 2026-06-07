@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Home, Info, DollarSign, BookOpen,
-  Activity, ChevronRight, Globe, Menu, X,
+  Activity, ChevronRight, Globe, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
@@ -24,16 +24,9 @@ export default function LandingSidebar() {
 
   return (
     <>
-      {/* Mobile hamburger button — visible only on small screens */}
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Open navigation"
-        className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-[#0D0920]/80 border border-white/10 text-ink-400 hover:text-white backdrop-blur-sm transition-colors"
-      >
-        <Menu className="w-4 h-4" />
-      </button>
-
-      {/* Desktop hover trigger strip */}
+      {/* Desktop hover trigger strip. (Mobile navigation is handled by the
+          Navbar's menu button, which opens the full-screen MegaMenu — a
+          second hamburger here would overlap the Navbar logo on phones.) */}
       <div
         className="hidden md:block fixed left-0 top-0 bottom-0 z-50 w-4 cursor-pointer"
         onMouseEnter={() => setOpen(true)}
