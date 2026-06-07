@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Github, ExternalLink } from 'lucide-react'
 import Logo from '@/components/ui/Logo'
 
@@ -39,13 +40,13 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-6 gap-10 mb-14">
           <div className="col-span-2">
-            <a href="/" className="flex items-center gap-2.5 mb-4 group w-fit">
+            <Link href="/" className="flex items-center gap-2.5 mb-4 group w-fit">
               <Logo size={26} />
               <span className="font-display font-semibold text-base">
                 <span className="text-white">Threat</span>
                 <span className="text-gradient-magenta">Orbit</span>
               </span>
-            </a>
+            </Link>
             <p className="text-sm text-ink-500 leading-relaxed max-w-xs">
               Enterprise threat intelligence ingestion, log anomaly detection, and OpenCTI
               integration — built for the modern security team.
@@ -60,13 +61,13 @@ export default function Footer() {
               >
                 <Github className="w-4 h-4" />
               </a>
-              <a
+              <Link
                 href="/docs"
                 className="p-2 rounded-lg border border-white/8 text-ink-500 hover:text-white hover:border-magenta/30 transition-all duration-200"
                 aria-label="Documentation"
               >
                 <ExternalLink className="w-4 h-4" />
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -76,10 +77,10 @@ export default function Footer() {
               <ul className="space-y-2.5">
                 {items.map((item) => (
                   <li key={item.label}>
-                    <a href={item.href} className="group inline-flex items-center text-sm text-ink-500 hover:text-ink-200 transition-colors duration-200">
+                    <Link href={item.href} className="group inline-flex items-center text-sm text-ink-500 hover:text-ink-200 transition-colors duration-200">
                       <span className="w-0 group-hover:w-2.5 h-px bg-magenta mr-0 group-hover:mr-1.5 transition-all duration-300" />
                       {item.label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

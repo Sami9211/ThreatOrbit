@@ -191,7 +191,7 @@ const CASES: CaseRecord[] = [
   {
     id: 'CASE-0437',
     title: 'SQL injection campaign — 847 attempts, 15 bypass events',
-    type: 'Web Attack', severity: 'high', status: 'assigned',
+    type: 'Web Attack', severity: 'high', status: 'new',
     owner: null, playbook: 'Web Attack Triage',
     slaHours: 12, created: '2024-11-12T13:10:00Z', updated: '2024-11-12T13:10:00Z',
     alertCount: 1,

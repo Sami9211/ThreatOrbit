@@ -101,7 +101,13 @@ export default function Navbar() {
               <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
             </a>
             <a
-              href="#cta"
+              href="/login"
+              className="hidden md:flex items-center px-3 py-2 rounded-lg text-ink-300 font-medium text-sm transition-colors hover:text-white"
+            >
+              Sign in
+            </a>
+            <a
+              href="/signup"
               className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/12 text-ink-200 font-medium text-sm transition-all duration-300 hover:border-magenta/30 hover:text-white"
             >
               Get Started

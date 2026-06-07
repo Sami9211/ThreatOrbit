@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, RefreshCw, User, AlertTriangle, X, Search, Command, Menu, Zap } from 'lucide-react'
+import { Bell, RefreshCw, AlertTriangle, X, Search, Command, Menu, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
@@ -12,7 +12,7 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 function ModeToggle() {
   const [mode, setMode] = useExperienceMode()
   return (
-    <div className="hidden sm:flex items-center p-0.5 rounded-lg bg-surface-2 border border-white/8" role="group" aria-label="Experience mode">
+    <div className="flex items-center p-0.5 rounded-lg bg-surface-2 border border-white/8" role="group" aria-label="Experience mode">
       {(['normal', 'power'] as const).map((m) => {
         const active = mode === m
         return (
@@ -20,7 +20,7 @@ function ModeToggle() {
             key={m}
             onClick={() => setMode(m)}
             aria-pressed={active}
-            className="relative px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+            className="relative px-2 sm:px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
           >
             {active && (
               <motion.span
@@ -235,7 +235,7 @@ export default function TopBar() {
         {/* User */}
         <div className="flex items-center gap-2 pl-2 border-l border-white/8">
           <div className="w-7 h-7 rounded-lg bg-plasma flex items-center justify-center">
-            <User className="w-3.5 h-3.5 text-white" />
+            <span className="text-xs font-bold text-white">A</span>
           </div>
           <div className="hidden sm:block">
             <div className="text-xs font-medium text-white">Admin</div>

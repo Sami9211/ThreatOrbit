@@ -711,7 +711,7 @@ export default function PricingPage() {
                   {/* CTA Buttons */}
                   <div className="space-y-2.5">
                     <a
-                      href="/dashboard"
+                      href="/signup"
                       className="group relative flex items-center justify-center gap-2 w-full py-3 px-5 rounded-xl font-semibold text-sm text-white transition-all duration-300 overflow-hidden hover:scale-[1.02] hover:shadow-magenta-md"
                       style={{
                         background: 'linear-gradient(135deg, #FF2E97 0%, #7A3CFF 55%, #FFB23E 100%)',
@@ -895,7 +895,7 @@ export default function PricingPage() {
               {/* Free CTA */}
               <div className="px-4 py-5 flex items-center justify-center">
                 <a
-                  href="/dashboard"
+                  href="/signup"
                   className="text-xs font-semibold text-safe/80 hover:text-safe border border-safe/20 hover:border-safe/40 rounded-lg px-3 py-2 transition-all duration-200 text-center whitespace-nowrap"
                 >
                   Get started free
@@ -904,7 +904,7 @@ export default function PricingPage() {
               {/* Starter CTA */}
               <div className="px-4 py-5 flex items-center justify-center">
                 <a
-                  href="/dashboard"
+                  href="/signup"
                   className="text-xs font-semibold text-amber/80 hover:text-amber border border-amber/20 hover:border-amber/40 rounded-lg px-3 py-2 transition-all duration-200 text-center whitespace-nowrap"
                 >
                   Start Starter
@@ -913,7 +913,7 @@ export default function PricingPage() {
               {/* Professional CTA */}
               <div className="px-4 py-5 flex items-center justify-center bg-magenta-50">
                 <a
-                  href="/dashboard"
+                  href="/signup"
                   className="text-xs font-semibold text-white bg-magenta hover:bg-magenta/90 rounded-lg px-4 py-2 transition-all duration-200 text-center whitespace-nowrap shadow-magenta-sm hover:shadow-magenta-md"
                 >
                   Go Pro

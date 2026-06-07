@@ -186,7 +186,7 @@ export default function Hero() {
             className="flex flex-wrap gap-4"
           >
             <MagneticButton
-              href="#cta"
+              href="/signup"
               className="px-6 py-3 rounded-xl bg-plasma text-white font-semibold text-sm transition-shadow duration-300 hover:shadow-magenta-md"
             >
               Start for Free

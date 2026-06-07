@@ -6,19 +6,24 @@ import {
   Settings, Key, Bell, Shield, Database, Globe, Plug,
   Eye, EyeOff, Copy, RefreshCw, CheckCircle, Save,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
+  PanelLeftOpen, PanelLeftClose, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 
 /* ── Shared input ────────────────────────────────────────────────── */
-function Field({ label, value, type = 'text', hint }: { label: string; value: string; type?: string; hint?: string }) {
+function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
+  label: string; value: string; type?: string; hint?: string
+  onChange?: (v: string) => void; placeholder?: string
+}) {
   return (
     <div>
       <label className="block text-xs font-medium text-ink-300 mb-1.5">{label}</label>
       <input
         type={type}
-        defaultValue={value}
+        placeholder={placeholder}
+        {...(onChange ? { value, onChange: (e) => onChange(e.target.value) } : { defaultValue: value })}
         className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600"
       />
       {hint && <p className="text-[10px] text-ink-600 mt-1">{hint}</p>}
@@ -36,9 +41,12 @@ function Toggle({ label, description, checked }: { label: string; description: s
       </div>
       <button
         onClick={() => setOn((o) => !o)}
-        className={cn('w-9 h-5 rounded-full transition-colors shrink-0', on ? 'bg-safe' : 'bg-ink-600')}
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', on ? 'bg-safe' : 'bg-ink-600')}
       >
-        <div className={cn('w-3.5 h-3.5 rounded-full bg-white mt-0.5 transition-transform mx-auto', on ? 'translate-x-2' : '-translate-x-2')} />
+        <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all', on ? 'left-[18px]' : 'left-0.5')} />
       </button>
     </div>
   )
@@ -81,6 +89,66 @@ function APIKey({ label, value, scope }: { label: string; value: string; scope: 
   )
 }
 
+/* ── Create-new-key form (interactive) ───────────────────────────── */
+function CreateApiKey() {
+  const [name, setName] = useState('')
+  const [scope, setScope] = useState('Read Only')
+  const [generated, setGenerated] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  function randKey() {
+    const prefix = scope === 'Full Admin' ? 'to_ak_live_' : scope === 'Read + Write' ? 'to_sk_live_' : 'to_rk_live_'
+    const body = Array.from({ length: 36 }, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')
+    return prefix + body
+  }
+
+  return (
+    <div className="glass border border-white/5 rounded-xl p-4">
+      <h3 className="text-xs font-semibold text-white mb-3">Create New API Key</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <Field label="Key Name" value={name} onChange={setName} placeholder="e.g. CI pipeline" />
+        <div>
+          <label className="block text-xs font-medium text-ink-300 mb-1.5">Scope</label>
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40"
+          >
+            <option>Read Only</option>
+            <option>Read + Write</option>
+            <option>Full Admin</option>
+          </select>
+        </div>
+      </div>
+      <button
+        onClick={() => { setGenerated(randKey()); setCopied(false) }}
+        className="px-4 py-2 rounded-xl bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all"
+      >
+        Generate Key
+      </button>
+
+      {generated && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+          className="mt-3 overflow-hidden"
+        >
+          <div className="flex items-center gap-2 rounded-lg bg-surface-3 border border-safe/20 px-3 py-2">
+            <span className="font-mono text-[11px] text-safe flex-1 truncate">{generated}</span>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(generated); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              className="p-1 rounded text-ink-400 hover:text-white transition-colors shrink-0"
+              aria-label="Copy key"
+            >
+              {copied ? <CheckCircle className="w-3.5 h-3.5 text-safe" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-amber mt-1.5">Copy this key now — for security it won&apos;t be shown again.</p>
+        </motion.div>
+      )}
+    </div>
+  )
+}
+
 /* ── Feed source row ─────────────────────────────────────────────── */
 function FeedSource({ name, url, enabled, lastSync, icon }: {
   name: string; url: string; enabled: boolean; lastSync: string; icon: string
@@ -96,9 +164,12 @@ function FeedSource({ name, url, enabled, lastSync, icon }: {
       </div>
       <button
         onClick={() => setOn((o) => !o)}
-        className={cn('w-9 h-5 rounded-full transition-colors shrink-0', on ? 'bg-safe' : 'bg-ink-600')}
+        role="switch"
+        aria-checked={on}
+        aria-label={`Toggle ${name}`}
+        className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', on ? 'bg-safe' : 'bg-ink-600')}
       >
-        <div className={cn('w-3.5 h-3.5 rounded-full bg-white mt-0.5 transition-transform mx-auto', on ? 'translate-x-2' : '-translate-x-2')} />
+        <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all', on ? 'left-[18px]' : 'left-0.5')} />
       </button>
     </div>
   )
@@ -314,6 +385,73 @@ const TABS = [
   { id: 'integrations',label: 'Integrations',     icon: Plug     },
 ]
 
+/* ── Collapsible settings nav ────────────────────────────────────────
+   Default state is a slim icon rail. Hovering expands it (desktop); clicking
+   the pin toggle keeps it open so it works on touch / mobile too. */
+function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => void }) {
+  const [pinned, setPinned] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const expanded = pinned || hovered
+  const activeTab = TABS.find((t) => t.id === tab)
+
+  return (
+    <nav
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={cn(
+        'shrink-0 transition-[width] duration-300 ease-out',
+        expanded ? 'w-48' : 'w-12',
+      )}
+    >
+      <div className="sticky top-4 glass border border-white/8 rounded-2xl p-2 overflow-hidden">
+        {/* Pin / expand toggle */}
+        <button
+          onClick={() => setPinned((p) => !p)}
+          aria-label={pinned ? 'Unpin settings menu' : 'Pin settings menu open'}
+          aria-pressed={pinned}
+          className="w-full flex items-center gap-3 px-2 py-2 rounded-xl text-ink-400 hover:text-white hover:bg-white/5 transition-colors mb-1"
+        >
+          <span className="w-5 flex justify-center shrink-0">
+            {pinned ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </span>
+          <span className={cn('text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap transition-opacity',
+            expanded ? 'opacity-100' : 'opacity-0')}>
+            {pinned ? 'Collapse' : 'Settings'}
+          </span>
+        </button>
+
+        <div className="h-px bg-white/6 mx-1 mb-1" />
+
+        <div className="space-y-0.5">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              title={!expanded ? label : undefined}
+              className={cn(
+                'w-full flex items-center gap-3 px-2 py-2.5 rounded-xl text-xs font-medium transition-colors text-left',
+                tab === id
+                  ? 'bg-magenta/10 text-magenta'
+                  : 'text-ink-400 hover:text-white hover:bg-white/5',
+              )}
+            >
+              <span className="w-5 flex justify-center shrink-0"><Icon className="w-4 h-4" /></span>
+              <span className={cn('whitespace-nowrap transition-opacity', expanded ? 'opacity-100' : 'opacity-0')}>
+                {label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Collapsed-state breadcrumb of the active section (mobile clarity) */}
+      {!expanded && activeTab && (
+        <p className="text-[10px] text-ink-600 text-center mt-2 px-1 leading-tight">{activeTab.label}</p>
+      )}
+    </nav>
+  )
+}
+
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function ConfigPage() {
   const [tab, setTab] = useState('general')
@@ -325,9 +463,9 @@ export default function ConfigPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+    <div className="p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-6 gap-3">
+        <div className="min-w-0">
           <h1 className="font-display text-xl font-bold text-white">Configuration</h1>
           <p className="text-xs text-ink-500 mt-0.5">Platform settings, API keys, integrations, and notifications</p>
         </div>
@@ -338,34 +476,16 @@ export default function ConfigPage() {
             saved ? 'bg-safe/15 text-safe border border-safe/25' : 'bg-plasma text-white hover:shadow-magenta-sm',
           )}
         >
-          {saved ? <><CheckCircle className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> Save Changes</>}
+          {saved ? <><CheckCircle className="w-4 h-4" /> <span className="hidden sm:inline">Saved!</span></> : <><Save className="w-4 h-4" /> <span className="hidden sm:inline">Save Changes</span></>}
         </button>
       </div>
 
-      <div className="flex gap-6">
-        {/* Side nav */}
-        <nav className="w-44 shrink-0">
-          <div className="space-y-0.5">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors text-left',
-                  tab === id
-                    ? 'bg-magenta/10 text-magenta border border-magenta/20'
-                    : 'text-ink-400 hover:text-white hover:bg-white/5',
-                )}
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </nav>
+      <div className="flex gap-4 sm:gap-6">
+        {/* Collapsible side nav */}
+        <SettingsNav tab={tab} setTab={setTab} />
 
         {/* Content */}
-        <div className="flex-1 space-y-5">
+        <div className="flex-1 min-w-0 space-y-5">
           {tab === 'general' && (
             <>
               {/* ── Experience Mode ─────────────────────────────────── */}
@@ -379,7 +499,7 @@ export default function ConfigPage() {
                   <Field label="Platform Name" value="ThreatOrbit Production" />
                   <Field label="Organization" value="Acme Security Corp" />
                   <Field label="API Base URL" value="https://api.threatorbit.space" hint="The base URL for all API endpoints" />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Timezone" value="UTC" />
                     <Field label="Feed Update Interval (seconds)" value="3" type="number" hint="Minimum: 1 second" />
                   </div>
@@ -417,23 +537,7 @@ export default function ConfigPage() {
                   scope="Read Only"
                 />
               </div>
-              <div className="glass border border-white/5 rounded-xl p-4">
-                <h3 className="text-xs font-semibold text-white mb-3">Create New API Key</h3>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <Field label="Key Name" value="" />
-                  <div>
-                    <label className="block text-xs font-medium text-ink-300 mb-1.5">Scope</label>
-                    <select className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
-                      <option>Read Only</option>
-                      <option>Read + Write</option>
-                      <option>Full Admin</option>
-                    </select>
-                  </div>
-                </div>
-                <button className="px-4 py-2 rounded-xl bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
-                  Generate Key
-                </button>
-              </div>
+              <CreateApiKey />
             </Section>
           )}
 
