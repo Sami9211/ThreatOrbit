@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, CheckCircle, Clock, AlertTriangle, X, Shield, User,
   FileText, MessageSquare, ChevronDown, Search, Play, RefreshCw,
-  BarChart2, ArrowRight, Terminal, Paperclip, Flag,
+  BarChart2, ArrowRight, Terminal, Paperclip, Flag, Eye,
   GitBranch, Activity, TrendingUp, TrendingDown, Database,
   ChevronRight, MoreHorizontal, Circle,
 } from 'lucide-react'
@@ -599,6 +599,103 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   )
 }
 
+/* ── Normal Mode: Case Kanban Board ──────────────────────────────── */
+function NormalSOAR() {
+  const SEV_COLOR: Record<string, string> = {
+    critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#2DD4BF',
+  }
+  const COLS = [
+    { id: 'todo',       label: 'New',         statuses: ['new'],                                  color: '#FFB23E', border: 'border-amber/25',   header: 'bg-amber/10 text-amber'   },
+    { id: 'inprogress', label: 'In Progress',  statuses: ['assigned', 'in-progress', 'pending'],  color: '#7A3CFF', border: 'border-violet/25',  header: 'bg-violet/10 text-violet' },
+    { id: 'done',       label: 'Resolved',     statuses: ['resolved', 'closed'],                  color: '#34F5C5', border: 'border-safe/25',    header: 'bg-safe/10 text-safe'     },
+  ]
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-white/5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
+        <div>
+          <h1 className="font-display text-xl font-bold text-white">Case Board</h1>
+          <p className="text-xs text-ink-500 mt-0.5">
+            {CASES.length} cases · track progress at a glance
+          </p>
+        </div>
+        <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium self-start">
+          <Eye className="w-3 h-3" /> Normal mode
+        </span>
+      </div>
+
+      {/* Board */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {COLS.map(({ id, label, statuses, color, border, header }) => {
+            const colCases = CASES.filter((c) => statuses.includes(c.status))
+            return (
+              <div key={id} className={cn('glass border rounded-xl overflow-hidden flex flex-col', border)}>
+                <div className={cn('flex items-center justify-between px-4 py-3', header)}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+                    <span className="text-sm font-semibold">{label}</span>
+                  </div>
+                  <span className="text-sm font-bold">{colCases.length}</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[160px]">
+                  {colCases.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-ink-600">No cases</div>
+                  ) : (
+                    colCases.map((c) => (
+                      <motion.div
+                        key={c.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="glass border border-white/5 rounded-lg p-3.5 space-y-2 hover:border-white/10 transition-colors group"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: SEV_COLOR[c.severity] }} />
+                          <p className="text-xs text-ink-100 leading-snug flex-1 group-hover:text-white transition-colors">{c.title}</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-ink-500 font-mono flex-wrap">
+                          <span>{c.id}</span>
+                          <span>·</span>
+                          <span className="text-ink-600">{c.type}</span>
+                          {c.owner && <><span>·</span><span>{c.owner}</span></>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase"
+                            style={{ background: `${SEV_COLOR[c.severity]}1a`, color: SEV_COLOR[c.severity] }}>
+                            {c.severity}
+                          </span>
+                          <span className="text-[10px] text-ink-600">
+                            {c.alertCount} alert{c.alertCount !== 1 ? 's' : ''}
+                          </span>
+                          <span className="text-[10px] text-ink-600 ml-auto">
+                            SLA {c.slaHours}h
+                          </span>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Power mode CTA */}
+        <div className="glass border border-white/5 rounded-xl p-4 flex items-center gap-4">
+          <div className="p-2 rounded-lg bg-magenta/10 shrink-0">
+            <Zap className="w-4 h-4 text-magenta" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-white">Power User mode shows playbooks, automation analytics & war rooms</p>
+            <p className="text-[10px] text-ink-400 mt-0.5">Full case investigation, evidence chain, SOAR playbook editor, and automation ROI metrics</p>
+          </div>
+          <span className="text-[10px] text-ink-500 shrink-0 hidden sm:block">Toggle in top bar →</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SOARPage() {
   const [mode] = useExperienceMode()
@@ -643,6 +740,8 @@ export default function SOARPage() {
       }, i * 900 + 700)
     })
   }
+
+  if (isNormal) return <NormalSOAR />
 
   return (
     <div className="flex h-full overflow-hidden">
