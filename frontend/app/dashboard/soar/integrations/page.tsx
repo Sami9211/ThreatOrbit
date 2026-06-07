@@ -141,7 +141,7 @@ export default function SoarIntegrationsPage() {
                   'rounded-xl border p-4 cursor-pointer transition-all',
                   isSelected
                     ? 'border-magenta/30 bg-magenta/5 ring-1 ring-magenta/20'
-                    : 'border-white/8 bg-[#0D0920] hover:border-white/15',
+                    : 'border-white/8 bg-surface hover:border-white/15',
                   !isEnabled && 'opacity-50',
                 )}
               >

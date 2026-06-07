@@ -113,7 +113,7 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0D0920] p-6"
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-surface p-6"
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -274,7 +274,7 @@ export default function ApiKeysPage() {
             {WEBHOOKS.map((w) => {
               const st = WH_STATUS_CFG[w.status]
               return (
-                <div key={w.id} className="flex items-center gap-4 p-4 rounded-xl border border-white/8 bg-[#0D0920]">
+                <div key={w.id} className="flex items-center gap-4 p-4 rounded-xl border border-white/8 bg-surface">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-ink-200 truncate">{w.url}</p>
                     <div className="flex flex-wrap gap-1 mt-1.5">

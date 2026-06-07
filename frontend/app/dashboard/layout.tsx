@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Sidebar from '@/components/dashboard/Sidebar'
 import TopBar from '@/components/dashboard/TopBar'
 import CommandPalette from '@/components/dashboard/CommandPalette'
+import ThemeScope from '@/components/dashboard/ThemeScope'
 
 export const metadata: Metadata = {
   title: {
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-bg">
+    <ThemeScope>
       <Sidebar />
       <div className="flex-1 ml-0 md:ml-14 flex flex-col min-h-screen">
         <TopBar />
@@ -21,6 +22,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <CommandPalette />
-    </div>
+    </ThemeScope>
   )
 }

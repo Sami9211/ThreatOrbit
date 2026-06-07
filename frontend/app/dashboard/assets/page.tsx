@@ -116,10 +116,10 @@ function RiskRing({ score, size = 52 }: { score: number; size?: number }) {
   const r = size / 2 - 7
   const circ = 2 * Math.PI * r
   const fill = (score / 100) * circ
-  const color = score >= 70 ? '#FF2E97' : score >= 40 ? '#FFB23E' : '#34F5C5'
+  const color = score >= 70 ? 'rgb(var(--magenta))' : score >= 40 ? 'rgb(var(--amber))' : 'rgb(var(--safe))'
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={5} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={5}
           strokeDasharray={`${fill} ${circ}`} strokeLinecap="round" />
@@ -600,7 +600,7 @@ export default function AssetsPage() {
           is selected (the inline column would otherwise be unreachable). */}
       <div
         className={cn(
-          'border-l border-white/5 flex flex-col overflow-hidden bg-[#0D0920]',
+          'border-l border-white/5 flex flex-col overflow-hidden bg-surface',
           'xl:static xl:z-auto xl:w-72 xl:max-w-none xl:translate-x-0 xl:shadow-none',
           'fixed right-0 top-0 bottom-0 z-[60] w-full max-w-sm shadow-2xl transition-transform duration-300 ease-in-out',
           selectedAsset ? 'translate-x-0' : 'translate-x-full',
@@ -796,7 +796,7 @@ export default function AssetsPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.94, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-[#0D0920] border border-white/10 rounded-2xl p-6"
+              className="w-full max-w-md bg-surface border border-white/10 rounded-2xl p-6"
             >
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">

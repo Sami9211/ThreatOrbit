@@ -384,17 +384,17 @@ export default function VulnsPage() {
 
         <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value as Severity | 'all')}
           className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/10 bg-white/5 text-ink-400 outline-none cursor-pointer">
-          <option value="all" className="bg-[#0D0920]">All Severities</option>
+          <option value="all" className="bg-surface">All Severities</option>
           {(['critical', 'high', 'medium', 'low'] as Severity[]).map((s) => (
-            <option key={s} value={s} className="bg-[#0D0920]">{SEVERITY_META[s].label}</option>
+            <option key={s} value={s} className="bg-surface">{SEVERITY_META[s].label}</option>
           ))}
         </select>
 
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as VulnStatus | 'all')}
           className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/10 bg-white/5 text-ink-400 outline-none cursor-pointer">
-          <option value="all" className="bg-[#0D0920]">All Statuses</option>
+          <option value="all" className="bg-surface">All Statuses</option>
           {(['open', 'in-progress', 'patched', 'accepted'] as VulnStatus[]).map((s) => (
-            <option key={s} value={s} className="bg-[#0D0920]">{STATUS_META[s].label}</option>
+            <option key={s} value={s} className="bg-surface">{STATUS_META[s].label}</option>
           ))}
         </select>
 
@@ -475,7 +475,7 @@ export default function VulnsPage() {
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-              className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-md bg-[#0D0920] border-l border-white/10 shadow-2xl overflow-y-auto">
+              className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-md bg-surface border-l border-white/10 shadow-2xl overflow-y-auto">
               {(() => {
                 const v = selected
                 return (

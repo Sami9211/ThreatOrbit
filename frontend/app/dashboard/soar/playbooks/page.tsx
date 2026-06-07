@@ -306,7 +306,7 @@ function StepDetailPanel({ pb, onClose }: { pb: Playbook; onClose: () => void })
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 290, damping: 28 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-md flex flex-col bg-[#0D0920] border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-md flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Panel header */}
       <div className="p-4 border-b border-white/8 shrink-0">

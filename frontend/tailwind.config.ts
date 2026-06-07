@@ -9,46 +9,51 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Plasma Noir base: obsidian with a warm violet undertone
-        bg: '#0A0612',
-        surface: '#100A1C',
-        'surface-2': '#160E28',
-        'surface-3': '#1E1336',
+        // All theme tokens are driven by CSS variables (see app/globals.css)
+        // so the dashboard can swap colour schemes at runtime via [data-theme].
+        // The channel format `rgb(var(--x) / <alpha-value>)` keeps Tailwind's
+        // /opacity modifiers working (e.g. bg-magenta/20).
+        bg: 'rgb(var(--bg) / <alpha-value>)',
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        'surface-2': 'rgb(var(--surface-2) / <alpha-value>)',
+        'surface-3': 'rgb(var(--surface-3) / <alpha-value>)',
         // Signature plasma accents
         magenta: {
-          DEFAULT: '#FF2E97',
-          50: 'rgba(255,46,151,0.05)',
-          100: 'rgba(255,46,151,0.1)',
-          200: 'rgba(255,46,151,0.2)',
-          400: 'rgba(255,46,151,0.4)',
+          DEFAULT: 'rgb(var(--magenta) / <alpha-value>)',
+          50: 'rgb(var(--magenta) / 0.05)',
+          100: 'rgb(var(--magenta) / 0.1)',
+          200: 'rgb(var(--magenta) / 0.2)',
+          400: 'rgb(var(--magenta) / 0.4)',
         },
         violet: {
-          DEFAULT: '#7A3CFF',
-          50: 'rgba(122,60,255,0.05)',
-          100: 'rgba(122,60,255,0.1)',
-          200: 'rgba(122,60,255,0.2)',
-          400: 'rgba(122,60,255,0.4)',
+          DEFAULT: 'rgb(var(--violet) / <alpha-value>)',
+          50: 'rgb(var(--violet) / 0.05)',
+          100: 'rgb(var(--violet) / 0.1)',
+          200: 'rgb(var(--violet) / 0.2)',
+          400: 'rgb(var(--violet) / 0.4)',
         },
         amber: {
-          DEFAULT: '#FFB23E',
-          100: 'rgba(255,178,62,0.1)',
-          200: 'rgba(255,178,62,0.2)',
+          DEFAULT: 'rgb(var(--amber) / <alpha-value>)',
+          100: 'rgb(var(--amber) / 0.1)',
+          200: 'rgb(var(--amber) / 0.2)',
         },
         // Minor cool supporting tone (keeps the blue family whispering)
         teal: {
-          DEFAULT: '#2DD4BF',
-          100: 'rgba(45,212,191,0.1)',
+          DEFAULT: 'rgb(var(--teal) / <alpha-value>)',
+          100: 'rgb(var(--teal) / 0.1)',
         },
-        threat: '#FF4D6D',
-        safe: '#34F5C5',
+        threat: 'rgb(var(--threat) / <alpha-value>)',
+        safe: 'rgb(var(--safe) / <alpha-value>)',
         // Warm-tinted neutral ink for cohesion with the violet base
         ink: {
-          100: '#F5F0FA',
-          200: '#D9D0E6',
-          300: '#B4A8C8',
-          400: '#8A7DA3',
-          500: '#665B7D',
-          600: '#473F5C',
+          100: 'rgb(var(--ink-100) / <alpha-value>)',
+          200: 'rgb(var(--ink-200) / <alpha-value>)',
+          300: 'rgb(var(--ink-300) / <alpha-value>)',
+          400: 'rgb(var(--ink-400) / <alpha-value>)',
+          500: 'rgb(var(--ink-500) / <alpha-value>)',
+          600: 'rgb(var(--ink-600) / <alpha-value>)',
+          700: 'rgb(var(--ink-700) / <alpha-value>)',
+          800: 'rgb(var(--ink-800) / <alpha-value>)',
         },
       },
       fontFamily: {
@@ -119,9 +124,9 @@ const config: Config = {
       },
       backgroundImage: {
         'grid-dim': "url(\"data:image/svg+xml,%3Csvg width='52' height='52' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52 0 L52 52 M0 52 L52 52' stroke='%23ffffff' stroke-width='0.4' stroke-opacity='0.04' fill='none'/%3E%3C/svg%3E\")",
-        'radial-magenta': 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,46,151,0.14), transparent)',
-        'radial-violet': 'radial-gradient(ellipse 60% 50% at 50% 100%, rgba(122,60,255,0.12), transparent)',
-        'plasma': 'linear-gradient(135deg, #FF2E97 0%, #7A3CFF 55%, #FFB23E 100%)',
+        'radial-magenta': 'radial-gradient(ellipse 60% 40% at 50% 0%, rgb(var(--magenta) / 0.14), transparent)',
+        'radial-violet': 'radial-gradient(ellipse 60% 50% at 50% 100%, rgb(var(--violet) / 0.12), transparent)',
+        'plasma': 'linear-gradient(135deg, rgb(var(--magenta)) 0%, rgb(var(--violet)) 55%, rgb(var(--amber)) 100%)',
       },
       boxShadow: {
         'magenta-sm': '0 0 16px rgba(255,46,151,0.3)',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Search, Activity, Zap, Brain, Radio, Settings, Home,
@@ -193,7 +194,7 @@ export default function Sidebar() {
         )}
       >
         <motion.aside
-          className="h-full flex flex-col bg-[#0D0920] border-r border-white/5 overflow-hidden select-none"
+          className="h-full flex flex-col bg-surface border-r border-white/5 overflow-hidden select-none"
           animate={{ width: expanded ? 232 : 56 }}
           transition={{ type: 'spring', stiffness: 320, damping: 32 }}
           onMouseEnter={() => { if (!pinned) setHovered(true) }}
@@ -288,9 +289,10 @@ export default function Sidebar() {
                     <div key={href}>
                       {/* Parent item */}
                       <div className="relative flex items-center mx-2">
-                        <a
+                        <Link
                           href={href}
                           title={label}
+                          onClick={() => { if (isMobile) setMobileOpen(false) }}
                           className={cn(
                             'flex-1 flex items-center gap-3 px-2.5 py-2.5 rounded-lg transition-colors duration-150',
                             active
@@ -319,7 +321,7 @@ export default function Sidebar() {
                               </motion.span>
                             )}
                           </AnimatePresence>
-                        </a>
+                        </Link>
 
                         {/* Expand toggle for sub-items */}
                         {hasSub && expanded && (
@@ -358,9 +360,10 @@ export default function Sidebar() {
                                     ? true
                                     : pathname === subItem.href
                                 return (
-                                  <a
+                                  <Link
                                     key={subItem.href}
                                     href={subItem.href}
+                                    onClick={() => { if (isMobile) setMobileOpen(false) }}
                                     className={cn(
                                       'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] transition-colors duration-150',
                                       subActive
@@ -375,7 +378,7 @@ export default function Sidebar() {
                                       )}
                                     />
                                     {subItem.label}
-                                  </a>
+                                  </Link>
                                 )
                               })}
                             </div>
@@ -391,14 +394,15 @@ export default function Sidebar() {
 
           {/* Alerts badge */}
           <div className="px-2 pb-2">
-            <a
+            <Link
               href="/dashboard/siem"
               title="Active Alerts"
+              onClick={() => { if (isMobile) setMobileOpen(false) }}
               className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-amber hover:bg-amber/5 transition-colors"
             >
               <div className="relative shrink-0">
                 <AlertTriangle className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-threat text-[8px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-threat text-[8px] font-bold text-white flex items-center justify-center ring-2 ring-surface">
                   7
                 </span>
               </div>
@@ -414,7 +418,7 @@ export default function Sidebar() {
                   </motion.span>
                 )}
               </AnimatePresence>
-            </a>
+            </Link>
           </div>
 
           {/* Back to landing */}

@@ -2,17 +2,149 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Themeable design tokens. Values are space-separated RGB *channels* so that
+ * Tailwind's `<alpha-value>` opacity modifiers (e.g. bg-magenta/20) work via
+ * `rgb(var(--token) / <alpha-value>)`. The :root values are the default
+ * "Plasma Noir" theme; dashboard-scoped [data-theme="…"] blocks below override
+ * them for the alternate colour schemes. Only the dashboard wrapper carries a
+ * data-theme attribute, so the public site always uses the :root defaults.
+ */
 :root {
-  --bg: #0A0612;
-  --magenta: #FF2E97;
-  --violet: #7A3CFF;
-  --amber: #FFB23E;
-  --teal: #2DD4BF;
-  --threat: #FF4D6D;
-  --safe: #34F5C5;
+  /* surfaces */
+  --bg: 10 6 18;          /* #0A0612 */
+  --surface: 16 10 28;    /* #100A1C */
+  --surface-2: 22 14 40;  /* #160E28 */
+  --surface-3: 30 19 54;  /* #1E1336 */
+  /* accents */
+  --magenta: 255 46 151;  /* #FF2E97 */
+  --violet: 122 60 255;   /* #7A3CFF */
+  --amber: 255 178 62;    /* #FFB23E */
+  --teal: 45 212 191;     /* #2DD4BF */
+  --threat: 255 77 109;   /* #FF4D6D */
+  --safe: 52 245 197;     /* #34F5C5 */
+  /* ink (text) ramp */
+  --ink-100: 245 240 250; /* #F5F0FA */
+  --ink-200: 217 208 230; /* #D9D0E6 */
+  --ink-300: 180 168 200; /* #B4A8C8 */
+  --ink-400: 138 125 163; /* #8A7DA3 */
+  --ink-500: 102 91 125;  /* #665B7D */
+  --ink-600: 71 63 92;    /* #473F5C */
+  --ink-700: 52 46 68;    /* #342E44 */
+  --ink-800: 36 31 48;    /* #241F30 */
   /* Render native form controls, scrollbars, etc. in dark mode so inputs
      don't fall back to a white UA background. */
   color-scheme: dark;
+}
+
+/* ── Monochrome — "black & white" graphite ─────────────────────────── */
+[data-theme='mono'] {
+  --bg: 10 10 11;
+  --surface: 19 19 21;
+  --surface-2: 27 27 30;
+  --surface-3: 38 38 43;
+  --magenta: 250 250 250;
+  --violet: 184 184 192;
+  --amber: 212 212 216;
+  --teal: 156 163 175;
+  --threat: 244 244 245;
+  --safe: 161 161 170;
+  --ink-100: 250 250 250;
+  --ink-200: 228 228 231;
+  --ink-300: 212 212 216;
+  --ink-400: 161 161 170;
+  --ink-500: 113 113 122;
+  --ink-600: 82 82 91;
+  --ink-700: 63 63 70;
+  --ink-800: 39 39 42;
+}
+
+/* ── Arctic — cool sky/indigo on deep navy ─────────────────────────── */
+[data-theme='arctic'] {
+  --bg: 6 11 18;
+  --surface: 10 17 28;
+  --surface-2: 14 23 38;
+  --surface-3: 20 33 54;
+  --magenta: 56 189 248;
+  --violet: 99 102 241;
+  --amber: 34 211 238;
+  --teal: 45 212 191;
+  --threat: 251 113 133;
+  --safe: 52 211 153;
+  --ink-100: 241 245 249;
+  --ink-200: 226 232 240;
+  --ink-300: 203 213 225;
+  --ink-400: 148 163 184;
+  --ink-500: 100 116 139;
+  --ink-600: 71 85 105;
+  --ink-700: 51 65 85;
+  --ink-800: 30 41 59;
+}
+
+/* ── Matrix — terminal green on near-black ─────────────────────────── */
+[data-theme='matrix'] {
+  --bg: 5 10 5;
+  --surface: 8 17 8;
+  --surface-2: 12 24 12;
+  --surface-3: 18 34 18;
+  --magenta: 52 208 88;
+  --violet: 22 163 74;
+  --amber: 163 230 53;
+  --teal: 45 212 191;
+  --threat: 239 68 68;
+  --safe: 74 222 128;
+  --ink-100: 227 242 227;
+  --ink-200: 190 220 190;
+  --ink-300: 147 179 147;
+  --ink-400: 107 138 107;
+  --ink-500: 77 101 77;
+  --ink-600: 53 69 53;
+  --ink-700: 40 51 40;
+  --ink-800: 26 34 26;
+}
+
+/* ── Solar Flare — amber/orange on warm dark ───────────────────────── */
+[data-theme='solar'] {
+  --bg: 18 11 5;
+  --surface: 26 16 8;
+  --surface-2: 35 23 11;
+  --surface-3: 47 31 18;
+  --magenta: 251 146 60;
+  --violet: 245 158 11;
+  --amber: 251 191 36;
+  --teal: 252 211 77;
+  --threat: 239 68 68;
+  --safe: 132 204 22;
+  --ink-100: 250 245 239;
+  --ink-200: 231 221 208;
+  --ink-300: 201 185 166;
+  --ink-400: 156 139 120;
+  --ink-500: 111 95 77;
+  --ink-600: 77 65 51;
+  --ink-700: 57 47 36;
+  --ink-800: 38 31 24;
+}
+
+/* ── Crimson — rose/red threat aesthetic ───────────────────────────── */
+[data-theme='crimson'] {
+  --bg: 15 6 8;
+  --surface: 23 10 13;
+  --surface-2: 32 14 18;
+  --surface-3: 45 20 26;
+  --magenta: 244 63 94;
+  --violet: 220 38 38;
+  --amber: 251 113 133;
+  --teal: 248 113 113;
+  --threat: 239 68 68;
+  --safe: 52 211 153;
+  --ink-100: 251 238 240;
+  --ink-200: 236 212 216;
+  --ink-300: 208 168 176;
+  --ink-400: 166 120 127;
+  --ink-500: 116 80 90;
+  --ink-600: 78 53 60;
+  --ink-700: 58 39 45;
+  --ink-800: 39 26 30;
 }
 
 * {
@@ -24,7 +156,7 @@ html {
 }
 
 body {
-  background-color: var(--bg);
+  background-color: rgb(var(--bg));
   color: #F5F0FA;
   font-family: var(--font-inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -238,7 +370,7 @@ body {
 .cursor-blink::after {
   content: '_';
   animation: cursorBlink 1s step-end infinite;
-  color: var(--magenta);
+  color: rgb(var(--magenta));
 }
 @keyframes cursorBlink {
   0%, 100% { opacity: 1; }

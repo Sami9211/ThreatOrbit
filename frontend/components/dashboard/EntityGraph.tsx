@@ -104,7 +104,7 @@ export default function EntityGraph({ data }: { data: GraphData }) {
                 stroke={n.color} strokeWidth={isHover ? 1.4 : 1}
                 filter={isHover ? 'url(#eg-glow)' : undefined}
                 style={{ transition: 'r 0.15s' }} />
-              <text x={n.x} y={n.y - 11} textAnchor="middle"
+              <text x={n.x} y={n.y - 11} textAnchor="middle" dominantBaseline="auto"
                 fontSize={9} fontWeight={isHover ? 700 : 500}
                 fill={isHover ? '#fff' : '#9a90b5'}
                 fontFamily="system-ui,sans-serif"
@@ -112,7 +112,7 @@ export default function EntityGraph({ data }: { data: GraphData }) {
                 {n.label.length > 22 ? n.label.slice(0, 21) + '…' : n.label}
               </text>
               {isHover && n.meta && (
-                <text x={n.x} y={n.y + 16} textAnchor="middle" fontSize={7.5}
+                <text x={n.x} y={n.y + 16} textAnchor="middle" dominantBaseline="hanging" fontSize={7.5}
                   fill={n.color} fontFamily="system-ui,sans-serif" style={{ pointerEvents: 'none' }}>
                   {n.meta}
                 </text>

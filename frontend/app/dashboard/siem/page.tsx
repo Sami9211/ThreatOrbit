@@ -522,7 +522,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-xl flex flex-col bg-[#0D0920] border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-xl flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Header */}
       <div className="p-4 border-b border-white/8">
@@ -932,7 +932,7 @@ function MitreCoverageMatrix() {
                         {tech.id}
                       </div>
                       {isHov && (
-                        <div className="absolute z-30 top-full left-0 mt-1 w-56 bg-[#0D0920] border border-white/15 rounded-lg p-2.5 shadow-2xl pointer-events-none">
+                        <div className="absolute z-30 top-full left-0 mt-1 w-56 bg-surface border border-white/15 rounded-lg p-2.5 shadow-2xl pointer-events-none">
                           <p className="text-[10px] font-semibold text-white leading-snug">{tech.name}</p>
                           <p className="text-[9px] font-mono text-ink-600 mt-0.5">{tech.id}</p>
                           {rule ? (
