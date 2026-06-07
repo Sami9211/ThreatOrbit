@@ -13,7 +13,7 @@ type MenuGroup = {
 const PRIMARY = [
   { label: 'Home', href: '/' },
   { label: 'Docs', href: '/docs' },
-  { label: 'Pricing', href: '/#pricing' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Contact', href: '/#contact' },
 ]
 
@@ -24,7 +24,8 @@ const GROUPS: MenuGroup[] = [
       { label: 'Super SOC',   href: '/products/super-soc',  desc: 'CTI + SIEM + SOAR, unified' },
       { label: 'CTI Library', href: '/products/cti-library', desc: 'Threat intelligence ingestion' },
       { label: 'SIEM + SOAR', href: '/products/siem-soar',   desc: 'Detection and automated response' },
-      { label: 'Pricing',     href: '/#pricing',             desc: 'Plans and pricing' },
+      { label: 'Pricing',     href: '/pricing',              desc: 'Build your plan, pay only for what you need' },
+      { label: 'IntelScope',  href: '/dashboard/scanner',   desc: 'Free threat scanner — IPs, URLs, hashes' },
     ],
   },
   {

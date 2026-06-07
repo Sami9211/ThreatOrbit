@@ -6,12 +6,26 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Search, Activity, Zap, Brain, Radio, Settings, Home,
   ChevronRight, AlertTriangle, Wifi, Server,
-  PanelLeftOpen, PanelLeftClose, X,
+  PanelLeftOpen, PanelLeftClose, X, ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 
-const NAV = [
+type SubItem = { href: string; label: string }
+
+type NavItem = {
+  href: string
+  label: string
+  icon: React.ElementType
+  sub?: SubItem[]
+}
+
+type NavGroup = {
+  section: string | null
+  items: NavItem[]
+}
+
+const NAV: NavGroup[] = [
   {
     section: null,
     items: [{ href: '/dashboard', label: 'Overview', icon: Globe }],
@@ -19,22 +33,81 @@ const NAV = [
   {
     section: 'Intelligence',
     items: [
-      { href: '/dashboard/feeds',   label: 'Threat Feeds',    icon: Radio   },
-      { href: '/dashboard/scanner', label: 'Threat Scanner',  icon: Search  },
-      { href: '/dashboard/cti',     label: 'CTI Intelligence', icon: Brain  },
+      {
+        href: '/dashboard/feeds',
+        label: 'Threat Feeds',
+        icon: Radio,
+        sub: [
+          { href: '/dashboard/feeds',         label: 'Live Feed' },
+          { href: '/dashboard/feeds/sources',  label: 'Sources' },
+          { href: '/dashboard/feeds/import',   label: 'Import IOCs' },
+        ],
+      },
+      { href: '/dashboard/scanner', label: 'IntelScope', icon: Search },
+      {
+        href: '/dashboard/cti',
+        label: 'CTI Intelligence',
+        icon: Brain,
+        sub: [
+          { href: '/dashboard/cti',        label: 'Overview' },
+          { href: '/dashboard/cti/hunt',   label: 'Threat Hunt' },
+          { href: '/dashboard/cti/actors', label: 'Actor Profiles' },
+        ],
+      },
     ],
   },
   {
     section: 'Operations',
     items: [
-      { href: '/dashboard/assets', label: 'Asset Surface', icon: Server   },
-      { href: '/dashboard/siem',   label: 'SIEM',          icon: Activity },
-      { href: '/dashboard/soar',   label: 'SOAR',          icon: Zap      },
+      {
+        href: '/dashboard/assets',
+        label: 'Asset Surface',
+        icon: Server,
+        sub: [
+          { href: '/dashboard/assets',         label: 'Inventory' },
+          { href: '/dashboard/assets/vulns',   label: 'Vulnerabilities' },
+          { href: '/dashboard/assets/network', label: 'Network Map' },
+        ],
+      },
+      {
+        href: '/dashboard/siem',
+        label: 'SIEM',
+        icon: Activity,
+        sub: [
+          { href: '/dashboard/siem',         label: 'Alert Queue' },
+          { href: '/dashboard/siem/rules',   label: 'Rules Engine' },
+          { href: '/dashboard/siem/sources', label: 'Log Sources' },
+          { href: '/dashboard/siem/hunt',    label: 'Threat Hunt' },
+        ],
+      },
+      {
+        href: '/dashboard/soar',
+        label: 'SOAR',
+        icon: Zap,
+        sub: [
+          { href: '/dashboard/soar',              label: 'Cases' },
+          { href: '/dashboard/soar/playbooks',    label: 'Playbooks' },
+          { href: '/dashboard/soar/integrations', label: 'Integrations' },
+          { href: '/dashboard/soar/metrics',      label: 'SOC Metrics' },
+        ],
+      },
     ],
   },
   {
     section: 'System',
-    items: [{ href: '/dashboard/config', label: 'Configuration', icon: Settings }],
+    items: [
+      {
+        href: '/dashboard/config',
+        label: 'Configuration',
+        icon: Settings,
+        sub: [
+          { href: '/dashboard/config',         label: 'General' },
+          { href: '/dashboard/config/sources', label: 'Data Sources' },
+          { href: '/dashboard/config/users',   label: 'Users & Roles' },
+          { href: '/dashboard/config/api',     label: 'API Keys' },
+        ],
+      },
+    ],
   },
 ]
 
@@ -44,11 +117,9 @@ export default function Sidebar() {
   const [pinned, setPinned] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  // Manually expanded sections (in addition to auto-expand for active)
+  const [manualExpanded, setManualExpanded] = useState<Set<string>>(new Set())
 
-  // Track viewport. The collapse-to-icon (width) behaviour is desktop-only —
-  // on mobile the sidebar is always full width and visibility is controlled
-  // purely by the slide (translate) on the wrapper. This prevents the width
-  // from collapsing while the drawer slides away (the "flicker" on close).
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)')
     const update = () => setIsMobile(mq.matches)
@@ -62,19 +133,37 @@ export default function Sidebar() {
   // Close mobile sidebar on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
-  // Lock body scroll while the mobile drawer is open
+  // Lock body scroll while mobile drawer is open
   useEffect(() => {
     if (!mobileOpen) return
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [mobileOpen])
 
-  // Listen for mobile toggle event dispatched from TopBar
+  // Listen for mobile toggle event from TopBar
   useEffect(() => {
     function handler() { setMobileOpen((o) => !o) }
     window.addEventListener('sidebar-mobile-toggle', handler)
     return () => window.removeEventListener('sidebar-mobile-toggle', handler)
   }, [])
+
+  // Determine if a nav item's sub section should be shown
+  function isSubVisible(item: NavItem) {
+    if (!item.sub?.length) return false
+    const parentActive = item.href === '/dashboard'
+      ? pathname === '/dashboard' || pathname === '/dashboard/'
+      : pathname?.startsWith(item.href)
+    return parentActive || manualExpanded.has(item.href)
+  }
+
+  function toggleManual(href: string) {
+    setManualExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(href)) next.delete(href)
+      else next.add(href)
+      return next
+    })
+  }
 
   return (
     <>
@@ -92,7 +181,7 @@ export default function Sidebar() {
         )}
       </AnimatePresence>
 
-      {/* Sidebar wrapper — outer div handles mobile slide, inner aside handles width */}
+      {/* Sidebar wrapper */}
       <div
         className={cn(
           'fixed left-0 top-0 bottom-0 z-40 transition-transform duration-300 ease-in-out',
@@ -123,7 +212,6 @@ export default function Sidebar() {
                     <span className="font-display font-bold text-sm text-gradient-magenta">Orbit</span>
                   </div>
                   <div className="flex items-center gap-0.5 ml-2 shrink-0">
-                    {/* Desktop: pin / unpin button */}
                     <button
                       className="hidden md:flex p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/8 transition-colors"
                       onClick={() => setPinned((p) => !p)}
@@ -133,7 +221,6 @@ export default function Sidebar() {
                         ? <PanelLeftClose className="w-3.5 h-3.5 text-magenta" />
                         : <PanelLeftOpen  className="w-3.5 h-3.5" />}
                     </button>
-                    {/* Mobile: close button */}
                     <button
                       className="md:hidden p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/8 transition-colors"
                       onClick={() => setMobileOpen(false)}
@@ -184,54 +271,114 @@ export default function Sidebar() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-                {items.map(({ href, label, icon: Icon }) => {
-                  const active =
-                    href === '/dashboard'
-                      ? pathname === '/dashboard' || pathname === '/dashboard/'
-                      : pathname?.startsWith(href)
+
+                {items.map((navItem) => {
+                  const { href, label, icon: Icon, sub } = navItem
+                  const active = href === '/dashboard'
+                    ? pathname === '/dashboard' || pathname === '/dashboard/'
+                    : pathname?.startsWith(href)
+                  const hasSub = !!sub?.length
+                  const subOpen = isSubVisible(navItem)
+
                   return (
-                    <a
-                      key={href}
-                      href={href}
-                      title={label}
-                      className={cn(
-                        'relative flex items-center gap-3 mx-2 px-2.5 py-2.5 rounded-lg transition-colors duration-150',
-                        active
-                          ? 'bg-magenta/10 text-magenta'
-                          : 'text-ink-400 hover:text-white hover:bg-white/5',
-                      )}
-                    >
-                      {active && (
-                        <motion.span
-                          layoutId="sidebar-active"
-                          className="absolute inset-0 rounded-lg border border-magenta/25 bg-magenta/8"
-                          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                        />
-                      )}
-                      <Icon className="w-4 h-4 shrink-0 relative" />
-                      <AnimatePresence>
-                        {expanded && (
-                          <motion.span
-                            initial={{ opacity: 0, x: -6 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -6 }}
-                            transition={{ duration: 0.12 }}
-                            className="text-xs font-medium whitespace-nowrap relative"
+                    <div key={href}>
+                      {/* Parent item */}
+                      <div className="relative flex items-center mx-2">
+                        <a
+                          href={href}
+                          title={label}
+                          className={cn(
+                            'flex-1 flex items-center gap-3 px-2.5 py-2.5 rounded-lg transition-colors duration-150',
+                            active
+                              ? 'bg-magenta/10 text-magenta'
+                              : 'text-ink-400 hover:text-white hover:bg-white/5',
+                          )}
+                        >
+                          {active && (
+                            <motion.span
+                              layoutId="sidebar-active"
+                              className="absolute inset-0 rounded-lg border border-magenta/25 bg-magenta/8"
+                              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                            />
+                          )}
+                          <Icon className="w-4 h-4 shrink-0 relative" />
+                          <AnimatePresence>
+                            {expanded && (
+                              <motion.span
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -6 }}
+                                transition={{ duration: 0.12 }}
+                                className="text-xs font-medium whitespace-nowrap relative flex-1"
+                              >
+                                {label}
+                              </motion.span>
+                            )}
+                          </AnimatePresence>
+                        </a>
+
+                        {/* Expand toggle for sub-items */}
+                        {hasSub && expanded && (
+                          <button
+                            onClick={() => toggleManual(href)}
+                            className={cn(
+                              'relative p-1.5 rounded-md transition-colors mr-0.5',
+                              active ? 'text-magenta/60 hover:text-magenta' : 'text-ink-600 hover:text-ink-300',
+                            )}
                           >
-                            {label}
-                          </motion.span>
+                            <motion.div
+                              animate={{ rotate: subOpen ? 180 : 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </motion.div>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Sub-items */}
+                      <AnimatePresence initial={false}>
+                        {hasSub && subOpen && expanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                            className="overflow-hidden"
+                          >
+                            <div className="ml-4 mr-2 mb-1 border-l border-white/8 pl-3 space-y-0.5">
+                              {sub!.map((subItem) => {
+                                const subActive = subItem.href === href
+                                  ? pathname === href || pathname === href + '/'
+                                  : pathname?.startsWith(subItem.href) && subItem.href !== href
+                                    ? true
+                                    : pathname === subItem.href
+                                return (
+                                  <a
+                                    key={subItem.href}
+                                    href={subItem.href}
+                                    className={cn(
+                                      'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] transition-colors duration-150',
+                                      subActive
+                                        ? 'text-magenta bg-magenta/8'
+                                        : 'text-ink-500 hover:text-ink-200 hover:bg-white/4',
+                                    )}
+                                  >
+                                    <span
+                                      className={cn(
+                                        'w-1 h-1 rounded-full shrink-0',
+                                        subActive ? 'bg-magenta' : 'bg-ink-600',
+                                      )}
+                                    />
+                                    {subItem.label}
+                                  </a>
+                                )
+                              })}
+                            </div>
+                          </motion.div>
                         )}
                       </AnimatePresence>
-                      {active && expanded && (
-                        <motion.span
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="ml-auto relative"
-                        >
-                          <ChevronRight className="w-3 h-3 text-magenta/60" />
-                        </motion.span>
-                      )}
-                    </a>
+                    </div>
                   )
                 })}
               </div>
