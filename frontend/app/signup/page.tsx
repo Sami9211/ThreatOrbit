@@ -69,16 +69,16 @@ export default function SignUpPage() {
 
       <div className="relative z-10 max-w-6xl mx-auto px-5 sm:px-6 py-6 sm:py-10">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <Link href="/" className="flex items-center gap-2.5 group">
+        <div className="flex items-center justify-between gap-3 mb-8">
+          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
             <Logo size={28} className="transition-transform group-hover:scale-110" />
             <span className="font-display font-semibold text-lg">
               <span className="text-white">Threat</span>
               <span className="text-gradient-magenta">Orbit</span>
             </span>
           </Link>
-          <p className="text-sm text-ink-400">
-            Already have an account?{' '}
+          <p className="text-sm text-ink-400 shrink-0">
+            <span className="hidden sm:inline">Already have an account? </span>
             <Link href="/login" className="text-magenta hover:underline font-medium">Sign in</Link>
           </p>
         </div>

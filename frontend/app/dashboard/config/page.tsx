@@ -414,10 +414,11 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
           <span className="w-5 flex justify-center shrink-0">
             {pinned ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
           </span>
-          <span className={cn('text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap transition-opacity',
-            expanded ? 'opacity-100' : 'opacity-0')}>
-            {pinned ? 'Collapse' : 'Settings'}
-          </span>
+          {expanded && (
+            <span className="text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap">
+              {pinned ? 'Collapse' : 'Settings'}
+            </span>
+          )}
         </button>
 
         <div className="h-px bg-white/6 mx-1 mb-1" />
@@ -436,9 +437,7 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
               )}
             >
               <span className="w-5 flex justify-center shrink-0"><Icon className="w-4 h-4" /></span>
-              <span className={cn('whitespace-nowrap transition-opacity', expanded ? 'opacity-100' : 'opacity-0')}>
-                {label}
-              </span>
+              {expanded && <span className="whitespace-nowrap">{label}</span>}
             </button>
           ))}
         </div>
@@ -463,7 +462,7 @@ export default function ConfigPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 overflow-x-clip">
       <div className="flex items-center justify-between mb-6 gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-xl font-bold text-white">Configuration</h1>

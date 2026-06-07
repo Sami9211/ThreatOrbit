@@ -102,21 +102,22 @@ export default function TopBar() {
 
   return (
     <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/60 backdrop-blur-sm sticky top-0 z-30">
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-2 text-sm min-w-0">
         {/* Mobile hamburger — dispatches event to Sidebar */}
         <button
-          className="md:hidden p-1.5 -ml-1 mr-1 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"
+          className="md:hidden p-1.5 -ml-1 mr-0.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors shrink-0"
           onClick={() => window.dispatchEvent(new CustomEvent('sidebar-mobile-toggle'))}
           aria-label="Open navigation"
         >
           <Menu className="w-4 h-4" />
         </button>
-        <span className="text-ink-500">ThreatOrbit</span>
-        <span className="text-ink-600">/</span>
-        <span className="text-white font-medium">{label}</span>
+        {/* Breadcrumb prefix hidden on mobile to make room for the controls */}
+        <span className="hidden sm:inline text-ink-500">ThreatOrbit</span>
+        <span className="hidden sm:inline text-ink-600">/</span>
+        <span className="text-white font-medium truncate">{label}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {/* Experience mode toggle */}
         <ModeToggle />
 
@@ -223,18 +224,18 @@ export default function TopBar() {
           </AnimatePresence>
         </div>
 
-        {/* Refresh */}
+        {/* Refresh — hidden on mobile to save space */}
         <button
           aria-label="Refresh data"
           onClick={handleRefresh}
-          className="p-2 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors"
+          className="hidden sm:block p-2 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors"
         >
           <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin text-safe')} aria-hidden="true" />
         </button>
 
         {/* User */}
-        <div className="flex items-center gap-2 pl-2 border-l border-white/8">
-          <div className="w-7 h-7 rounded-lg bg-plasma flex items-center justify-center">
+        <div className="flex items-center gap-2 sm:pl-2 sm:border-l border-white/8">
+          <div className="w-7 h-7 rounded-lg bg-plasma flex items-center justify-center shrink-0">
             <span className="text-xs font-bold text-white">A</span>
           </div>
           <div className="hidden sm:block">
