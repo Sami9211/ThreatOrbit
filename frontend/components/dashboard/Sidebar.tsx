@@ -120,6 +120,10 @@ export default function Sidebar() {
   // Manually expanded sections (in addition to auto-expand for active)
   const [manualExpanded, setManualExpanded] = useState<Set<string>>(new Set())
 
+  // Track viewport. The collapse-to-icon (width) behaviour is desktop-only —
+  // on mobile the sidebar is always full width and visibility is controlled
+  // purely by the slide (translate) on the wrapper. This prevents the width
+  // from collapsing while the drawer slides away (the "flicker" on close).
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)')
     const update = () => setIsMobile(mq.matches)
@@ -133,14 +137,14 @@ export default function Sidebar() {
   // Close mobile sidebar on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
-  // Lock body scroll while mobile drawer is open
+  // Lock body scroll while the mobile drawer is open
   useEffect(() => {
     if (!mobileOpen) return
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [mobileOpen])
 
-  // Listen for mobile toggle event from TopBar
+  // Listen for mobile toggle event dispatched from TopBar
   useEffect(() => {
     function handler() { setMobileOpen((o) => !o) }
     window.addEventListener('sidebar-mobile-toggle', handler)
