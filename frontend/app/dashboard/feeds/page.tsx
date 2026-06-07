@@ -1,16 +1,20 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Filter, X, RefreshCw, ExternalLink, ChevronDown,
-  AlertTriangle, Globe, Hash, Link, Zap, Shield, Download,
+  Radio, CheckCircle2, HelpCircle, X, RefreshCw, ExternalLink,
+  AlertTriangle, Shield, Zap, ChevronDown, ChevronRight, Filter,
+  Activity, Globe, Hash, Link, Download, Send, Eye, Clock,
+  TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
-type FeedEntry = {
+type ThreatStatus = 'confirmed' | 'unconfirmed'
+
+type ThreatEntry = {
   id: string
   ts: string
   cve: string | null
@@ -18,796 +22,653 @@ type FeedEntry = {
   attackType: string
   source: string
   sourceCountry: string
-  destination: string
-  destCountry: string
   severity: Severity
   sectors: string[]
   summary: string
-  recommendations: string[]
-  docLink: string | null
-  cvssScore: number | null
+  feedSources: string[]
+  aiConfidence: number
+  iocs: string[]
+  mitre: string[]
+  status: ThreatStatus
+  correlated: number
   tags: string[]
 }
 
-/* ── Master dataset (50 entries) ─────────────────────────────────── */
-const ALL_FEEDS: FeedEntry[] = [
+/* ── Seed data ────────────────────────────────────────────────────── */
+const CONFIRMED_SEED: ThreatEntry[] = [
   {
-    id: 'f001', ts: '2024-11-12T14:22:00Z', cve: 'CVE-2024-6387',
+    id: 'c001', ts: '2024-11-12T14:22:00Z', cve: 'CVE-2024-6387',
     title: 'OpenSSH glibc RCE — unauthenticated remote code execution',
     attackType: 'RCE', source: '45.95.147.236', sourceCountry: 'Russia',
-    destination: '10.44.0.15', destCountry: 'United Kingdom',
     severity: 'critical', sectors: ['Healthcare', 'Finance', 'Government'],
-    summary: 'Signal handler race condition in OpenSSH before 9.8p1 allows unauthenticated RCE as root. Requires glibc-based Linux. Estimated 700k+ internet-exposed instances.',
-    recommendations: ['Patch to OpenSSH 9.8p1 immediately', 'Restrict SSH to VPN/bastion hosts', 'Enable MFA for SSH', 'Monitor auth logs for failed root login attempts'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-6387',
-    cvssScore: 8.1, tags: ['openssh', 'regresshion', 'linux', 'rce'],
+    summary: 'Signal handler race condition in OpenSSH before 9.8p1 allows unauthenticated RCE as root. 700k+ internet-exposed instances. Mass exploitation confirmed.',
+    feedSources: ['NVD', 'MISP', 'RecordedFuture', 'CrowdStrike'],
+    aiConfidence: 99, iocs: ['45.95.147.236', '185.220.101.1', 'CVE-2024-6387'],
+    mitre: ['T1190', 'T1133'], status: 'confirmed', correlated: 14, tags: ['openssh', 'regresshion', 'linux', 'rce'],
   },
   {
-    id: 'f002', ts: '2024-11-12T14:18:00Z', cve: 'CVE-2024-3094',
+    id: 'c002', ts: '2024-11-12T14:18:00Z', cve: 'CVE-2024-3094',
     title: 'XZ Utils backdoor — malicious supply chain compromise',
     attackType: 'Supply Chain', source: '185.220.101.1', sourceCountry: 'North Korea',
-    destination: '192.168.44.10', destCountry: 'Germany',
     severity: 'critical', sectors: ['Technology', 'Government', 'Defense'],
-    summary: 'Malicious code injected into XZ Utils 5.6.0-5.6.1 by a long-running social engineering campaign. Backdoor allows unauthorized SSH access bypassing authentication.',
-    recommendations: ['Downgrade XZ Utils to 5.4.x', 'Audit all SSH daemons on affected distros', 'Review supply chain integrity processes', 'Implement SLSA level 3+ for build pipelines'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-3094',
-    cvssScore: 10.0, tags: ['xz', 'supply-chain', 'ssh', 'backdoor'],
+    summary: 'Malicious code injected into XZ Utils 5.6.0-5.6.1 via social engineering. SSH authentication bypass via backdoor. CISA Emergency Directive issued.',
+    feedSources: ['CISA', 'NVD', 'MISP', 'GreyNoise', 'AlienVault'],
+    aiConfidence: 100, iocs: ['185.220.101.1', 'CVE-2024-3094', 'liblzma.so'],
+    mitre: ['T1195.001', 'T1078'], status: 'confirmed', correlated: 22, tags: ['xz', 'supply-chain', 'ssh'],
   },
   {
-    id: 'f003', ts: '2024-11-12T14:11:00Z', cve: null,
+    id: 'c003', ts: '2024-11-12T14:11:00Z', cve: null,
     title: 'Lazarus Group deploys BLINDINGCAN RAT against defense sector',
     attackType: 'APT', source: '165.22.120.1', sourceCountry: 'North Korea',
-    destination: '172.16.0.55', destCountry: 'United States',
     severity: 'critical', sectors: ['Defense', 'Aerospace'],
-    summary: 'FBI and CISA joint advisory confirms Lazarus Group (UNC4736) deploying BLINDINGCAN remote access trojan via weaponized job offer PDFs targeting defense contractors.',
-    recommendations: ['Block C2 IOCs at perimeter', 'Enable EDR behavioral detection', 'Restrict macro execution in Office docs', 'User awareness training on job offer phishing'],
-    docLink: null,
-    cvssScore: null, tags: ['lazarus', 'apt', 'rat', 'defense', 'dprk'],
+    summary: 'FBI and CISA joint advisory confirms Lazarus Group (UNC4736) deploying BLINDINGCAN RAT via weaponized job offer PDFs targeting defense contractors.',
+    feedSources: ['FBI', 'CISA', 'RecordedFuture', 'Mandiant'],
+    aiConfidence: 97, iocs: ['165.22.120.1', '103.248.12.3', 'resume_final.pdf.exe'],
+    mitre: ['T1566.001', 'T1105'], status: 'confirmed', correlated: 8, tags: ['lazarus', 'apt', 'rat', 'dprk'],
   },
   {
-    id: 'f004', ts: '2024-11-12T14:04:00Z', cve: 'CVE-2024-21762',
+    id: 'c004', ts: '2024-11-12T14:04:00Z', cve: 'CVE-2024-21762',
     title: 'FortiOS SSL VPN out-of-bounds write — actively exploited',
     attackType: 'Authentication Bypass', source: '91.92.251.103', sourceCountry: 'Iran',
-    destination: '10.8.0.0/24', destCountry: 'Israel',
     severity: 'critical', sectors: ['Government', 'Finance', 'Critical Infrastructure'],
-    summary: 'Critical out-of-bounds write in FortiOS SSL VPN allows unauthenticated RCE. Actively exploited in the wild by Iranian threat actors targeting government networks.',
-    recommendations: ['Apply Fortinet patch immediately', 'Disable SSL VPN if patch unavailable', 'Review VPN access logs for anomalies', 'Enable 2FA on VPN'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-21762',
-    cvssScore: 9.6, tags: ['fortios', 'vpn', 'authentication-bypass'],
+    summary: 'Critical out-of-bounds write in FortiOS SSL VPN allows unauthenticated RCE. Actively exploited by Iranian threat actors targeting government networks in Middle East.',
+    feedSources: ['Fortinet', 'CISA', 'NVD', 'Shodan'],
+    aiConfidence: 99, iocs: ['91.92.251.103', '194.165.16.51', 'CVE-2024-21762'],
+    mitre: ['T1190', 'T1078.001'], status: 'confirmed', correlated: 11, tags: ['fortios', 'vpn', 'authentication-bypass'],
   },
   {
-    id: 'f005', ts: '2024-11-12T13:58:00Z', cve: null,
+    id: 'c005', ts: '2024-11-12T13:58:00Z', cve: null,
     title: 'Volt Typhoon pre-positioning in US critical infrastructure',
     attackType: 'APT', source: '103.148.20.3', sourceCountry: 'China',
-    destination: '198.51.100.0/24', destCountry: 'United States',
     severity: 'critical', sectors: ['Critical Infrastructure', 'Energy', 'Water'],
-    summary: 'CISA advisory: Chinese state-sponsored Volt Typhoon living-off-the-land in US critical infrastructure. Focus on pre-positioning for potential destructive attacks, not espionage.',
-    recommendations: ['Audit all LOTL tool usage (LOLBins)', 'Harden Active Directory', 'Implement network segmentation for OT/ICS', 'Review all outbound connections from OT networks'],
-    docLink: null,
-    cvssScore: null, tags: ['volt-typhoon', 'china', 'apt', 'ics', 'ot'],
+    summary: 'CISA advisory: Chinese Volt Typhoon living-off-the-land in US critical infrastructure. Pre-positioning for potential destructive attacks, not espionage.',
+    feedSources: ['CISA', 'NSA', 'FBI', 'Mandiant'],
+    aiConfidence: 98, iocs: ['103.148.20.3', 'netstat.exe', 'ipconfig /all'],
+    mitre: ['T1078', 'T1218'], status: 'confirmed', correlated: 19, tags: ['volt-typhoon', 'china', 'ics', 'lotl'],
   },
   {
-    id: 'f006', ts: '2024-11-12T13:45:00Z', cve: 'CVE-2024-23897',
+    id: 'c006', ts: '2024-11-12T13:45:00Z', cve: 'CVE-2024-23897',
     title: 'Jenkins arbitrary file read leading to RCE',
     attackType: 'RCE', source: '185.199.108.1', sourceCountry: 'Romania',
-    destination: '10.0.1.50', destCountry: 'Netherlands',
     severity: 'high', sectors: ['Technology', 'Software Development'],
-    summary: 'Jenkins 2.441 and earlier CLI path traversal allows unauthenticated users to read arbitrary files on the controller filesystem, enabling RCE through multiple attack chains.',
-    recommendations: ['Upgrade Jenkins to 2.442+', 'Restrict Jenkins CLI access', 'Expose Jenkins internally only', 'Rotate all secrets stored in Jenkins credentials'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-23897',
-    cvssScore: 9.8, tags: ['jenkins', 'ci-cd', 'path-traversal', 'rce'],
+    summary: 'Jenkins CLI path traversal allows unauthenticated users to read arbitrary files on the controller filesystem, enabling RCE through multiple attack chains.',
+    feedSources: ['NVD', 'MISP', 'GreyNoise'],
+    aiConfidence: 96, iocs: ['185.199.108.1', '/var/jenkins/secrets/initialAdminPassword'],
+    mitre: ['T1190', 'T1083'], status: 'confirmed', correlated: 7, tags: ['jenkins', 'ci-cd', 'rce'],
   },
   {
-    id: 'f007', ts: '2024-11-12T13:38:00Z', cve: null,
-    title: 'Scattered Spider BEC campaign targeting MGM-style hospitality firms',
-    attackType: 'Social Engineering', source: 'Multiple', sourceCountry: 'United States',
-    destination: 'Internal', destCountry: 'United States',
-    severity: 'high', sectors: ['Hospitality', 'Gaming', 'Retail'],
-    summary: 'Scattered Spider (UNC3944) conducting vishing attacks against IT help desks, impersonating employees to reset MFA. Deploying ALPHV/BlackCat ransomware post-access.',
-    recommendations: ['Implement strict help desk identity verification', 'Enable phishing-resistant MFA (FIDO2)', 'Train staff to recognize vishing', 'Segment POS systems from corporate network'],
-    docLink: null,
-    cvssScore: null, tags: ['scattered-spider', 'bec', 'vishing', 'ransomware'],
-  },
-  {
-    id: 'f008', ts: '2024-11-12T13:22:00Z', cve: 'CVE-2024-21413',
-    title: 'Microsoft Outlook Moniker Link RCE — NTLM hash leak',
-    attackType: 'NTLM Relay', source: '94.102.61.0/24', sourceCountry: 'Russia',
-    destination: 'Email servers', destCountry: 'Global',
-    severity: 'high', sectors: ['Finance', 'Government', 'Enterprise'],
-    summary: 'MonikerLink bug in Outlook allows attackers to force NTLM credential leak and execute arbitrary commands by sending a malicious email — preview panel triggers the exploit.',
-    recommendations: ['Apply MS February 2024 patches', 'Block outbound SMB at firewall', 'Disable NTLM where possible', 'Enable Extended Protection for Authentication'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-21413',
-    cvssScore: 9.8, tags: ['outlook', 'ntlm', 'rce', 'email'],
-  },
-  {
-    id: 'f009', ts: '2024-11-12T13:10:00Z', cve: null,
+    id: 'c007', ts: '2024-11-12T13:38:00Z', cve: null,
     title: 'BlackBasta ransomware expanding healthcare sector targeting',
     attackType: 'Ransomware', source: '23.184.48.200', sourceCountry: 'Russia',
-    destination: '10.20.0.0/16', destCountry: 'United States',
     severity: 'critical', sectors: ['Healthcare'],
-    summary: 'HHS warns Black Basta has attacked 500+ healthcare orgs. Initial access via QakBot phishing → Cobalt Strike → data exfiltration → encryption. Average ransom: $1.5M.',
-    recommendations: ['Implement offline backup strategy', 'Restrict RDP and remote management', 'Deploy endpoint detection on all hosts', 'Practice incident response tabletop exercises'],
-    docLink: null,
-    cvssScore: null, tags: ['blackbasta', 'ransomware', 'healthcare', 'qakbot'],
+    summary: 'HHS warns Black Basta has attacked 500+ healthcare orgs. Initial access via QakBot phishing → Cobalt Strike → data exfil → encryption. Average ransom: $1.5M.',
+    feedSources: ['HHS', 'MISP', 'SentinelOne', 'CrowdStrike'],
+    aiConfidence: 99, iocs: ['23.184.48.200', '104.149.168.0', 'qakbot.dll'],
+    mitre: ['T1566', 'T1486'], status: 'confirmed', correlated: 16, tags: ['blackbasta', 'ransomware', 'healthcare'],
   },
   {
-    id: 'f010', ts: '2024-11-12T12:55:00Z', cve: 'CVE-2024-4577',
-    title: 'PHP CGI argument injection on Windows — RCE without authentication',
-    attackType: 'RCE', source: '185.220.101.56', sourceCountry: 'Belarus',
-    destination: '203.0.113.15', destCountry: 'Japan',
-    severity: 'critical', sectors: ['Technology', 'Retail', 'Education'],
-    summary: 'Critical RCE in PHP on Windows due to argument injection in CGI mode. Exploits Windows character conversion quirk. CVSS 10.0. Active mass exploitation within 24h of disclosure.',
-    recommendations: ['Upgrade PHP to 8.1.29, 8.2.20, or 8.3.8', 'Disable PHP CGI mode', 'Use PHP-FPM instead', 'Apply WAF rules for PHP CGI exploitation'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-4577',
-    cvssScore: 10.0, tags: ['php', 'cgi', 'windows', 'rce'],
-  },
-  {
-    id: 'f011', ts: '2024-11-12T12:40:00Z', cve: null,
-    title: 'DNS tunneling campaign exfiltrating from air-gapped networks',
-    attackType: 'Exfiltration', source: '8.8.4.4', sourceCountry: 'Unknown',
-    destination: '192.168.1.0/24', destCountry: 'South Korea',
-    severity: 'high', sectors: ['Defense', 'Government', 'Nuclear'],
-    summary: 'Novel DNS tunneling technique bypassing DLP tools by encoding data in TXT/NULL records with timing-based covert channel. Associated with Kimsuky APT activity.',
-    recommendations: ['Deploy DNS security filtering (PDNS)', 'Monitor for high-volume DNS TXT queries', 'Implement DNS sinkholing', 'Restrict recursive DNS to known resolvers'],
-    docLink: null,
-    cvssScore: null, tags: ['dns-tunneling', 'kimsuky', 'exfiltration', 'apt'],
-  },
-  {
-    id: 'f012', ts: '2024-11-12T12:25:00Z', cve: 'CVE-2024-38094',
-    title: 'Microsoft SharePoint deserialization RCE — authenticated user',
-    attackType: 'RCE', source: '45.134.26.0/24', sourceCountry: 'China',
-    destination: 'SharePoint Online', destCountry: 'Australia',
-    severity: 'high', sectors: ['Government', 'Education', 'Enterprise'],
-    summary: 'Deserialization vulnerability in Microsoft SharePoint allows authenticated attackers to execute arbitrary code on the server. Used in targeted espionage campaigns against government.',
-    recommendations: ['Apply July 2024 Cumulative Update', 'Restrict SharePoint to internal access', 'Monitor SharePoint audit logs', 'Enable Microsoft Defender for SharePoint'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-38094',
-    cvssScore: 7.2, tags: ['sharepoint', 'deserialization', 'microsoft', 'rce'],
-  },
-  {
-    id: 'f013', ts: '2024-11-12T12:10:00Z', cve: null,
-    title: 'LockBit 3.0 affiliate targeting law firms across EU',
-    attackType: 'Ransomware', source: '45.227.254.26', sourceCountry: 'Russia',
-    destination: '10.10.0.0/16', destCountry: 'France',
-    severity: 'high', sectors: ['Legal', 'Finance'],
-    summary: 'LockBit affiliates targeting EU law firms via spear-phishing. Exfiltrating client privileged communications before encryption. Double extortion with 72-hour deadline.',
-    recommendations: ['Air-gap legal document repositories', 'Implement privileged access management', 'Deploy email gateway scanning', 'Regular offline backups for case files'],
-    docLink: null,
-    cvssScore: null, tags: ['lockbit', 'ransomware', 'law', 'eu'],
-  },
-  {
-    id: 'f014', ts: '2024-11-12T11:55:00Z', cve: 'CVE-2024-20353',
-    title: 'Cisco ASA DoS vulnerability — actively exploited in the wild',
-    attackType: 'DoS', source: '194.165.16.0/24', sourceCountry: 'Iran',
-    destination: 'Network perimeter', destCountry: 'Israel',
-    severity: 'high', sectors: ['Government', 'Finance', 'ISP'],
-    summary: 'Cisco ASA and FTD management tunnel parsing flaw allows unauthenticated remote DoS. CISA KEV listed. Exploited alongside CVE-2024-20359 for persistent access.',
-    recommendations: ['Apply Cisco security advisory updates', 'Disable management access from internet', 'Implement management network segmentation', 'Monitor for unexpected ASA reboots'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-20353',
-    cvssScore: 8.6, tags: ['cisco', 'asa', 'dos', 'network'],
-  },
-  {
-    id: 'f015', ts: '2024-11-12T11:40:00Z', cve: null,
-    title: 'FIN7 deploying POWERTRASH shellcode loader via fake job sites',
-    attackType: 'Initial Access', source: '104.21.45.0/24', sourceCountry: 'Russia',
-    destination: 'Endpoints', destCountry: 'United States',
-    severity: 'high', sectors: ['Finance', 'Retail'],
-    summary: 'FIN7 creating fake recruitment portals impersonating Fortune 500 companies. Victims lured to download "assessment tools" containing POWERTRASH → Carbanak RAT chain.',
-    recommendations: ['Block known FIN7 infrastructure IOCs', 'Enable PowerShell script block logging', 'Deploy application whitelisting', 'Review recruitment email filtering'],
-    docLink: null,
-    cvssScore: null, tags: ['fin7', 'powershell', 'loader', 'recruitment-lure'],
-  },
-  {
-    id: 'f016', ts: '2024-11-12T11:25:00Z', cve: 'CVE-2024-27956',
-    title: 'WordPress Automatic Plugin SQL injection — 200K sites at risk',
-    attackType: 'SQL Injection', source: 'Botnets', sourceCountry: 'Global',
-    destination: 'Web servers', destCountry: 'Global',
-    severity: 'critical', sectors: ['Technology', 'Retail', 'Media'],
-    summary: 'Unauthenticated SQL injection in WP Automatic Plugin (≤3.92.0) allows complete database takeover and admin account creation. Mass exploitation scanning detected.',
-    recommendations: ['Update WP Automatic to 3.92.1+', 'Audit WordPress plugins immediately', 'Enable WAF with SQL injection rules', 'Review admin user accounts for unauthorized additions'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-27956',
-    cvssScore: 9.9, tags: ['wordpress', 'sqli', 'cms', 'plugin'],
-  },
-  {
-    id: 'f017', ts: '2024-11-12T11:10:00Z', cve: null,
-    title: 'Cl0p ransomware exploiting MOVEit Transfer zero-day (ongoing)',
-    attackType: 'SQL Injection / RCE', source: '195.123.246.0/24', sourceCountry: 'Russia',
-    destination: 'MOVEit installations', destCountry: 'United States',
-    severity: 'critical', sectors: ['Finance', 'Healthcare', 'Government'],
-    summary: 'Cl0p continues mass exploitation of MOVEit Transfer SQLi vulnerability affecting 2,700+ organizations. Data from 93M individuals exposed. Affiliate model expanding.',
-    recommendations: ['Apply all MOVEit patches', 'Conduct forensic investigation if exposed', 'Notify affected data subjects (GDPR Article 33)', 'Implement DMZ for file transfer services'],
-    docLink: null,
-    cvssScore: null, tags: ['clop', 'moveit', 'sqli', 'data-breach'],
-  },
-  {
-    id: 'f018', ts: '2024-11-12T10:55:00Z', cve: 'CVE-2024-30051',
-    title: 'Windows DWM Core Library privilege escalation — zero-day',
-    attackType: 'Privilege Escalation', source: '91.108.56.0/24', sourceCountry: 'Russia',
-    destination: 'Windows endpoints', destCountry: 'Global',
-    severity: 'high', sectors: ['Enterprise', 'Government'],
-    summary: 'Heap-based buffer overflow in Windows Desktop Window Manager allows local privilege escalation to SYSTEM. Used alongside CVE-2024-30040 in QakBot campaigns.',
-    recommendations: ['Apply May 2024 Patch Tuesday updates', 'Deploy EDR with memory protection', 'Monitor for SYSTEM-level process spawning from user context', 'Enforce least privilege'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-30051',
-    cvssScore: 7.8, tags: ['windows', 'privesc', 'dwm', 'zero-day'],
-  },
-  {
-    id: 'f019', ts: '2024-11-12T10:40:00Z', cve: null,
-    title: 'UNC4899 targeting software developers with trojanized Python packages',
-    attackType: 'Supply Chain', source: 'PyPI', sourceCountry: 'North Korea',
-    destination: 'Developer workstations', destCountry: 'Global',
-    severity: 'high', sectors: ['Technology', 'Cryptocurrency', 'Finance'],
-    summary: 'North Korean APT (linked to Lazarus) publishing fake crypto utility packages to PyPI with typosquatted names. Backdoor collects SSH keys, AWS credentials, browser passwords.',
-    recommendations: ['Audit installed Python packages against PyPI', 'Pin dependencies to specific hashes', 'Implement code signing for internal packages', 'Deploy developer endpoint protection'],
-    docLink: null,
-    cvssScore: null, tags: ['pypi', 'supply-chain', 'typosquatting', 'dprk', 'crypto'],
-  },
-  {
-    id: 'f020', ts: '2024-11-12T10:20:00Z', cve: 'CVE-2024-49113',
-    title: 'LDAP Nightmare — Windows LDAP DoS via malicious server',
-    attackType: 'DoS', source: 'Internet', sourceCountry: 'Global',
-    destination: 'Windows LDAP clients', destCountry: 'Global',
-    severity: 'medium', sectors: ['Enterprise', 'Active Directory environments'],
-    summary: 'Unauthenticated crash of Windows LDAP client via malicious LDAP server referral. Can crash domain-joined machines including domain controllers by sending malicious referrals.',
-    recommendations: ['Apply December 2024 Windows patches', 'Block outbound LDAP to untrusted servers', 'Monitor LDAP connection anomalies', 'Keep DCs on isolated management VLAN'],
-    docLink: 'https://nvd.nist.gov/vuln/detail/CVE-2024-49113',
-    cvssScore: 7.5, tags: ['ldap', 'windows', 'dos', 'active-directory'],
+    id: 'c008', ts: '2024-11-12T13:22:00Z', cve: 'CVE-2024-21413',
+    title: 'Microsoft Outlook Moniker Link RCE — NTLM hash leak',
+    attackType: 'NTLM Relay', source: '94.102.61.14', sourceCountry: 'Russia',
+    severity: 'high', sectors: ['Finance', 'Government', 'Enterprise'],
+    summary: 'MonikerLink bug in Outlook forces NTLM credential leak via email preview panel. Actively exploited in spear-phishing campaigns against financial sector.',
+    feedSources: ['Microsoft', 'NVD', 'Proofpoint', 'MISP'],
+    aiConfidence: 98, iocs: ['94.102.61.14', 'CVE-2024-21413', '185.220.101.0/24'],
+    mitre: ['T1187', 'T1566.001'], status: 'confirmed', correlated: 9, tags: ['outlook', 'ntlm', 'email'],
   },
 ]
 
-/* ── Filter constants ────────────────────────────────────────────── */
-const ATTACK_TYPES = ['All', 'RCE', 'APT', 'Ransomware', 'Supply Chain', 'DoS', 'SQL Injection', 'Social Engineering', 'Privilege Escalation', 'Exfiltration', 'Initial Access', 'Authentication Bypass', 'NTLM Relay']
-const SEVERITIES   = ['All', 'Critical', 'High', 'Medium', 'Low', 'Info']
-const SECTORS = ['All', 'Healthcare', 'Finance', 'Government', 'Technology', 'Defense', 'Critical Infrastructure', 'Education', 'Energy', 'Legal', 'Retail', 'Hospitality', 'Media', 'Aerospace']
-const COUNTRIES = ['All', 'United States', 'United Kingdom', 'Germany', 'Russia', 'China', 'North Korea', 'France', 'Japan', 'Australia', 'Israel', 'Netherlands', 'Global']
+const UNCONFIRMED_SEED: ThreatEntry[] = [
+  {
+    id: 'u001', ts: '2024-11-12T14:45:00Z', cve: null,
+    title: 'Suspicious Cobalt Strike beacon activity from 185.220.101.88',
+    attackType: 'C2 Beacon', source: '185.220.101.88', sourceCountry: 'Russia',
+    severity: 'high', sectors: ['Enterprise'],
+    summary: 'GreyNoise flagged IP with C2 communication pattern. Timing analysis suggests Cobalt Strike default profile. No MISP match. Awaiting correlation with SIEM logs.',
+    feedSources: ['GreyNoise', 'AbuseIPDB'],
+    aiConfidence: 78, iocs: ['185.220.101.88', 'beacon.min.js'],
+    mitre: ['T1071.001'], status: 'unconfirmed', correlated: 2, tags: ['cobalt-strike', 'c2'],
+  },
+  {
+    id: 'u002', ts: '2024-11-12T14:52:00Z', cve: null,
+    title: 'Potential credential stuffing — 1,400 login failures against /api/auth in 5min',
+    attackType: 'Credential Stuffing', source: '45.227.254.100', sourceCountry: 'Brazil',
+    severity: 'medium', sectors: ['Finance', 'SaaS'],
+    summary: 'AbuseIPDB score 89/100. Bot-like pattern: sequential usernames, consistent User-Agent, 5ms inter-request interval. No successful logins confirmed yet.',
+    feedSources: ['AbuseIPDB', 'InternalSIEM'],
+    aiConfidence: 72, iocs: ['45.227.254.100', '/api/auth'],
+    mitre: ['T1110.004'], status: 'unconfirmed', correlated: 1, tags: ['brute-force', 'credential-stuffing'],
+  },
+  {
+    id: 'u003', ts: '2024-11-12T14:38:00Z', cve: 'CVE-2024-49113',
+    title: 'LDAP Nightmare scanner detected — CVE-2024-49113 probe',
+    attackType: 'Reconnaissance', source: '198.98.62.55', sourceCountry: 'Germany',
+    severity: 'medium', sectors: ['Enterprise', 'Active Directory'],
+    summary: 'Shodan scanner IP probing for LDAP Nightmare vulnerability. Legitimate research or pre-attack reconnaissance unclear. IP belongs to known security scanner vendor.',
+    feedSources: ['Shodan', 'GreyNoise'],
+    aiConfidence: 55, iocs: ['198.98.62.55', 'LDAP/636'],
+    mitre: ['T1595.001'], status: 'unconfirmed', correlated: 0, tags: ['ldap', 'reconnaissance'],
+  },
+  {
+    id: 'u004', ts: '2024-11-12T14:31:00Z', cve: null,
+    title: 'Large-scale DNS TXT record queries from internal host WS-DEV-012',
+    attackType: 'Potential Exfiltration', source: '10.20.0.12', sourceCountry: 'Internal',
+    severity: 'high', sectors: ['Internal'],
+    summary: '12,000 DNS TXT queries in 20 minutes from developer workstation. Unusual domains with high-entropy subdomains. Pattern matches DNS tunneling toolkits. No C2 IOC match yet.',
+    feedSources: ['InternalSIEM', 'DNS Analytics'],
+    aiConfidence: 84, iocs: ['10.20.0.12', 'x3kp7.malicious-tunnel.io'],
+    mitre: ['T1048.003'], status: 'unconfirmed', correlated: 3, tags: ['dns-tunnel', 'exfil', 'internal'],
+  },
+  {
+    id: 'u005', ts: '2024-11-12T14:20:00Z', cve: null,
+    title: 'Typosquatted npm package "lodash-secure" detected in CI pipeline',
+    attackType: 'Supply Chain', source: 'npm registry', sourceCountry: 'Unknown',
+    severity: 'critical', sectors: ['Technology', 'DevOps'],
+    summary: 'Unknown package "lodash-secure" (not official lodash team) installed in 3 CI containers. Contains base64-encoded eval() in postinstall. Package age: 2 days. Downloads: 41.',
+    feedSources: ['npm Audit', 'Sonatype'],
+    aiConfidence: 91, iocs: ['lodash-secure@1.0.2', 'npm-postinstall.js'],
+    mitre: ['T1195.001', 'T1059.007'], status: 'unconfirmed', correlated: 0, tags: ['npm', 'supply-chain', 'typosquatting'],
+  },
+  {
+    id: 'u006', ts: '2024-11-12T14:15:00Z', cve: null,
+    title: 'Tor exit node traffic to PROD-DB-01 on port 5432',
+    attackType: 'Suspicious Traffic', source: '192.42.116.202', sourceCountry: 'Anonymous',
+    severity: 'high', sectors: ['Finance', 'Healthcare'],
+    summary: 'Danbooru Tor exit node attempting TCP connection to production database. Connection blocked by firewall. Source is on known Tor exit node list. Purpose unknown.',
+    feedSources: ['TorProject', 'Firewall Logs'],
+    aiConfidence: 68, iocs: ['192.42.116.202', 'postgres/5432'],
+    mitre: ['T1090.003'], status: 'unconfirmed', correlated: 1, tags: ['tor', 'database', 'suspicious'],
+  },
+]
+
+const LIVE_UNCONFIRMED: Partial<ThreatEntry>[] = [
+  { title: 'Brute force SSH — 2,400 attempts/min from 45.152.67.88', attackType: 'Brute Force', severity: 'medium', sourceCountry: 'China', aiConfidence: 67, feedSources: ['AbuseIPDB'], iocs: ['45.152.67.88'] },
+  { title: 'Suspicious PowerShell encoded command on WORKSTATION-044', attackType: 'Defense Evasion', severity: 'high', sourceCountry: 'Internal', aiConfidence: 82, feedSources: ['InternalSIEM'], iocs: ['WS-044', 'powershell.exe'] },
+  { title: 'Reconnaissance scan: 14 ports probed on API gateway', attackType: 'Reconnaissance', severity: 'low', sourceCountry: 'Netherlands', aiConfidence: 45, feedSources: ['GreyNoise'], iocs: ['52.212.100.41'] },
+  { title: 'Unrecognized outbound HTTPS to high-entropy domain', attackType: 'C2 Beacon', severity: 'medium', sourceCountry: 'Internal', aiConfidence: 73, feedSources: ['DNS Analytics'], iocs: ['xm4k9p.cloudflare-ntp.org'] },
+  { title: 'Mass email relay attempt — 80K messages queued in 3 min', attackType: 'Spam/Relay', severity: 'high', sourceCountry: 'Russia', aiConfidence: 88, feedSources: ['SpamHaus'], iocs: ['91.108.56.88'] },
+]
 
 const SEV_COLOR: Record<Severity, string> = {
-  critical: 'bg-magenta/15 text-magenta border-magenta/25',
-  high:     'bg-threat/15 text-threat border-threat/25',
-  medium:   'bg-amber/15 text-amber border-amber/25',
-  low:      'bg-safe/15 text-safe border-safe/25',
-  info:     'bg-violet/15 text-violet border-violet/25',
+  critical: 'bg-magenta/15 text-magenta border-magenta/20',
+  high:     'bg-threat/15 text-[#FF4D6D] border-threat/20',
+  medium:   'bg-amber/15 text-amber border-amber/20',
+  low:      'bg-safe/15 text-safe border-safe/20',
+  info:     'bg-violet/15 text-violet border-violet/20',
 }
 
-/* ── Generate "live" random entries ──────────────────────────────── */
-const LIVE_POOL: Partial<FeedEntry>[] = [
-  { cve: null,  title: 'Brute force SSH login — 847 attempts in 60s',       attackType: 'Brute Force',    severity: 'medium',   sourceCountry: 'China',   destCountry: 'Germany'       },
-  { cve: null,  title: 'Shodan fingerprint: exposed Elasticsearch cluster',  attackType: 'Reconnaissance', severity: 'info',     sourceCountry: 'Iran',    destCountry: 'Netherlands'   },
-  { cve: null,  title: 'Cobalt Strike beacon C2 callback detected',          attackType: 'C2 Beacon',      severity: 'high',     sourceCountry: 'Russia',  destCountry: 'United States' },
-  { cve: null,  title: 'Credential stuffing attack on identity provider',    attackType: 'Credential',     severity: 'medium',   sourceCountry: 'Nigeria', destCountry: 'United Kingdom'},
-  { cve: null,  title: 'Mass scan for log4j (CVE-2021-44228) still active',  attackType: 'Reconnaissance', severity: 'low',      sourceCountry: 'Global',  destCountry: 'Global'        },
-  { cve: null,  title: 'DarkGate malware delivered via Microsoft Teams',     attackType: 'Phishing',       severity: 'high',     sourceCountry: 'Russia',  destCountry: 'United States' },
-  { cve: null,  title: 'Suspicious S3 bucket data exfiltration',             attackType: 'Exfiltration',   severity: 'high',     sourceCountry: 'Unknown', destCountry: 'United States' },
-  { cve: null,  title: 'GootLoader JS campaign targeting legal sector',      attackType: 'Initial Access', severity: 'medium',   sourceCountry: 'Russia',  destCountry: 'United States' },
-]
+const SEV_DOT: Record<Severity, string> = {
+  critical: '#FF2E97',
+  high:     '#FF4D6D',
+  medium:   '#FFB23E',
+  low:      '#34F5C5',
+  info:     '#7A3CFF',
+}
 
-let liveCounter = 1000
-
-function generateLiveEntry(): FeedEntry {
-  const pool = LIVE_POOL[Math.floor(Math.random() * LIVE_POOL.length)]
+let liveCounter = 0
+function makeLiveEntry(): ThreatEntry {
+  const pool = LIVE_UNCONFIRMED[liveCounter % LIVE_UNCONFIRMED.length]
+  liveCounter++
   const now = new Date()
   return {
-    id: `live-${++liveCounter}`,
+    id: `live-${Date.now()}-${liveCounter}`,
     ts: now.toISOString(),
     cve: null,
-    source: `${Math.floor(Math.random() * 200 + 50)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}`,
-    destination: `10.${Math.floor(Math.random() * 20)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}`,
+    source: `${Math.floor(Math.random() * 180 + 60)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}`,
+    sourceCountry: pool.sourceCountry ?? 'Unknown',
+    attackType: pool.attackType ?? 'Unknown',
+    severity: pool.severity ?? 'medium',
     sectors: ['Enterprise'],
-    summary: `Live detection: ${pool.title?.toLowerCase()}. Automated threat correlation in progress.`,
-    recommendations: ['Investigate immediately', 'Check SIEM for correlated events', 'Isolate affected endpoint if confirmed'],
-    docLink: null,
-    cvssScore: null,
+    summary: `Live detection: ${pool.title?.toLowerCase()}. Awaiting analyst review.`,
+    feedSources: pool.feedSources ?? ['Automated'],
+    aiConfidence: pool.aiConfidence ?? 60,
+    iocs: pool.iocs ?? [],
+    mitre: [],
+    status: 'unconfirmed',
+    correlated: 0,
     tags: ['live'],
-    ...pool,
-  } as FeedEntry
+    title: pool.title ?? 'Unknown threat',
+  }
 }
 
-/* ── Feed Entry Row ──────────────────────────────────────────────── */
-function FeedRow({ entry, idx }: { entry: FeedEntry; idx: number }) {
-  const [hovered, setHovered] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const rowRef = useRef<HTMLDivElement>(null)
-  const panelOpen = hovered || expanded
+function timeAgo(ts: string) {
+  const diff = (Date.now() - new Date(ts).getTime()) / 1000
+  if (diff < 60) return `${Math.floor(diff)}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  return `${Math.floor(diff / 3600)}h ago`
+}
 
-  const timeAgo = (ts: string) => {
-    const diff = (Date.now() - new Date(ts).getTime()) / 1000
-    if (diff < 60) return `${Math.floor(diff)}s ago`
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    return `${Math.floor(diff / 3600)}h ago`
-  }
+/* ── Confidence Ring ─────────────────────────────────────────────── */
+function ConfidenceRing({ value }: { value: number }) {
+  const r = 10
+  const circ = 2 * Math.PI * r
+  const color = value >= 85 ? '#FF2E97' : value >= 65 ? '#FFB23E' : '#34F5C5'
+  return (
+    <svg width="28" height="28" className="shrink-0 -rotate-90">
+      <circle cx="14" cy="14" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+      <circle
+        cx="14" cy="14" r={r} fill="none"
+        stroke={color} strokeWidth="3"
+        strokeDasharray={`${(value / 100) * circ} ${circ}`}
+        strokeLinecap="round"
+      />
+      <text
+        x="14" y="14"
+        dominantBaseline="middle" textAnchor="middle"
+        className="rotate-90" style={{ transformOrigin: '14px 14px' }}
+        fill={color} fontSize="7" fontWeight="700"
+      >
+        {value}
+      </text>
+    </svg>
+  )
+}
+
+/* ── Threat Card ─────────────────────────────────────────────────── */
+function ThreatCard({
+  entry,
+  onConfirm,
+  onDismiss,
+  isNew,
+}: {
+  entry: ThreatEntry
+  onConfirm?: (id: string) => void
+  onDismiss: (id: string) => void
+  isNew?: boolean
+}) {
+  const [expanded, setExpanded] = useState(false)
 
   return (
-    <div
-      ref={rowRef}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="relative"
+    <motion.div
+      layout
+      initial={isNew ? { opacity: 0, y: -16, scale: 0.97 } : { opacity: 1 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -20, scale: 0.95 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+        'rounded-xl border bg-[#0D0920] overflow-hidden',
+        entry.status === 'confirmed'
+          ? 'border-white/8'
+          : 'border-amber/15',
+        isNew && 'ring-1 ring-magenta/40',
+      )}
     >
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: idx * 0.03, duration: 0.3 }}
+      {/* Card header */}
+      <div
+        className="flex items-start gap-3 p-3 cursor-pointer select-none"
         onClick={() => setExpanded((e) => !e)}
-        className={cn(
-          'grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 border-b border-white/4 transition-colors cursor-pointer select-none',
-          panelOpen ? 'bg-white/3' : idx % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.012]',
-          expanded && 'border-l-2 border-l-magenta/60',
-        )}
       >
-        {/* Severity dot */}
         <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: entry.severity === 'critical' ? '#FF2E97' : entry.severity === 'high' ? '#FF4D6D' : entry.severity === 'medium' ? '#FFB23E' : entry.severity === 'low' ? '#34F5C5' : '#7A3CFF' }}
+          className="mt-0.5 w-2 h-2 rounded-full shrink-0"
+          style={{ background: SEV_DOT[entry.severity] }}
         />
 
-        {/* Title + CVE */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start gap-2 flex-wrap">
             {entry.cve && (
-              <span className="shrink-0 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-violet/15 text-violet border border-violet/20">
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-violet/15 text-violet border border-violet/20 shrink-0">
                 {entry.cve}
               </span>
             )}
-            <span className="text-xs text-ink-200 truncate">{entry.title}</span>
+            <span className={cn(
+              'text-[9px] font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide shrink-0',
+              SEV_COLOR[entry.severity],
+            )}>
+              {entry.severity}
+            </span>
+            {isNew && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-magenta/20 text-magenta border border-magenta/30 shrink-0 animate-pulse">
+                NEW
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-3 mt-0.5">
-            <span className="text-[10px] text-ink-600 font-mono">{entry.source}</span>
-            <span className="text-[10px] text-ink-700">→</span>
-            <span className="text-[10px] text-ink-600 font-mono">{entry.destination}</span>
+          <p className="text-xs text-ink-100 mt-1 leading-snug line-clamp-2">{entry.title}</p>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span className="text-[10px] text-ink-500">{entry.attackType}</span>
+            <span className="text-ink-700 text-[10px]">·</span>
+            <span className="text-[10px] text-ink-600">{entry.sourceCountry}</span>
+            <span className="text-ink-700 text-[10px]">·</span>
+            <span suppressHydrationWarning className="text-[10px] text-ink-600">{timeAgo(entry.ts)}</span>
+          </div>
+          {/* Feed sources */}
+          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+            {entry.feedSources.map(src => (
+              <span key={src} className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-ink-500 border border-white/8">
+                {src}
+              </span>
+            ))}
+            {entry.correlated > 0 && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet/10 text-violet border border-violet/15">
+                {entry.correlated} correlated
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Attack type */}
-        <span className="text-[10px] text-ink-400 whitespace-nowrap">{entry.attackType}</span>
-
-        {/* Countries */}
-        <div className="text-[10px] text-ink-500 whitespace-nowrap text-right hidden md:block">
-          <div>{entry.sourceCountry}</div>
-          <div className="text-ink-700">→ {entry.destCountry}</div>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          {entry.status === 'unconfirmed' && (
+            <ConfidenceRing value={entry.aiConfidence} />
+          )}
+          <ChevronDown className={cn(
+            'w-3.5 h-3.5 text-ink-600 transition-transform',
+            expanded && 'rotate-180',
+          )} />
         </div>
+      </div>
 
-        {/* Severity badge */}
-        <span className={cn('text-[9px] font-semibold px-2 py-0.5 rounded-full border uppercase tracking-wide whitespace-nowrap', SEV_COLOR[entry.severity])}>
-          {entry.severity}
-        </span>
-
-        {/* Time */}
-        <span suppressHydrationWarning className="text-[10px] text-ink-600 whitespace-nowrap hidden sm:block">{timeAgo(entry.ts)}</span>
-      </motion.div>
-
-      {/* Detail panel — shown on hover (desktop) or click/tap (mobile) */}
-      <AnimatePresence>
-        {panelOpen && (
+      {/* Expanded detail */}
+      <AnimatePresence initial={false}>
+        {expanded && (
           <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.97 }}
-            transition={{ duration: 0.15 }}
-            className="absolute left-4 right-4 top-full z-50 mt-1 glass border border-white/10 rounded-xl p-4 shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
           >
-            {/* Glow */}
-            <div className="absolute inset-0 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse at 0% 0%, rgba(255,46,151,0.06), transparent 60%)' }}
-            />
+            <div className="px-3 pb-3 border-t border-white/5 pt-3 space-y-3">
+              <p className="text-xs text-ink-300 leading-relaxed">{entry.summary}</p>
 
-            <div className="relative grid md:grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  {entry.cve && (
-                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-violet/20 text-violet border border-violet/30">
-                      {entry.cve}
-                    </span>
-                  )}
-                  {entry.cvssScore && (
-                    <span className={cn(
-                      'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded',
-                      entry.cvssScore >= 9 ? 'bg-magenta/15 text-magenta' :
-                      entry.cvssScore >= 7 ? 'bg-threat/15 text-threat' : 'bg-amber/15 text-amber',
-                    )}>
-                      CVSS {entry.cvssScore}
-                    </span>
-                  )}
+              {entry.iocs.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-1.5">Extracted IOCs</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entry.iocs.map(ioc => (
+                      <span key={ioc} className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/30 text-ink-300 border border-white/8">
+                        {ioc}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-ink-300 leading-relaxed">{entry.summary}</p>
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {entry.tags.map((t) => (
-                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-surface-3 text-ink-500 font-mono">{t}</span>
-                  ))}
-                </div>
-              </div>
+              )}
 
-              <div>
-                <p className="text-[10px] font-semibold text-white mb-2 uppercase tracking-wide">Recommended Actions</p>
-                <ul className="space-y-1.5">
-                  {entry.recommendations.map((r, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-ink-300">
-                      <Shield className="w-3 h-3 text-safe mt-0.5 shrink-0" />
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-                {entry.docLink && (
-                  <a
-                    href={entry.docLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-3 text-xs text-magenta hover:underline"
+              {entry.mitre.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-1.5">MITRE ATT&CK</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entry.mitre.map(t => (
+                      <a
+                        key={t}
+                        href={`https://attack.mitre.org/techniques/${t.replace('T', 'T').replace('.', '/')}/`}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet/10 text-violet border border-violet/20 hover:bg-violet/20 transition-colors"
+                      >
+                        {t}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                {onConfirm && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onConfirm(entry.id) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-safe/15 text-safe border border-safe/25 text-xs font-medium hover:bg-safe/25 transition-colors"
                   >
-                    <ExternalLink className="w-3 h-3" />
-                    Official CVE Documentation
-                  </a>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Confirm Threat
+                  </button>
                 )}
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {entry.sectors.map((s) => (
-                    <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-surface-2 border border-white/8 text-ink-500">{s}</span>
-                  ))}
-                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation() }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-magenta/12 text-magenta border border-magenta/25 text-xs font-medium hover:bg-magenta/20 transition-colors"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Send to SIEM
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation() }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-ink-300 border border-white/10 text-xs font-medium hover:bg-white/8 transition-colors"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  Block IOCs
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDismiss(entry.id) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/4 text-ink-500 border border-white/8 text-xs font-medium hover:text-ink-300 transition-colors ml-auto"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Dismiss
+                </button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   )
 }
 
-/* ── Filters ─────────────────────────────────────────────────────── */
-function FilterDropdown({
-  label, options, value, onChange, open, onToggle,
-}: {
-  label: string; options: string[]; value: string; onChange: (v: string) => void
-  open: boolean; onToggle: () => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onToggle()
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open, onToggle])
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={onToggle}
-        className={cn(
-          'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors',
-          value !== 'All'
-            ? 'bg-magenta/10 border-magenta/30 text-magenta'
-            : open
-            ? 'bg-surface-2 border-white/15 text-ink-200'
-            : 'bg-surface-2 border-white/8 text-ink-400 hover:text-white hover:border-white/15',
-        )}
-      >
-        {label}: <span className="font-medium">{value}</span>
-        <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            className="absolute top-full mt-1 left-0 z-50 bg-[#100A1C] border border-white/10 rounded-xl overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.6)] min-w-[160px] max-h-60 overflow-y-auto"
-          >
-            {options.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => { onChange(opt); onToggle() }}
-                className={cn(
-                  'w-full text-left px-3 py-2 text-xs transition-colors',
-                  opt === value ? 'text-magenta bg-magenta/8' : 'text-ink-300 hover:text-white hover:bg-white/5',
-                )}
-              >
-                {opt}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-/* ── Stats bar ───────────────────────────────────────────────────── */
-function FeedStats({ feeds }: { feeds: FeedEntry[] }) {
-  const counts = {
-    critical: feeds.filter((f) => f.severity === 'critical').length,
-    high:     feeds.filter((f) => f.severity === 'high').length,
-    medium:   feeds.filter((f) => f.severity === 'medium').length,
-    total:    feeds.length,
-  }
-  return (
-    <div className="flex items-center gap-6 text-xs text-ink-500">
-      <span className="font-mono text-white font-semibold">{counts.total} events</span>
-      <span className="text-magenta">{counts.critical} critical</span>
-      <span className="text-threat">{counts.high} high</span>
-      <span className="text-amber">{counts.medium} medium</span>
-    </div>
-  )
-}
-
-/* ── Volume Chart ────────────────────────────────────────────────── */
-const HOURLY_VOLUME = [
-  { h: '00', critical: 2,  high: 4,  medium: 6  },
-  { h: '01', critical: 1,  high: 2,  medium: 3  },
-  { h: '02', critical: 0,  high: 1,  medium: 4  },
-  { h: '03', critical: 1,  high: 3,  medium: 2  },
-  { h: '04', critical: 3,  high: 5,  medium: 7  },
-  { h: '05', critical: 2,  high: 4,  medium: 5  },
-  { h: '06', critical: 4,  high: 7,  medium: 9  },
-  { h: '07', critical: 6,  high: 11, medium: 14 },
-  { h: '08', critical: 9,  high: 18, medium: 22 },
-  { h: '09', critical: 12, high: 24, medium: 31 },
-  { h: '10', critical: 8,  high: 16, medium: 27 },
-  { h: '11', critical: 14, high: 28, medium: 38 },
-  { h: '12', critical: 11, high: 22, medium: 34 },
-  { h: '13', critical: 7,  high: 14, medium: 21 },
-  { h: '14', critical: 9,  high: 19, medium: 26 },
-  { h: '15', critical: 16, high: 31, medium: 44 },
-  { h: '16', critical: 18, high: 36, medium: 51 },
-  { h: '17', critical: 21, high: 42, medium: 58 },
-  { h: '18', critical: 15, high: 30, medium: 43 },
-  { h: '19', critical: 11, high: 23, medium: 31 },
-  { h: '20', critical: 8,  high: 16, medium: 24 },
-  { h: '21', critical: 6,  high: 12, medium: 18 },
-  { h: '22', critical: 4,  high: 8,  medium: 12 },
-  { h: '23', critical: 3,  high: 6,  medium: 9  },
+/* ── Source Health Pills ─────────────────────────────────────────── */
+const SOURCES = [
+  { name: 'MISP', status: 'live', rate: '847/h' },
+  { name: 'RecordedFuture', status: 'live', rate: '234/h' },
+  { name: 'GreyNoise', status: 'live', rate: '1.2k/h' },
+  { name: 'AbuseIPDB', status: 'live', rate: '509/h' },
+  { name: 'Shodan', status: 'live', rate: '88/h' },
+  { name: 'CISA', status: 'live', rate: '12/h' },
+  { name: 'AlienVault', status: 'degraded', rate: '43/h' },
+  { name: 'NVD', status: 'live', rate: '6/h' },
 ]
 
-function VolumeChart() {
-  const max = Math.max(...HOURLY_VOLUME.map((h) => h.critical + h.high + h.medium))
+/* ── Main Page ───────────────────────────────────────────────────── */
+export default function FeedsPage() {
+  const [confirmed, setConfirmed] = useState<ThreatEntry[]>(CONFIRMED_SEED)
+  const [unconfirmed, setUnconfirmed] = useState<ThreatEntry[]>(UNCONFIRMED_SEED)
+  const [newIds, setNewIds] = useState<Set<string>>(new Set())
+  const [severityFilter, setSeverityFilter] = useState<string>('all')
+  const [liveCount, setLiveCount] = useState(0)
+  const [pulse, setPulse] = useState(false)
+
+  // Simulate live incoming unconfirmed threats every 8–14 seconds
+  useEffect(() => {
+    const jitter = () => 8000 + Math.random() * 6000
+    let timer: ReturnType<typeof setTimeout>
+    const schedule = () => {
+      timer = setTimeout(() => {
+        const entry = makeLiveEntry()
+        setUnconfirmed(prev => [entry, ...prev].slice(0, 30))
+        setNewIds(prev => new Set(Array.from(prev).concat(entry.id)))
+        setLiveCount(c => c + 1)
+        setPulse(true)
+        setTimeout(() => {
+          setNewIds(prev => { const n = new Set(prev); n.delete(entry.id); return n })
+          setPulse(false)
+        }, 8000)
+        schedule()
+      }, jitter())
+    }
+    schedule()
+    return () => clearTimeout(timer)
+  }, [])
+
+  function handleConfirm(id: string) {
+    const entry = unconfirmed.find(e => e.id === id)
+    if (!entry) return
+    setUnconfirmed(prev => prev.filter(e => e.id !== id))
+    setConfirmed(prev => [{ ...entry, status: 'confirmed' }, ...prev])
+  }
+
+  function handleDismissUnconfirmed(id: string) {
+    setUnconfirmed(prev => prev.filter(e => e.id !== id))
+  }
+
+  function handleDismissConfirmed(id: string) {
+    setConfirmed(prev => prev.filter(e => e.id !== id))
+  }
+
+  const filteredConfirmed = severityFilter === 'all'
+    ? confirmed
+    : confirmed.filter(e => e.severity === severityFilter)
+
+  const filteredUnconfirmed = severityFilter === 'all'
+    ? unconfirmed
+    : unconfirmed.filter(e => e.severity === severityFilter)
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-white">Feed Volume (24h)</span>
-        <div className="flex items-center gap-3 text-[9px] text-ink-600">
-          {[['Critical','#FF2E97'],['High','#FF4D6D'],['Medium','#FFB23E']].map(([l,c]) => (
-            <span key={l} className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-sm" style={{ background: c }} />{l}
+    <div className="flex flex-col h-full min-h-0 bg-[#0A0612]">
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
+        <div>
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4 text-magenta" />
+            <h1 className="text-lg font-display font-semibold text-white">Threat Feeds</h1>
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-[10px] font-medium text-safe">
+              <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
+              LIVE
             </span>
+          </div>
+          <p className="text-xs text-ink-500 mt-0.5">
+            Real-time threat intelligence from {SOURCES.length} sources · {liveCount} new today
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white transition-colors">
+            <Download className="w-3.5 h-3.5" />
+            Export IOCs
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-magenta/15 border border-magenta/25 text-xs text-magenta font-medium hover:bg-magenta/25 transition-colors">
+            <Filter className="w-3.5 h-3.5" />
+            Filters
+          </button>
+        </div>
+      </div>
+
+      {/* Source health strip */}
+      <div className="px-6 py-2.5 border-b border-white/4 bg-white/[0.01] shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-2 min-w-max">
+          <span className="text-[10px] text-ink-600 uppercase tracking-widest mr-1">Sources</span>
+          {SOURCES.map(src => (
+            <div key={src.name} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/8">
+              <span className={cn(
+                'w-1.5 h-1.5 rounded-full',
+                src.status === 'live' ? 'bg-safe animate-pulse' : 'bg-amber',
+              )} />
+              <span className="text-[10px] text-ink-300">{src.name}</span>
+              <span className="text-[10px] text-ink-600">{src.rate}</span>
+            </div>
           ))}
         </div>
       </div>
-      <div className="flex items-end gap-0.5 h-16">
-        {HOURLY_VOLUME.map((h, i) => {
-          const total = h.critical + h.high + h.medium
-          const pct = (total / max) * 100
-          return (
-            <div key={h.h} className="flex-1 flex flex-col items-stretch gap-px" title={`${h.h}:00 — ${total} events`}>
-              <motion.div
-                initial={{ height: 0 }}
-                animate={{ height: `${(h.medium / max) * 100}%` }}
-                transition={{ delay: i * 0.015, duration: 0.6, ease: 'easeOut' }}
-                className="rounded-t-sm min-h-0"
-                style={{ background: '#FFB23E80' }}
-              />
-              <motion.div
-                initial={{ height: 0 }}
-                animate={{ height: `${(h.high / max) * 100}%` }}
-                transition={{ delay: i * 0.015, duration: 0.6, ease: 'easeOut' }}
-                className="min-h-0"
-                style={{ background: '#FF4D6D' }}
-              />
-              <motion.div
-                initial={{ height: 0 }}
-                animate={{ height: `${(h.critical / max) * 100}%` }}
-                transition={{ delay: i * 0.015, duration: 0.6, ease: 'easeOut' }}
-                className="rounded-b-sm min-h-0"
-                style={{ background: '#FF2E97' }}
-              />
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-4 divide-x divide-white/5 border-b border-white/5 shrink-0">
+        {[
+          { label: 'Confirmed', value: confirmed.length, color: 'text-safe', icon: CheckCircle2 },
+          { label: 'Unconfirmed', value: unconfirmed.length, color: 'text-amber', icon: HelpCircle },
+          { label: 'Critical', value: [...confirmed, ...unconfirmed].filter(e => e.severity === 'critical').length, color: 'text-magenta', icon: Flame },
+          { label: 'Live/hr rate', value: '2.4k', color: 'text-violet', icon: Activity },
+        ].map(kpi => (
+          <div key={kpi.label} className="flex items-center gap-3 px-4 py-3">
+            <kpi.icon className={cn('w-4 h-4 shrink-0', kpi.color)} />
+            <div>
+              <div className={cn('text-base font-bold font-mono', kpi.color)}>{kpi.value}</div>
+              <div className="text-[10px] text-ink-600">{kpi.label}</div>
             </div>
-          )
-        })}
-      </div>
-      <div className="flex justify-between mt-1 text-[8px] text-ink-700">
-        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span>
-      </div>
-    </div>
-  )
-}
-
-/* ── Source Health ────────────────────────────────────────────────── */
-const FEED_SOURCES = [
-  { name: 'MISP',        type: 'IOC', events: 2814, status: 'healthy',  latency: '120ms' },
-  { name: 'Shodan',      type: 'ASM', events: 1240, status: 'healthy',  latency: '340ms' },
-  { name: 'GreyNoise',   type: 'IP',  events: 891,  status: 'healthy',  latency: '89ms'  },
-  { name: 'AlienVault',  type: 'IOC', events: 3102, status: 'degraded', latency: '2.1s'  },
-  { name: 'AbuseIPDB',   type: 'IP',  events: 654,  status: 'healthy',  latency: '210ms' },
-  { name: 'NVD NIST',    type: 'CVE', events: 421,  status: 'healthy',  latency: '460ms' },
-]
-
-const SRC_STATUS_COLOR: Record<string, string> = { healthy: '#34F5C5', degraded: '#FFB23E', offline: '#FF4D6D' }
-
-function SourceHealth() {
-  return (
-    <div className="min-w-[220px]">
-      <span className="text-xs font-semibold text-white block mb-2">Source Health</span>
-      <div className="space-y-1">
-        {FEED_SOURCES.map((src) => (
-          <div key={src.name} className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: SRC_STATUS_COLOR[src.status] }} />
-            <span className="text-xs text-ink-300 w-20 shrink-0">{src.name}</span>
-            <span className="text-[9px] text-ink-600 shrink-0">{src.type}</span>
-            <span className="text-[9px] font-mono text-ink-600 ml-auto shrink-0">{src.latency}</span>
           </div>
         ))}
       </div>
-    </div>
-  )
-}
 
-/* ── Page ────────────────────────────────────────────────────────── */
-export default function ThreatFeedsPage() {
-  const [feeds, setFeeds] = useState<FeedEntry[]>(ALL_FEEDS)
-  const [live, setLive] = useState(true)
-  const [filterAttack, setFilterAttack] = useState('All')
-  const [filterSev, setFilterSev] = useState('All')
-  const [filterSector, setFilterSector] = useState('All')
-  const [filterCountry, setFilterCountry] = useState('All')
-  const [search, setSearch] = useState('')
-  const [ticker, setTicker] = useState(0)
-  const [openFilter, setOpenFilter] = useState<string | null>(null)
-  function toggleFilter(name: string) { setOpenFilter((o) => (o === name ? null : name)) }
-
-  // Live feed update every 3 seconds
-  useEffect(() => {
-    if (!live) return
-    const id = setInterval(() => {
-      setFeeds((prev) => [generateLiveEntry(), ...prev.slice(0, 79)])
-      setTicker((t) => t + 1)
-    }, 3000)
-    return () => clearInterval(id)
-  }, [live])
-
-  const filtered = feeds.filter((f) => {
-    if (filterAttack !== 'All' && f.attackType !== filterAttack) return false
-    if (filterSev !== 'All' && f.severity !== filterSev.toLowerCase()) return false
-    if (filterSector !== 'All' && !f.sectors.includes(filterSector)) return false
-    if (filterCountry !== 'All' && f.sourceCountry !== filterCountry && f.destCountry !== filterCountry) return false
-    if (search && !f.title.toLowerCase().includes(search.toLowerCase()) && !(f.cve ?? '').toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
-
-  const hasFilters = filterAttack !== 'All' || filterSev !== 'All' || filterSector !== 'All' || filterCountry !== 'All' || search
-
-  function exportCSV() {
-    const header = 'CVE,Title,Attack Type,Severity,Source Country,Dest Country,CVSS Score,Tags'
-    const rows = filtered.map((f) =>
-      [
-        f.cve ?? '',
-        `"${f.title.replace(/"/g, '""')}"`,
-        f.attackType,
-        f.severity,
-        f.sourceCountry,
-        f.destCountry,
-        f.cvssScore ?? '',
-        `"${f.tags.join(', ')}"`,
-      ].join(','),
-    )
-    const csv = [header, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `threatorbit-feeds-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-white/5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="font-display text-xl font-bold text-white">Threat Intelligence Feeds</h1>
-          <p className="text-xs text-ink-500 mt-0.5">Real-time threat feed aggregation · click any row for details</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Export CSV */}
+      {/* Severity filter */}
+      <div className="flex items-center gap-1.5 px-6 py-2 border-b border-white/4 shrink-0 overflow-x-auto">
+        {['all', 'critical', 'high', 'medium', 'low'].map(sev => (
           <button
-            onClick={exportCSV}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors"
-            aria-label="Export as CSV"
-          >
-            <Download className="w-3 h-3" />
-            Export CSV
-          </button>
-          {/* Live toggle */}
-          <button
-            onClick={() => setLive((l) => !l)}
-            aria-label={live ? 'Pause live feed' : 'Resume live feed'}
+            key={sev}
+            onClick={() => setSeverityFilter(sev)}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors',
-              live ? 'bg-safe/10 border-safe/25 text-safe' : 'bg-surface-2 border-white/8 text-ink-400',
+              'px-3 py-1 rounded-full text-[11px] font-medium capitalize transition-colors whitespace-nowrap',
+              severityFilter === sev
+                ? 'bg-magenta/20 text-magenta border border-magenta/30'
+                : 'bg-white/4 text-ink-500 border border-white/8 hover:text-ink-200',
             )}
           >
-            <span className={cn('w-1.5 h-1.5 rounded-full', live && 'animate-pulse bg-safe')} style={!live ? { background: '#665B7D' } : {}} />
-            {live ? 'Live' : 'Paused'}
+            {sev === 'all' ? 'All Severities' : sev}
           </button>
-          <div className="flex items-center gap-1.5 text-[10px] text-ink-600">
-            <RefreshCw className="w-3 h-3" />
-            Update #{ticker}
-          </div>
-        </div>
-      </div>
-
-      {/* Volume + source health strip */}
-      <div className="px-6 py-4 border-b border-white/5 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-start">
-        <VolumeChart />
-        <SourceHealth />
-      </div>
-
-      {/* KPI stat pills */}
-      <div className="px-6 py-2 border-b border-white/4 flex items-center gap-6 overflow-x-auto">
-        {[
-          { label: 'Total', value: feeds.length, color: 'text-white' },
-          { label: 'Critical', value: feeds.filter((f) => f.severity === 'critical').length, color: 'text-magenta' },
-          { label: 'High',     value: feeds.filter((f) => f.severity === 'high').length,     color: 'text-threat' },
-          { label: 'Medium',   value: feeds.filter((f) => f.severity === 'medium').length,   color: 'text-amber' },
-          { label: 'Low',      value: feeds.filter((f) => f.severity === 'low').length,       color: 'text-safe' },
-          { label: 'With CVE', value: feeds.filter((f) => f.cve).length,                      color: 'text-violet' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="flex items-center gap-2 shrink-0">
-            <span className={`font-display text-lg font-bold ${color}`}>{value}</span>
-            <span className="text-[10px] text-ink-600">{label}</span>
-          </div>
         ))}
       </div>
 
-      {/* Filter bar */}
-      <div className="px-6 py-3 border-b border-white/4 flex flex-wrap items-center gap-3">
-        <Filter className="w-3.5 h-3.5 text-ink-500 shrink-0" />
+      {/* Split columns */}
+      <div className="flex-1 min-h-0 grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/5 overflow-hidden">
 
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="Search CVE, title..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="px-3 py-1.5 rounded-lg text-xs bg-surface-2 border border-white/8 text-ink-200 placeholder-ink-600 focus:outline-none focus:border-magenta/40 w-44"
-        />
-
-        <FilterDropdown label="Attack Type" options={ATTACK_TYPES} value={filterAttack} onChange={setFilterAttack} open={openFilter==='attack'}   onToggle={() => toggleFilter('attack')}  />
-        <FilterDropdown label="Severity"    options={SEVERITIES}   value={filterSev}    onChange={setFilterSev}    open={openFilter==='severity'} onToggle={() => toggleFilter('severity')}/>
-        <FilterDropdown label="Sector"      options={SECTORS}       value={filterSector} onChange={setFilterSector} open={openFilter==='sector'}   onToggle={() => toggleFilter('sector')}  />
-        <FilterDropdown label="Country"     options={COUNTRIES}     value={filterCountry}onChange={setFilterCountry}open={openFilter==='country'}  onToggle={() => toggleFilter('country')} />
-
-        {hasFilters && (
-          <button
-            onClick={() => { setFilterAttack('All'); setFilterSev('All'); setFilterSector('All'); setFilterCountry('All'); setSearch('') }}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-threat hover:bg-threat/5 transition-colors border border-threat/20"
-          >
-            <X className="w-3 h-3" />
-            Clear
-          </button>
-        )}
-
-        <div className="ml-auto">
-          <FeedStats feeds={filtered} />
-        </div>
-      </div>
-
-      {/* Column headers */}
-      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-2 text-[9px] font-semibold uppercase tracking-widest text-ink-600 border-b border-white/4">
-        <span className="w-2" />
-        <span>Threat / IOC</span>
-        <span>Type</span>
-        <span className="hidden md:block text-right">Country</span>
-        <span>Severity</span>
-        <span className="hidden sm:block">Time</span>
-      </div>
-
-      {/* Feed rows */}
-      <div className="flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-ink-600">
-            <Zap className="w-6 h-6 mb-2" />
-            <p className="text-sm">No matching threats</p>
+        {/* ── Confirmed Threats ── */}
+        <div className="flex flex-col overflow-hidden">
+          {/* Column header */}
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-safe/[0.03] shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-safe" />
+            <span className="text-xs font-semibold text-safe">Confirmed Threats</span>
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-safe/15 text-safe border border-safe/25 font-mono">
+              {filteredConfirmed.length}
+            </span>
           </div>
-        ) : (
-          filtered.map((entry, i) => <FeedRow key={entry.id} entry={entry} idx={i} />)
-        )}
+
+          {/* Feed list */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <AnimatePresence mode="popLayout">
+              {filteredConfirmed.map(entry => (
+                <ThreatCard
+                  key={entry.id}
+                  entry={entry}
+                  onDismiss={handleDismissConfirmed}
+                />
+              ))}
+              {filteredConfirmed.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-32 text-ink-600">
+                  <CheckCircle2 className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-xs">No confirmed threats match filter</p>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* ── Unconfirmed Threats ── */}
+        <div className="flex flex-col overflow-hidden">
+          {/* Column header */}
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-amber/[0.03] shrink-0">
+            <HelpCircle className={cn('w-4 h-4 text-amber', pulse && 'animate-bounce')} />
+            <span className="text-xs font-semibold text-amber">Unconfirmed / Under Analysis</span>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-[9px] text-ink-500 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber animate-pulse" />
+                Live updates
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber/15 text-amber border border-amber/25 font-mono">
+                {filteredUnconfirmed.length}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {/* AI confidence legend */}
+            <div className="flex items-center gap-4 px-1 mb-1">
+              <span className="text-[10px] text-ink-600">AI Confidence:</span>
+              {[['≥85%', 'text-magenta'], ['65-84%', 'text-amber'], ['<65%', 'text-safe']].map(([label, cls]) => (
+                <span key={label} className={cn('text-[10px] font-medium', cls)}>{label}</span>
+              ))}
+            </div>
+            <AnimatePresence mode="popLayout">
+              {filteredUnconfirmed.map(entry => (
+                <ThreatCard
+                  key={entry.id}
+                  entry={entry}
+                  onConfirm={handleConfirm}
+                  onDismiss={handleDismissUnconfirmed}
+                  isNew={newIds.has(entry.id)}
+                />
+              ))}
+              {filteredUnconfirmed.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-32 text-ink-600">
+                  <HelpCircle className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-xs">No unconfirmed threats — feed is quiet</p>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
     </div>
   )

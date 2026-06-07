@@ -9,7 +9,7 @@ import MegaMenu from '@/components/layout/MegaMenu'
 
 const NAV_LINKS = [
   { label: 'Platform', href: '#features' },
-  { label: 'Products', href: '#pricing' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Threat Intel', href: '#threat-intel' },
   { label: 'About', href: '#about' },
   { label: 'Docs', href: '/docs' },

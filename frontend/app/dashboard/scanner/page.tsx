@@ -272,7 +272,11 @@ export default function ScannerPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="font-display text-xl font-bold text-white mb-1">Threat Scanner</h1>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="font-display text-xl font-bold text-white">IntelScope</h1>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-safe/15 text-safe border border-safe/30 uppercase tracking-wider">Free</span>
+            <span className="text-[10px] text-ink-600">by ThreatOrbit</span>
+          </div>
           <p className="text-xs text-ink-500">Scan URLs, IPs, file hashes, and files against 90+ threat intelligence engines</p>
         </div>
         {/* Stats row */}
