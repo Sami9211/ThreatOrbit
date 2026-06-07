@@ -1010,6 +1010,25 @@ export default function PricingPage() {
           </motion.div>
         </section>
       </main>
+
+      {/* Mobile sticky total bar — keeps price + CTA reachable without scrolling
+          past every module card (the summary panel is far down on phones). */}
+      <div className="xl:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-[#0A0612]/95 backdrop-blur-xl px-4 py-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] text-ink-500 uppercase tracking-widest">Monthly total</p>
+          <p className="font-display text-xl font-bold text-white leading-none">
+            ${effectiveTotal.toLocaleString()}
+            <span className="text-xs font-normal text-ink-500"> /mo · {selected.size} modules</span>
+          </p>
+        </div>
+        <a
+          href="/signup"
+          className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-plasma text-white font-semibold text-sm shrink-0"
+        >
+          <Sparkles className="w-4 h-4" />
+          Start
+        </a>
+      </div>
     </div>
   )
 }

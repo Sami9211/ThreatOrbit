@@ -79,6 +79,12 @@ export default function Pricing() {
         </p>
       </Reveal>
 
+      <div className="text-center mb-8">
+        <a href="/pricing" className="inline-flex items-center gap-1.5 text-sm text-magenta hover:underline font-medium">
+          Build your exact plan with the pricing calculator →
+        </a>
+      </div>
+
       <div className="grid md:grid-cols-3 gap-5">
         {TIERS.map((tier, i) => (
           <Reveal key={tier.name} variant="bloom" delay={i * 0.08} className={cn('relative', tier.highlighted && 'md:-mt-3 md:mb-3')}>
@@ -122,7 +128,7 @@ export default function Pricing() {
               <p className="text-[11px] text-ink-500 mb-6">{tier.note}</p>
 
               <a
-                href="#contact"
+                href={tier.price === 'Free' ? '/signup' : tier.name === 'Super SOC' ? '/signup' : '/pricing'}
                 className={cn(
                   'block text-center px-4 py-2.5 rounded-xl font-medium text-sm mb-7 transition-all',
                   tier.highlighted

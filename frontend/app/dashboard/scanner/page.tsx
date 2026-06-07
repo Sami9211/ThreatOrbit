@@ -452,6 +452,34 @@ export default function ScannerPage() {
         )}
       </AnimatePresence>
 
+      {/* What you can scan — fills idle space with useful guidance */}
+      <AnimatePresence>
+        {!result && !scanning && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+          >
+            {[
+              { icon: Link,   title: 'URLs',   desc: 'Phishing, malware delivery & C2 domains', color: '#FF2E97', example: 'https://example.com/path' },
+              { icon: Globe,  title: 'IPs',    desc: 'Reputation, geolocation & ASN context',   color: '#7A3CFF', example: '45.95.147.236' },
+              { icon: Hash,   title: 'Hashes', desc: 'MD5 / SHA-1 / SHA-256 file fingerprints',  color: '#FFB23E', example: 'a3f8e92b1d47…' },
+              { icon: File,   title: 'Files',  desc: 'Static analysis across 90+ engines',       color: '#2DD4BF', example: 'invoice.pdf' },
+            ].map((c) => (
+              <div key={c.title} className="glass border border-white/5 rounded-2xl p-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: `${c.color}18` }}>
+                  <c.icon className="w-5 h-5" style={{ color: c.color }} />
+                </div>
+                <p className="text-sm font-semibold text-white mb-1">{c.title}</p>
+                <p className="text-xs text-ink-400 leading-snug mb-3">{c.desc}</p>
+                <p className="text-[10px] font-mono text-ink-600 truncate bg-surface-3 rounded-md px-2 py-1">{c.example}</p>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Results */}
       <AnimatePresence>
         {result && (
