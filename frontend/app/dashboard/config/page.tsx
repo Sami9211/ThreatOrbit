@@ -224,20 +224,20 @@ function ExperienceModeCard() {
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       className="rounded-xl border border-violet/25 overflow-hidden"
       style={{ background: 'linear-gradient(135deg, rgba(122,60,255,0.08), rgba(255,46,151,0.05))' }}>
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/8">
-        <div className="p-2 rounded-lg bg-violet/15">
+      <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4 border-b border-white/8">
+        <div className="p-2 rounded-lg bg-violet/15 shrink-0">
           <BarChart2 className="w-4 h-4 text-violet" />
         </div>
-        <div>
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white">Experience Mode</h2>
           <p className="text-[11px] text-ink-500 mt-0.5">Switch between simplified and power-user dashboard layouts</p>
         </div>
-        <div className="ml-auto px-2.5 py-1 rounded-full text-[10px] font-semibold border border-violet/30 bg-violet/10 text-violet">
-          Active: {mode === 'normal' ? 'Normal' : 'Power User'}
+        <div className="ml-auto shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-violet/30 bg-violet/10 text-violet">
+          <span className="hidden sm:inline">Active: </span>{mode === 'normal' ? 'Normal' : 'Power'}
         </div>
       </div>
 
-      <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="p-3 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {MODES.map((m) => {
           const Icon = m.icon
           const active = mode === m.id
@@ -246,7 +246,7 @@ function ExperienceModeCard() {
               key={m.id}
               onClick={() => setMode(m.id)}
               className={cn(
-                'text-left p-4 rounded-xl border transition-all',
+                'text-left p-3 sm:p-4 rounded-xl border transition-all',
                 active
                   ? 'border-opacity-60 shadow-lg'
                   : 'border-white/8 hover:border-white/15 bg-surface-2/40',
@@ -285,7 +285,7 @@ function ExperienceModeCard() {
         })}
       </div>
 
-      <div className="px-5 pb-4">
+      <div className="px-4 pb-3 sm:px-5 sm:pb-4">
         <p className="text-[10px] text-ink-700">
           Mode applies across all dashboard pages. Power User mode reveals advanced panels, raw data views, and analyst tools not shown in Normal mode.
         </p>
@@ -302,20 +302,20 @@ function ThemeCard() {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       className="glass border border-white/5 rounded-xl overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
-        <div className="p-2 rounded-lg" style={{ background: `${active.swatch[1]}22` }}>
+      <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4 border-b border-white/5">
+        <div className="p-2 rounded-lg shrink-0" style={{ background: `${active.swatch[1]}22` }}>
           <Palette className="w-4 h-4" style={{ color: active.swatch[1] }} />
         </div>
-        <div>
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white">Dashboard Theme</h2>
           <p className="text-[11px] text-ink-500 mt-0.5">Recolour the entire dashboard — applies instantly, only here (not the public site)</p>
         </div>
-        <div className="ml-auto px-2.5 py-1 rounded-full text-[10px] font-semibold border border-white/12 bg-white/5 text-ink-200">
+        <div className="ml-auto shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-white/12 bg-white/5 text-ink-200">
           {active.label}
         </div>
       </div>
 
-      <div className="p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="p-3 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
         {THEMES.map((t) => {
           const isActive = t.id === theme
           return (
@@ -355,7 +355,7 @@ function ThemeCard() {
         })}
       </div>
 
-      <div className="px-5 pb-4">
+      <div className="px-4 pb-3 sm:px-5 sm:pb-4">
         <p className="text-[10px] text-ink-700">
           Your choice is saved to this browser and syncs across open dashboard tabs. The marketing site keeps its signature Plasma Noir look.
         </p>
@@ -374,13 +374,13 @@ function Section({ title, icon: Icon, color, children }: {
       animate={{ opacity: 1, y: 0 }}
       className="glass border border-white/5 rounded-xl overflow-hidden"
     >
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
-        <div className="p-2 rounded-lg" style={{ background: `${color}18` }}>
+      <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4 border-b border-white/5">
+        <div className="p-2 rounded-lg shrink-0" style={{ background: `${color}18` }}>
           <Icon className="w-4 h-4" style={{ color }} />
         </div>
         <h2 className="text-sm font-semibold text-white">{title}</h2>
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </motion.div>
   )
 }
@@ -410,10 +410,10 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
       onMouseLeave={() => setHovered(false)}
       className={cn(
         'shrink-0 transition-[width] duration-300 ease-out',
-        expanded ? 'w-48' : 'w-12',
+        expanded ? 'w-44 sm:w-48' : 'w-12',
       )}
     >
-      <div className="sticky top-4 glass border border-white/8 rounded-2xl p-2 overflow-hidden">
+      <div className="sticky top-4 glass border border-white/8 rounded-2xl p-1.5 overflow-hidden">
         {/* Pin / expand toggle */}
         <button
           onClick={() => setPinned((p) => !p)}
