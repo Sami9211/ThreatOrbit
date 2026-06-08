@@ -452,3 +452,16 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Dashboard page density ─────────────────────────────────────────
+ * The Overview page is authored at a dense, laptop-friendly scale. The other
+ * dashboard routes were built a touch larger, so on laptop/desktop they read as
+ * "zoomed in". We scale their content down to match Overview — but only from the
+ * md breakpoint up, since mobile layouts already stack and shrinking them further
+ * would hurt legibility. The TopBar/Sidebar live outside this wrapper, so the
+ * app chrome stays one consistent size on every page. */
+@media (min-width: 768px) {
+  .page-scale[data-zoom='out'] {
+    zoom: 0.9;
+  }
+}
