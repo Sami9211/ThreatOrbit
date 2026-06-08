@@ -9,11 +9,11 @@ import { useState, useEffect, useCallback } from 'react'
 const KEY = 'to-cursor-effect'
 
 export function useCursorEffect(): [boolean, (v: boolean) => void] {
-  const [enabled, setEnabled] = useState(true)
+  const [enabled, setEnabled] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem(KEY)
-    if (stored !== null) setEnabled(stored !== 'off')
+    if (stored !== null) setEnabled(stored === 'on')
   }, [])
 
   const set = useCallback((v: boolean) => {
