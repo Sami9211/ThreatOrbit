@@ -53,6 +53,31 @@ services:
       retries: 3
       start_period: 15s
 
+  dashboard_api:
+    build:
+      context: ./dashboard_api
+    container_name: dashboard_api
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - dashboard_data:/data
+      - ./dashboard_api:/app/dashboard_api
+    environment:
+      - DASHBOARD_DB_PATH=/data/dashboard.db
+      - DASHBOARD_JWT_SECRET=${DASHBOARD_JWT_SECRET:-dev-insecure-secret-change-me}
+      - DASHBOARD_ADMIN_EMAIL=${DASHBOARD_ADMIN_EMAIL:-admin@threatorbit.space}
+      - DASHBOARD_ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD:-ChangeMe123!}
+      - DASHBOARD_CORS_ORIGINS=${DASHBOARD_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    command: uvicorn dashboard_api.main:app --host 0.0.0.0 --port 8002
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
 volumes:
   threat_data:
   log_data:
+  dashboard_data:
