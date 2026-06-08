@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { fetchPlaybooks, type Playbook as ApiPlaybook } from '@/lib/api'
 import {
   Zap, CheckCircle, RefreshCw, AlertTriangle, X, Shield, User,
   GitBranch, MessageSquare, Activity, Play, Edit2, Clock,
@@ -587,6 +588,32 @@ export default function PlaybooksPage() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [playbooks, setPlaybooks] = useState(PLAYBOOKS)
+
+  useEffect(() => {
+    fetchPlaybooks().then((data: ApiPlaybook[]) => {
+      if (data.length > 0) {
+        const mapped = data.map((p) => {
+          const seed = PLAYBOOKS.find((s) => s.id === p.id || s.name === p.name)
+          return {
+            id: p.id,
+            name: p.name,
+            category: (seed?.category ?? 'Network') as FilterCat,
+            trigger: p.trigger,
+            triggerType: 'auto' as const,
+            stepsCount: p.steps?.length ?? seed?.stepsCount ?? 0,
+            estimatedRuntime: `${p.avgTime}s`,
+            successRate: p.successRate,
+            lastRun: p.lastRun ?? 'Never',
+            lastRunStatus: (p.status === 'active' ? 'success' : 'idle') as RunStatus,
+            runCount: p.runs,
+            enabled: p.status === 'active',
+            steps: seed?.steps ?? p.steps?.map((s) => ({ name: s.name, type: s.type as StepType, status: s.status as StepStatus, duration: `${s.duration}s` })) ?? [],
+          }
+        })
+        setPlaybooks(mapped)
+      }
+    }).catch(() => {})
+  }, [])
 
   const selectedPB = playbooks.find((p) => p.id === selectedId) ?? null
 

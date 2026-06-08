@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { fetchSoarMetrics, type SoarMetrics } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
   TrendingDown, TrendingUp, Clock, Zap, AlertTriangle,
@@ -350,6 +351,11 @@ function DonutChart({
 export default function SOCMetricsPage() {
   const [mode] = useExperienceMode()
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
+  const [metrics, setMetrics] = useState<SoarMetrics | null>(null)
+
+  useEffect(() => {
+    fetchSoarMetrics().then(setMetrics).catch(() => {})
+  }, [])
 
   const timeRanges: TimeRange[] = ['7d', '30d', '90d']
 
@@ -416,7 +422,11 @@ export default function SOCMetricsPage() {
                   </div>
                 </div>
                 <div>
-                  <p className={cn('text-xl font-bold', k.color)}>{k.value}</p>
+                  <p className={cn('text-xl font-bold', k.color)}>
+                    {metrics && k.label === 'MTTR' ? `${metrics.mttr.toFixed(1)} min` :
+                     metrics && k.label === 'Automation Rate' ? `${metrics.automationRate.toFixed(0)}%` :
+                     k.value}
+                  </p>
                   <p className="text-[10px] text-ink-600 leading-snug mt-0.5">{k.sublabel}</p>
                 </div>
                 <p className="text-[9px] text-ink-700">{k.trendLabel}</p>

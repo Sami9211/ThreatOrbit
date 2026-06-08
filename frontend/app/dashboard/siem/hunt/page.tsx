@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { fetchSiemHunts, type SavedHunt as ApiSavedHunt } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Terminal, Search, Play, Clock, Save, BookOpen,
@@ -235,7 +236,26 @@ export default function ThreatHuntPage() {
     hits:    BEACONING_RESULTS.length,
     results: BEACONING_RESULTS,
   })
+  const [savedHunts, setSavedHunts] = useState<SavedHunt[]>(SAVED_HUNTS)
   const [selectedHuntId, setSelectedHuntId] = useState<string>(SAVED_HUNTS[0].id)
+
+  useEffect(() => {
+    fetchSiemHunts().then((data: ApiSavedHunt[]) => {
+      if (data.length > 0) {
+        const mapped: SavedHunt[] = data.map((h) => ({
+          id: h.id,
+          name: h.name,
+          description: h.hypothesis,
+          query: `// ${h.name}\n// Domain: ${h.domain}`,
+          technique: 'T1071',
+          lastRun: h.lastRun ?? 'Never',
+          hitCount: h.artifacts,
+          author: h.analyst,
+        }))
+        setSavedHunts(mapped)
+      }
+    }).catch(() => {})
+  }, [])
 
   /* Saved panel visibility (mobile) */
   const [savedOpen, setSavedOpen] = useState(true)
@@ -351,7 +371,7 @@ export default function ThreatHuntPage() {
             <div className="flex items-center gap-2">
               <BookOpen className="w-3.5 h-3.5 text-violet" />
               <span>Saved Hunts</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-violet/20 text-violet text-[10px] font-semibold">{SAVED_HUNTS.length}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-violet/20 text-violet text-[10px] font-semibold">{savedHunts.length}</span>
             </div>
             <ChevronDown className={cn('w-3.5 h-3.5 text-ink-600 transition-transform lg:hidden', savedOpen && 'rotate-180')} />
           </button>
@@ -366,7 +386,7 @@ export default function ThreatHuntPage() {
                 className="overflow-hidden"
               >
                 <div className="space-y-2">
-                  {SAVED_HUNTS.map((hunt) => {
+                  {savedHunts.map((hunt) => {
                     const isActive = selectedHuntId === hunt.id
                     return (
                       <button
@@ -539,7 +559,7 @@ export default function ThreatHuntPage() {
                   <span>·</span>
                   <span>{runResult.elapsed}</span>
                   <span>·</span>
-                  <span className="text-violet font-semibold">MITRE {SAVED_HUNTS.find((h) => h.id === selectedHuntId)?.technique ?? 'T1071.001'}</span>
+                  <span className="text-violet font-semibold">MITRE {savedHunts.find((h) => h.id === selectedHuntId)?.technique ?? 'T1071.001'}</span>
                   <button className="ml-2 flex items-center gap-1 text-ink-600 hover:text-white transition-colors">
                     <ArrowUpRight className="w-3 h-3" /> Export
                   </button>

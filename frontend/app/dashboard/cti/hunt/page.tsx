@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { fetchCtiHunts, type SavedHunt as ApiSavedHunt } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Crosshair, Target, ChevronRight, Play, Pause, CheckCircle,
@@ -452,12 +453,12 @@ function HuntCard({ hunt, expanded, onToggle }: { hunt: Hunt; expanded: boolean;
 }
 
 /* ─── MITRE coverage mini-matrix ─────────────────────────────────────── */
-function CoverageMatrix() {
+function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
   // tactic -> covering active hunts
   const coverage = useMemo(() => {
     const map: Record<string, Hunt[]> = {}
     for (const tactic of MATRIX_TACTICS) map[tactic] = []
-    for (const hunt of HUNTS) {
+    for (const hunt of hunts) {
       if (hunt.status !== 'active') continue
       const tactics = new Set(hunt.techniques.map((t) => t.tactic))
       for (const tac of tactics) {
@@ -465,7 +466,7 @@ function CoverageMatrix() {
       }
     }
     return map
-  }, [])
+  }, [hunts])
 
   function cellColor(count: number) {
     if (count >= 2) return '#FF2E97'
@@ -522,6 +523,32 @@ function CoverageMatrix() {
 /* ─── Page ───────────────────────────────────────────────────────────── */
 export default function ThreatHuntPage() {
   const [expandedId, setExpandedId] = useState<string | null>(HUNTS[0].id)
+  const [hunts, setHunts] = useState<Hunt[]>(HUNTS)
+
+  useEffect(() => {
+    fetchCtiHunts().then((data: ApiSavedHunt[]) => {
+      if (data.length > 0) {
+        const merged: Hunt[] = data.map((h) => {
+          const seed = HUNTS.find((s) => s.id === h.id || s.name === h.name)
+          return seed
+            ? { ...seed, progress: h.progress, analyst: h.analyst }
+            : {
+                id: h.id,
+                name: h.name,
+                description: h.hypothesis,
+                status: (h.status === 'active' ? 'active' : h.status === 'completed' ? 'completed' : 'paused') as HuntStatus,
+                analyst: h.analyst,
+                techniques: [],
+                progress: h.progress,
+                started: h.created,
+                hypotheses: [],
+              }
+        })
+        setHunts(merged)
+        if (merged.length > 0) setExpandedId(merged[0].id)
+      }
+    }).catch(() => {})
+  }, [])
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -568,17 +595,17 @@ export default function ThreatHuntPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
         {/* Coverage matrix */}
-        <CoverageMatrix />
+        <CoverageMatrix hunts={hunts} />
 
         {/* Hunt campaigns */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Activity className="w-3.5 h-3.5 text-violet" />
             <h2 className="text-sm font-semibold text-white">Hunt Campaigns</h2>
-            <span className="text-[10px] text-ink-600">{HUNTS.length} total</span>
+            <span className="text-[10px] text-ink-600">{hunts.length} total</span>
           </div>
           <div className="space-y-3">
-            {HUNTS.map((hunt) => (
+            {hunts.map((hunt) => (
               <HuntCard
                 key={hunt.id}
                 hunt={hunt}

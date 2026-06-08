@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { fetchFeeds, toggleFeed as apiToggleFeed, type Feed as ApiFeed } from '@/lib/api'
 import {
   Radio, Plus, RefreshCw, XCircle, Settings, Key, Link2,
   Clock, Tag, SlidersHorizontal, Activity, ShieldCheck,
@@ -70,8 +71,37 @@ export default function FeedSourcesPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [feeds, setFeeds] = useState<FeedSource[]>(FEEDS)
 
+  useEffect(() => {
+    fetchFeeds().then((data: ApiFeed[]) => {
+      if (data.length > 0) {
+        const mapped: FeedSource[] = data.map(f => ({
+          id: f.id,
+          name: f.name,
+          type: (f.type === 'commercial' ? 'Commercial' : f.type === 'government' ? 'Government' : f.type === 'community' ? 'Community' : 'OSINT') as FeedType,
+          format: 'STIX 2.1' as FeedFormat,
+          iocsPerDay: f.indicators,
+          lastPull: f.lastSync ?? 'Never',
+          reliability: 'B' as Reliability,
+          enabled: f.enabled,
+          url: f.url ?? '',
+          apiKeyConfigured: false,
+          pullInterval: '30m',
+          taxiiCollection: 'n/a',
+          confidenceWeight: 75,
+          tagMapping: [],
+        }))
+        setFeeds(mapped)
+      }
+    }).catch(() => {})
+  }, [])
+
   const toggleFeed = (id: string) => {
+    const feed = feeds.find(f => f.id === id)
+    if (!feed) return
     setFeeds(prev => prev.map(f => (f.id === id ? { ...f, enabled: !f.enabled } : f)))
+    apiToggleFeed(id, !feed.enabled).catch(() => {
+      setFeeds(prev => prev.map(f => (f.id === id ? { ...f, enabled: feed.enabled } : f)))
+    })
   }
 
   const setWeight = (id: string, weight: number) => {

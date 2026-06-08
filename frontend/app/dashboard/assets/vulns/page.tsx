@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { fetchVulns, type Asset as ApiAsset } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShieldAlert, Bug, Search, X, ExternalLink, Crosshair, Clock,
@@ -303,7 +304,71 @@ function ExploitBadge({ exploit }: { exploit: ExploitMaturity }) {
 
 /* ── Main page ─────────────────────────────────────────────────── */
 export default function VulnsPage() {
-  const [vulns] = useState<Vuln[]>(SEED)
+  const [vulns, setVulns] = useState<Vuln[]>(SEED)
+
+  useEffect(() => {
+    fetchVulns().then((assets: ApiAsset[]) => {
+      if (assets.length > 0) {
+        const extra: Vuln[] = assets
+          .filter((a) => a.cves.critical + a.cves.high > 0)
+          .flatMap((a) => {
+            const rows: Vuln[] = []
+            const totalCritical = a.cves.critical
+            const totalHigh = a.cves.high
+            if (totalCritical > 0) {
+              rows.push({
+                id: `CVE-API-${a.id}-C`,
+                cvss: 9.5,
+                title: `${totalCritical} critical CVE${totalCritical > 1 ? 's' : ''} on ${a.name}`,
+                description: `Asset ${a.name} has ${totalCritical} unpatched critical vulnerabilities detected during last scan.`,
+                severity: 'critical',
+                status: a.status === 'critical' ? 'open' : 'in-progress',
+                exploit: 'poc',
+                kev: false,
+                exploitAvailable: true,
+                affectedAssets: [a.name],
+                ageDays: a.patchAge,
+                assignee: a.owner,
+                cvssVector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+                vectorBreakdown: [{ label: 'Attack Vector', value: 'Network' }],
+                epss: 0.5,
+                remediation: [`Apply available patches for ${a.name}.`, 'Update OS and software packages.'],
+                references: [],
+              })
+            }
+            if (totalHigh > 0) {
+              rows.push({
+                id: `CVE-API-${a.id}-H`,
+                cvss: 7.5,
+                title: `${totalHigh} high CVE${totalHigh > 1 ? 's' : ''} on ${a.name}`,
+                description: `Asset ${a.name} has ${totalHigh} unpatched high-severity vulnerabilities.`,
+                severity: 'high',
+                status: 'open',
+                exploit: 'poc',
+                kev: false,
+                exploitAvailable: false,
+                affectedAssets: [a.name],
+                ageDays: a.patchAge,
+                assignee: a.owner,
+                cvssVector: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N',
+                vectorBreakdown: [{ label: 'Attack Vector', value: 'Network' }],
+                epss: 0.3,
+                remediation: [`Patch high-severity findings on ${a.name}.`],
+                references: [],
+              })
+            }
+            return rows
+          })
+        if (extra.length > 0) {
+          setVulns((prev) => {
+            const existingIds = new Set(prev.map((v) => v.id))
+            const newOnly = extra.filter((v) => !existingIds.has(v.id))
+            return newOnly.length > 0 ? [...prev, ...newOnly] : prev
+          })
+        }
+      }
+    }).catch(() => {})
+  }, [])
   const [search, setSearch] = useState('')
   const [sevFilter, setSevFilter] = useState<Severity | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<VulnStatus | 'all'>('all')

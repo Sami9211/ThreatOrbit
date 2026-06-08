@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { fetchSoarIntegrations } from '@/lib/api'
 import {
   Link, Plus, CheckCircle, AlertTriangle, XCircle, Settings,
   RefreshCw, Activity, Zap, Shield, Globe, Database, Clock,
@@ -60,18 +61,41 @@ const STATUS_CFG: Record<IntStatus, { label: string; cls: string; dot: string }>
 }
 
 export default function SoarIntegrationsPage() {
+  const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS)
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(
     Object.fromEntries(INTEGRATIONS.map(i => [i.id, i.enabled]))
   )
   const [selected, setSelected] = useState<string | null>(null)
   const [catFilter, setCatFilter] = useState<string>('All')
 
-  const categories = ['All', ...Array.from(new Set(INTEGRATIONS.map(i => i.category)))]
-  const filtered = catFilter === 'All' ? INTEGRATIONS : INTEGRATIONS.filter(i => i.category === catFilter)
-  const selectedInt = INTEGRATIONS.find(i => i.id === selected) ?? null
+  useEffect(() => {
+    fetchSoarIntegrations().then((data) => {
+      if (data.length > 0) {
+        const mapped: Integration[] = data.map(d => ({
+          id: d.id,
+          name: d.name,
+          vendor: d.name,
+          category: 'SIEM' as IntCategory,
+          status: (d.status === 'active' ? 'connected' : d.status === 'error' ? 'degraded' : 'disconnected') as IntStatus,
+          lastSync: d.lastSync ?? 'Never',
+          actionsRun: 0,
+          avgResponseMs: 0,
+          description: d.description,
+          actions: [],
+          enabled: d.status === 'active',
+        }))
+        setIntegrations(mapped)
+        setEnabledMap(Object.fromEntries(mapped.map(i => [i.id, i.enabled])))
+      }
+    }).catch(() => {})
+  }, [])
 
-  const connected = INTEGRATIONS.filter(i => i.status === 'connected').length
-  const totalActions = INTEGRATIONS.reduce((a, i) => a + i.actionsRun, 0)
+  const categories = ['All', ...Array.from(new Set(integrations.map(i => i.category)))]
+  const filtered = catFilter === 'All' ? integrations : integrations.filter(i => i.category === catFilter)
+  const selectedInt = integrations.find(i => i.id === selected) ?? null
+
+  const connected = integrations.filter(i => i.status === 'connected').length
+  const totalActions = integrations.reduce((a, i) => a + i.actionsRun, 0)
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -95,8 +119,8 @@ export default function SoarIntegrationsPage() {
         {[
           { label: 'Connected',     value: connected,                        color: 'text-safe'   },
           { label: 'Total Actions', value: `${(totalActions/1000).toFixed(1)}k`, color: 'text-violet' },
-          { label: 'Degraded',      value: INTEGRATIONS.filter(i => i.status === 'degraded').length, color: 'text-amber' },
-          { label: 'Offline',       value: INTEGRATIONS.filter(i => i.status === 'disconnected').length, color: 'text-threat' },
+          { label: 'Degraded',      value: integrations.filter(i => i.status === 'degraded').length, color: 'text-amber' },
+          { label: 'Offline',       value: integrations.filter(i => i.status === 'disconnected').length, color: 'text-threat' },
         ].map(({ label, value, color }) => (
           <div key={label} className="px-5 py-3">
             <div className={cn('text-xl font-bold font-mono', color)}>{value}</div>
@@ -126,7 +150,7 @@ export default function SoarIntegrationsPage() {
       {/* Integration cards */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((int, i) => {
+          {(filtered as Integration[]).map((int, i) => {
             const st = STATUS_CFG[int.status]
             const isEnabled = enabledMap[int.id] ?? int.enabled
             const isSelected = selected === int.id

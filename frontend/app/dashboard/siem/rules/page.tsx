@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield, Search, Plus, ChevronDown, X, Edit2, Trash2,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { fetchRules } from '@/lib/api'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -616,6 +617,14 @@ function DataRow({ label, value, mono }: { label: string; value: string; mono?: 
 export default function RulesEnginePage() {
   useExperienceMode()
 
+  const [rulesData, setRulesData] = useState(RULES_DATA)
+
+  useEffect(() => {
+    fetchRules()
+      .then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) })
+      .catch(() => {})
+  }, [])
+
   /* filter state */
   const [search,     setSearch]     = useState('')
   const [filterSev,  setFilterSev]  = useState<Severity | 'all'>('all')
@@ -624,12 +633,17 @@ export default function RulesEnginePage() {
 
   /* table row selection → panel */
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const selectedRule = RULES_DATA.find((r) => r.id === selectedId) ?? null
+  const selectedRule = rulesData.find((r) => r.id === selectedId) ?? null
 
   /* interactive status toggles */
   const [statuses, setStatuses] = useState<Record<string, RuleStatus>>(
-    () => Object.fromEntries(RULES_DATA.map((r) => [r.id, r.status])),
+    () => Object.fromEntries(rulesData.map((r) => [r.id, r.status])),
   )
+
+  // Re-init statuses when rulesData loads from API
+  useEffect(() => {
+    setStatuses(Object.fromEntries(rulesData.map((r) => [r.id, r.status ?? 'enabled'])))
+  }, [rulesData])
 
   function toggleRule(id: string) {
     setStatuses((prev) => ({
@@ -647,7 +661,7 @@ export default function RulesEnginePage() {
   }, [selectedId])
 
   /* Filtered rows */
-  const rows = useMemo(() => RULES_DATA.filter((r) => {
+  const rows = useMemo(() => rulesData.filter((r) => {
     if (filterSev  !== 'all' && r.severity  !== filterSev)  return false
     if (filterCat  !== 'all' && r.category  !== filterCat)  return false
     if (filterStat !== 'all' && statuses[r.id] !== filterStat) return false
@@ -665,10 +679,10 @@ export default function RulesEnginePage() {
   }), [search, filterSev, filterCat, filterStat, statuses])
 
   /* KPIs */
-  const totalRules = RULES_DATA.length
-  const active     = RULES_DATA.filter((r) => statuses[r.id] === 'enabled').length
-  const suppressed = RULES_DATA.filter((r) => statuses[r.id] === 'suppressed').length
-  const custom     = RULES_DATA.filter((r) => r.id.startsWith('CLO') || r.id.startsWith('TI')).length + 4 // simulate 44
+  const totalRules = rulesData.length
+  const active     = rulesData.filter((r) => statuses[r.id] === 'enabled').length
+  const suppressed = rulesData.filter((r) => statuses[r.id] === 'suppressed').length
+  const custom     = rulesData.filter((r) => r.id.startsWith('CLO') || r.id.startsWith('TI')).length + 4 // simulate 44
 
   /* Merged rule with live status */
   function mergedRule(r: DetectionRule): DetectionRule {
@@ -800,7 +814,7 @@ export default function RulesEnginePage() {
         />
 
         <span className="text-[10px] text-ink-600 ml-auto">
-          {rows.length} of {RULES_DATA.length} rules
+          {rows.length} of {rulesData.length} rules
         </span>
       </motion.div>
 
@@ -935,7 +949,7 @@ export default function RulesEnginePage() {
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-ink-600" />
-              {RULES_DATA.length - active - suppressed} disabled
+              {rulesData.length - active - suppressed} disabled
             </span>
           </div>
         </div>

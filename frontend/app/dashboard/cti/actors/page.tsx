@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { fetchActors, type Actor as ApiActor } from '@/lib/api'
 import {
   UserSearch, Search, X, ChevronRight, ExternalLink, Shield,
   Crosshair, Bug, Clock, Activity, Building2, Filter,
@@ -605,15 +606,47 @@ export default function ActorProfilesPage() {
   const [filterMotivation, setFilterMotivation] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [actors, setActors] = useState<ThreatActor[]>(ACTORS)
 
-  const selected = ACTORS.find((a) => a.id === selectedId) ?? null
-
-  const origins = useMemo(() => {
-    const set = new Set(ACTORS.map((a) => a.origin))
-    return Array.from(set).sort()
+  useEffect(() => {
+    fetchActors().then((data: ApiActor[]) => {
+      if (data.length > 0) {
+        const mapped: ThreatActor[] = data.map((a) => {
+          const seed = ACTORS.find((s) => s.id === a.id || s.name === a.name)
+          return {
+            id: a.id,
+            name: a.name,
+            aliases: a.aliases,
+            origin: a.origin,
+            flag: a.flag ?? seed?.flag ?? '🌐',
+            type: (a.type === 'nation-state' ? 'Nation-State' : a.type === 'cybercrime' ? 'Cybercrime' : 'Hacktivist') as ActorType,
+            motivations: ([a.motivation].filter(Boolean) as Motivation[]),
+            sophistication: a.sophistication,
+            threatLevel: (a.threatLevel as 'critical' | 'high' | 'elevated') ?? 'high',
+            sectors: a.sectors,
+            campaignCount: a.campaigns.length,
+            firstSeen: a.firstSeen?.split('-')[0] ?? 'Unknown',
+            malware: seed?.malware ?? [],
+            ttps: a.ttps,
+            recentActivity: seed?.recentActivity ?? a.description,
+            description: a.description,
+            campaigns: seed?.campaigns ?? a.campaigns.map((c) => ({ year: '', name: c, note: '' })),
+            iocs: seed?.iocs ?? [],
+          }
+        })
+        setActors(mapped)
+      }
+    }).catch(() => {})
   }, [])
 
-  const filtered = useMemo(() => ACTORS.filter((a) => {
+  const selected = actors.find((a) => a.id === selectedId) ?? null
+
+  const origins = useMemo(() => {
+    const set = new Set(actors.map((a) => a.origin))
+    return Array.from(set).sort()
+  }, [actors])
+
+  const filtered = useMemo(() => actors.filter((a) => {
     if (filterOrigin !== 'all' && a.origin !== filterOrigin) return false
     if (filterMotivation !== 'all' && !a.motivations.includes(filterMotivation as Motivation)) return false
     if (filterType !== 'all' && a.type !== filterType) return false
@@ -628,7 +661,7 @@ export default function ActorProfilesPage() {
       )
     }
     return true
-  }), [search, filterOrigin, filterMotivation, filterType])
+  }), [actors, search, filterOrigin, filterMotivation, filterType])
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -717,7 +750,7 @@ export default function ActorProfilesPage() {
             ]}
           />
 
-          <span className="text-[10px] text-ink-600 ml-auto">{filtered.length} of {ACTORS.length} actors</span>
+          <span className="text-[10px] text-ink-600 ml-auto">{filtered.length} of {actors.length} actors</span>
         </div>
       </div>
 
