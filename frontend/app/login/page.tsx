@@ -4,27 +4,37 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, ShieldCheck, Github } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, ShieldCheck, Github, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
+import { useAuth } from '@/lib/auth-context'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [remember, setRemember] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
   const canSubmit = emailValid && password.length > 0
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSubmit) return
     setSubmitting(true)
-    // Frontend-only demo: simulate auth then enter the dashboard.
-    setTimeout(() => router.push('/dashboard'), 900)
+    setError(null)
+    try {
+      await login(email, password)
+      router.push('/dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -95,6 +105,13 @@ export default function LoginPage() {
                 <span className="text-xs text-ink-400">Keep me signed in</span>
               </label>
 
+              {error && (
+                <div className="flex items-center gap-2 rounded-xl bg-threat/10 border border-threat/25 px-3 py-2.5 text-xs text-threat">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {error}
+                </div>
+              )}
+
               <button type="submit" disabled={!canSubmit || submitting}
                 className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all',
                   canSubmit && !submitting ? 'bg-plasma text-white hover:shadow-magenta-md hover:scale-[1.01]' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
@@ -108,8 +125,8 @@ export default function LoginPage() {
               <div className="flex-1 h-px bg-white/8" />
             </div>
 
-            <button type="button" onClick={() => router.push('/dashboard')}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 text-sm text-ink-200 hover:text-white hover:border-white/20 transition-colors">
+            <button type="button" disabled
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 text-sm text-ink-500 cursor-not-allowed opacity-50">
               <Github className="w-4 h-4" /> Continue with GitHub
             </button>
           </div>

@@ -9,6 +9,7 @@ import {
   TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fetchFeeds, toggleFeed, type Feed as ApiFeed } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -446,7 +447,7 @@ function ThreatCard({
 }
 
 /* ── Source Health Pills ─────────────────────────────────────────── */
-const SOURCES = [
+const SOURCES_FALLBACK = [
   { name: 'MISP', status: 'live', rate: '847/h' },
   { name: 'RecordedFuture', status: 'live', rate: '234/h' },
   { name: 'GreyNoise', status: 'live', rate: '1.2k/h' },
@@ -461,10 +462,16 @@ const SOURCES = [
 export default function FeedsPage() {
   const [confirmed, setConfirmed] = useState<ThreatEntry[]>(CONFIRMED_SEED)
   const [unconfirmed, setUnconfirmed] = useState<ThreatEntry[]>(UNCONFIRMED_SEED)
+  const [apiFeeds, setApiFeeds] = useState<ApiFeed[]>([])
   const [newIds, setNewIds] = useState<Set<string>>(new Set())
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [liveCount, setLiveCount] = useState(0)
   const [pulse, setPulse] = useState(false)
+
+  // Load feed sources from API
+  useEffect(() => {
+    fetchFeeds().then(setApiFeeds).catch(() => {})
+  }, [])
 
   // Simulate live incoming unconfirmed threats every 8–14 seconds
   useEffect(() => {
@@ -526,7 +533,7 @@ export default function FeedsPage() {
             </span>
           </div>
           <p className="text-xs text-ink-500 mt-0.5">
-            Real-time threat intelligence from {SOURCES.length} sources · {liveCount} new today
+            Real-time threat intelligence from {apiFeeds.length || SOURCES_FALLBACK.length} sources · {liveCount} new today
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -545,7 +552,7 @@ export default function FeedsPage() {
       <div className="px-6 py-2.5 border-b border-white/4 bg-white/[0.01] shrink-0 overflow-x-auto">
         <div className="flex items-center gap-2 min-w-max">
           <span className="text-[10px] text-ink-600 uppercase tracking-widest mr-1">Sources</span>
-          {SOURCES.map(src => (
+          {(apiFeeds.length > 0 ? apiFeeds.map(f => ({ name: f.name, status: f.status === 'active' ? 'live' : 'degraded', rate: `${f.indicators}` })) : SOURCES_FALLBACK).map(src => (
             <div key={src.name} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/8">
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full',

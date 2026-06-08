@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -610,7 +611,8 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 }
 
 /* ── Normal Mode: Case Kanban Board ──────────────────────────────── */
-function NormalSOAR() {
+function NormalSOAR({ cases: casesData }: { cases: CaseRecord[] }) {
+  const CASES = casesData
   const SEV_COLOR: Record<string, string> = {
     critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#2DD4BF',
   }
@@ -711,10 +713,21 @@ export default function SOARPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'cases' | 'playbooks' | 'metrics'>('cases')
+  const [cases, setCases] = useState<CaseRecord[]>(CASES)
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
   const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
   const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOKS)
   const selectedPB = playbooks.find((p) => p.id === selectedPBId) ?? null
+
+  // Load from API
+  useEffect(() => {
+    fetchCases()
+      .then((data) => { if (data.length > 0) setCases(data as unknown as CaseRecord[]) })
+      .catch(() => {})
+    fetchPlaybooks()
+      .then((data) => { if (data.length > 0) setPlaybooks(data as unknown as Playbook[]) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => { if (isNormal && tab !== 'cases') setTab('cases') }, [isNormal, tab])
 
@@ -751,7 +764,7 @@ export default function SOARPage() {
     })
   }
 
-  if (isNormal) return <NormalSOAR />
+  if (isNormal) return <NormalSOAR cases={cases} />
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -838,7 +851,7 @@ export default function SOARPage() {
                 <span>Created</span>
               </div>
               <div className="flex-1 overflow-y-auto">
-                {CASES.map((c, i) => (
+                {cases.map((c, i) => (
                   <CaseRow key={c.id} c={c} idx={i} selected={selectedCase?.id === c.id}
                     onClick={() => setSelectedCase((prev) => prev?.id === c.id ? null : c)} />
                 ))}
