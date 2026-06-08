@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { fetchAssets, type Asset as ApiAsset } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Network, Server, Monitor, Shield, Cloud, Database, Globe,
@@ -129,16 +130,31 @@ export default function NetworkMapPage() {
   const [zoneVisibility, setZoneVisibility] = useState<Record<Zone, boolean>>({
     dmz: true, internal: true, cloud: true, ot: true,
   })
+  const [nodes, setNodes] = useState<Node[]>(NODES)
+
+  useEffect(() => {
+    fetchAssets({ limit: '100' }).then(({ items }) => {
+      if (items.length > 0) {
+        setNodes((prev) => prev.map((n) => {
+          const api = items.find((a: ApiAsset) => a.name === n.hostname || a.id === n.id)
+          if (!api) return n
+          const score = api.riskScore ?? n.riskScore
+          const risk: Risk = score >= 70 ? 'critical' : score >= 40 ? 'warning' : 'healthy'
+          return { ...n, riskScore: score, risk, ports: api.openPorts ?? n.ports }
+        }))
+      }
+    }).catch(() => {})
+  }, [])
 
   const nodeMap = useMemo(() => {
     const m: Record<string, Node> = {}
-    NODES.forEach((n) => { m[n.id] = n })
+    nodes.forEach((n) => { m[n.id] = n })
     return m
-  }, [])
+  }, [nodes])
 
   const visibleNodes = useMemo(
-    () => NODES.filter((n) => n.id === 'inet' || zoneVisibility[n.zone]),
-    [zoneVisibility],
+    () => nodes.filter((n) => n.id === 'inet' || zoneVisibility[n.zone]),
+    [nodes, zoneVisibility],
   )
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleLinks = useMemo(

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { fetchUsers, type User as ApiUser } from '@/lib/api'
 import {
   Users, Plus, X, ShieldCheck, ShieldOff, Check, Minus, Mail,
   Clock, Activity, KeyRound, Ban, Monitor, ChevronDown,
@@ -256,7 +257,25 @@ function UserPanel({ user, onClose }: { user: TeamUser; onClose: () => void }) {
 export default function UsersRolesPage() {
   const [tab, setTab] = useState<'users' | 'roles'>('users')
   const [selected, setSelected] = useState<string | null>(null)
-  const selectedUser = USERS.find((u) => u.id === selected) ?? null
+  const [users, setUsers] = useState<TeamUser[]>(USERS)
+
+  useEffect(() => {
+    fetchUsers().then((data) => {
+      if (data.length > 0) {
+        setUsers(data.map((u: ApiUser) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: (u.role === 'admin' ? 'Admin' : u.role === 'manager' ? 'SOC Manager' : u.role === 'analyst' ? 'Analyst' : 'Read-Only') as RoleName,
+          lastActive: u.lastLogin ?? 'Never',
+          mfa: true,
+          status: (u.status === 'active' ? 'active' : u.status === 'invited' ? 'invited' : 'suspended') as UserStatus,
+        })))
+      }
+    }).catch(() => {})
+  }, [])
+
+  const selectedUser = users.find((u) => u.id === selected) ?? null
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -306,7 +325,7 @@ export default function UsersRolesPage() {
                 </tr>
               </thead>
               <tbody>
-                {USERS.map((u) => (
+                {users.map((u) => (
                   <tr
                     key={u.id}
                     onClick={() => setSelected(u.id)}

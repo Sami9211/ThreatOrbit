@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { fetchApiKeys, createApiKey, revokeApiKey, type ApiKey as RemoteApiKey } from '@/lib/api'
 import {
   Key, Plus, Copy, CheckCircle, Trash2, X, AlertTriangle, Webhook,
   Activity, Clock, Terminal,
@@ -67,7 +68,7 @@ const WH_STATUS_CFG: Record<WebhookStatus, { label: string; cls: string; dot: st
   paused:  { label: 'Paused',  cls: 'text-ink-400 border-white/10 bg-white/5',   dot: 'bg-ink-500'            },
 }
 
-const NEW_KEY = 'to_sk_live_a7f8e92b1d47c61e83dd2a9f7c4b5e01abcd1234'
+const NEW_KEY_FALLBACK = 'to_sk_live_a7f8e92b1d47c61e83dd2a9f7c4b5e01abcd1234'
 
 const CURL_SNIPPET = `curl https://api.threatorbit.space/v2/alerts \\
   -H "Authorization: Bearer to_sk_live_••••4f2a" \\
@@ -99,7 +100,7 @@ function CopyBtn({ value, className }: { value: string; className?: string }) {
 }
 
 /* ── Generate key modal ──────────────────────────────────────────── */
-function GenerateModal({ onClose }: { onClose: () => void }) {
+function GenerateModal({ keySecret, onClose }: { keySecret: string; onClose: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -136,8 +137,8 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
 
         <label className="block text-xs font-medium text-ink-300 mb-1.5">Your API Key</label>
         <div className="flex items-center gap-2 p-3 rounded-xl bg-surface-3 border border-white/8 mb-4">
-          <code className="flex-1 font-mono text-xs text-safe break-all">{NEW_KEY}</code>
-          <CopyBtn value={NEW_KEY} />
+          <code className="flex-1 font-mono text-xs text-safe break-all">{keySecret}</code>
+          <CopyBtn value={keySecret} />
         </div>
 
         <button
@@ -154,7 +155,54 @@ function GenerateModal({ onClose }: { onClose: () => void }) {
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function ApiKeysPage() {
   const [showModal, setShowModal] = useState(false)
+  const [newKeySecret, setNewKeySecret] = useState(NEW_KEY_FALLBACK)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [keys, setKeys] = useState<ApiKey[]>(API_KEYS)
+
+  useEffect(() => {
+    fetchApiKeys().then((data) => {
+      if (data.length > 0) {
+        setKeys(data.map((k: RemoteApiKey) => ({
+          id: k.id,
+          label: k.name,
+          masked: `to_sk_live_••••${k.prefix}`,
+          scopes: [k.scope as Scope],
+          created: new Date(k.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          lastUsed: k.lastUsed ? new Date(k.lastUsed).toLocaleDateString() : 'Never',
+          requests: 0,
+          status: k.revoked ? 'revoked' : 'active' as KeyStatus,
+        })))
+      }
+    }).catch(() => {})
+  }, [])
+
+  async function handleGenerate() {
+    try {
+      const result = await createApiKey('New Key')
+      setNewKeySecret(result.secret ?? NEW_KEY_FALLBACK)
+      const newEntry: ApiKey = {
+        id: result.id,
+        label: result.name,
+        masked: `to_sk_live_••••${result.prefix}`,
+        scopes: [result.scope as Scope],
+        created: new Date(result.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        lastUsed: 'Never',
+        requests: 0,
+        status: 'active',
+      }
+      setKeys((prev) => [newEntry, ...prev])
+    } catch {
+      setNewKeySecret(NEW_KEY_FALLBACK)
+    }
+    setShowModal(true)
+  }
+
+  async function handleRevoke(id: string) {
+    try {
+      await revokeApiKey(id)
+      setKeys((prev) => prev.map((k) => k.id === id ? { ...k, status: 'revoked' as KeyStatus } : k))
+    } catch { /* ignore */ }
+  }
 
   const copyKey = (k: ApiKey) => {
     navigator.clipboard?.writeText(k.masked)
@@ -174,7 +222,7 @@ export default function ApiKeysPage() {
           <p className="text-xs text-ink-500 mt-0.5">Manage API access tokens and webhooks</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleGenerate}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -184,8 +232,8 @@ export default function ApiKeysPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-3 divide-x divide-white/5 border-b border-white/5 shrink-0">
-        <Kpi label="Active Keys"    value="8"    color="text-safe"   />
-        <Kpi label="Requests Today" value="142k" color="text-violet" />
+        <Kpi label="Active Keys"    value={String(keys.filter(k => k.status === 'active').length)}    color="text-safe"   />
+        <Kpi label="Requests Today" value={`${(keys.reduce((a, k) => a + k.requests, 0) / 1000).toFixed(0)}k`} color="text-violet" />
         <Kpi label="Rate Limit"     value="1M/mo" color="text-amber"  />
       </div>
 
@@ -208,7 +256,7 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {API_KEYS.map((k) => (
+                {keys.map((k) => (
                   <tr key={k.id} className="border-b border-white/4 last:border-0 hover:bg-white/4 transition-colors">
                     <td className="px-4 py-3 text-xs font-medium text-white">{k.label}</td>
                     <td className="px-4 py-3">
@@ -245,6 +293,7 @@ export default function ApiKeysPage() {
                         </button>
                         <button
                           disabled={k.status === 'revoked'}
+                          onClick={() => handleRevoke(k.id)}
                           className={cn(
                             'p-1.5 rounded-lg transition-colors',
                             k.status === 'revoked'
@@ -320,7 +369,7 @@ export default function ApiKeysPage() {
       </div>
 
       <AnimatePresence>
-        {showModal && <GenerateModal onClose={() => setShowModal(false)} />}
+        {showModal && <GenerateModal keySecret={newKeySecret} onClose={() => setShowModal(false)} />}
       </AnimatePresence>
     </div>
   )

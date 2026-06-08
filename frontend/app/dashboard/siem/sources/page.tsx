@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Database, Plus, RefreshCw, CheckCircle, AlertTriangle,
@@ -8,6 +8,7 @@ import {
   Activity, Clock, Cpu, Network, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fetchSiemSources } from '@/lib/api'
 
 type SourceStatus = 'healthy' | 'degraded' | 'offline' | 'paused'
 type SourceType = 'Syslog' | 'Windows Event' | 'CEF/ArcSight' | 'API Pull' | 'Kafka' | 'S3 Bucket' | 'Splunk Forwarder'
@@ -52,19 +53,28 @@ export default function SiemSourcesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selected, setSelected] = useState<string | null>(null)
+  const [sourcesData, setSourcesData] = useState(SOURCES)
 
-  const filtered = SOURCES.filter(s => {
+  useEffect(() => {
+    fetchSiemSources()
+      .then((data) => { if (data.length > 0) setSourcesData(data as unknown as typeof SOURCES) })
+      .catch(() => {})
+  }, [])
+
+  const SOURCES_ACTIVE = sourcesData
+
+  const filtered = SOURCES_ACTIVE.filter(s => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false
     if (search && !s.name.toLowerCase().includes(search.toLowerCase()) && !s.host.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
-  const selectedSource = SOURCES.find(s => s.id === selected) ?? null
+  const selectedSource = SOURCES_ACTIVE.find(s => s.id === selected) ?? null
 
-  const totalEps = SOURCES.filter(s => s.status === 'healthy' || s.status === 'degraded').reduce((acc, s) => acc + s.epsAvg, 0)
-  const healthyCount = SOURCES.filter(s => s.status === 'healthy').length
-  const offlineCount = SOURCES.filter(s => s.status === 'offline').length
-  const degradedCount = SOURCES.filter(s => s.status === 'degraded').length
+  const totalEps = SOURCES_ACTIVE.filter(s => s.status === 'healthy' || s.status === 'degraded').reduce((acc, s) => acc + s.epsAvg, 0)
+  const healthyCount = SOURCES_ACTIVE.filter(s => s.status === 'healthy').length
+  const offlineCount = SOURCES_ACTIVE.filter(s => s.status === 'offline').length
+  const degradedCount = SOURCES_ACTIVE.filter(s => s.status === 'degraded').length
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -75,7 +85,7 @@ export default function SiemSourcesPage() {
             <Database className="w-4 h-4 text-violet" />
             <h1 className="text-lg font-display font-semibold text-white">Log Sources</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Data ingestion pipeline — {SOURCES.length} sources configured</p>
+          <p className="text-xs text-ink-500 mt-0.5">Data ingestion pipeline — {SOURCES_ACTIVE.length} sources configured</p>
         </div>
         <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold">
           <Plus className="w-3.5 h-3.5" />
