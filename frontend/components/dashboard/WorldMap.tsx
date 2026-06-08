@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useRef, useCallback } from 'react'
+import { cn } from '@/lib/utils'
 
 const W = 360
 const H = 180
@@ -237,7 +238,22 @@ function CountryTooltip({
   )
 }
 
+/* Top origin countries by attack volume — deduped from COUNTRY_STATS by country. */
+const TOP_COUNTRIES = (() => {
+  const seen = new Set<string>()
+  const list: CountryStat[] = []
+  for (const key of Object.keys(COUNTRY_STATS)) {
+    const c = COUNTRY_STATS[key]
+    if (seen.has(c.country)) continue
+    seen.add(c.country)
+    list.push(c)
+  }
+  return list.sort((a, b) => b.attacks - a.attacks).slice(0, 8)
+})()
+const TOP_MAX = Math.max(...TOP_COUNTRIES.map((c) => c.attacks))
+
 export default function WorldMap() {
+  const [view, setView] = useState<'continents' | 'countries'>('continents')
   const [hoveredRegion, setHoveredRegion] = useState<RegionStat | null>(null)
   const [hoveredCity, setHoveredCity] = useState<string | null>(null)
   const [cityTooltipPos, setCityTooltipPos] = useState({ x: 0, y: 0 })
@@ -412,8 +428,8 @@ export default function WorldMap() {
           )
         })}
 
-        {/* Region hover rects */}
-        {HOVER_DRAW_ORDER.map((id) => {
+        {/* Region hover rects (continents view only) */}
+        {view === 'continents' && HOVER_DRAW_ORDER.map((id) => {
           const r = regionById[id]
           const [x1, y1] = project(r.lonRange[0], r.latRange[1])
           const [x2, y2] = project(r.lonRange[1], r.latRange[0])
@@ -430,7 +446,7 @@ export default function WorldMap() {
         })}
 
         {/* Region tooltip (SVG) */}
-        {hoveredRegion && !hoveredCity && (() => {
+        {view === 'continents' && hoveredRegion && !hoveredCity && (() => {
           const cx = (hoveredRegion.lonRange[0] + hoveredRegion.lonRange[1]) / 2 + 180
           const cy = 90 - (hoveredRegion.latRange[0] + hoveredRegion.latRange[1]) / 2
           const tx = Math.max(60, Math.min(W - 60, cx))
@@ -487,9 +503,52 @@ export default function WorldMap() {
         Live Attack Map
       </div>
 
-      {!hoveredRegion && !hoveredCity && (
-        <div className="absolute top-3 right-3 text-[9px] text-slate-600 pointer-events-none hidden md:block">
-          Hover cities · tap on mobile
+      {/* View toggle: Continents (hover regions) ↔ Top Countries leaderboard */}
+      <div className="absolute top-2.5 right-2.5 flex items-center p-0.5 rounded-lg bg-surface-2/90 border border-white/10 backdrop-blur-sm z-20">
+        {(['continents', 'countries'] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            aria-pressed={view === v}
+            className={cn(
+              'px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
+              view === v ? 'bg-magenta/15 text-magenta border border-magenta/30' : 'text-ink-500 hover:text-ink-200 border border-transparent',
+            )}
+          >
+            {v === 'continents' ? 'Continents' : 'Top Countries'}
+          </button>
+        ))}
+      </div>
+
+      {/* Top-countries leaderboard */}
+      {view === 'countries' && (
+        <div className="absolute top-12 right-2.5 w-52 max-w-[60%] rounded-xl border border-white/10 bg-surface/95 backdrop-blur-md p-3 z-10 shadow-2xl">
+          <p className="text-[9px] uppercase tracking-widest text-ink-500 font-semibold mb-2">Top attack origins</p>
+          <div className="space-y-2">
+            {TOP_COUNTRIES.map((c, i) => (
+              <div key={c.country} className="flex items-center gap-2">
+                <span className="text-[10px] text-ink-600 w-3 shrink-0">{i + 1}</span>
+                <span className="text-sm shrink-0">{c.flag}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-ink-200 truncate">{c.country}</span>
+                    <span className="text-[10px] font-mono shrink-0" style={{ color: c.color }}>
+                      {(c.attacks / 1000).toFixed(1)}k
+                    </span>
+                  </div>
+                  <div className="h-1 mt-0.5 rounded-full bg-white/8 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${(c.attacks / TOP_MAX) * 100}%`, background: c.color }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === 'continents' && !hoveredRegion && !hoveredCity && (
+        <div className="absolute top-12 right-3 text-[9px] text-slate-600 pointer-events-none hidden md:block">
+          Hover regions &amp; cities · tap on mobile
         </div>
       )}
 

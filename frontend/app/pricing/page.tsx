@@ -711,7 +711,7 @@ export default function PricingPage() {
                   {/* CTA Buttons */}
                   <div className="space-y-2.5">
                     <a
-                      href="/dashboard"
+                      href="/signup"
                       className="group relative flex items-center justify-center gap-2 w-full py-3 px-5 rounded-xl font-semibold text-sm text-white transition-all duration-300 overflow-hidden hover:scale-[1.02] hover:shadow-magenta-md"
                       style={{
                         background: 'linear-gradient(135deg, #FF2E97 0%, #7A3CFF 55%, #FFB23E 100%)',
@@ -895,7 +895,7 @@ export default function PricingPage() {
               {/* Free CTA */}
               <div className="px-4 py-5 flex items-center justify-center">
                 <a
-                  href="/dashboard"
+                  href="/signup"
                   className="text-xs font-semibold text-safe/80 hover:text-safe border border-safe/20 hover:border-safe/40 rounded-lg px-3 py-2 transition-all duration-200 text-center whitespace-nowrap"
                 >
                   Get started free
@@ -904,7 +904,7 @@ export default function PricingPage() {
               {/* Starter CTA */}
               <div className="px-4 py-5 flex items-center justify-center">
                 <a
-                  href="/dashboard"
+                  href="/signup"
                   className="text-xs font-semibold text-amber/80 hover:text-amber border border-amber/20 hover:border-amber/40 rounded-lg px-3 py-2 transition-all duration-200 text-center whitespace-nowrap"
                 >
                   Start Starter
@@ -913,7 +913,7 @@ export default function PricingPage() {
               {/* Professional CTA */}
               <div className="px-4 py-5 flex items-center justify-center bg-magenta-50">
                 <a
-                  href="/dashboard"
+                  href="/signup"
                   className="text-xs font-semibold text-white bg-magenta hover:bg-magenta/90 rounded-lg px-4 py-2 transition-all duration-200 text-center whitespace-nowrap shadow-magenta-sm hover:shadow-magenta-md"
                 >
                   Go Pro
@@ -1010,6 +1010,25 @@ export default function PricingPage() {
           </motion.div>
         </section>
       </main>
+
+      {/* Mobile sticky total bar — keeps price + CTA reachable without scrolling
+          past every module card (the summary panel is far down on phones). */}
+      <div className="xl:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-[#0A0612]/95 backdrop-blur-xl px-4 py-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] text-ink-500 uppercase tracking-widest">Monthly total</p>
+          <p className="font-display text-xl font-bold text-white leading-none">
+            ${effectiveTotal.toLocaleString()}
+            <span className="text-xs font-normal text-ink-500"> /mo · {selected.size} modules</span>
+          </p>
+        </div>
+        <a
+          href="/signup"
+          className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-plasma text-white font-semibold text-sm shrink-0"
+        >
+          <Sparkles className="w-4 h-4" />
+          Start
+        </a>
+      </div>
     </div>
   )
 }

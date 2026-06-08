@@ -123,18 +123,18 @@ export default function MegaMenu({ open, onClose }: { open: boolean; onClose: ()
 
                 <div className="flex items-center gap-3 mt-8">
                   <a
-                    href="#contact"
+                    href="/signup"
                     onClick={onClose}
                     className="px-5 py-2.5 rounded-xl bg-plasma text-white font-medium text-sm hover:shadow-magenta-md transition-shadow"
                   >
                     Get Started
                   </a>
                   <a
-                    href="/docs"
+                    href="/login"
                     onClick={onClose}
                     className="px-5 py-2.5 rounded-xl glass border border-white/10 text-ink-200 font-medium text-sm hover:text-white transition-colors"
                   >
-                    View Docs
+                    Sign in
                   </a>
                 </div>
               </motion.nav>

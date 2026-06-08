@@ -423,7 +423,7 @@ export default function Sidebar() {
 
           {/* Back to landing */}
           <div className="border-t border-white/5 px-2 py-2">
-            <a
+            <Link
               href="/"
               title="Back to Landing"
               className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors"
@@ -441,7 +441,7 @@ export default function Sidebar() {
                   </motion.span>
                 )}
               </AnimatePresence>
-            </a>
+            </Link>
           </div>
         </motion.aside>
       </div>

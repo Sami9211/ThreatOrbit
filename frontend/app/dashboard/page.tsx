@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, Shield, Activity, Zap, Globe, TrendingUp,
@@ -79,7 +80,7 @@ function TrendingCVEs() {
           <Bug className="w-3.5 h-3.5 text-threat" />
           <h3 className="text-sm font-semibold text-white">Trending CVEs</h3>
         </div>
-        <a href="/dashboard/feeds" className="text-xs text-magenta hover:underline">Feeds →</a>
+        <Link href="/dashboard/feeds" className="text-xs text-magenta hover:underline">Feeds →</Link>
       </div>
       <div className="divide-y divide-white/4">
         {TRENDING_CVES.map((cve, i) => (
@@ -181,7 +182,7 @@ function ActiveIncidents() {
             {INCIDENTS.filter((i) => i.status === 'active').length} open
           </span>
         </div>
-        <a href="/dashboard/siem" className="text-xs text-magenta hover:underline">SIEM →</a>
+        <Link href="/dashboard/siem" className="text-xs text-magenta hover:underline">SIEM →</Link>
       </div>
 
       {/* Severity bar */}
@@ -248,7 +249,7 @@ function RecentAlerts() {
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
         <h3 className="text-sm font-semibold text-white">Recent Alerts</h3>
-        <a href="/dashboard/siem" className="text-xs text-magenta hover:underline">View all</a>
+        <Link href="/dashboard/siem" className="text-xs text-magenta hover:underline">View all</Link>
       </div>
       <div className="divide-y divide-white/4">
         {ALERTS.map((a) => (
@@ -293,7 +294,7 @@ function TopActors() {
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
         <h3 className="text-sm font-semibold text-white">Top Threat Actors</h3>
-        <a href="/dashboard/cti" className="text-xs text-magenta hover:underline">CTI →</a>
+        <Link href="/dashboard/cti" className="text-xs text-magenta hover:underline">CTI →</Link>
       </div>
       <div className="p-4 space-y-3">
         {TOP_ACTORS.map((a, i) => (
@@ -683,7 +684,7 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
             <h2 className="text-base font-semibold text-white">Requires Your Attention</h2>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-threat/10 text-threat font-semibold border border-threat/20">3</span>
           </div>
-          <a href="/dashboard/siem" className="text-xs text-magenta hover:underline transition-colors">View All Alerts →</a>
+          <Link href="/dashboard/siem" className="text-xs text-magenta hover:underline transition-colors">View All Alerts →</Link>
         </div>
         <div className="divide-y divide-white/4">
           {TOP_ALERTS.map((a, i) => (
@@ -703,10 +704,10 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
                   <span className="text-[11px] text-ink-600">{a.age}</span>
                 </div>
               </div>
-              <a href="/dashboard/siem"
+              <Link href="/dashboard/siem"
                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-magenta/10 text-magenta hover:bg-magenta/20 transition-colors border border-magenta/20 shrink-0">
                 Investigate →
-              </a>
+              </Link>
             </motion.div>
           ))}
         </div>
@@ -722,13 +723,13 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
             { label: 'View Assets',       icon: Globe,         href: '/dashboard/assets',  color: 'text-teal',   bg: 'bg-teal/10',   border: 'border-teal/15'   },
             { label: 'Threat Feeds',      icon: Radio,         href: '/dashboard/feeds',   color: 'text-amber',  bg: 'bg-amber/10',  border: 'border-amber/15'  },
           ].map((q) => (
-            <a key={q.label} href={q.href}
+            <Link key={q.label} href={q.href}
               className={cn('flex flex-col items-center gap-3 p-5 rounded-xl border hover:bg-white/3 transition-all group text-center', q.border)}>
               <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', q.bg)}>
                 <q.icon className={cn('w-6 h-6', q.color)} />
               </div>
               <span className="text-sm text-ink-300 group-hover:text-white transition-colors">{q.label}</span>
-            </a>
+            </Link>
           ))}
         </div>
       </div>
@@ -911,7 +912,7 @@ export default function DashboardOverview() {
               { label: 'CTI Intelligence',    href: '/dashboard/cti',     icon: Shield,     color: '#2DD4BF' },
               { label: 'SOAR Playbooks',      href: '/dashboard/soar',    icon: ArrowUpRight,color: '#FF4D6D' },
             ].map(({ label, href, icon: Icon, color }) => (
-              <a
+              <Link
                 key={href}
                 href={href}
                 className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
@@ -921,7 +922,7 @@ export default function DashboardOverview() {
                 </div>
                 <span className="text-xs text-ink-300 group-hover:text-white transition-colors">{label}</span>
                 <ArrowUpRight className="w-3 h-3 text-ink-600 ml-auto group-hover:text-magenta transition-colors" />
-              </a>
+              </Link>
             ))}
           </div>
 
