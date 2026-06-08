@@ -4,6 +4,7 @@ import TopBar from '@/components/dashboard/TopBar'
 import CommandPalette from '@/components/dashboard/CommandPalette'
 import ThemeScope from '@/components/dashboard/ThemeScope'
 import PageScale from '@/components/dashboard/PageScale'
+import CursorParticles from '@/components/effects/CursorParticles'
 
 export const metadata: Metadata = {
   title: {
@@ -23,6 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <CommandPalette />
+      <CursorParticles />
     </ThemeScope>
   )
 }

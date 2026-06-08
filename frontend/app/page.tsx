@@ -3,6 +3,7 @@ import LandingSidebar from '@/components/layout/LandingSidebar'
 import Footer from '@/components/layout/Footer'
 import SmoothScroll from '@/components/effects/SmoothScroll'
 import CursorGlow from '@/components/effects/CursorGlow'
+import CursorParticles from '@/components/effects/CursorParticles'
 import Preloader from '@/components/effects/Preloader'
 import ScrollProgress from '@/components/ui/ScrollProgress'
 import ScrollToTop from '@/components/ui/ScrollToTop'
@@ -31,6 +32,7 @@ export default function Home() {
       <Preloader />
       <ScrollProgress />
       <CursorGlow />
+      <CursorParticles />
       <LandingSidebar />
       <Navbar />
       <main id="main-content">

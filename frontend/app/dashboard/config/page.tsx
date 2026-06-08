@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
+import { useCursorEffect } from '@/lib/useCursorEffect'
 
 /* ── Shared input ────────────────────────────────────────────────── */
 function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
@@ -31,8 +32,17 @@ function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
   )
 }
 
-function Toggle({ label, description, checked }: { label: string; description: string; checked: boolean }) {
-  const [on, setOn] = useState(checked)
+function Toggle({ label, description, checked, value, onChange }: {
+  label: string; description: string; checked?: boolean
+  value?: boolean; onChange?: (v: boolean) => void
+}) {
+  const [on, setOn] = useState(checked ?? true)
+  const controlled = value !== undefined
+  const isOn = controlled ? value! : on
+  const toggle = () => {
+    if (controlled) onChange?.(!value)
+    else setOn((o) => { const n = !o; onChange?.(n); return n })
+  }
   return (
     <div className="flex items-center justify-between py-3 border-b border-white/4 last:border-0">
       <div>
@@ -40,13 +50,13 @@ function Toggle({ label, description, checked }: { label: string; description: s
         <p className="text-[10px] text-ink-600 mt-0.5">{description}</p>
       </div>
       <button
-        onClick={() => setOn((o) => !o)}
+        onClick={toggle}
         role="switch"
-        aria-checked={on}
+        aria-checked={isOn}
         aria-label={label}
-        className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', on ? 'bg-safe' : 'bg-ink-600')}
+        className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', isOn ? 'bg-safe' : 'bg-ink-600')}
       >
-        <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all', on ? 'left-[18px]' : 'left-0.5')} />
+        <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all', isOn ? 'left-[18px]' : 'left-0.5')} />
       </button>
     </div>
   )
@@ -409,13 +419,14 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
           onClick={() => setPinned((p) => !p)}
           aria-label={pinned ? 'Unpin settings menu' : 'Pin settings menu open'}
           aria-pressed={pinned}
-          className="w-full flex items-center gap-3 px-2 py-2 rounded-xl text-ink-400 hover:text-white hover:bg-white/5 transition-colors mb-1"
+          className="w-full flex items-center py-2 rounded-xl text-ink-400 hover:text-white hover:bg-white/5 transition-colors mb-1"
         >
-          <span className="w-5 flex justify-center shrink-0">
+          {/* Icon cell — always 32px wide so icons stack in a perfect column */}
+          <span className="w-8 flex justify-center shrink-0">
             {pinned ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
           </span>
           {expanded && (
-            <span className="text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap">
+            <span className="text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap pr-2">
               {pinned ? 'Collapse' : 'Settings'}
             </span>
           )}
@@ -430,14 +441,15 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
               onClick={() => setTab(id)}
               title={!expanded ? label : undefined}
               className={cn(
-                'w-full flex items-center gap-3 px-2 py-2.5 rounded-xl text-xs font-medium transition-colors text-left',
+                'w-full flex items-center py-2.5 rounded-xl text-xs font-medium transition-colors',
                 tab === id
                   ? 'bg-magenta/10 text-magenta'
                   : 'text-ink-400 hover:text-white hover:bg-white/5',
               )}
             >
-              <span className="w-5 flex justify-center shrink-0"><Icon className="w-4 h-4" /></span>
-              {expanded && <span className="whitespace-nowrap">{label}</span>}
+              {/* Fixed-width icon cell — same 32px as the pin button so every icon aligns */}
+              <span className="w-8 flex justify-center shrink-0"><Icon className="w-4 h-4" /></span>
+              {expanded && <span className="whitespace-nowrap pr-2">{label}</span>}
             </button>
           ))}
         </div>
@@ -455,6 +467,7 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
 export default function ConfigPage() {
   const [tab, setTab] = useState('general')
   const [saved, setSaved] = useState(false)
+  const [cursorFx, setCursorFx] = useCursorEffect()
 
   const save = () => {
     setSaved(true)
@@ -511,6 +524,7 @@ export default function ConfigPage() {
                   <Toggle label="Dark Mode" description="Use dark Plasma Noir theme (default)" checked={true} />
                   <Toggle label="Compact View" description="Show more rows in event tables" checked={false} />
                   <Toggle label="Animated Effects" description="Enable canvas animations and transitions" checked={true} />
+                  <Toggle label="Cursor Particle Effect" description="Liquid particle trail that follows your mouse / finger" value={cursorFx} onChange={setCursorFx} />
                   <Toggle label="Auto-refresh Dashboard" description="Refresh overview widgets every 30s" checked={true} />
                 </div>
               </Section>

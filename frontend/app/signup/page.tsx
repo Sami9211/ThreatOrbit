@@ -45,7 +45,7 @@ export default function SignUpPage() {
     if (selected.price === null) return 'Custom pricing'
     if (selected.price === 0) return 'Free forever'
     const p = annual ? Math.round(selected.price * 0.8) : selected.price
-    return `$${p}/mo${annual ? ' · billed annually' : ''}`
+    return `£${p}/mo${annual ? ' · billed annually' : ''}`
   }, [selected, annual])
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)
@@ -127,8 +127,8 @@ export default function SignUpPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {PLANS.map((p) => {
                   const active = plan === p.id
-                  const displayPrice = p.price === null ? 'Custom' : p.price === 0 ? '$0' :
-                    `$${annual ? Math.round(p.price * 0.8) : p.price}`
+                  const displayPrice = p.price === null ? 'Custom' : p.price === 0 ? '£0' :
+                    `£${annual ? Math.round(p.price * 0.8) : p.price}`
                   return (
                     <button key={p.id} onClick={() => setPlan(p.id)}
                       className={cn('relative text-left rounded-2xl border p-5 transition-all duration-300 flex flex-col',

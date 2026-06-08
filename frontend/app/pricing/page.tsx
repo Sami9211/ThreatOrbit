@@ -386,7 +386,7 @@ function ModuleChip({
               selected ? 'text-magenta' : 'text-ink-300',
             )}
           >
-            ${module.price}
+            £{module.price}
             <span className="font-normal text-ink-500">/mo</span>
           </span>
         )}
@@ -593,7 +593,7 @@ export default function PricingPage() {
                           animate={{ opacity: 1, height: 'auto' }}
                           className="text-safe text-xs mt-1 font-medium"
                         >
-                          Saving ${Math.round(monthlyTotal * 0.2)}/mo with annual billing
+                          Saving £{Math.round(monthlyTotal * 0.2)}/mo with annual billing
                         </motion.p>
                       )}
                     </div>
@@ -675,7 +675,7 @@ export default function PricingPage() {
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0 ml-3">
                                   <span className="text-xs font-semibold text-ink-200">
-                                    ${modulePrice}
+                                    £{modulePrice}
                                   </span>
                                   <button
                                     onClick={() => toggleModule(module.id)}
@@ -702,7 +702,7 @@ export default function PricingPage() {
                           Total
                         </span>
                         <span className="text-sm font-bold text-white">
-                          ${effectiveTotal.toLocaleString()}/mo
+                          £{effectiveTotal.toLocaleString()}/mo
                         </span>
                       </motion.div>
                     )}
@@ -797,7 +797,7 @@ export default function PricingPage() {
             {/* Free */}
             <TierHeader
               name="Free"
-              price="$0"
+              price="£0"
               priceSub="forever"
               description="Start exploring threat intelligence with zero cost."
               users="1 user"
@@ -810,7 +810,7 @@ export default function PricingPage() {
             {/* Starter */}
             <TierHeader
               name="Starter"
-              price="$149"
+              price="£149"
               priceSub="/mo starting"
               description="CTI, Feeds & Asset Surface for growing security teams."
               users="Up to 3 users"
@@ -823,7 +823,7 @@ export default function PricingPage() {
             {/* Professional */}
             <TierHeader
               name="Professional"
-              price="$499"
+              price="£499"
               priceSub="/mo starting"
               description="Full stack security ops. Everything but multi-tenant."
               users="Up to 10 users"
@@ -1017,7 +1017,7 @@ export default function PricingPage() {
         <div className="min-w-0">
           <p className="text-[10px] text-ink-500 uppercase tracking-widest">Monthly total</p>
           <p className="font-display text-xl font-bold text-white leading-none">
-            ${effectiveTotal.toLocaleString()}
+            £{effectiveTotal.toLocaleString()}
             <span className="text-xs font-normal text-ink-500"> /mo · {selected.size} modules</span>
           </p>
         </div>
