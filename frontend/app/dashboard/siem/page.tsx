@@ -18,6 +18,16 @@ type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 type AlertStatus = 'new' | 'assigned' | 'in-progress' | 'pending' | 'resolved' | 'closed'
 type Disposition = 'undetermined' | 'true-positive' | 'false-positive' | 'benign' | 'duplicate'
 
+/* Responsive grid for the alert queue. MITRE/Entity/Status columns drop out below
+   md/lg/sm; their fixed tracks must drop with them or the remaining cells shift
+   into the wrong tracks and the row overflows. Track count tracks visible cells. */
+const ALERT_GRID =
+  'grid gap-3 items-center ' +
+  'grid-cols-[16px_minmax(0,1fr)_auto_auto] ' +              // mobile: dot Alert Risk Time
+  'sm:grid-cols-[16px_1fr_60px_80px_80px] ' +                 // +Status
+  'md:grid-cols-[16px_1fr_80px_60px_80px_80px] ' +            // +MITRE
+  'lg:grid-cols-[16px_1fr_80px_100px_60px_80px_80px]'         // +Entity
+
 type SiemAlert = {
   id: string
   ts: string
@@ -1245,7 +1255,7 @@ export default function SIEMPage() {
               </div>
 
               {/* Table header */}
-              <div className="grid grid-cols-[16px_1fr_80px_100px_60px_80px_80px] gap-3 px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide shrink-0">
+              <div className={cn(ALERT_GRID, 'px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide shrink-0')}>
                 <span />
                 <span>Alert / Rule</span>
                 <span className="hidden md:block">MITRE</span>
@@ -1496,7 +1506,7 @@ function AlertRow({ alert, idx, selected, onClick }: {
       transition={{ delay: idx * 0.025, duration: 0.25 }}
       onClick={onClick}
       className={cn(
-        'grid grid-cols-[16px_1fr_80px_100px_60px_80px_80px] gap-3 items-center px-4 py-2.5 border-b border-white/4 cursor-pointer transition-colors',
+        ALERT_GRID, 'px-4 py-2.5 border-b border-white/4 cursor-pointer transition-colors',
         selected ? 'bg-magenta/8 border-l-2 border-l-magenta' : 'hover:bg-white/3',
         alert.status === 'closed' || alert.status === 'resolved' ? 'opacity-50' : '',
       )}

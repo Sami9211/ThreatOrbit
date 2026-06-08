@@ -633,7 +633,7 @@ export default function CTIPage() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Actor list */}
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <h2 className="text-sm font-semibold text-white">Threat Actors</h2>
           {ACTORS.map((actor) => (
             <ActorCard
@@ -646,7 +646,7 @@ export default function CTIPage() {
         </div>
 
         {/* Actor detail + MITRE */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-5 min-w-0">
           <AnimatePresence mode="wait">
             <ActorDetail key={selectedActor.id} actor={selectedActor} />
           </AnimatePresence>

@@ -13,6 +13,16 @@ import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 
 /* ── Types ────────────────────────────────────────────────────────── */
+/* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
+   until lg) would otherwise leave their fixed tracks reserved on smaller screens,
+   shifting the remaining columns out of alignment and squashing the row. The
+   track count is kept in step with the number of visible cells per breakpoint. */
+const CASE_GRID =
+  'grid gap-3 items-center ' +
+  'grid-cols-[16px_minmax(0,1fr)_auto_auto_auto] ' +     // mobile: dot Case Playbook SLA Created
+  'md:grid-cols-[16px_1fr_80px_80px_90px_60px] ' +        // +Status
+  'lg:grid-cols-[16px_1fr_80px_90px_80px_90px_60px]'      // +Owner
+
 type Severity = 'critical' | 'high' | 'medium' | 'low'
 type CaseStatus = 'new' | 'assigned' | 'in-progress' | 'pending' | 'resolved' | 'closed'
 type StepType = 'check' | 'action' | 'decision' | 'notify' | 'human' | 'sub-playbook'
@@ -818,7 +828,7 @@ export default function SOARPage() {
           {/* ── CASE QUEUE ─────────────────────────────────────────── */}
           {tab === 'cases' && (
             <div className="flex flex-col h-full">
-              <div className="grid grid-cols-[16px_1fr_80px_90px_80px_90px_60px] gap-3 px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide shrink-0">
+              <div className={cn(CASE_GRID, 'px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide shrink-0')}>
                 <span />
                 <span>Case / Type</span>
                 <span className="hidden md:block">Status</span>
@@ -1030,7 +1040,7 @@ function CaseRow({ c, idx, selected, onClick }: {
       transition={{ delay: idx * 0.04, duration: 0.25 }}
       onClick={onClick}
       className={cn(
-        'grid grid-cols-[16px_1fr_80px_90px_80px_90px_60px] gap-3 items-center px-4 py-2.5 border-b border-white/4 cursor-pointer transition-colors',
+        CASE_GRID, 'px-4 py-2.5 border-b border-white/4 cursor-pointer transition-colors',
         selected ? 'bg-magenta/8 border-l-2 border-l-magenta' : 'hover:bg-white/3',
         (c.status === 'closed' || c.status === 'resolved') && 'opacity-50',
       )}
