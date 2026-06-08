@@ -3,26 +3,33 @@
 import { useEffect, useRef } from 'react'
 import { useCursorEffect } from '@/lib/useCursorEffect'
 
-interface Particle {
-  x: number
-  y: number
-  vx: number
-  vy: number
-  life: number     // 0..1 remaining life
-  decay: number    // per-frame decay rate
-  radius: number
-  hue: number      // degrees, cycles for variety
-}
+// Brand palette — blobs cycle through these
+const BRAND_RGB = [
+  [255, 46,  151],  // #FF2E97 magenta
+  [122, 60,  255],  // #7A3CFF violet
+  [45,  212, 191],  // #2DD4BF teal
+  [255, 178, 62],   // #FFB23E amber
+  [180, 80,  255],  // purple-magenta bridge
+] as const
 
-const MAX = 80
-const COLORS = ['#FF2E97', '#7A3CFF', '#FFB23E', '#2DD4BF'] as const
+interface Blob {
+  x: number; y: number   // current position
+  tx: number; ty: number // target position
+  speed: number          // lerp factor per frame
+  r: number              // RGB triple index
+  g: number
+  b: number
+  radius: number         // gradient outer radius
+  phase: number          // oscillation phase for idle drift
+  phaseSpeed: number
+}
 
 export default function CursorParticles() {
   const [enabled] = useCursorEffect()
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const particles = useRef<Particle[]>([])
-  const mouse = useRef({ x: -9999, y: -9999, moving: false })
-  const raf = useRef<number>()
+  const blobsRef  = useRef<Blob[]>([])
+  const cursor    = useRef({ x: -500, y: -500 })
+  const raf       = useRef<number>()
 
   useEffect(() => {
     if (!enabled) return
@@ -32,98 +39,99 @@ export default function CursorParticles() {
     const ctx = canvas.getContext('2d')!
 
     function resize() {
-      canvas!.width = window.innerWidth
+      canvas!.width  = window.innerWidth
       canvas!.height = window.innerHeight
     }
     resize()
     window.addEventListener('resize', resize)
 
-    function spawn(x: number, y: number, burst = 1) {
-      for (let i = 0; i < burst; i++) {
-        if (particles.current.length >= MAX) particles.current.shift()
-        const angle = Math.random() * Math.PI * 2
-        const speed = 0.4 + Math.random() * 1.4
-        const color = COLORS[Math.floor(Math.random() * COLORS.length)]
-        particles.current.push({
-          x,
-          y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 0.3, // slight upward drift
-          life: 1,
-          decay: 0.018 + Math.random() * 0.018,
-          radius: 1.5 + Math.random() * 2.5,
-          hue: parseInt(color.replace('#', ''), 16),
-        })
-      }
+    // Place blobs off-screen initially — they flow to cursor on first move
+    const startX = -500, startY = -500
+    // Speeds deliberately different so blobs stretch into a trail on fast movement
+    const speeds  = [0.10, 0.065, 0.042, 0.028, 0.018]
+    const radii   = [72, 88, 68, 80, 64]
+
+    blobsRef.current = BRAND_RGB.map(([r, g, b], i) => ({
+      x: startX, y: startY,
+      tx: startX, ty: startY,
+      speed: speeds[i],
+      r, g, b,
+      radius: radii[i],
+      phase: (i / BRAND_RGB.length) * Math.PI * 2,
+      phaseSpeed: 0.007 + i * 0.002,
+    }))
+
+    function moveTo(x: number, y: number) {
+      cursor.current = { x, y }
+      blobsRef.current.forEach(b => { b.tx = x; b.ty = y })
     }
 
-    let lastX = -1, lastY = -1
-    function onMouseMove(e: MouseEvent) {
-      const dx = e.clientX - lastX, dy = e.clientY - lastY
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      mouse.current = { x: e.clientX, y: e.clientY, moving: true }
-      if (dist > 6) {          // only emit when actually moving
-        spawn(e.clientX, e.clientY, 2)
-        lastX = e.clientX; lastY = e.clientY
-      }
-    }
-    function onTouchMove(e: TouchEvent) {
-      const t = e.touches[0]
-      spawn(t.clientX, t.clientY, 3)
-    }
-    function onTouchStart(e: TouchEvent) {
-      const t = e.touches[0]
-      spawn(t.clientX, t.clientY, 6)  // burst on tap
+    function burst(x: number, y: number) {
+      // On tap/touchstart — scatter blobs outward then let them flow back
+      blobsRef.current.forEach((b, i) => {
+        const angle = (i / blobsRef.current.length) * Math.PI * 2
+        const d = 55 + i * 12
+        b.x = x + Math.cos(angle) * d
+        b.y = y + Math.sin(angle) * d
+        b.tx = x; b.ty = y
+      })
+      cursor.current = { x, y }
     }
 
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    function onMouseMove(e: MouseEvent)  { moveTo(e.clientX, e.clientY) }
+    function onTouchMove(e: TouchEvent)  { moveTo(e.touches[0].clientX, e.touches[0].clientY) }
+    function onTouchStart(e: TouchEvent) { burst(e.touches[0].clientX,  e.touches[0].clientY) }
+
+    window.addEventListener('mousemove',  onMouseMove)
+    window.addEventListener('touchmove',  onTouchMove,  { passive: true })
     window.addEventListener('touchstart', onTouchStart, { passive: true })
 
     function frame() {
       ctx.clearRect(0, 0, canvas!.width, canvas!.height)
 
-      particles.current = particles.current.filter(p => p.life > 0)
+      // 'lighter' makes overlapping blobs brighten — the plasma core effect
+      ctx.globalCompositeOperation = 'lighter'
 
-      for (const p of particles.current) {
-        p.x += p.vx
-        p.y += p.vy
-        p.vy += 0.04          // gravity
-        p.vx *= 0.97          // friction
-        p.life -= p.decay
+      for (const blob of blobsRef.current) {
+        blob.phase += blob.phaseSpeed
 
-        const alpha = p.life
-        const r = p.radius * p.life
+        // Smooth lerp toward target
+        blob.x += (blob.tx - blob.x) * blob.speed
+        blob.y += (blob.ty - blob.y) * blob.speed
 
-        // soft glowing dot
-        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 4)
-        const col = COLORS[Math.floor(p.hue % COLORS.length)]
-        grad.addColorStop(0,   col + Math.round(alpha * 0xcc).toString(16).padStart(2, '0'))
-        grad.addColorStop(0.5, col + Math.round(alpha * 0x44).toString(16).padStart(2, '0'))
-        grad.addColorStop(1,   col + '00')
+        // Gentle idle oscillation — blobs breathe when clustered
+        const settled = Math.sqrt((blob.tx - blob.x) ** 2 + (blob.ty - blob.y) ** 2)
+        const drift   = Math.max(0, 1 - settled / 80) * 7
+        const px = blob.x + Math.sin(blob.phase)          * drift
+        const py = blob.y + Math.cos(blob.phase * 0.73)   * drift
+
+        // Subtle size pulse
+        const radiusPulse = blob.radius * (1 + Math.sin(blob.phase * 0.5) * 0.06)
+
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, radiusPulse)
+        grad.addColorStop(0,    `rgba(${blob.r},${blob.g},${blob.b},0.30)`)
+        grad.addColorStop(0.35, `rgba(${blob.r},${blob.g},${blob.b},0.14)`)
+        grad.addColorStop(0.7,  `rgba(${blob.r},${blob.g},${blob.b},0.05)`)
+        grad.addColorStop(1,    `rgba(${blob.r},${blob.g},${blob.b},0)`)
 
         ctx.beginPath()
-        ctx.arc(p.x, p.y, r * 4, 0, Math.PI * 2)
+        ctx.arc(px, py, radiusPulse, 0, Math.PI * 2)
         ctx.fillStyle = grad
-        ctx.fill()
-
-        // bright core
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-        ctx.fillStyle = col + Math.round(alpha * 0xff).toString(16).padStart(2, '0')
         ctx.fill()
       }
 
+      ctx.globalCompositeOperation = 'source-over'
       raf.current = requestAnimationFrame(frame)
     }
     raf.current = requestAnimationFrame(frame)
 
     return () => {
-      window.removeEventListener('resize', resize)
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('resize',     resize)
+      window.removeEventListener('mousemove',  onMouseMove)
+      window.removeEventListener('touchmove',  onTouchMove)
       window.removeEventListener('touchstart', onTouchStart)
       if (raf.current) cancelAnimationFrame(raf.current)
+      ctx.globalCompositeOperation = 'source-over'
       ctx.clearRect(0, 0, canvas!.width, canvas!.height)
     }
   }, [enabled])
@@ -138,7 +146,7 @@ export default function CursorParticles() {
         position: 'fixed',
         inset: 0,
         pointerEvents: 'none',
-        zIndex: 9998,       // below modals (10000+), above everything else
+        zIndex: 9998,
       }}
     />
   )
