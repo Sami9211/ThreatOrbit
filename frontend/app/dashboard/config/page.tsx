@@ -44,8 +44,8 @@ function Toggle({ label, description, checked, value, onChange }: {
     else setOn((o) => { const n = !o; onChange?.(n); return n })
   }
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/4 last:border-0">
-      <div>
+    <div className="flex items-center justify-between py-2.5 sm:py-3 border-b border-white/4 last:border-0">
+      <div className="mr-4">
         <p className="text-xs font-medium text-ink-200">{label}</p>
         <p className="text-[10px] text-ink-600 mt-0.5">{description}</p>
       </div>
@@ -237,7 +237,7 @@ function ExperienceModeCard() {
         </div>
       </div>
 
-      <div className="p-3 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+      <div className="p-3 sm:p-5 grid grid-cols-2 gap-2.5 sm:gap-4">
         {MODES.map((m) => {
           const Icon = m.icon
           const active = mode === m.id
@@ -246,7 +246,7 @@ function ExperienceModeCard() {
               key={m.id}
               onClick={() => setMode(m.id)}
               className={cn(
-                'text-left p-3 sm:p-4 rounded-xl border transition-all',
+                'text-left p-2.5 sm:p-4 rounded-xl border transition-all',
                 active
                   ? 'border-opacity-60 shadow-lg'
                   : 'border-white/8 hover:border-white/15 bg-surface-2/40',
@@ -257,22 +257,23 @@ function ExperienceModeCard() {
                 boxShadow: `0 0 24px ${m.color}18`,
               } : undefined}
             >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg" style={{ background: m.color + '18' }}>
-                  <Icon className="w-4 h-4" style={{ color: m.color }} />
+              <div className="flex items-center gap-2 sm:gap-3 mb-0 sm:mb-3">
+                <div className="p-1.5 sm:p-2 rounded-lg shrink-0" style={{ background: m.color + '18' }}>
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: m.color }} />
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">{m.label}</p>
-                  <p className="text-[10px]" style={{ color: m.color }}>{m.tagline}</p>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm font-semibold text-white leading-tight">{m.label}</p>
+                  <p className="text-[9px] sm:text-[10px] leading-tight" style={{ color: m.color }}>{m.tagline}</p>
                 </div>
                 {active && (
-                  <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center"
+                  <div className="ml-auto w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shrink-0"
                     style={{ background: m.color + '20', border: `1px solid ${m.color}50` }}>
-                    <CheckCircle className="w-3 h-3" style={{ color: m.color }} />
+                    <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" style={{ color: m.color }} />
                   </div>
                 )}
               </div>
-              <ul className="space-y-1.5">
+              {/* Feature list — hidden on mobile to keep cards compact */}
+              <ul className="hidden sm:block space-y-1.5 mt-3">
                 {m.features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2 text-[11px] text-ink-400">
                     <ChevronRight className="w-3 h-3 mt-0.5 shrink-0" style={{ color: active ? m.color : '#4a4463' }} />
@@ -315,7 +316,7 @@ function ThemeCard() {
         </div>
       </div>
 
-      <div className="p-3 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+      <div className="p-3 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         {THEMES.map((t) => {
           const isActive = t.id === theme
           return (
@@ -323,33 +324,32 @@ function ThemeCard() {
               key={t.id}
               onClick={() => setTheme(t.id)}
               className={cn(
-                'group relative text-left rounded-xl border p-3 transition-all',
+                'group relative text-left rounded-xl border p-2 sm:p-3 transition-all',
                 isActive
                   ? 'border-white/25 shadow-lg'
                   : 'border-white/8 hover:border-white/18 hover:bg-white/3',
               )}
               style={isActive ? { boxShadow: `0 0 22px ${t.swatch[1]}33`, borderColor: `${t.swatch[1]}66` } : undefined}
             >
-              {/* Preview chip */}
               <div
-                className="relative h-14 rounded-lg overflow-hidden mb-2.5 border border-white/8"
+                className="relative h-10 sm:h-14 rounded-lg overflow-hidden mb-2 border border-white/8"
                 style={{ background: t.swatch[0] }}
               >
-                <div className="absolute inset-0 flex items-end gap-1.5 p-2">
-                  <span className="w-6 h-6 rounded-md" style={{ background: t.swatch[1] }} />
-                  <span className="w-4 h-5 rounded-md" style={{ background: t.swatch[2] }} />
-                  <span className="w-3 h-4 rounded-md" style={{ background: t.swatch[3] }} />
-                  <span className="ml-auto w-8 h-2 rounded-full self-center" style={{ background: `${t.swatch[1]}55` }} />
+                <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 p-1.5 sm:p-2">
+                  <span className="w-4 h-4 sm:w-6 sm:h-6 rounded-md" style={{ background: t.swatch[1] }} />
+                  <span className="w-3 h-3.5 sm:w-4 sm:h-5 rounded-md" style={{ background: t.swatch[2] }} />
+                  <span className="w-2 h-3 sm:w-3 sm:h-4 rounded-md" style={{ background: t.swatch[3] }} />
+                  <span className="ml-auto w-6 h-1.5 sm:w-8 sm:h-2 rounded-full self-center" style={{ background: `${t.swatch[1]}55` }} />
                 </div>
                 {isActive && (
-                  <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                  <div className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center"
                     style={{ background: t.swatch[1] }}>
-                    <Check className="w-3 h-3" style={{ color: t.swatch[0] }} strokeWidth={3} />
+                    <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" style={{ color: t.swatch[0] }} strokeWidth={3} />
                   </div>
                 )}
               </div>
-              <p className="text-xs font-semibold text-white">{t.label}</p>
-              <p className="text-[10px] text-ink-500 mt-0.5">{t.desc}</p>
+              <p className="text-[11px] sm:text-xs font-semibold text-white">{t.label}</p>
+              <p className="text-[9px] sm:text-[10px] text-ink-500 mt-0.5 hidden sm:block">{t.desc}</p>
             </button>
           )
         })}
@@ -395,71 +395,84 @@ const TABS = [
   { id: 'integrations',label: 'Integrations',     icon: Plug     },
 ]
 
-/* ── Collapsible settings nav ────────────────────────────────────────
-   Default state is a slim icon rail. Hovering expands it (desktop); clicking
-   the pin toggle keeps it open so it works on touch / mobile too. */
+/* ── Settings navigation ─────────────────────────────────────────────
+   Mobile  (< sm): horizontal scrollable icon+label strip above the content
+   Desktop (sm+) : vertical collapsible icon rail with hover-to-expand      */
 function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => void }) {
   const [pinned, setPinned] = useState(false)
   const [hovered, setHovered] = useState(false)
   const expanded = pinned || hovered
-  const activeTab = TABS.find((t) => t.id === tab)
 
   return (
-    <nav
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className={cn(
-        'shrink-0 transition-[width] duration-300 ease-out',
-        expanded ? 'w-44 sm:w-48' : 'w-12',
-      )}
-    >
-      <div className="sticky top-4 glass border border-white/8 rounded-2xl p-1.5 overflow-hidden">
-        {/* Pin / expand toggle */}
-        <button
-          onClick={() => setPinned((p) => !p)}
-          aria-label={pinned ? 'Unpin settings menu' : 'Pin settings menu open'}
-          aria-pressed={pinned}
-          className="w-full flex items-center py-2 rounded-xl text-ink-400 hover:text-white hover:bg-white/5 transition-colors mb-1"
-        >
-          {/* Icon cell — always 32px wide so icons stack in a perfect column */}
-          <span className="w-8 flex justify-center shrink-0">
-            {pinned ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-          </span>
-          {expanded && (
-            <span className="text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap pr-2">
-              {pinned ? 'Collapse' : 'Settings'}
+    <>
+      {/* ── Mobile horizontal strip ── */}
+      <nav className="sm:hidden overflow-x-auto flex gap-1 pb-2 -mx-4 px-4 scrollbar-none">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={cn(
+              'flex flex-col items-center gap-1 px-3 py-2 rounded-xl shrink-0 transition-colors',
+              tab === id
+                ? 'bg-magenta/12 text-magenta'
+                : 'text-ink-400 hover:text-white hover:bg-white/5',
+            )}
+          >
+            <Icon className="w-4 h-4" />
+            <span className="text-[10px] font-medium whitespace-nowrap">{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* ── Desktop vertical rail ── */}
+      <nav
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        className={cn(
+          'hidden sm:block shrink-0 transition-[width] duration-300 ease-out',
+          expanded ? 'w-48' : 'w-12',
+        )}
+      >
+        <div className="sticky top-4 glass border border-white/8 rounded-2xl p-2 overflow-hidden">
+          <button
+            onClick={() => setPinned((p) => !p)}
+            aria-label={pinned ? 'Unpin settings menu' : 'Pin settings menu open'}
+            aria-pressed={pinned}
+            className="w-full flex items-center py-2 rounded-xl text-ink-400 hover:text-white hover:bg-white/5 transition-colors mb-1"
+          >
+            <span className="w-8 flex justify-center shrink-0">
+              {pinned ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
             </span>
-          )}
-        </button>
+            {expanded && (
+              <span className="text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap pr-2">
+                {pinned ? 'Collapse' : 'Settings'}
+              </span>
+            )}
+          </button>
 
-        <div className="h-px bg-white/6 mx-1 mb-1" />
+          <div className="h-px bg-white/6 mx-1 mb-1" />
 
-        <div className="space-y-0.5">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              title={!expanded ? label : undefined}
-              className={cn(
-                'w-full flex items-center py-2.5 rounded-xl text-xs font-medium transition-colors',
-                tab === id
-                  ? 'bg-magenta/10 text-magenta'
-                  : 'text-ink-400 hover:text-white hover:bg-white/5',
-              )}
-            >
-              {/* Fixed-width icon cell — same 32px as the pin button so every icon aligns */}
-              <span className="w-8 flex justify-center shrink-0"><Icon className="w-4 h-4" /></span>
-              {expanded && <span className="whitespace-nowrap pr-2">{label}</span>}
-            </button>
-          ))}
+          <div className="space-y-0.5">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                title={!expanded ? label : undefined}
+                className={cn(
+                  'w-full flex items-center py-2.5 rounded-xl text-xs font-medium transition-colors',
+                  tab === id
+                    ? 'bg-magenta/10 text-magenta'
+                    : 'text-ink-400 hover:text-white hover:bg-white/5',
+                )}
+              >
+                <span className="w-8 flex justify-center shrink-0"><Icon className="w-4 h-4" /></span>
+                {expanded && <span className="whitespace-nowrap pr-2">{label}</span>}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Collapsed-state breadcrumb of the active section (mobile clarity) */}
-      {!expanded && activeTab && (
-        <p className="text-[10px] text-ink-600 text-center mt-2 px-1 leading-tight">{activeTab.label}</p>
-      )}
-    </nav>
+      </nav>
+    </>
   )
 }
 
@@ -492,8 +505,8 @@ export default function ConfigPage() {
         </button>
       </div>
 
-      <div className="flex gap-4 sm:gap-6">
-        {/* Collapsible side nav */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+        {/* Nav: horizontal strip on mobile, vertical rail on sm+ */}
         <SettingsNav tab={tab} setTab={setTab} />
 
         {/* Content */}
