@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, patchAlert, type SiemAlert as ApiSiemAlert } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -1109,9 +1110,19 @@ export default function SIEMPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedAlert = alerts.find((a) => a.id === selectedId) ?? null
 
+  // Load alerts from API
+  useEffect(() => {
+    fetchSiemAlerts({ limit: '140' })
+      .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
+      .catch(() => {})
+  }, [])
+
   // Mutate a single alert's triage fields (status/owner/disposition) in place
-  function updateAlert(id: string, patch: Partial<SiemAlert>) {
+  async function updateAlert(id: string, patch: Partial<SiemAlert>) {
     setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)))
+    try {
+      await patchAlert(id, patch as Parameters<typeof patchAlert>[1])
+    } catch { /* UI is already updated optimistically */ }
   }
 
   // Normal mode only exposes the alert queue; force tab back if a hidden one is active

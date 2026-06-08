@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain, Globe, Hash, Target, ChevronRight, ExternalLink,
@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
+import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph } from '@/lib/api'
 
 /* ── Threat Actors ───────────────────────────────────────────────── */
 type Actor = {
@@ -586,10 +587,23 @@ function NormalCTI() {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function CTIPage() {
+  const [actors, setActors] = useState<Actor[]>(ACTORS)
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
   const graph = buildGraph(selectedActor)
+
+  useEffect(() => {
+    fetchActors()
+      .then((data) => {
+        if (data.length > 0) {
+          const mapped = data as unknown as Actor[]
+          setActors(mapped)
+          setSelectedActor(mapped[0])
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   if (!isPower) return <NormalCTI />
 
@@ -600,8 +614,8 @@ export default function CTIPage() {
         <div>
           <h1 className="font-display text-xl font-bold text-white">Cyber Threat Intelligence</h1>
           <p className="text-xs text-ink-500 mt-0.5">
-            {ACTORS.length} tracked actors · {ACTORS.reduce((s, a) => s + a.iocCount, 0).toLocaleString()} IOCs ·
-            {' '}{ACTORS.reduce((s, a) => s + a.campaigns, 0)} campaigns
+            {actors.length} tracked actors · {actors.reduce((s, a) => s + a.iocCount, 0).toLocaleString()} IOCs ·
+            {' '}{actors.reduce((s: number, a) => s + (Array.isArray(a.campaigns) ? a.campaigns.length : 0), 0)} campaigns
           </p>
         </div>
         <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',
@@ -635,7 +649,7 @@ export default function CTIPage() {
         {/* Actor list */}
         <div className="space-y-3 min-w-0">
           <h2 className="text-sm font-semibold text-white">Threat Actors</h2>
-          {ACTORS.map((actor) => (
+          {actors.map((actor) => (
             <ActorCard
               key={actor.id}
               actor={actor}

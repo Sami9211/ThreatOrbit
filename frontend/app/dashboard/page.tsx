@@ -11,8 +11,14 @@ import {
 import { cn } from '@/lib/utils'
 import WorldMap from '@/components/dashboard/WorldMap'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import {
+  fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
+  fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
+  type OverviewKpis, type OverviewAlert, type Incident,
+  type TopActor, type ThreatVector, type LiveFeedItem,
+} from '@/lib/api'
 
-const SEVERITY_COLOR = {
+const SEVERITY_COLOR: Record<string, string> = {
   critical: '#FF2E97',
   high:     '#FF4D6D',
   medium:   '#FFB23E',
@@ -63,7 +69,7 @@ function KPICard({
   )
 }
 
-/* ── Trending CVEs ───────────────────────────────────────────────── */
+/* ── Trending CVEs (static — no CVE endpoint yet) ────────────────── */
 const TRENDING_CVES = [
   { id: 'CVE-2024-6387', name: 'OpenSSH regreSSHion', cvss: 8.1,  affected: 'OpenSSH < 9.8p1', patched: false, color: '#FF2E97', tag: 'RCE' },
   { id: 'CVE-2024-3094', name: 'XZ Utils backdoor',   cvss: 10.0, affected: 'XZ Utils 5.6.x',  patched: true,  color: '#FF2E97', tag: 'Supply Chain' },
@@ -116,14 +122,30 @@ function TrendingCVEs() {
 }
 
 /* ── Intel Brief ─────────────────────────────────────────────────── */
-const BRIEF_ITEMS = [
+const BRIEF_ITEMS_FALLBACK = [
   { headline: 'Lazarus Group activity surge — 3 new C2 IPs blocked', severity: 'critical', age: '2h ago', src: 'ThreatFox / MISP' },
   { headline: 'CISA KEV updated with 2 new FortiOS exploits',        severity: 'high',     age: '5h ago', src: 'CISA KEV' },
   { headline: 'Novel MFA-bypass technique targeting Azure AD',       severity: 'high',     age: '8h ago', src: 'Microsoft TI' },
   { headline: 'Ransomware campaign targets EU healthcare sector',    severity: 'critical', age: '11h ago',src: 'Europol' },
 ]
 
-function IntelBrief() {
+function timeAgo(iso: string) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return `${Math.floor(diff)}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
+}
+
+function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
+  const items = alerts.length > 0
+    ? alerts.slice(0, 4).map((a) => ({
+        headline: a.title,
+        severity: a.severity,
+        age: timeAgo(a.time),
+        src: a.src,
+      }))
+    : BRIEF_ITEMS_FALLBACK
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden flex flex-col h-full">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -134,7 +156,7 @@ function IntelBrief() {
         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-safe font-medium">Live</span>
       </div>
       <div className="flex-1 divide-y divide-white/4">
-        {BRIEF_ITEMS.map((item, i) => (
+        {items.map((item, i) => (
           <div key={i} className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
             <span
               className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
@@ -158,20 +180,10 @@ function IntelBrief() {
   )
 }
 
-/* ── Active Incidents ────────────────────────────────────────────── */
-const INCIDENTS = [
-  { id: 'INC-0047', title: 'SSH brute force from TOR exit nodes',   severity: 'critical', status: 'active',  category: 'Brute Force',  age: '4m',  assigned: 'auto'   },
-  { id: 'INC-0046', title: 'Lateral movement attempt on DC server', severity: 'critical', status: 'active',  category: 'Lateral Move', age: '18m', assigned: 'Alice'  },
-  { id: 'INC-0045', title: 'Suspicious PowerShell encoded payload', severity: 'high',     status: 'triaged', category: 'Malware',      age: '32m', assigned: 'Bob'    },
-  { id: 'INC-0044', title: 'Large file transfer to unknown host',   severity: 'high',     status: 'active',  category: 'Exfiltration', age: '1h',  assigned: 'auto'   },
-  { id: 'INC-0043', title: 'MISP sync failure — feed offline',      severity: 'medium',   status: 'triaged', category: 'Integration',  age: '1h',  assigned: 'Charlie'},
-  { id: 'INC-0042', title: 'Repeated MFA prompt from new location', severity: 'medium',   status: 'closed',  category: 'Identity',     age: '2h',  assigned: 'auto'   },
-]
+const STATUS_COLOR: Record<string, string> = { active: '#FF2E97', triaged: '#FFB23E', open: '#FF2E97', 'in-progress': '#FFB23E', resolved: '#2DD4BF', closed: '#2DD4BF' }
+const STATUS_BG:    Record<string, string> = { active: '#FF2E9710', triaged: '#FFB23E10', open: '#FF2E9710', 'in-progress': '#FFB23E10', resolved: '#2DD4BF10', closed: '#2DD4BF10' }
 
-const STATUS_COLOR: Record<string, string> = { active: '#FF2E97', triaged: '#FFB23E', closed: '#2DD4BF' }
-const STATUS_BG:    Record<string, string> = { active: '#FF2E9710', triaged: '#FFB23E10', closed: '#2DD4BF10' }
-
-function ActiveIncidents() {
+function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -179,36 +191,41 @@ function ActiveIncidents() {
           <Flame className="w-3.5 h-3.5 text-threat" />
           <h3 className="text-sm font-semibold text-white">Active Incidents</h3>
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-threat/10 border border-threat/20 text-threat font-semibold">
-            {INCIDENTS.filter((i) => i.status === 'active').length} open
+            {incidents.filter((i) => i.status === 'active' || i.status === 'open').length} open
           </span>
         </div>
         <Link href="/dashboard/siem" className="text-xs text-magenta hover:underline">SIEM →</Link>
       </div>
 
       {/* Severity bar */}
-      <div className="flex h-1.5 mx-5 mt-3 rounded-full overflow-hidden gap-px">
-        {[
-          { pct: 33, color: '#FF2E97' },
-          { pct: 33, color: '#FF4D6D' },
-          { pct: 22, color: '#FFB23E' },
-          { pct: 12, color: '#2DD4BF' },
-        ].map(({ pct, color }, i) => (
-          <motion.div
-            key={i}
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.8, delay: i * 0.1, ease: 'easeOut' }}
-            className="h-full"
-            style={{ background: color }}
-          />
-        ))}
-      </div>
-      <div className="flex justify-between px-5 pt-1 pb-3 text-[9px] text-ink-600">
-        <span>2 critical</span><span>2 high</span><span>1 med</span><span>—</span>
-      </div>
+      {incidents.length > 0 && (() => {
+        const crit = incidents.filter(i => i.severity === 'critical').length
+        const high = incidents.filter(i => i.severity === 'high').length
+        const med  = incidents.filter(i => i.severity === 'medium').length
+        const tot  = incidents.length || 1
+        return (
+          <>
+            <div className="flex h-1.5 mx-5 mt-3 rounded-full overflow-hidden gap-px">
+              {[
+                { pct: Math.round(crit/tot*100), color: '#FF2E97' },
+                { pct: Math.round(high/tot*100), color: '#FF4D6D' },
+                { pct: Math.round(med/tot*100),  color: '#FFB23E' },
+                { pct: Math.max(0, 100 - Math.round(crit/tot*100) - Math.round(high/tot*100) - Math.round(med/tot*100)), color: '#2DD4BF' },
+              ].map(({ pct, color }, i) => (
+                <motion.div key={i} initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.8, delay: i * 0.1, ease: 'easeOut' }}
+                  className="h-full" style={{ background: color }} />
+              ))}
+            </div>
+            <div className="flex justify-between px-5 pt-1 pb-3 text-[9px] text-ink-600">
+              <span>{crit} critical</span><span>{high} high</span><span>{med} med</span><span>—</span>
+            </div>
+          </>
+        )
+      })()}
 
       <div className="divide-y divide-white/4">
-        {INCIDENTS.map((inc) => (
+        {incidents.map((inc) => (
           <div key={inc.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/2 transition-colors cursor-pointer group">
             <span className="w-1.5 h-1.5 rounded-full shrink-0 ring-2 ring-current/10"
               style={{ background: SEVERITY_COLOR[inc.severity as keyof typeof SEVERITY_COLOR] }}
@@ -220,11 +237,11 @@ function ActiveIncidents() {
             <div className="flex items-center gap-2 shrink-0">
               <span
                 className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold capitalize"
-                style={{ background: STATUS_BG[inc.status], color: STATUS_COLOR[inc.status] }}
+                style={{ background: STATUS_BG[inc.status] ?? '#ffffff10', color: STATUS_COLOR[inc.status] ?? '#aaa' }}
               >
                 {inc.status}
               </span>
-              <span className="text-[10px] text-ink-600">{inc.age}</span>
+              <span className="text-[10px] text-ink-600">{timeAgo(inc.age)}</span>
             </div>
           </div>
         ))}
@@ -233,18 +250,7 @@ function ActiveIncidents() {
   )
 }
 
-/* ── Recent Alerts ───────────────────────────────────────────────── */
-const ALERTS = [
-  { id: 1, title: 'CVE-2024-6387 OpenSSH RCE attempt',          severity: 'critical', time: '2m ago',  src: '45.95.147.236'  },
-  { id: 2, title: 'Lazarus Group C2 beacon detected',            severity: 'critical', time: '7m ago',  src: '185.220.101.42' },
-  { id: 3, title: 'SQL Injection on /api/users endpoint',        severity: 'high',     time: '12m ago', src: '192.168.10.44'  },
-  { id: 4, title: 'Suspicious PowerShell execution pattern',     severity: 'high',     time: '18m ago', src: '10.0.2.15'      },
-  { id: 5, title: 'Large data exfiltration to external host',    severity: 'critical', time: '24m ago', src: '172.16.0.44'    },
-  { id: 6, title: 'Brute-force SSH login from 14 IPs',          severity: 'medium',   time: '31m ago', src: 'Multiple'       },
-  { id: 7, title: 'Malicious URL in phishing email detected',    severity: 'medium',   time: '45m ago', src: 'Email gateway'  },
-]
-
-function RecentAlerts() {
+function RecentAlerts({ alerts }: { alerts: OverviewAlert[] }) {
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -252,7 +258,7 @@ function RecentAlerts() {
         <Link href="/dashboard/siem" className="text-xs text-magenta hover:underline">View all</Link>
       </div>
       <div className="divide-y divide-white/4">
-        {ALERTS.map((a) => (
+        {alerts.map((a) => (
           <div key={a.id} className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
             <span
               className="mt-1 w-2 h-2 rounded-full shrink-0 ring-2 ring-current/20"
@@ -271,7 +277,7 @@ function RecentAlerts() {
               )}>
                 {a.severity}
               </span>
-              <span className="text-[10px] text-ink-600">{a.time}</span>
+              <span className="text-[10px] text-ink-600">{timeAgo(a.time)}</span>
             </div>
           </div>
         ))}
@@ -280,16 +286,9 @@ function RecentAlerts() {
   )
 }
 
-/* ── Top Threat Actors ───────────────────────────────────────────── */
-const TOP_ACTORS = [
-  { name: 'Lazarus Group',    origin: 'DPRK',  score: 9.8, attacks: 247, color: '#FF2E97' },
-  { name: 'APT29 Cozy Bear', origin: 'Russia', score: 9.4, attacks: 189, color: '#7A3CFF' },
-  { name: 'Volt Typhoon',    origin: 'China',  score: 9.2, attacks: 156, color: '#FFB23E' },
-  { name: 'Scattered Spider',origin: 'USA/UK', score: 8.6, attacks: 98,  color: '#2DD4BF' },
-  { name: 'FIN7',            origin: 'Russia', score: 8.4, attacks: 84,  color: '#FF4D6D' },
-]
+const ACTOR_COLORS = ['#FF2E97', '#7A3CFF', '#FFB23E', '#2DD4BF', '#FF4D6D']
 
-function TopActors() {
+function TopActors({ actors }: { actors: TopActor[] }) {
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -297,7 +296,7 @@ function TopActors() {
         <Link href="/dashboard/cti" className="text-xs text-magenta hover:underline">CTI →</Link>
       </div>
       <div className="p-4 space-y-3">
-        {TOP_ACTORS.map((a, i) => (
+        {actors.map((a, i) => (
           <div key={a.name} className="flex items-center gap-3">
             <span className="text-[10px] text-ink-600 w-4">{i + 1}</span>
             <div className="flex-1 min-w-0">
@@ -311,7 +310,7 @@ function TopActors() {
                   animate={{ width: `${(a.score / 10) * 100}%` }}
                   transition={{ delay: i * 0.1, duration: 0.8, ease: 'easeOut' }}
                   className="h-full rounded-full"
-                  style={{ background: a.color }}
+                  style={{ background: ACTOR_COLORS[i % ACTOR_COLORS.length] }}
                 />
               </div>
             </div>
@@ -323,21 +322,12 @@ function TopActors() {
   )
 }
 
-/* ── Attack Vector Breakdown ─────────────────────────────────────── */
-const VECTORS = [
-  { label: 'Phishing',      pct: 34, color: '#FF2E97' },
-  { label: 'RCE Exploits',  pct: 28, color: '#7A3CFF' },
-  { label: 'Credential',    pct: 18, color: '#FFB23E' },
-  { label: 'Supply Chain',  pct: 12, color: '#2DD4BF' },
-  { label: 'Other',         pct:  8, color: '#665B7D'  },
-]
-
-function AttackVectors() {
+function AttackVectors({ vectors }: { vectors: ThreatVector[] }) {
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <h3 className="text-sm font-semibold text-white mb-4">Attack Vectors (24h)</h3>
       <div className="space-y-3">
-        {VECTORS.map((v) => (
+        {vectors.map((v) => (
           <div key={v.label}>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-ink-300">{v.label}</span>
@@ -359,11 +349,11 @@ function AttackVectors() {
   )
 }
 
-/* ── Events per hour mini-chart ──────────────────────────────────── */
-const HOURLY = [12, 18, 9, 24, 31, 15, 28, 44, 38, 52, 47, 61, 58, 43, 39, 55, 67, 71, 63, 58, 49, 44, 37, 29]
+const HOURLY_FALLBACK = [12, 18, 9, 24, 31, 15, 28, 44, 38, 52, 47, 61, 58, 43, 39, 55, 67, 71, 63, 58, 49, 44, 37, 29]
 
-function EventTimeline() {
-  const max = Math.max(...HOURLY)
+function EventTimeline({ hourly }: { hourly: number[] }) {
+  const data = hourly.length === 24 ? hourly : HOURLY_FALLBACK
+  const max = Math.max(...data)
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -374,7 +364,7 @@ function EventTimeline() {
         </div>
       </div>
       <div className="flex items-end gap-1 h-20">
-        {HOURLY.map((v, i) => (
+        {data.map((v, i) => (
           <motion.div
             key={i}
             initial={{ height: 0 }}
@@ -456,54 +446,26 @@ function ThreatHeatmap() {
 }
 
 /* ── Live Threat Feed (with filters) ─────────────────────────────── */
-type Feed = {
-  id: number
-  type: string
-  severity: 'critical' | 'high' | 'medium' | 'low'
-  region: string
-  ip: string
-  detail: string
-}
-
-const FEED_SEED: Omit<Feed, 'id'>[] = [
-  { type: 'RCE Exploit',   severity: 'critical', region: 'Europe',   ip: '45.95.147.236',  detail: 'CVE-2024-6387 OpenSSH attempt' },
-  { type: 'C2 Beacon',     severity: 'critical', region: 'N. America', ip: '185.220.101.42', detail: 'Lazarus Group callback' },
-  { type: 'Ransomware',    severity: 'critical', region: 'Asia',     ip: '103.224.182.0',  detail: 'LockBit encryption pattern' },
-  { type: 'Phishing',      severity: 'high',     region: 'N. America', ip: '192.3.45.18',   detail: 'Credential harvest page' },
-  { type: 'Brute Force',   severity: 'high',     region: 'Europe',   ip: '91.92.251.103',  detail: 'SSH 4,200 attempts / min' },
-  { type: 'SQL Injection', severity: 'medium',   region: 'Asia',     ip: '23.184.48.200',  detail: 'WAF blocked union-based' },
-  { type: 'Port Scan',     severity: 'low',      region: 'S. America', ip: '177.54.144.9',  detail: 'Full TCP sweep' },
-  { type: 'DDoS',          severity: 'high',     region: 'Africa',   ip: '105.112.20.4',   detail: 'SYN flood 48 Gbps' },
-  { type: 'Supply Chain',  severity: 'critical', region: 'Europe',   ip: '195.123.246.0',  detail: 'Malicious npm package' },
-  { type: 'BEC',           severity: 'medium',   region: 'Oceania',  ip: '110.232.76.5',   detail: 'CEO impersonation' },
-  { type: 'Crypto Miner',  severity: 'low',      region: 'Asia',     ip: '47.241.0.88',    detail: 'XMRig on K8s pod' },
-  { type: 'Data Exfil',    severity: 'critical', region: 'N. America', ip: '198.51.100.7', detail: '4.2 GB to external host' },
-]
-
 const REGIONS = ['All', 'N. America', 'S. America', 'Europe', 'Africa', 'Asia', 'Oceania']
 const SEVS = ['All', 'critical', 'high', 'medium', 'low'] as const
 
-let feedId = 100
-function randFeed(): Feed {
-  const base = FEED_SEED[Math.floor(Math.random() * FEED_SEED.length)]
-  return { ...base, id: ++feedId }
-}
-
-function LiveThreatFeed() {
-  const [feeds, setFeeds] = useState<Feed[]>(() =>
-    FEED_SEED.map((f, i) => ({ ...f, id: i })),
-  )
+function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
+  const [feeds, setFeeds] = useState<LiveFeedItem[]>(seed)
   const [paused, setPaused] = useState(false)
   const [region, setRegion] = useState('All')
   const [sev, setSev] = useState<string>('All')
 
+  useEffect(() => { if (seed.length > 0) setFeeds(seed) }, [seed])
+
   useEffect(() => {
-    if (paused) return
+    if (paused || seed.length === 0) return
+    let counter = 1000
     const id = setInterval(() => {
-      setFeeds((prev) => [randFeed(), ...prev].slice(0, 40))
-    }, 2200)
+      const base = seed[counter % seed.length]
+      setFeeds((prev) => [{ ...base, id: String(counter++) }, ...prev].slice(0, 40))
+    }, 3500)
     return () => clearInterval(id)
-  }, [paused])
+  }, [paused, seed])
 
   const filtered = useMemo(
     () =>
@@ -751,23 +713,29 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function DashboardOverview() {
-  const [count, setCount] = useState({ threats: 1842, iocs: 14671, sources: 23, score: 8.4 })
+  const [kpis, setKpis]           = useState<OverviewKpis>({ threats: 0, iocs: 0, sources: 0, score: 0 })
+  const [recentAlerts, setRecentAlerts]     = useState<OverviewAlert[]>([])
+  const [incidents, setIncidents]           = useState<Incident[]>([])
+  const [topActors, setTopActors]           = useState<TopActor[]>([])
+  const [hourly, setHourly]                 = useState<number[]>([])
+  const [vectors, setVectors]               = useState<ThreatVector[]>([])
+  const [liveFeed, setLiveFeed]             = useState<LiveFeedItem[]>([])
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setCount((c) => ({
-        threats: c.threats + Math.floor(Math.random() * 3),
-        iocs: c.iocs + Math.floor(Math.random() * 8),
-        sources: c.sources,
-        score: c.score,
-      }))
-    }, 3000)
-    return () => clearInterval(id)
+    fetchKpis().then(setKpis).catch(() => {})
+    fetchRecentAlerts(8).then(setRecentAlerts).catch(() => {})
+    fetchRecentIncidents(6).then(setIncidents).catch(() => {})
+    fetchTopActors(5).then(setTopActors).catch(() => {})
+    fetchHourly().then(setHourly).catch(() => {})
+    fetchVectors().then(setVectors).catch(() => {})
+    fetchLiveFeed(20).then(setLiveFeed).catch(() => {})
   }, [])
 
-  if (!isPower) return <NormalDashboard count={count} />
+  if (!isPower) return <NormalDashboard count={kpis} />
+
+  const fmtScore = Number(kpis.score ?? 0).toFixed(1)
 
   return (
     <div className="p-6 space-y-6">
@@ -786,10 +754,10 @@ export default function DashboardOverview() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Active Threats" value={count.threats.toLocaleString()} sub="across all sources" icon={AlertTriangle} color="#FF2E97" trend="up" trendVal="+12%" />
-        <KPICard label="IOCs Tracked"   value={count.iocs.toLocaleString()}    sub="last 24 hours"     icon={Eye}           color="#7A3CFF" trend="up" trendVal="+8%" />
-        <KPICard label="Sources Online" value={`${count.sources}/24`}          sub="1 degraded"        icon={Globe}         color="#2DD4BF" />
-        <KPICard label="Avg CVSS Score" value={count.score.toFixed(1)}         sub="weighted mean"     icon={Shield}        color="#FFB23E" trend="up" trendVal="+0.3" />
+        <KPICard label="Active Threats" value={kpis.threats.toLocaleString()} sub="across all sources" icon={AlertTriangle} color="#FF2E97" />
+        <KPICard label="IOCs Tracked"   value={kpis.iocs.toLocaleString()}    sub="in threat database" icon={Eye}           color="#7A3CFF" />
+        <KPICard label="Sources Online" value={`${kpis.sources}`}             sub="active feeds"       icon={Globe}         color="#2DD4BF" />
+        <KPICard label="Avg Risk Score" value={fmtScore}                      sub="weighted mean"      icon={Shield}        color="#FFB23E" />
       </div>
 
       {/* SOC operations metrics (Power User only) */}
@@ -799,7 +767,7 @@ export default function DashboardOverview() {
             { label: 'MTTD',            value: '4m 12s',  sub: '↓ from 6m',     color: 'text-safe' },
             { label: 'MTTA',            value: '8m 03s',  sub: '< 15m target',  color: 'text-safe' },
             { label: 'MTTR',            value: '23m 41s', sub: '↑ from 19m',    color: 'text-amber' },
-            { label: 'Open Incidents',  value: '12',      sub: '1 critical',    color: 'text-magenta' },
+            { label: 'Open Incidents',  value: String(incidents.filter(i => !['resolved','closed'].includes(i.status)).length), sub: '1 critical', color: 'text-magenta' },
             { label: 'Automation Rate', value: '73%',     sub: '+5% MoM',       color: 'text-violet' },
             { label: 'SLA Compliance',  value: '94.2%',   sub: 'P1 incidents',  color: 'text-amber' },
           ].map((m) => (
@@ -815,8 +783,8 @@ export default function DashboardOverview() {
       {/* Intel Brief Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <TrendingCVEs />
-        <IntelBrief />
-        <ActiveIncidents />
+        <IntelBrief alerts={recentAlerts} />
+        <ActiveIncidents incidents={incidents} />
       </div>
 
       {/* World Map + Live Feed */}
@@ -824,15 +792,15 @@ export default function DashboardOverview() {
         <div className="h-[360px] w-full">
           <WorldMap />
         </div>
-        <LiveThreatFeed />
+        <LiveThreatFeed seed={liveFeed} />
       </div>
 
       {/* Middle row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecentAlerts />
+        <RecentAlerts alerts={recentAlerts} />
         <div className="space-y-4">
-          <EventTimeline />
-          <AttackVectors />
+          <EventTimeline hourly={hourly} />
+          <AttackVectors vectors={vectors} />
         </div>
       </div>
 
@@ -841,7 +809,7 @@ export default function DashboardOverview() {
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <TopActors />
+        <TopActors actors={topActors} />
 
         {/* Security Posture + System Status */}
         <div className="glass border border-white/5 rounded-xl p-5 flex flex-col gap-5">

@@ -5,6 +5,7 @@ import CommandPalette from '@/components/dashboard/CommandPalette'
 import ThemeScope from '@/components/dashboard/ThemeScope'
 import PageScale from '@/components/dashboard/PageScale'
 import CursorParticles from '@/components/effects/CursorParticles'
+import AuthGuard from '@/components/dashboard/AuthGuard'
 
 export const metadata: Metadata = {
   title: {
@@ -15,16 +16,18 @@ export const metadata: Metadata = {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeScope>
-      <Sidebar />
-      <div className="flex-1 min-w-0 ml-0 md:ml-14 flex flex-col min-h-screen">
-        <TopBar />
-        <main className="flex-1 overflow-x-hidden">
-          <PageScale>{children}</PageScale>
-        </main>
-      </div>
-      <CommandPalette />
-      <CursorParticles />
-    </ThemeScope>
+    <AuthGuard>
+      <ThemeScope>
+        <Sidebar />
+        <div className="flex-1 min-w-0 ml-0 md:ml-14 flex flex-col min-h-screen">
+          <TopBar />
+          <main className="flex-1 overflow-x-hidden">
+            <PageScale>{children}</PageScale>
+          </main>
+        </div>
+        <CommandPalette />
+        <CursorParticles />
+      </ThemeScope>
+    </AuthGuard>
   )
 }

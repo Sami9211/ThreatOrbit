@@ -10,6 +10,7 @@ import {
   ExternalLink, Eye, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fetchAssets } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
@@ -174,6 +175,13 @@ export default function AssetsPage() {
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [sortBy, setSortBy] = useState<'risk' | 'name' | 'alerts' | 'cves'>('risk')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Load from API
+  useEffect(() => {
+    fetchAssets({ limit: '200' })
+      .then(({ items }) => { if (items.length > 0) setAssets(items as unknown as Asset[]) })
+      .catch(() => {})
+  }, [])
 
   // Add-asset form
   const [name, setName] = useState('')
