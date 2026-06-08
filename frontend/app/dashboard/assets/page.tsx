@@ -111,6 +111,17 @@ const SEED: Asset[] = [
 
 let nextId = 200
 
+/* Responsive grid template for the asset table. The CVEs and Ports columns are
+   hidden below md/lg, so the template must drop their tracks at those breakpoints
+   too — otherwise the empty tracks keep consuming width and squash the remaining
+   columns (making the risk rings overlap badges on mobile). Track count always
+   matches the number of *visible* cells at each breakpoint. */
+const ROW_GRID =
+  'grid gap-2 md:gap-3 items-center ' +
+  'grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] ' +          // mobile: Asset Risk Alerts Status Actions
+  'md:grid-cols-[1.4fr_70px_90px_80px_100px_80px] ' +          // +CVEs
+  'lg:grid-cols-[1.4fr_70px_90px_110px_80px_100px_80px]'       // +Ports/OS
+
 /* ── Sub-components ─────────────────────────────────────────────── */
 function RiskRing({ score, size = 52 }: { score: number; size?: number }) {
   const r = size / 2 - 7
@@ -345,7 +356,7 @@ export default function AssetsPage() {
           {/* ── TABLE VIEW ───────────────────────────────────────── */}
           {view === 'table' && (
             <>
-              <div className="grid grid-cols-[1.4fr_70px_90px_110px_80px_100px_80px] gap-3 px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide">
+              <div className={cn(ROW_GRID, 'px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide')}>
                 <span>Asset</span>
                 <span>Risk</span>
                 <span className="hidden md:block">CVEs</span>
@@ -367,7 +378,7 @@ export default function AssetsPage() {
                       transition={{ delay: i * 0.02 }}
                       onClick={() => setSelectedId(isSelected ? null : a.id)}
                       className={cn(
-                        'grid grid-cols-[1.4fr_70px_90px_110px_80px_100px_80px] gap-3 px-4 py-2.5 items-center border-b border-white/4 cursor-pointer transition-colors',
+                        ROW_GRID, 'px-4 py-2.5 border-b border-white/4 cursor-pointer transition-colors',
                         isSelected ? 'bg-magenta/6 border-l-2 border-l-magenta' : 'hover:bg-white/2',
                       )}
                     >

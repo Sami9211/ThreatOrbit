@@ -319,10 +319,11 @@ function DonutChart({
           className="w-full h-full rounded-full"
           style={{ background: gradient }}
         />
-        {/* Hole — centred via a single translate technique (no conflicting insets) */}
+        {/* Hole — centred via a single translate technique (no conflicting insets).
+            A larger hole keeps the ring slim and elegant rather than a thick wedge. */}
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface flex flex-col items-center justify-center"
-          style={{ width: size * 0.58, height: size * 0.58 }}
+          style={{ width: size * 0.74, height: size * 0.74 }}
         >
           <p className="text-[10px] font-bold text-white leading-tight text-center px-1">{label}</p>
           {sublabel && <p className="text-[8px] text-ink-600 text-center">{sublabel}</p>}
