@@ -1,7 +1,7 @@
 /**
  * Shared subscription plan definitions used by the pricing page, the sign-up
  * flow, and the landing pricing section so they never tell contradictory
- * stories. Prices are monthly USD.
+ * stories. Prices are monthly GBP.
  */
 export type PlanId = 'free' | 'starter' | 'professional' | 'enterprise'
 
@@ -24,7 +24,7 @@ export const PLANS: Plan[] = [
     id: 'free',
     name: 'Free',
     price: 0,
-    priceLabel: '$0',
+    priceLabel: '£0',
     cadence: 'forever',
     tagline: 'Start exploring threat intelligence with zero cost.',
     users: '1 user',
@@ -40,7 +40,7 @@ export const PLANS: Plan[] = [
     id: 'starter',
     name: 'Starter',
     price: 149,
-    priceLabel: '$149',
+    priceLabel: '£149',
     cadence: '/mo starting',
     tagline: 'CTI, Feeds & Asset Surface for growing security teams.',
     users: 'Up to 3 users',
@@ -57,7 +57,7 @@ export const PLANS: Plan[] = [
     id: 'professional',
     name: 'Professional',
     price: 499,
-    priceLabel: '$499',
+    priceLabel: '£499',
     cadence: '/mo starting',
     tagline: 'Full-stack security ops. Everything but multi-tenant.',
     users: 'Up to 10 users',
