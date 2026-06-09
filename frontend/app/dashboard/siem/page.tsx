@@ -1172,21 +1172,33 @@ export default function SIEMPage() {
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
   const [filterTactic, setFilterTactic] = useState('All')
   const [ruleSearch, setRuleSearch] = useState('')
+  // Alert table sorting (client-side over the loaded queue).
+  const [alertSort, setAlertSort] = useState<{ col: 'ts' | 'riskScore'; dir: 'asc' | 'desc' }>({ col: 'ts', dir: 'desc' })
+  function toggleSort(col: 'ts' | 'riskScore') {
+    setAlertSort((s) => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' })
+  }
 
-  const filteredAlerts = useMemo(() => alerts.filter((a) => {
-    // Normal mode: only actionable alerts — open status, critical/high severity
-    if (isNormal) {
-      if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
-      if (!['critical', 'high'].includes(a.severity)) return false
-    }
-    if (filterSev !== 'all' && a.severity !== filterSev) return false
-    if (filterStatus !== 'all' && a.status !== filterStatus) return false
-    if (filterTactic !== 'All' && a.mitreTactic !== filterTactic) return false
-    if (search && !a.title.toLowerCase().includes(search.toLowerCase()) &&
-        !a.ruleId.toLowerCase().includes(search.toLowerCase()) &&
-        !(a.srcIp).includes(search)) return false
-    return true
-  }), [alerts, search, filterSev, filterStatus, filterTactic, isNormal])
+  const filteredAlerts = useMemo(() => {
+    const rows = alerts.filter((a) => {
+      // Normal mode: only actionable alerts — open status, critical/high severity
+      if (isNormal) {
+        if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
+        if (!['critical', 'high'].includes(a.severity)) return false
+      }
+      if (filterSev !== 'all' && a.severity !== filterSev) return false
+      if (filterStatus !== 'all' && a.status !== filterStatus) return false
+      if (filterTactic !== 'All' && a.mitreTactic !== filterTactic) return false
+      if (search && !a.title.toLowerCase().includes(search.toLowerCase()) &&
+          !a.ruleId.toLowerCase().includes(search.toLowerCase()) &&
+          !(a.srcIp).includes(search)) return false
+      return true
+    })
+    const dir = alertSort.dir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      if (alertSort.col === 'riskScore') return (a.riskScore - b.riskScore) * dir
+      return (Date.parse(a.ts) - Date.parse(b.ts)) * dir  // ts
+    })
+  }, [alerts, search, filterSev, filterStatus, filterTactic, isNormal, alertSort])
 
   const filteredRules = useMemo(() => RULES.filter((r) =>
     !ruleSearch || r.name.toLowerCase().includes(ruleSearch.toLowerCase()) || r.id.toLowerCase().includes(ruleSearch.toLowerCase())
@@ -1303,9 +1315,23 @@ export default function SIEMPage() {
                 <span>Alert / Rule</span>
                 <span className="hidden md:block">MITRE</span>
                 <span className="hidden lg:block">Entity</span>
-                <span>Risk</span>
+                <button onClick={() => toggleSort('riskScore')}
+                  className={cn('flex items-center gap-0.5 uppercase tracking-wide hover:text-ink-300 transition-colors',
+                    alertSort.col === 'riskScore' && 'text-ink-300')}>
+                  Risk
+                  {alertSort.col === 'riskScore' && (
+                    <ChevronDown className={cn('w-3 h-3 transition-transform', alertSort.dir === 'asc' && 'rotate-180')} />
+                  )}
+                </button>
                 <span className="hidden sm:block">Status</span>
-                <span>Time</span>
+                <button onClick={() => toggleSort('ts')}
+                  className={cn('flex items-center gap-0.5 uppercase tracking-wide hover:text-ink-300 transition-colors',
+                    alertSort.col === 'ts' && 'text-ink-300')}>
+                  Time
+                  {alertSort.col === 'ts' && (
+                    <ChevronDown className={cn('w-3 h-3 transition-transform', alertSort.dir === 'asc' && 'rotate-180')} />
+                  )}
+                </button>
               </div>
 
               {/* Rows */}
