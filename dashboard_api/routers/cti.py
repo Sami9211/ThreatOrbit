@@ -24,21 +24,40 @@ def get_actor(actor_id: str):
     return row_to_dict(row)
 
 
+# Whitelisted IOC sort columns; anything else is rejected (no SQL injection).
+_IOC_SORTS = {
+    "last_seen": "last_seen",
+    "first_seen": "first_seen",
+    "confidence": "confidence",
+    "severity": "CASE severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 "
+                "WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END",
+}
+
+
 @router.get("/iocs")
 def list_iocs(type: str | None = None, severity: str | None = None,
-              q: str | None = None, limit: int = Query(100, le=1000), offset: int = 0):
+              actor: str | None = None, source: str | None = None,
+              min_confidence: int | None = Query(None, ge=0, le=100),
+              q: str | None = None,
+              sort: str = Query("last_seen", description=f"one of {sorted(_IOC_SORTS)}"),
+              order: str = Query("desc", pattern="^(asc|desc)$"),
+              limit: int = Query(100, le=1000), offset: int = 0):
+    if sort not in _IOC_SORTS:
+        raise HTTPException(status_code=400, detail=f"sort must be one of {sorted(_IOC_SORTS)}")
     clauses, params = [], []
-    if type:
-        clauses.append("type=?"); params.append(type)
-    if severity:
-        clauses.append("severity=?"); params.append(severity)
+    for col, val in (("type", type), ("severity", severity), ("actor", actor), ("source", source)):
+        if val:
+            clauses.append(f"{col}=?"); params.append(val)
+    if min_confidence is not None:
+        clauses.append("confidence>=?"); params.append(min_confidence)
     if q:
         clauses.append("value LIKE ?"); params.append(f"%{q}%")
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    order_sql = f"{_IOC_SORTS[sort]} {order.upper()}"
     with get_conn() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM iocs {where}", params).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM iocs {where} ORDER BY last_seen DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM iocs {where} ORDER BY {order_sql} LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
     return {"total": total, "items": rows_to_dicts(rows)}

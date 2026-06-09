@@ -22,27 +22,48 @@ class RuleUpdate(BaseModel):
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
+# Whitelisted sort columns → SQL ORDER BY expressions. Severity sorts by
+# operational priority (critical first), not alphabetically. Anything not in
+# this map is rejected, so the sort parameter can never inject SQL.
+_ALERT_SORTS = {
+    "ts": "ts",
+    "risk_score": "risk_score",
+    "event_count": "event_count",
+    "ti_hits": "ti_hits",
+    "severity": "CASE severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 "
+                "WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END",
+}
+
+
 @router.get("/alerts")
 def list_alerts(
     severity: str | None = None,
     status: str | None = None,
+    tactic: str | None = None,
+    disposition: str | None = None,
+    owner: str | None = None,
     q: str | None = None,
+    sort: str = Query("ts", description=f"one of {sorted(_ALERT_SORTS)}"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, le=500),
     offset: int = 0,
 ):
+    if sort not in _ALERT_SORTS:
+        raise HTTPException(status_code=400, detail=f"sort must be one of {sorted(_ALERT_SORTS)}")
     clauses, params = [], []
-    if severity:
-        clauses.append("severity=?"); params.append(severity)
-    if status:
-        clauses.append("status=?"); params.append(status)
+    for col, val in (("severity", severity), ("status", status),
+                     ("mitre_tactic", tactic), ("disposition", disposition), ("owner", owner)):
+        if val:
+            clauses.append(f"{col}=?"); params.append(val)
     if q:
         clauses.append("(title LIKE ? OR rule_name LIKE ? OR src_ip LIKE ? OR hostname LIKE ?)")
         params += [f"%{q}%"] * 4
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    order_sql = f"{_ALERT_SORTS[sort]} {order.upper()}"
     with get_conn() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM alerts {where}", params).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM alerts {where} ORDER BY ts DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM alerts {where} ORDER BY {order_sql} LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
     return {"total": total, "items": rows_to_dicts(rows)}
