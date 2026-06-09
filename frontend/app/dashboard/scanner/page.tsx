@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { lookupIoc } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
@@ -255,16 +256,41 @@ export default function ScannerPage() {
     setResult(null)
     setSaved(false)
 
-    // Simulate scan delay + pick demo result
-    setTimeout(() => {
-      const q = query.toLowerCase()
-      let demo = DEMO_RESULTS.url
-      if (scanType === 'ip')   demo = DEMO_RESULTS.ip
-      if (scanType === 'hash') demo = DEMO_RESULTS.hash
-      if (q.includes('8.8.8.8') || q.includes('google')) demo = DEMO_RESULTS.clean
-      setResult(demo)
-      setScanning(false)
-    }, 2200)
+    // Base demo shape for the indicator type, then overlay a real verdict from
+    // the IOC threat-intel store when the value is known to us.
+    const q = query.toLowerCase()
+    let demo = DEMO_RESULTS.url
+    if (scanType === 'ip')   demo = DEMO_RESULTS.ip
+    if (scanType === 'hash') demo = DEMO_RESULTS.hash
+    if (q.includes('8.8.8.8') || q.includes('google')) demo = DEMO_RESULTS.clean
+
+    const finish = (r: ScanResult) => setTimeout(() => { setResult(r); setScanning(false) }, 900)
+
+    if (scanType === 'file' || !query.trim()) { finish(demo); return }
+
+    lookupIoc(query.trim())
+      .then((hit) => {
+        if (!hit.found) {
+          // Not in our TI — report clean/unverified rather than a fake verdict.
+          finish({
+            ...demo, target: query.trim(), verdict: 'clean', score: 0,
+            detectionRatio: '0/90', categories: [],
+            iocs: [], mitre: [],
+          })
+          return
+        }
+        finish({
+          ...demo,
+          target: hit.value,
+          verdict: hit.verdict,
+          score: hit.confidence,
+          firstSeen: hit.firstSeen ?? demo.firstSeen,
+          lastSeen: hit.lastSeen ?? demo.lastSeen,
+          categories: [hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
+            .filter(Boolean) as string[],
+        })
+      })
+      .catch(() => finish(demo))  // API unreachable → keep the demo result
   }
 
   return (

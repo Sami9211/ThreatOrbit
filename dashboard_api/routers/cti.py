@@ -96,6 +96,37 @@ def cti_summary():
     }
 
 
+@router.get("/lookup")
+def ioc_lookup(value: str):
+    """Look an indicator up against the IOC store and return a verdict + enrichment.
+
+    Exact match first, then a substring fallback (handles URLs/paths). A known
+    indicator's verdict follows its severity/confidence; unknown values are
+    reported clean-but-unverified so the caller can distinguish "not in our TI".
+    """
+    v = value.strip()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM iocs WHERE value=?", (v,)).fetchone()
+        if row is None and v:
+            row = conn.execute(
+                "SELECT * FROM iocs WHERE value LIKE ? ORDER BY confidence DESC LIMIT 1",
+                (f"%{v}%",),
+            ).fetchone()
+    if row is None:
+        return {"value": v, "found": False, "verdict": "clean", "confidence": 0,
+                "severity": None, "threatType": None, "actor": None, "source": None,
+                "firstSeen": None, "lastSeen": None, "tags": []}
+    ioc = row_to_dict(row)
+    verdict = "malicious" if ioc["severity"] in ("critical", "high") else (
+        "suspicious" if ioc["severity"] == "medium" else "clean")
+    return {
+        "value": ioc["value"], "found": True, "verdict": verdict,
+        "confidence": ioc["confidence"], "severity": ioc["severity"],
+        "threatType": ioc["threat_type"], "actor": ioc["actor"], "source": ioc["source"],
+        "firstSeen": ioc["first_seen"], "lastSeen": ioc["last_seen"], "tags": ioc["tags"],
+    }
+
+
 @router.get("/hunts")
 def list_hunts():
     with get_conn() as conn:

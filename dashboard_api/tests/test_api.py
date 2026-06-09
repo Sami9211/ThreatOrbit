@@ -161,6 +161,17 @@ def test_cti_summary(client, auth):
     assert s["totalIocs"] == client.get("/cti/iocs?limit=1", headers=auth).json()["total"]
 
 
+def test_ioc_lookup(client, auth):
+    """A seeded IOC is found with enrichment; an unknown value is clean/not-found."""
+    known = client.get("/cti/iocs?limit=1", headers=auth).json()["items"][0]
+    hit = client.get(f"/cti/lookup?value={known['value']}", headers=auth).json()
+    assert hit["found"] is True
+    assert hit["verdict"] in {"malicious", "suspicious", "clean"}
+    assert hit["confidence"] == known["confidence"]
+    miss = client.get("/cti/lookup?value=definitely-not-a-real-indicator-xyz", headers=auth).json()
+    assert miss["found"] is False and miss["verdict"] == "clean"
+
+
 def test_assets(client, auth):
     data = client.get("/assets", headers=auth).json()
     assert data["total"] > 0
