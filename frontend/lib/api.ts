@@ -322,6 +322,24 @@ export interface Asset {
   uptime: number
 }
 
+export interface RiskComponent {
+  axis: 'vulnerability' | 'exposure' | 'patch' | 'alerts'
+  value: number
+  weight: number
+  contribution: number
+}
+
+export interface RiskBreakdown {
+  score: number
+  band: string
+  criticalityMultiplier: number
+  components: RiskComponent[]
+}
+
+export interface AssetDetail extends Asset {
+  riskBreakdown: RiskBreakdown
+}
+
 export interface AssetSummary {
   totalAssets: number
   criticalAssets: number
@@ -447,8 +465,11 @@ export const fetchAssets = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
   return api<{ total: number; items: Asset[] }>(`/assets${q}`)
 }
+export const fetchAsset = (id: string) => api<AssetDetail>(`/assets/${id}`)
 export const fetchAssetsSummary = () => api<AssetSummary>('/assets/summary')
 export const fetchVulns = () => api<Asset[]>('/assets/vulns')
+export const recomputeAssetRisk = () =>
+  api<{ updated: number }>('/assets/recompute-risk', { method: 'POST' })
 
 // ── Feeds ─────────────────────────────────────────────────────────────
 export const fetchFeeds   = () => api<Feed[]>('/feeds')

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
-from dashboard_api.scoring import recompute_asset_risk
+from dashboard_api.scoring import recompute_asset_risk, risk_breakdown
 
 router = APIRouter(prefix="/assets", tags=["assets"], dependencies=[Depends(current_user)])
 
@@ -80,4 +80,11 @@ def get_asset(asset_id: str):
         row = conn.execute("SELECT * FROM assets WHERE id=?", (asset_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Asset not found")
-    return row_to_dict(row)
+    asset = row_to_dict(row)
+    # Attach a transparent per-axis explanation of the stored risk score.
+    asset["riskBreakdown"] = risk_breakdown(
+        cves=asset["cves"], criticality=asset["criticality"],
+        patch_age=asset["patch_age"], open_alerts=asset["alerts"],
+        open_ports=asset["open_ports"], tags=asset["tags"],
+    )
+    return asset

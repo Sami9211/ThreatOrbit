@@ -163,6 +163,20 @@ def test_resolving_alerts_lowers_asset_risk(client, auth):
     assert after["risk_score"] <= before
 
 
+def test_asset_detail_includes_risk_breakdown(client, auth):
+    """The asset detail view explains its score per axis, summing to the total."""
+    aid = client.get("/assets?limit=1", headers=auth).json()["items"][0]["id"]
+    asset = client.get(f"/assets/{aid}", headers=auth).json()
+    bd = asset["riskBreakdown"]
+    assert {"vulnerability", "exposure", "patch", "alerts"} == {c["axis"] for c in bd["components"]}
+    assert bd["score"] == asset["risk_score"]  # explanation matches the stored score
+    # components are ordered by contribution, descending
+    contribs = [c["contribution"] for c in bd["components"]]
+    assert contribs == sorted(contribs, reverse=True)
+    # the summed contributions reconstruct the score (within rounding)
+    assert abs(sum(contribs) - bd["score"]) <= 1
+
+
 def test_scoring_model_units():
     """The pure scoring model is bounded and ordered as documented."""
     from dashboard_api.scoring import asset_risk, risk_band, org_risk
