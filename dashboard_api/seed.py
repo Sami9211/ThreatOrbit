@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from dashboard_api.auth import hash_password
 from dashboard_api.config import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_RANDOM
 from dashboard_api.db import dumps, get_conn
+from dashboard_api.scoring import asset_risk, recompute_asset_risk, risk_band
 
 UTC = timezone.utc
 
@@ -120,27 +121,22 @@ def _seed_assets(conn, rng):
             "critical": rng.randint(0, 2 if crit in ("critical", "high") else 1),
             "high": rng.randint(0, 4), "medium": rng.randint(0, 8), "low": rng.randint(0, 12),
         }
-        total_crit_weight = cves["critical"] * 25 + cves["high"] * 10 + cves["medium"] * 3 + cves["low"]
         patch_age = rng.randint(0, 180)
-        risk = min(100, int(total_crit_weight * 0.6 + patch_age * 0.15 +
-                            {"critical": 25, "high": 15, "medium": 8, "low": 3}[crit]))
-        if risk >= 75:
-            status = "critical"
-        elif risk >= 45:
-            status = "at-risk"
-        elif rng.random() < 0.1:
-            status = "scanning"
-        else:
-            status = "clean"
-        alerts = rng.randint(0, 3) if risk < 45 else rng.randint(2, 12)
         ports = sorted(rng.sample(port_pool, rng.randint(2, 6)))
+        tags = rng.sample(["prod", "pci", "internet-facing", "crown-jewel", "legacy", "monitored"], rng.randint(1, 3))
+        # Provisional risk from the scoring model (alert pressure is filled in by
+        # recompute_asset_risk once alerts exist). Status follows the same bands.
+        alerts = rng.randint(0, 3) if crit in ("low", "medium") else rng.randint(1, 6)
+        risk = asset_risk(cves=cves, criticality=crit, patch_age=patch_age,
+                          open_alerts=alerts, open_ports=ports, tags=tags)
+        status = "scanning" if rng.random() < 0.08 else risk_band(risk)
         conn.execute(
             "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
             "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), name, typ, value, crit, status, risk, _ago(rng, 72),
              alerts, dumps(cves), dumps(ports), os_, rng.choice(owners), patch_age,
-             dumps(rng.sample(["prod", "pci", "internet-facing", "crown-jewel", "legacy", "monitored"], rng.randint(1, 3))),
+             dumps(tags),
              round(rng.uniform(97.5, 100.0), 2), _iso(_now() - timedelta(days=rng.randint(1, 300)))),
         )
         asset_names.append((name, value, crit))
@@ -515,6 +511,9 @@ def seed(force: bool = False):
         _seed_feeds(conn, rng)
         _seed_hunts(conn, rng)
         _seed_settings(conn)
+        # Now that alerts exist, align each asset's risk/status/alert-count with
+        # real alert pressure so the stored scores match the live model.
+        recompute_asset_risk(conn)
         conn.commit()
     return True
 

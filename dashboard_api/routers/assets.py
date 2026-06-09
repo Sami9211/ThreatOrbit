@@ -2,7 +2,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from dashboard_api.auth import current_user
-from dashboard_api.db import get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.scoring import recompute_asset_risk
 
 router = APIRouter(prefix="/assets", tags=["assets"], dependencies=[Depends(current_user)])
 
@@ -61,6 +62,16 @@ def vulnerabilities():
         out.append({**row_to_dict(r), "cveTotal": sum(c.values()), "cveWeighted": weighted})
     out.sort(key=lambda x: x["cveWeighted"], reverse=True)
     return out
+
+
+@router.post("/recompute-risk")
+def recompute_risk(user: dict = Depends(current_user)):
+    """Recalculate every asset's risk from current CVEs and live alert pressure."""
+    with get_conn() as conn:
+        count = recompute_asset_risk(conn)
+        audit(conn, user["email"], "asset.recompute_risk", None, f"assets={count}")
+        conn.commit()
+    return {"updated": count}
 
 
 @router.get("/{asset_id}")
