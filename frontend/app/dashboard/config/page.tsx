@@ -9,7 +9,7 @@ import {
   PanelLeftOpen, PanelLeftClose, X, ScrollText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchAuditLog, type AuditEntry } from '@/lib/api'
+import { fetchAuditLog, fetchSettings, updateSettings, type AuditEntry } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 import { useCursorEffect } from '@/lib/useCursorEffect'
@@ -553,7 +553,24 @@ export default function ConfigPage() {
   const [saved, setSaved] = useState(false)
   const [cursorFx, setCursorFx] = useCursorEffect()
 
+  // Platform settings, loaded from and persisted to the backend settings store.
+  const [settings, setSettings] = useState<Record<string, string>>({
+    platform_name: 'ThreatOrbit Production',
+    organization: 'Acme Security Corp',
+    timezone: 'UTC',
+    feed_update_interval: '3',
+    data_retention_days: '90',
+  })
+  const setSetting = (key: string) => (v: string) => setSettings((s) => ({ ...s, [key]: v }))
+
+  useEffect(() => {
+    fetchSettings()
+      .then((remote) => setSettings((s) => ({ ...s, ...remote })))
+      .catch(() => {})
+  }, [])
+
   const save = () => {
+    updateSettings(settings).catch(() => {})  // persists when API is up; UI state is source of truth otherwise
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
@@ -592,14 +609,14 @@ export default function ConfigPage() {
 
               <Section title="Platform Settings" icon={Settings} color="#7A3CFF">
                 <div className="space-y-4">
-                  <Field label="Platform Name" value="ThreatOrbit Production" />
-                  <Field label="Organization" value="Acme Security Corp" />
+                  <Field label="Platform Name" value={settings.platform_name ?? ''} onChange={setSetting('platform_name')} />
+                  <Field label="Organization" value={settings.organization ?? ''} onChange={setSetting('organization')} />
                   <Field label="API Base URL" value="https://api.threatorbit.space" hint="The base URL for all API endpoints" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Timezone" value="UTC" />
-                    <Field label="Feed Update Interval (seconds)" value="3" type="number" hint="Minimum: 1 second" />
+                    <Field label="Timezone" value={settings.timezone ?? 'UTC'} onChange={setSetting('timezone')} />
+                    <Field label="Feed Update Interval (seconds)" value={settings.feed_update_interval ?? '3'} type="number" hint="Minimum: 1 second" onChange={setSetting('feed_update_interval')} />
                   </div>
-                  <Field label="Data Retention (days)" value="90" type="number" hint="Older events are automatically purged" />
+                  <Field label="Data Retention (days)" value={settings.data_retention_days ?? '90'} type="number" hint="Older events are automatically purged" onChange={setSetting('data_retention_days')} />
                 </div>
               </Section>
 

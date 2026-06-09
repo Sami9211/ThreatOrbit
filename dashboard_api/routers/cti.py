@@ -1,10 +1,32 @@
 """CTI routes: threat actors, IOCs, hunts, and a relationship graph."""
+import json
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
-from dashboard_api.db import get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/cti", tags=["cti"], dependencies=[Depends(current_user)])
+
+_IOC_TYPES = {"ip", "domain", "url", "hash", "email", "cve"}
+
+
+class IocImportItem(BaseModel):
+    type: str
+    value: str
+
+
+class IocImport(BaseModel):
+    indicators: list[IocImportItem]
+    confidence: int = 50
+    severity: str = "medium"
+    source: str = "manual-import"
+    actor: str = ""
+    threat_type: str = "Imported indicator"
+    tags: list[str] = []
 
 
 @router.get("/actors")
@@ -61,6 +83,40 @@ def list_iocs(type: str | None = None, severity: str | None = None,
             params + [limit, offset],
         ).fetchall()
     return {"total": total, "items": rows_to_dicts(rows)}
+
+
+@router.post("/iocs/import", status_code=201)
+def import_iocs(body: IocImport, user: dict = Depends(current_user)):
+    """Bulk-insert indicators into the IOC store. Duplicates (by value) are
+    skipped, invalid types rejected; returns a per-batch tally for the UI."""
+    if not body.indicators:
+        raise HTTPException(status_code=400, detail="No indicators supplied")
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    tags_json = json.dumps(body.tags, separators=(",", ":"))
+    imported = duplicates = skipped = 0
+    with get_conn() as conn:
+        for item in body.indicators:
+            val = item.value.strip()
+            itype = item.type.strip().lower()
+            if not val or itype not in _IOC_TYPES:
+                skipped += 1
+                continue
+            if conn.execute("SELECT 1 FROM iocs WHERE value=?", (val,)).fetchone():
+                duplicates += 1
+                continue
+            conn.execute(
+                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
+                "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), itype, val, body.threat_type,
+                 max(0, min(100, body.confidence)), body.severity, body.source, body.actor,
+                 now, now, tags_json),
+            )
+            imported += 1
+        audit(conn, user["email"], "ioc.import", None,
+              f"imported={imported} duplicates={duplicates} skipped={skipped}")
+        conn.commit()
+    return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
+            "total": len(body.indicators)}
 
 
 @router.get("/ioc-types")

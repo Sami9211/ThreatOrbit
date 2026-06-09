@@ -589,6 +589,7 @@ function NormalCTI() {
 export default function CTIPage() {
   const [actors, setActors] = useState<Actor[]>(ACTORS)
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
+  const [iocTypes, setIocTypes] = useState(IOC_TYPES)
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
   const graph = buildGraph(selectedActor)
@@ -601,6 +602,24 @@ export default function CTIPage() {
           setActors(mapped)
           setSelectedActor(mapped[0])
         }
+      })
+      .catch(() => {})
+    // Live IOC counts per indicator type, keeping the static strip as fallback.
+    fetchIocTypes()
+      .then((rows) => {
+        if (rows.length === 0) return
+        const display: Record<string, { label: string; icon: typeof Globe; color: string }> = {
+          ip:     { label: 'IP Addresses', icon: Globe,   color: '#FF2E97' },
+          domain: { label: 'Domains',      icon: Network, color: '#7A3CFF' },
+          hash:   { label: 'File Hashes',  icon: Hash,    color: '#FFB23E' },
+          url:    { label: 'URLs',         icon: Target,  color: '#2DD4BF' },
+          email:  { label: 'Emails',       icon: Target,  color: '#34F5C5' },
+          cve:    { label: 'CVEs',         icon: Target,  color: '#FF4D6D' },
+        }
+        setIocTypes(rows.slice(0, 4).map((r) => {
+          const d = display[r.label] ?? { label: r.label, icon: Hash, color: '#7A3CFF' }
+          return { type: d.label, count: r.count, icon: d.icon, color: d.color }
+        }))
       })
       .catch(() => {})
   }, [])
@@ -627,7 +646,7 @@ export default function CTIPage() {
 
       {/* IOC counts */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {IOC_TYPES.map(({ type, count, icon: Icon, color }) => (
+        {iocTypes.map(({ type, count, icon: Icon, color }) => (
           <motion.div
             key={type}
             initial={{ opacity: 0, y: 12 }}

@@ -1,8 +1,8 @@
 # ThreatOrbit Frontend
 
-Marketing site for the ThreatOrbit threat-intelligence platform. Built with
-Next.js 14 (App Router), TypeScript, Tailwind, Framer Motion, and a
-React-Three-Fiber 3D layer.
+Marketing site **and operator dashboard** for the ThreatOrbit
+threat-intelligence platform. Built with Next.js 14 (App Router), TypeScript,
+Tailwind, Framer Motion, and a React-Three-Fiber 3D layer.
 
 ## Stack
 
@@ -38,18 +38,36 @@ npx serve out      # preview the production build locally
 app/                 routes (home, docs/*, products/*, platform/*, legal)
   layout.tsx         root layout, fonts, metadata, skip-link, grain overlay
   page.tsx           homepage section composition
+  dashboard/         operator dashboard (see below)
   icon.svg           orbit-mark favicon
   sitemap.ts         all routes
   robots.ts          crawl rules
   not-found.tsx      branded 404
 components/
+  dashboard/         AuthGuard (JWT route protection for /dashboard/**)
   sections/          one component per homepage section
   effects/           WebGL scenes + page-level effects (see below)
   layout/            Navbar, Footer, MegaMenu
   ui/                reusable bits (TiltCard, CountUp, Chatbot, …)
 lib/
+  api.ts             typed Dashboard API client (JWT from localStorage,
+                     automatic snake_case → camelCase response mapping)
+  auth-context.tsx   login/session state backed by the Dashboard API
   usePerf.ts         shared perf/accessibility hooks
 ```
+
+### Operator dashboard (`app/dashboard/**`)
+
+23 pages — overview, SIEM (queue/analytics/rules/sources/hunt), SOAR
+(cases/playbooks/integrations/metrics), CTI (overview/actors/hunt), assets
+(inventory/network/vulns), feeds (overview/sources/import), the IntelScope
+scanner, and config (general/API keys/users/data sources). Every page fetches
+live data from the Dashboard API (`:8002`) on mount and falls back to built-in
+deterministic demo data when the API is unreachable, so the static export
+remains fully browsable standalone. Mutations (alert triage, rule toggles,
+playbook runs, feed toggles, user role/status changes, API keys, IOC imports,
+risk recompute, settings) persist via the API with optimistic UI and rollback
+on failure. Point at a non-default API with `NEXT_PUBLIC_API_URL`.
 
 ### 3D scenes (`components/effects/`)
 

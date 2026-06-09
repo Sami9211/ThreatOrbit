@@ -172,6 +172,31 @@ def test_ioc_lookup(client, auth):
     assert miss["found"] is False and miss["verdict"] == "clean"
 
 
+def test_ioc_import(client, auth):
+    """Importing indicators inserts new ones, skips duplicates and bad types."""
+    body = {
+        "indicators": [
+            {"type": "ip", "value": "203.0.113.250"},
+            {"type": "domain", "value": "evil-import-test.example"},
+            {"type": "ip", "value": "203.0.113.250"},   # duplicate within batch
+            {"type": "bogus", "value": "x"},             # invalid type → skipped
+        ],
+        "confidence": 80, "severity": "high", "source": "import:TLP:AMBER", "tags": ["triage"],
+    }
+    r = client.post("/cti/iocs/import", json=body, headers=auth)
+    assert r.status_code == 201
+    res = r.json()
+    assert res["imported"] == 2 and res["duplicates"] == 1 and res["skipped"] == 1
+    # the imported indicator is now retrievable and looks up as a known hit
+    hit = client.get("/cti/lookup?value=evil-import-test.example", headers=auth).json()
+    assert hit["found"] is True and hit["confidence"] == 80
+    # re-importing the same batch: every valid entry (ip twice + domain) is now a duplicate
+    again = client.post("/cti/iocs/import", json=body, headers=auth).json()
+    assert again["imported"] == 0 and again["duplicates"] == 3
+    # empty batch rejected
+    assert client.post("/cti/iocs/import", json={"indicators": []}, headers=auth).status_code == 400
+
+
 def test_assets(client, auth):
     data = client.get("/assets", headers=auth).json()
     assert data["total"] > 0

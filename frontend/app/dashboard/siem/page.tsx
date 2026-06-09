@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, patchAlert, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -1120,6 +1120,7 @@ export default function SIEMPage() {
 
   const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
   const [correlations, setCorrelations] = useState<Correlation[]>([])
+  const [mitreDist, setMitreDist] = useState(MITRE_DIST)
 
   // Load alerts from API
   useEffect(() => {
@@ -1128,6 +1129,9 @@ export default function SIEMPage() {
       .catch(() => {})
     fetchSiemKpis().then(setApiKpis).catch(() => {})
     fetchCorrelations(2).then(setCorrelations).catch(() => {})
+    fetchMitreDistribution()
+      .then((rows) => { if (rows.length > 0) setMitreDist(rows) })
+      .catch(() => {})
   }, [])
 
   // Prefer live KPIs from the API; fall back to the static demo values.
@@ -1379,13 +1383,13 @@ export default function SIEMPage() {
               <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
                 <p className="text-xs font-semibold text-white mb-4">Alert Volume by MITRE ATT&CK Tactic (last 7 days)</p>
                 <div className="space-y-2.5">
-                  {MITRE_DIST.map((t) => (
+                  {mitreDist.map((t) => (
                     <div key={t.tactic} className="flex items-center gap-3">
                       <span className="text-[11px] text-ink-400 w-44 shrink-0">{t.tactic}</span>
                       <div className="flex-1 h-2.5 bg-white/5 rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: `${(t.count / MITRE_DIST[0].count) * 100}%` }}
+                          animate={{ width: `${(t.count / mitreDist[0].count) * 100}%` }}
                           transition={{ duration: 0.6, delay: 0.1 }}
                           className="h-full rounded-full"
                           style={{ background: t.color }}
