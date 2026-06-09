@@ -44,6 +44,35 @@ def test_siem(client, auth):
     assert client.get("/siem/sources", headers=auth).json()
 
 
+def test_siem_alert_sorting_and_filters(client, auth):
+    """Alerts support whitelisted sorts (severity by priority) and rejects bad sort."""
+    # Sort by severity descending → first item is the highest-priority band present.
+    items = client.get("/siem/alerts?sort=severity&order=desc&limit=20", headers=auth).json()["items"]
+    rank = {"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1}
+    ranks = [rank[a["severity"]] for a in items]
+    assert ranks == sorted(ranks, reverse=True)
+    # risk_score ascending is monotonic non-decreasing.
+    asc = client.get("/siem/alerts?sort=risk_score&order=asc&limit=20", headers=auth).json()["items"]
+    scores = [a["risk_score"] for a in asc]
+    assert scores == sorted(scores)
+    # tactic filter only returns matching alerts.
+    t = items[0]["mitre_tactic"]
+    filtered = client.get(f"/siem/alerts?tactic={t}&limit=50", headers=auth).json()["items"]
+    assert filtered and all(a["mitre_tactic"] == t for a in filtered)
+    # an unknown sort column is rejected, not silently ignored.
+    assert client.get("/siem/alerts?sort=DROP", headers=auth).status_code == 400
+
+
+def test_ioc_sorting_and_confidence_filter(client, auth):
+    """IOCs support a min_confidence filter and confidence sort."""
+    hi = client.get("/cti/iocs?min_confidence=80&limit=100", headers=auth).json()["items"]
+    assert all(i["confidence"] >= 80 for i in hi)
+    desc = client.get("/cti/iocs?sort=confidence&order=desc&limit=20", headers=auth).json()["items"]
+    conf = [i["confidence"] for i in desc]
+    assert conf == sorted(conf, reverse=True)
+    assert client.get("/cti/iocs?sort=bogus", headers=auth).status_code == 400
+
+
 def test_siem_metrics_are_computed(client, auth):
     """MTTD/MTTA/MTTR are derived from per-alert latency telemetry, in minutes."""
     kpis = client.get("/siem/kpis", headers=auth).json()
