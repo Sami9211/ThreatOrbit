@@ -340,6 +340,15 @@ export interface AssetDetail extends Asset {
   riskBreakdown: RiskBreakdown
 }
 
+export interface RiskDistribution {
+  total: number
+  bands: { critical: number; 'at-risk': number; clean: number }
+  axisContribution: Array<{ axis: 'vulnerability' | 'exposure' | 'patch' | 'alerts'; avgContribution: number }>
+  topDriver: 'vulnerability' | 'exposure' | 'patch' | 'alerts' | null
+  meanScore: number
+  maxScore: number
+}
+
 export interface AssetSummary {
   totalAssets: number
   criticalAssets: number
@@ -466,6 +475,7 @@ export const fetchAssets = (params?: Record<string, string>) => {
   return api<{ total: number; items: Asset[] }>(`/assets${q}`)
 }
 export const fetchAsset = (id: string) => api<AssetDetail>(`/assets/${id}`)
+export const fetchRiskDistribution = () => api<RiskDistribution>('/assets/risk-distribution')
 export const fetchAssetsSummary = () => api<AssetSummary>('/assets/summary')
 export const fetchVulns = () => api<Asset[]>('/assets/vulns')
 export const recomputeAssetRisk = () =>
