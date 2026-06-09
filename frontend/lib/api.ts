@@ -295,6 +295,20 @@ export interface CtiSummary {
   totalIocs: number
 }
 
+export interface IocLookup {
+  value: string
+  found: boolean
+  verdict: 'malicious' | 'suspicious' | 'clean'
+  confidence: number
+  severity: string | null
+  threatType: string | null
+  actor: string | null
+  source: string | null
+  firstSeen: string | null
+  lastSeen: string | null
+  tags: string[]
+}
+
 export interface SavedHunt {
   id: string
   name: string
@@ -477,6 +491,8 @@ export const fetchIocs    = (params?: Record<string, string>) => {
 }
 export const fetchIocTypes  = () => api<IocType[]>('/cti/ioc-types')
 export const fetchCtiSummary = () => api<CtiSummary>('/cti/summary')
+export const lookupIoc = (value: string) =>
+  api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
 export const fetchCtiHunts  = () => api<SavedHunt[]>('/cti/hunts')
 export const fetchCtiGraph  = () => api<CtiGraph>('/cti/graph')
 
