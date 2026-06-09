@@ -1,17 +1,19 @@
 # ThreatOrbit
 
-**Threat Intelligence Ingestion + Log Anomaly Detection + STIX / OpenCTI Integration**
+**Threat Intelligence Ingestion + Log Anomaly Detection + SOC Dashboard + STIX / OpenCTI Integration**
 
-ThreatOrbit is a cybersecurity platform made of two backend services and a marketing/landing frontend:
+ThreatOrbit is a cybersecurity platform made of three backend services and a Next.js frontend (marketing site + full operator dashboard):
 
 * **Threat API** (`threat_api`, Flask, port 8000)
   Ingests external threat feeds (OTX, abuse.ch, RSS, dark-web OSINT, social OSINT) in parallel, normalizes and trust-scores indicators, enriches with VirusTotal, exports STIX 2.1, and reads from / pushes to OpenCTI.
 * **Log API** (`log_api`, FastAPI, port 8001)
   Parses logs (Apache, Syslog, Windows Event, Generic), detects anomalies via four engines (Pattern, Statistical, ML, Temporal), generates HTML reports, and exports STIX 2.1 from findings.
+* **Dashboard API** (`dashboard_api`, FastAPI, port 8002)
+  The unified backend powering the operator dashboard: JWT auth + role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR) and a correlation engine, SOAR cases/playbooks/integrations, CTI actors/IOCs with lookup + bulk import, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, and a full audit trail. See [`dashboard_api/README.md`](dashboard_api/README.md).
 * **Frontend** (`frontend`, Next.js 14 + TypeScript)
-  Marketing site that presents the platform. Deployable on Vercel.
+  Marketing site **and** the operator dashboard (`/dashboard/**`, 23 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Deployable on Vercel.
 
-Both APIs use WAL-mode SQLite, an async job model so long pipelines never block requests, CORS for browser clients, and a two-tier API key scheme (standard user key + admin key).
+All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion APIs use an async job model and a two-tier API key scheme; the Dashboard API uses JWT bearer auth.
 
 ---
 
@@ -31,7 +33,15 @@ Both APIs use WAL-mode SQLite, an async job model so long pipelines never block 
                               +----------------------+
                                | WAL SQLite (log_api.db)
 
-   Browser ------------------> Frontend (Next.js, Vercel) ---> calls the two APIs
+   Dashboard UI -------------> +----------------------+
+ (JWT login, SIEM/SOAR/CTI/   |    Dashboard API     | ---> SOC metrics, risk scoring,
+  assets/feeds/config pages)  |   (FastAPI, :8002)   |      correlations, audit trail
+                              +----------------------+
+                               | WAL SQLite (dashboard.db, auto-seeded)
+
+   Browser ------------------> Frontend (Next.js, Vercel)
+                                ├── marketing site (/)
+                                └── operator dashboard (/dashboard/**) ---> Dashboard API
 ```
 
 ---
@@ -90,14 +100,36 @@ ThreatOrbit-V2/
 │   ├── sample_logs/             # generator.py + sample_apache.log
 │   └── tests/                   # conftest.py, test_health.py
 │
-└── frontend/                    # Next.js 14 marketing site (Vercel)
-    ├── app/                     # layout.tsx, page.tsx, globals.css
+├── dashboard_api/               # FastAPI dashboard backend (:8002)
+│   ├── Dockerfile
+│   ├── main.py                  # app wiring, CORS, error handlers, startup seed
+│   ├── auth.py                  # PBKDF2 passwords + stdlib HS256 JWT, role deps
+│   ├── config.py                # env-driven config
+│   ├── db.py                    # WAL SQLite, schema, migrations, audit helper
+│   ├── scoring.py               # CVSS-style asset risk model + org rollups
+│   ├── seed.py                  # deterministic, internally-consistent demo data
+│   ├── routers/                 # auth, users, overview, siem, soar, cti, assets,
+│   │                            #   feeds, config — 59 routes total
+│   └── tests/                   # 29 behaviour tests (pytest + TestClient)
+│
+└── frontend/                    # Next.js 14 — marketing site + operator dashboard
+    ├── app/
+    │   ├── page.tsx             # marketing landing
+    │   └── dashboard/           # operator dashboard (23 pages, all API-wired):
+    │                            #   overview, siem(+rules/sources/hunt),
+    │                            #   soar(+playbooks/integrations/metrics),
+    │                            #   cti(+actors/hunt), assets(+network/vulns),
+    │                            #   feeds(+sources/import), scanner,
+    │                            #   config(+api/users/sources)
     ├── components/
+    │   ├── dashboard/           # AuthGuard (JWT route protection)
     │   ├── effects/             # ParticleNetwork, CursorGlow, SmoothScroll
     │   ├── layout/              # Navbar, Footer
     │   ├── sections/            # Hero, Features, ExpandingShowcase, etc.
     │   └── ui/                  # Logo, Reveal, MagneticButton, CountUp, ScrollProgress
     ├── lib/
+    │   ├── api.ts               # typed Dashboard API client (snake→camel mapping)
+    │   └── auth-context.tsx     # login/session state backed by /auth
     ├── tailwind.config.ts
     ├── next.config.mjs
     └── package.json
@@ -173,6 +205,24 @@ npm run dev          # http://localhost:3000
 
 To deploy on Vercel, set the project **Root Directory** to `frontend` and deploy. Vercel auto-detects Next.js.
 
+### Run the operator dashboard (frontend + Dashboard API)
+
+```bash
+# Terminal 1: Dashboard API (auto-seeds demo data on first boot)
+pip install -r dashboard_api/requirements.txt
+uvicorn dashboard_api.main:app --port 8002
+
+# Terminal 2: frontend
+cd frontend && npm run dev
+```
+
+Open `http://localhost:3000/dashboard` and log in with the seeded admin
+(`admin@threatorbit.space` / `ChangeMe123!` — override via
+`DASHBOARD_ADMIN_EMAIL` / `DASHBOARD_ADMIN_PASSWORD`). Every dashboard page
+loads live data from `:8002` and degrades to built-in demo data when the API
+is unreachable. Point the frontend at a non-default API URL with
+`NEXT_PUBLIC_API_URL`.
+
 ---
 
 ## 5. Authentication (two-tier API keys)
@@ -195,8 +245,10 @@ Feed source files (one URL per line): `threat_api/rss_feeds.txt`, `threat_api/da
 ```bash
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8002/health
 curl http://127.0.0.1:8000/ready
 curl http://127.0.0.1:8001/ready
+curl http://127.0.0.1:8002/ready
 ```
 
 ---
@@ -309,6 +361,15 @@ You can also export STIX bundles from both services and import them through the 
 | GET    | `/results/{result_id}`        | user | Result detail                 |
 | GET    | `/results/{result_id}/stix`   | user | STIX 2.1 from a result        |
 
+### Dashboard API (`:8002`)
+
+JWT bearer auth (login at `POST /auth/login`). 59 routes across auth, users,
+overview, SIEM, SOAR, CTI, assets, feeds, and config — including computed SOC
+metrics, an alert-correlation engine, a transparent asset risk model with
+per-axis breakdowns, IOC lookup/bulk-import, and a full audit trail. The
+complete endpoint map and algorithm notes live in
+[`dashboard_api/README.md`](dashboard_api/README.md).
+
 ---
 
 ## 11. Testing
@@ -316,6 +377,7 @@ You can also export STIX bundles from both services and import them through the 
 ```bash
 cd threat_api && pytest -q
 cd ../log_api && pytest -q
+python -m pytest dashboard_api/tests -q   # from the repo root (29 tests)
 ```
 
 Tests set their own API keys via `conftest.py`, so no `.env` is required to run them.
@@ -338,4 +400,4 @@ Tests set their own API keys via `conftest.py`, so no `.env` is required to run 
 
 ## 13. Intended users
 
-ThreatOrbit suits individual analysts and small-to-mid security teams who want a deployable CTI plus anomaly-detection workflow that integrates with OpenCTI, without standing up a heavy SIEM. The two services can run independently or together, locally or in containers.
+ThreatOrbit suits individual analysts and small-to-mid security teams who want a deployable CTI plus anomaly-detection workflow that integrates with OpenCTI — topped with a lightweight SOC dashboard (SIEM triage, SOAR cases/playbooks, asset risk, audit trail) — without standing up a heavy SIEM. The three services can run independently or together, locally or in containers.

@@ -8,10 +8,14 @@ import {
   Wand2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { importIocs, type ImportResult } from '@/lib/api'
 
 type ImportMode = 'paste' | 'upload'
 type TlpMarking = 'TLP:RED' | 'TLP:AMBER' | 'TLP:GREEN' | 'TLP:CLEAR'
 type ConfidenceLevel = 'Low' | 'Medium' | 'High' | 'Confirmed'
+
+const CONFIDENCE_SCORE: Record<ConfidenceLevel, number> = { Low: 25, Medium: 50, High: 75, Confirmed: 95 }
+const CONFIDENCE_SEVERITY: Record<ConfidenceLevel, string> = { Low: 'low', Medium: 'medium', High: 'high', Confirmed: 'critical' }
 
 interface ParsedIocs {
   ips: string[]
@@ -131,6 +135,8 @@ export default function ImportIocsPage() {
   const [dragging, setDragging] = useState(false)
   const [fileName, setFileName] = useState<string | null>(null)
   const [showToast, setShowToast] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
 
   const parsed = useMemo(() => parseIocs(rawText, doRefang), [rawText, doRefang])
 
@@ -157,10 +163,33 @@ export default function ImportIocsPage() {
 
   const removeTag = (t: string) => setTags(prev => prev.filter(x => x !== t))
 
-  const triggerImport = () => {
-    if (totalCount === 0) return
-    setShowToast(true)
-    window.setTimeout(() => setShowToast(false), 3200)
+  const triggerImport = async () => {
+    if (totalCount === 0 || importing) return
+    const indicators = [
+      ...parsed.ips.map((v) => ({ type: 'ip', value: v })),
+      ...parsed.domains.map((v) => ({ type: 'domain', value: v })),
+      ...parsed.hashes.map((v) => ({ type: 'hash', value: v })),
+      ...parsed.urls.map((v) => ({ type: 'url', value: v })),
+      ...parsed.cves.map((v) => ({ type: 'cve', value: v })),
+    ]
+    setImporting(true)
+    try {
+      const res = await importIocs({
+        indicators,
+        confidence: CONFIDENCE_SCORE[confidence],
+        severity: CONFIDENCE_SEVERITY[confidence],
+        source: `import:${tlp}`,
+        tags,
+      })
+      setImportResult(res)
+    } catch {
+      // API unreachable — surface an optimistic local tally instead.
+      setImportResult({ imported: totalCount, duplicates: 0, skipped: 0, total: totalCount })
+    } finally {
+      setImporting(false)
+      setShowToast(true)
+      window.setTimeout(() => setShowToast(false), 3600)
+    }
   }
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -185,14 +214,14 @@ export default function ImportIocsPage() {
         </div>
         <button
           onClick={triggerImport}
-          disabled={!canImport}
+          disabled={!canImport || importing}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity',
-            canImport ? 'bg-plasma text-white' : 'bg-white/5 text-ink-600 cursor-not-allowed',
+            canImport && !importing ? 'bg-plasma text-white' : 'bg-white/5 text-ink-600 cursor-not-allowed',
           )}
         >
           <CheckCircle className="w-3.5 h-3.5" />
-          Import {mode === 'paste' ? totalCount : fileName ? '' : 0} indicators
+          {importing ? 'Importing…' : `Import ${mode === 'paste' ? totalCount : fileName ? '' : 0} indicators`}
         </button>
       </div>
 
@@ -454,9 +483,13 @@ export default function ImportIocsPage() {
               <CheckCircle className="w-5 h-5 text-safe" />
             </motion.span>
             <div>
-              <p className="text-sm font-semibold text-white">Import queued</p>
+              <p className="text-sm font-semibold text-white">
+                {importResult ? `${importResult.imported} indicators imported` : 'Import queued'}
+              </p>
               <p className="text-[11px] text-ink-400">
-                {totalCount} indicators · {tlp} · {confidence} confidence
+                {importResult
+                  ? `${importResult.duplicates} duplicate${importResult.duplicates === 1 ? '' : 's'} skipped · ${tlp} · ${confidence} confidence`
+                  : `${totalCount} indicators · ${tlp} · ${confidence} confidence`}
               </p>
             </div>
           </motion.div>

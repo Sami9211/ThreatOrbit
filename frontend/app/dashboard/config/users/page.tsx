@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchUsers, type User as ApiUser } from '@/lib/api'
+import { fetchUsers, patchUser, type User as ApiUser, type UserRole } from '@/lib/api'
+
+/* Display role ↔ backend role mapping. The UI exposes richer display names
+ * (Senior Analyst, Auditor) that collapse onto the backend's four roles. */
+const ROLE_TO_API: Record<string, UserRole> = {
+  'Admin': 'admin', 'SOC Manager': 'manager', 'Senior Analyst': 'analyst',
+  'Analyst': 'analyst', 'Read-Only': 'viewer', 'Auditor': 'viewer',
+}
 import {
   Users, Plus, X, ShieldCheck, ShieldOff, Check, Minus, Mail,
   Clock, Activity, KeyRound, Ban, Monitor, ChevronDown,
@@ -141,7 +148,12 @@ function Avatar({ name, color, size = 'md' }: { name: string; color: string; siz
 }
 
 /* ── User detail panel ───────────────────────────────────────────── */
-function UserPanel({ user, onClose }: { user: TeamUser; onClose: () => void }) {
+function UserPanel({ user, onClose, onRoleChange, onToggleSuspend }: {
+  user: TeamUser
+  onClose: () => void
+  onRoleChange: (role: RoleName) => void
+  onToggleSuspend: () => void
+}) {
   const color = ROLE_COLORS[user.role]
   return (
     <motion.div
@@ -184,7 +196,8 @@ function UserPanel({ user, onClose }: { user: TeamUser; onClose: () => void }) {
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Role Assignment</label>
             <div className="relative">
               <select
-                defaultValue={user.role}
+                value={user.role}
+                onChange={(e) => onRoleChange(e.target.value as RoleName)}
                 className="w-full appearance-none px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 pr-9"
               >
                 {ROLES.map((r) => <option key={r.name}>{r.name}</option>)}
@@ -243,7 +256,9 @@ function UserPanel({ user, onClose }: { user: TeamUser; onClose: () => void }) {
             <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber/25 text-amber text-sm font-medium hover:bg-amber/5 transition-colors">
               <KeyRound className="w-4 h-4" /> Reset MFA
             </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-threat/25 text-threat text-sm font-medium hover:bg-threat/5 transition-colors">
+            <button
+              onClick={onToggleSuspend}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-threat/25 text-threat text-sm font-medium hover:bg-threat/5 transition-colors">
               <Ban className="w-4 h-4" /> {user.status === 'suspended' ? 'Reactivate User' : 'Suspend User'}
             </button>
           </div>
@@ -276,6 +291,27 @@ export default function UsersRolesPage() {
   }, [])
 
   const selectedUser = users.find((u) => u.id === selected) ?? null
+
+  // Persist a role change: optimistic local update, rollback on API failure.
+  function changeRole(id: string, role: RoleName) {
+    const prev = users.find((u) => u.id === id)?.role
+    setUsers((us) => us.map((u) => u.id === id ? { ...u, role } : u))
+    patchUser(id, { role: ROLE_TO_API[role] ?? 'analyst' }).catch(() => {
+      if (prev) setUsers((us) => us.map((u) => u.id === id ? { ...u, role: prev } : u))
+    })
+  }
+
+  // Suspend ↔ reactivate: the backend models this as active/disabled.
+  function toggleSuspend(id: string) {
+    const u = users.find((x) => x.id === id)
+    if (!u) return
+    const nextLocal: UserStatus = u.status === 'suspended' ? 'active' : 'suspended'
+    const nextApi = nextLocal === 'active' ? 'active' : 'disabled'
+    setUsers((us) => us.map((x) => x.id === id ? { ...x, status: nextLocal } : x))
+    patchUser(id, { status: nextApi }).catch(() => {
+      setUsers((us) => us.map((x) => x.id === id ? { ...x, status: u.status } : x))
+    })
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -400,7 +436,14 @@ export default function UsersRolesPage() {
       </div>
 
       <AnimatePresence>
-        {selectedUser && <UserPanel user={selectedUser} onClose={() => setSelected(null)} />}
+        {selectedUser && (
+          <UserPanel
+            user={selectedUser}
+            onClose={() => setSelected(null)}
+            onRoleChange={(role) => changeRole(selectedUser.id, role)}
+            onToggleSuspend={() => toggleSuspend(selectedUser.id)}
+          />
+        )}
       </AnimatePresence>
     </div>
   )

@@ -14,7 +14,7 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
   fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
-  fetchRiskDistribution,
+  fetchRiskDistribution, fetchHeatmap,
   type OverviewKpis, type OverviewAlert, type Incident,
   type TopActor, type ThreatVector, type LiveFeedItem, type RiskDistribution,
 } from '@/lib/api'
@@ -454,9 +454,17 @@ const HEATMAP_ROWS = [
 ]
 const HEATMAP_COLS = ['RCE', 'Phish', 'C2', 'SQLi', 'Brute', 'Exfil', 'DDoS']
 
-function ThreatHeatmap() {
-  const allVals = HEATMAP_ROWS.flatMap((r) => r.vals)
-  const maxV = Math.max(...allVals)
+function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }> }) {
+  // Live rows are MITRE tactics over six ~28h windows; static fallback is
+  // day-of-week × attack type. Column headers adapt to whichever shape arrived.
+  const live = rows.length > 0
+  const data = live ? rows : HEATMAP_ROWS
+  const nCols = data[0]?.vals.length ?? 6
+  const cols: string[] = live
+    ? Array.from({ length: nCols }, (_, i) => (i === nCols - 1 ? 'Now' : `-${nCols - 1 - i}d`))
+    : HEATMAP_COLS
+  const allVals = data.flatMap((r) => r.vals)
+  const maxV = Math.max(...allVals, 1)
 
   function heatColor(v: number) {
     const t = v / maxV
@@ -470,7 +478,7 @@ function ThreatHeatmap() {
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">Threat Heatmap (7d)</h3>
+        <h3 className="text-sm font-semibold text-white">{live ? 'MITRE Tactic Heatmap (7d)' : 'Threat Heatmap (7d)'}</h3>
         <div className="flex items-center gap-1.5 text-[9px] text-ink-600">
           {[['Low','#7A3CFF'],['Med','#FFB23E'],['High','#FF4D6D'],['Crit','#FF2E97']].map(([l,c]) => (
             <span key={l} className="flex items-center gap-1">
@@ -479,21 +487,22 @@ function ThreatHeatmap() {
           ))}
         </div>
       </div>
-      <div className="grid" style={{ gridTemplateColumns: `28px repeat(${HEATMAP_COLS.length}, 1fr)`, gap: '2px' }}>
+      <div className="grid" style={{ gridTemplateColumns: `${live ? '110px' : '28px'} repeat(${cols.length}, 1fr)`, gap: '2px' }}>
         <div />
-        {HEATMAP_COLS.map((c) => (
+        {cols.map((c) => (
           <div key={c} className="text-center text-[8px] text-ink-600 truncate pb-0.5">{c}</div>
         ))}
-        {HEATMAP_ROWS.flatMap((row, ri) => [
-          <div key={`lbl-${row.label}`} className="text-[9px] text-ink-600 flex items-center">{row.label}</div>,
+        {data.flatMap((row, ri) => [
+          <div key={`lbl-${row.label}`} className="text-[9px] text-ink-600 flex items-center truncate pr-1">{row.label}</div>,
           ...row.vals.map((v, ci) => (
             <motion.div
               key={`${row.label}-${ci}`}
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: (ri * HEATMAP_COLS.length + ci) * 0.008 }}
+              transition={{ delay: (ri * cols.length + ci) * 0.008 }}
               className="h-6 rounded-sm cursor-pointer hover:opacity-80 transition-opacity"
               style={{ background: heatColor(v) }}
+              title={`${row.label}: ${v}`}
             />
           )),
         ])}
@@ -778,6 +787,7 @@ export default function DashboardOverview() {
   const [vectors, setVectors]               = useState<ThreatVector[]>([])
   const [liveFeed, setLiveFeed]             = useState<LiveFeedItem[]>([])
   const [riskDist, setRiskDist]             = useState<RiskDistribution | null>(null)
+  const [heatmap, setHeatmap]               = useState<Array<{ label: string; vals: number[] }>>([])
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
 
@@ -790,6 +800,7 @@ export default function DashboardOverview() {
     fetchVectors().then(setVectors).catch(() => {})
     fetchLiveFeed(20).then(setLiveFeed).catch(() => {})
     fetchRiskDistribution().then(setRiskDist).catch(() => {})
+    fetchHeatmap().then(setHeatmap).catch(() => {})
   }, [])
 
   if (!isPower) return <NormalDashboard count={kpis} />
@@ -865,7 +876,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* Threat Heatmap */}
-      <ThreatHeatmap />
+      <ThreatHeatmap rows={heatmap} />
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

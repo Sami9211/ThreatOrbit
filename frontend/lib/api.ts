@@ -469,6 +469,8 @@ export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const fetchSiemHunts  = () => api<SavedHunt[]>('/siem/hunts')
 export const fetchCorrelations = (minAlerts = 2) =>
   api<Correlation[]>(`/siem/correlations?min_alerts=${minAlerts}`)
+export const fetchMitreDistribution = () =>
+  api<Array<{ tactic: string; count: number; color: string }>>('/siem/mitre-distribution')
 
 // ── SOAR ─────────────────────────────────────────────────────────────
 export const fetchCases = (params?: Record<string, string>) => {
@@ -493,6 +495,12 @@ export const fetchIocTypes  = () => api<IocType[]>('/cti/ioc-types')
 export const fetchCtiSummary = () => api<CtiSummary>('/cti/summary')
 export const lookupIoc = (value: string) =>
   api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
+export interface ImportResult { imported: number; duplicates: number; skipped: number; total: number }
+export const importIocs = (body: {
+  indicators: { type: string; value: string }[]
+  confidence?: number; severity?: string; source?: string
+  actor?: string; threat_type?: string; tags?: string[]
+}) => api<ImportResult>('/cti/iocs/import', { method: 'POST', body: JSON.stringify(body) })
 export const fetchCtiHunts  = () => api<SavedHunt[]>('/cti/hunts')
 export const fetchCtiGraph  = () => api<CtiGraph>('/cti/graph')
 
