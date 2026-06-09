@@ -10,7 +10,7 @@ import {
   ExternalLink, Eye, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchAssets } from '@/lib/api'
+import { fetchAssets, fetchAsset, recomputeAssetRisk, type RiskBreakdown } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
@@ -217,6 +217,30 @@ export default function AssetsPage() {
 
   const selectedAsset = assets.find((a) => a.id === selectedId) ?? null
 
+  // Fetch the per-axis risk explanation for the open asset.
+  const [breakdown, setBreakdown] = useState<RiskBreakdown | null>(null)
+  useEffect(() => {
+    if (!selectedId) { setBreakdown(null); return }
+    let live = true
+    fetchAsset(selectedId)
+      .then((d) => { if (live) setBreakdown(d.riskBreakdown ?? null) })
+      .catch(() => { if (live) setBreakdown(null) })
+    return () => { live = false }
+  }, [selectedId])
+
+  // Recompute every asset's risk from current CVEs + live alert pressure.
+  const [recomputing, setRecomputing] = useState(false)
+  async function recomputeRisk() {
+    if (recomputing) return
+    setRecomputing(true)
+    try {
+      await recomputeAssetRisk()
+      const { items } = await fetchAssets({ limit: '200' })
+      if (items.length > 0) setAssets(items as unknown as Asset[])
+    } catch { /* leave current data in place */ }
+    finally { setRecomputing(false) }
+  }
+
   // Escape closes the add-asset modal first, otherwise the detail panel.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -280,6 +304,11 @@ export default function AssetsPage() {
             <button onClick={scanAll}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-violet/40 transition-colors">
               <RefreshCw className="w-3.5 h-3.5" /> Scan All
+            </button>
+            <button onClick={recomputeRisk} disabled={recomputing}
+              title="Recalculate risk from current CVEs and live alert pressure"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-safe/40 transition-colors disabled:opacity-50 disabled:cursor-wait">
+              <RefreshCw className={cn('w-3.5 h-3.5', recomputing && 'animate-spin')} /> {recomputing ? 'Recomputing…' : 'Recompute Risk'}
             </button>
             <button onClick={() => setShowAdd(true)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-plasma text-white shadow-magenta-sm hover:shadow-magenta transition-all">
@@ -681,6 +710,36 @@ export default function AssetsPage() {
                       </div>
                     ))}
                   </div>
+
+                  {breakdown && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-ink-600 uppercase tracking-wide">Risk Breakdown</p>
+                        <span className="text-[9px] text-ink-600">×{breakdown.criticalityMultiplier} criticality</span>
+                      </div>
+                      {breakdown.components.map(({ axis, value, contribution }) => {
+                        const meta: Record<string, { label: string; color: string }> = {
+                          vulnerability: { label: 'Vulnerabilities', color: '#FF2E97' },
+                          exposure:      { label: 'Exposure',        color: '#FFB23E' },
+                          patch:         { label: 'Patch Hygiene',   color: '#7A3CFF' },
+                          alerts:        { label: 'Alert Pressure',  color: '#FF4D6D' },
+                        }
+                        const m = meta[axis] ?? { label: axis, color: '#34F5C5' }
+                        return (
+                          <div key={axis} className="flex items-center gap-2">
+                            <span className="text-[10px] text-ink-400 w-24 shrink-0">{m.label}</span>
+                            <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${value}%`, background: m.color }} />
+                            </div>
+                            <span className="text-[10px] font-mono w-10 text-right text-ink-400">+{contribution}</span>
+                          </div>
+                        )
+                      })}
+                      <p className="text-[9px] text-ink-700 leading-relaxed pt-0.5">
+                        Bars show each axis (0–100); the figure is points added to the score after criticality scaling.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <p className="text-[10px] text-ink-600 uppercase tracking-wide">Details</p>

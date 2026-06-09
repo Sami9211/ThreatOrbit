@@ -69,6 +69,39 @@ def risk_band(score: int) -> str:
     return "clean"
 
 
+def risk_breakdown(*, cves: dict, criticality: str, patch_age: int,
+                   open_alerts: int, open_ports=None, tags=None) -> dict:
+    """Explain a risk score: each axis's 0–100 value, its weight, and the points
+    it contributes to the final (criticality-scaled) score. Lets the UI render a
+    transparent "why is this risky?" panel.
+    """
+    axes = {
+        "vulnerability": (vuln_burden(cves), _W_VULN),
+        "exposure": (exposure_score(open_ports, tags), _W_EXPOSURE),
+        "patch": (min(100.0, (patch_age or 0) / _PATCH_FULL_DECAY_DAYS * 100.0), _W_PATCH),
+        "alerts": (min(100.0, (open_alerts or 0) / _ALERTS_SATURATE * 100.0), _W_ALERTS),
+    }
+    mult = CRITICALITY_MULTIPLIER.get(criticality, 0.5)
+    scale = 0.6 + 0.4 * mult
+    components = [
+        {
+            "axis": name,
+            "value": round(value, 1),                       # 0–100 on its own axis
+            "weight": weight,                                # share of the base score
+            "contribution": round(value * weight * scale, 1),  # points added to the total
+        }
+        for name, (value, weight) in axes.items()
+    ]
+    components.sort(key=lambda c: c["contribution"], reverse=True)
+    score = max(0, min(100, round(sum(c["contribution"] for c in components))))
+    return {
+        "score": score,
+        "band": risk_band(score),
+        "criticalityMultiplier": round(scale, 3),
+        "components": components,
+    }
+
+
 def org_risk(assets) -> int:
     """Criticality-weighted mean asset risk — crown jewels dominate the org score.
 
