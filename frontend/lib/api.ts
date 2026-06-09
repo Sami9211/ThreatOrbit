@@ -285,6 +285,16 @@ export interface IocType {
   count: number
 }
 
+export interface CtiSummary {
+  trackedActors: number
+  activeActors: number
+  activeCampaigns: number
+  nationState: number
+  cybercrime: number
+  hacktivist: number
+  totalIocs: number
+}
+
 export interface SavedHunt {
   id: string
   name: string
@@ -466,6 +476,7 @@ export const fetchIocs    = (params?: Record<string, string>) => {
   return api<{ total: number; items: Ioc[] }>(`/cti/iocs${q}`)
 }
 export const fetchIocTypes  = () => api<IocType[]>('/cti/ioc-types')
+export const fetchCtiSummary = () => api<CtiSummary>('/cti/summary')
 export const fetchCtiHunts  = () => api<SavedHunt[]>('/cti/hunts')
 export const fetchCtiGraph  = () => api<CtiGraph>('/cti/graph')
 

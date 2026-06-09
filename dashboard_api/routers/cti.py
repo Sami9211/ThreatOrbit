@@ -70,6 +70,32 @@ def ioc_types():
     return rows_to_dicts(rows)
 
 
+@router.get("/summary")
+def cti_summary():
+    """Top-line CTI counts: actors by type, active actors/campaigns, IOC total."""
+    with get_conn() as conn:
+        actors = conn.execute("SELECT type, active, campaign_count FROM threat_actors").fetchall()
+        total_iocs = conn.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
+    by_type: dict[str, int] = {}
+    active = active_campaigns = 0
+    for a in actors:
+        # Normalise type casing/format so buckets are robust ("Nation-State" → "nation-state").
+        key = (a["type"] or "").lower().replace(" ", "-")
+        by_type[key] = by_type.get(key, 0) + 1
+        if a["active"]:
+            active += 1
+            active_campaigns += a["campaign_count"] or 0
+    return {
+        "trackedActors": len(actors),
+        "activeActors": active,
+        "activeCampaigns": active_campaigns,
+        "nationState": by_type.get("nation-state", 0),
+        "cybercrime": by_type.get("cybercrime", 0),
+        "hacktivist": by_type.get("hacktivist", 0),
+        "totalIocs": total_iocs,
+    }
+
+
 @router.get("/hunts")
 def list_hunts():
     with get_conn() as conn:
