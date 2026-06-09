@@ -14,8 +14,9 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
   fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
+  fetchRiskDistribution,
   type OverviewKpis, type OverviewAlert, type Incident,
-  type TopActor, type ThreatVector, type LiveFeedItem,
+  type TopActor, type ThreatVector, type LiveFeedItem, type RiskDistribution,
 } from '@/lib/api'
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -345,6 +346,62 @@ function AttackVectors({ vectors }: { vectors: ThreatVector[] }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+const RISK_AXIS_META: Record<string, { label: string; color: string }> = {
+  vulnerability: { label: 'Vulnerabilities', color: '#FF2E97' },
+  exposure:      { label: 'Exposure',        color: '#FFB23E' },
+  patch:         { label: 'Patch Hygiene',   color: '#7A3CFF' },
+  alerts:        { label: 'Alert Pressure',  color: '#FF4D6D' },
+}
+
+function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
+  if (!dist) return null
+  const maxContrib = Math.max(...dist.axisContribution.map((a) => a.avgContribution), 1)
+  const driverLabel = dist.topDriver ? (RISK_AXIS_META[dist.topDriver]?.label ?? dist.topDriver) : '—'
+  return (
+    <div className="glass border border-white/5 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-white">Asset Risk Drivers</h3>
+        <span className="text-[10px] text-ink-500">
+          {dist.total} assets · top driver <span className="text-ink-300">{driverLabel}</span>
+        </span>
+      </div>
+      {/* Band summary */}
+      <div className="flex items-center gap-2 mb-4">
+        {([['critical', '#FF2E97'], ['at-risk', '#FFB23E'], ['clean', '#34F5C5']] as const).map(([band, color]) => (
+          <div key={band} className="flex-1 rounded-lg border border-white/6 bg-white/[0.02] px-2 py-1.5 text-center">
+            <p className="text-base font-bold" style={{ color }}>{dist.bands[band] ?? 0}</p>
+            <p className="text-[9px] text-ink-600 capitalize">{band}</p>
+          </div>
+        ))}
+      </div>
+      {/* Mean contribution per axis */}
+      <div className="space-y-3">
+        {dist.axisContribution.map((a) => {
+          const m = RISK_AXIS_META[a.axis] ?? { label: a.axis, color: '#34F5C5' }
+          return (
+            <div key={a.axis}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-ink-300">{m.label}</span>
+                <span className="text-xs font-mono text-ink-400">+{a.avgContribution}</span>
+              </div>
+              <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(a.avgContribution / maxContrib) * 100}%` }}
+                  transition={{ duration: 0.9, ease: 'easeOut' }}
+                  className="h-full rounded-full"
+                  style={{ background: m.color }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[10px] text-ink-600 mt-3">Mean points each axis adds to asset risk, fleet-wide.</p>
     </div>
   )
 }
@@ -720,6 +777,7 @@ export default function DashboardOverview() {
   const [hourly, setHourly]                 = useState<number[]>([])
   const [vectors, setVectors]               = useState<ThreatVector[]>([])
   const [liveFeed, setLiveFeed]             = useState<LiveFeedItem[]>([])
+  const [riskDist, setRiskDist]             = useState<RiskDistribution | null>(null)
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
 
@@ -731,6 +789,7 @@ export default function DashboardOverview() {
     fetchHourly().then(setHourly).catch(() => {})
     fetchVectors().then(setVectors).catch(() => {})
     fetchLiveFeed(20).then(setLiveFeed).catch(() => {})
+    fetchRiskDistribution().then(setRiskDist).catch(() => {})
   }, [])
 
   if (!isPower) return <NormalDashboard count={kpis} />
@@ -801,6 +860,7 @@ export default function DashboardOverview() {
         <div className="space-y-4">
           <EventTimeline hourly={hourly} />
           <AttackVectors vectors={vectors} />
+          <AssetRiskDrivers dist={riskDist} />
         </div>
       </div>
 
