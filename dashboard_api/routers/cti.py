@@ -54,7 +54,12 @@ def ioc_types():
 @router.get("/hunts")
 def list_hunts():
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM saved_hunts WHERE domain='cti' ORDER BY last_run DESC").fetchall()
+        rows = conn.execute(
+            "SELECT id, name, description AS hypothesis, author AS analyst, "
+            "query, technique, last_run, hit_count AS artifacts, "
+            "status, progress, domain "
+            "FROM saved_hunts WHERE domain='cti' ORDER BY last_run DESC"
+        ).fetchall()
     return rows_to_dicts(rows)
 
 

@@ -44,6 +44,42 @@ def test_siem(client, auth):
     assert client.get("/siem/sources", headers=auth).json()
 
 
+def test_siem_metrics_are_computed(client, auth):
+    """MTTD/MTTA/MTTR are derived from per-alert latency telemetry, in minutes."""
+    kpis = client.get("/siem/kpis", headers=auth).json()
+    # SOC-grade range: detection fastest, response slowest, all well under an hour.
+    assert 0 < kpis["mttd"] < 60
+    assert 0 < kpis["mtta"] < 90
+    assert 0 < kpis["mttr"] < 120
+    assert kpis["mttd"] < kpis["mttr"]  # detect before respond
+
+
+def test_siem_correlations(client, auth):
+    clusters = client.get("/siem/correlations?min_alerts=2", headers=auth).json()
+    assert isinstance(clusters, list)
+    for c in clusters:
+        assert c["pivot"] in {"src_ip", "hostname", "username"}
+        assert c["alertCount"] >= 2
+        assert len(c["alerts"]) == c["alertCount"]
+    # sorted by alertCount descending
+    counts = [c["alertCount"] for c in clusters]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_siem_hunts_aliased(client, auth):
+    hunts = client.get("/siem/hunts", headers=auth).json()
+    assert hunts
+    # frontend-facing field names are exposed, not the raw column names
+    assert {"hypothesis", "analyst", "artifacts", "status", "progress"} <= hunts[0].keys()
+    assert "description" not in hunts[0] and "author" not in hunts[0]
+
+
+def test_cti_hunts_aliased(client, auth):
+    hunts = client.get("/cti/hunts", headers=auth).json()
+    assert hunts
+    assert {"hypothesis", "analyst", "artifacts"} <= hunts[0].keys()
+
+
 def test_soar(client, auth):
     cases = client.get("/soar/cases", headers=auth).json()
     assert cases and {"tasks", "war_room", "entities"} <= cases[0].keys()
@@ -52,6 +88,27 @@ def test_soar(client, auth):
     assert client.get("/soar/integrations", headers=auth).json()
     m = client.get("/soar/metrics", headers=auth).json()
     assert "openCases" in m
+    assert 0 <= m["automationRate"] <= 100  # a real ratio, not a saturating proxy
+
+
+def test_soar_playbook_run(client, auth):
+    pbs = client.get("/soar/playbooks", headers=auth).json()
+    pb = next(p for p in pbs if p["enabled"])
+    before = pb["runs"]
+    r = client.post(f"/soar/playbooks/{pb['id']}/run", headers=auth)
+    assert r.status_code == 200
+    assert r.json()["runs"] == before + 1
+    assert r.json()["last_run_status"] == "success"
+
+
+def test_audit_log_records_mutations(client, auth):
+    """A mutation writes an audit row visible via the audit-log endpoint."""
+    feeds = client.get("/feeds", headers=auth).json()
+    fid = feeds[0]["id"]
+    client.patch(f"/feeds/{fid}", json={"enabled": False}, headers=auth)
+    log = client.get("/config/audit-log?limit=20", headers=auth).json()
+    assert any(r["action"] == "feed.toggle" and r["target"] == fid for r in log)
+    assert all({"ts", "actor", "action"} <= r.keys() for r in log)
 
 
 def test_cti(client, auth):
