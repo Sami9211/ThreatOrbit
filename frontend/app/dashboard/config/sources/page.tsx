@@ -1,12 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Database, Plus, CheckCircle, X, Save, Cloud, Fingerprint,
   MonitorSmartphone, Network, AppWindow, Settings, Radio,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fetchSiemSources, type LogSource } from '@/lib/api'
+
+/* Keywords that link a connector to a live SIEM log source by name. A connector
+ * shows "Connected" when a matching source is ingesting (not offline). */
+const CONNECTOR_MATCH: Record<string, string[]> = {
+  aws: ['aws', 'cloudtrail'], azure: ['azure'], gcp: ['gcp', 'google cloud'],
+  okta: ['okta'], aad: ['azure ad', 'entra', 'sentinel'], gws: ['workspace', 'google'],
+  crwd: ['crowdstrike', 'falcon'], s1: ['sentinelone'], mde: ['defender'],
+  palo: ['palo alto'], cisco: ['cisco', 'firepower', 'ftd'], forti: ['fortinet', 'fortigate'],
+  o365: ['office 365', 'o365', 'microsoft 365', 'exchange'], slack: ['slack'], github: ['github'],
+}
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type ConnCategory = 'Cloud' | 'Identity' | 'Endpoint' | 'Network' | 'SaaS'
@@ -229,9 +240,26 @@ function ConnectorCard({ connector, onConfigure }: { connector: Connector; onCon
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function DataSourcesPage() {
   const [selected, setSelected] = useState<string | null>(null)
-  const selectedConnector = CONNECTORS.find((c) => c.id === selected) ?? null
+  const [connectors, setConnectors] = useState<Connector[]>(CONNECTORS)
+  const selectedConnector = connectors.find((c) => c.id === selected) ?? null
 
-  const connectedCount = CONNECTORS.filter((c) => c.status === 'connected').length
+  // Derive each connector's status from live log sources: connected when a
+  // matching source is actively ingesting (anything but offline).
+  useEffect(() => {
+    fetchSiemSources().then((sources: LogSource[]) => {
+      if (sources.length === 0) return
+      const liveNames = sources
+        .filter((s) => s.status !== 'offline')
+        .map((s) => s.name.toLowerCase())
+      setConnectors(CONNECTORS.map((c) => {
+        const kws = CONNECTOR_MATCH[c.id] ?? [c.vendor.toLowerCase()]
+        const connected = liveNames.some((n) => kws.some((kw) => n.includes(kw)))
+        return connected ? { ...c, status: 'connected' } : { ...c, status: 'unconfigured' }
+      }))
+    }).catch(() => {})
+  }, [])
+
+  const connectedCount = connectors.filter((c) => c.status === 'connected').length
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -246,13 +274,13 @@ export default function DataSourcesPage() {
         </div>
         <div className="text-right">
           <span className="text-sm font-bold font-mono text-safe">{connectedCount}</span>
-          <span className="text-xs text-ink-500"> / {CONNECTORS.length} connected</span>
+          <span className="text-xs text-ink-500"> / {connectors.length} connected</span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8">
         {CATEGORIES.map(({ id, icon: Icon, color }) => {
-          const items = CONNECTORS.filter((c) => c.category === id)
+          const items = connectors.filter((c) => c.category === id)
           return (
             <section key={id}>
               <div className="flex items-center gap-2 mb-3">
