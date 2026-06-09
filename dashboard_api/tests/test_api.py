@@ -129,6 +129,57 @@ def test_assets(client, auth):
     assert client.get("/assets/vulns", headers=auth).json()
 
 
+def test_asset_risk_recompute_is_idempotent(client, auth):
+    """Two recomputes over unchanged state produce identical scores (deterministic)."""
+    r = client.post("/assets/recompute-risk", headers=auth)
+    assert r.status_code == 200 and r.json()["updated"] > 0
+    a1 = {a["id"]: a["risk_score"] for a in client.get("/assets?limit=500", headers=auth).json()["items"]}
+    client.post("/assets/recompute-risk", headers=auth)
+    a2 = {a["id"]: a["risk_score"] for a in client.get("/assets?limit=500", headers=auth).json()["items"]}
+    assert a1 == a2  # no random drift between runs
+
+
+def test_resolving_alerts_lowers_asset_risk(client, auth):
+    """Triaging an asset's open alerts reduces its alert pressure and risk."""
+    # Find an asset that currently carries open alerts.
+    assets = client.get("/assets?limit=500", headers=auth).json()["items"]
+    target = next((a for a in assets if a["alerts"] > 0), None)
+    if target is None:
+        return  # no alert-bearing asset in this seed; nothing to assert
+    host = target["name"]
+    before = target["risk_score"]
+    # Close every unresolved alert on that host.
+    alerts = client.get("/siem/alerts?limit=500", headers=auth).json()["items"]
+    closed = 0
+    for al in alerts:
+        if al["hostname"] == host and al["status"] not in ("resolved", "closed"):
+            client.patch(f"/siem/alerts/{al['id']}", json={"status": "closed"}, headers=auth)
+            closed += 1
+    if closed == 0:
+        return
+    client.post("/assets/recompute-risk", headers=auth)
+    after = next(a for a in client.get("/assets?limit=500", headers=auth).json()["items"] if a["id"] == target["id"])
+    assert after["alerts"] == 0
+    assert after["risk_score"] <= before
+
+
+def test_scoring_model_units():
+    """The pure scoring model is bounded and ordered as documented."""
+    from dashboard_api.scoring import asset_risk, risk_band, org_risk
+
+    clean = asset_risk(cves={"critical": 0, "high": 0, "medium": 0, "low": 0},
+                       criticality="low", patch_age=0, open_alerts=0)
+    maxed = asset_risk(cves={"critical": 5, "high": 10, "medium": 20, "low": 40},
+                       criticality="critical", patch_age=365, open_alerts=20,
+                       open_ports=[3389, 445, 23], tags=["internet-facing"])
+    assert 0 <= clean <= 100 and 0 <= maxed <= 100
+    assert clean < maxed and maxed >= 90
+    assert risk_band(80) == "critical" and risk_band(50) == "at-risk" and risk_band(10) == "clean"
+    # Org risk weights critical assets above low ones.
+    assert org_risk([{"risk_score": 90, "criticality": "critical"},
+                     {"risk_score": 10, "criticality": "low"}]) > 50
+
+
 def test_feeds(client, auth):
     feeds = client.get("/feeds", headers=auth).json()
     assert feeds

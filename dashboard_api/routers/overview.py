@@ -16,6 +16,7 @@ router = APIRouter(prefix="/overview", tags=["overview"], dependencies=[Depends(
 
 @router.get("/kpis")
 def kpis():
+    from dashboard_api.scoring import org_risk
     with get_conn() as conn:
         iocs = conn.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
         feeds = conn.execute("SELECT COUNT(*) FROM feeds WHERE status='active'").fetchone()[0]
@@ -23,8 +24,9 @@ def kpis():
             "SELECT COUNT(*) FROM alerts WHERE severity IN ('critical','high') "
             "AND status NOT IN ('resolved','closed')"
         ).fetchone()[0]
-        risk = conn.execute("SELECT AVG(risk_score) FROM assets").fetchone()[0] or 0
-    return {"threats": threats, "iocs": iocs, "sources": feeds, "score": round(risk)}
+        assets = conn.execute("SELECT risk_score, criticality FROM assets").fetchall()
+    # Criticality-weighted org risk — crown jewels move the needle more than endpoints.
+    return {"threats": threats, "iocs": iocs, "sources": feeds, "score": org_risk(assets)}
 
 
 @router.get("/threat-vectors")
