@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, patchAlert, type SiemAlert as ApiSiemAlert } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, patchAlert, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -356,6 +356,14 @@ const DATA_SOURCES = [
   { name: 'Windows WSUS',     type: 'Patch',    eps: 8,    status: 'offline', lastEvent: '4m',   events7d: '68K'    },
   { name: 'Azure Sentinel',   type: 'SIEM',     eps: 1102, status: 'healthy', lastEvent: '< 1s', events7d: '9.5M'   },
 ]
+
+/* Format a duration given in minutes as "Xm YYs" (the SOC convention used here). */
+function fmtMins(minutes: number): string {
+  const totalSecs = Math.round(minutes * 60)
+  const m = Math.floor(totalSecs / 60)
+  const s = totalSecs % 60
+  return `${m}m ${String(s).padStart(2, '0')}s`
+}
 
 /* ── Static metric calculations ──────────────────────────────────── */
 const METRICS = {
@@ -1110,12 +1118,36 @@ export default function SIEMPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedAlert = alerts.find((a) => a.id === selectedId) ?? null
 
+  const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
+  const [correlations, setCorrelations] = useState<Correlation[]>([])
+
   // Load alerts from API
   useEffect(() => {
     fetchSiemAlerts({ limit: '140' })
       .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
       .catch(() => {})
+    fetchSiemKpis().then(setApiKpis).catch(() => {})
+    fetchCorrelations(2).then(setCorrelations).catch(() => {})
   }, [])
+
+  // Prefer live KPIs from the API; fall back to the static demo values.
+  const metrics = useMemo(() => {
+    if (!apiKpis) return METRICS
+    return {
+      ...METRICS,
+      totalAlerts: apiKpis.totalAlerts,
+      critical: apiKpis.critical,
+      high: apiKpis.high,
+      medium: apiKpis.medium,
+      mttd: fmtMins(apiKpis.mttd),
+      mttr: fmtMins(apiKpis.mttr),
+      mtta: fmtMins(apiKpis.mtta),
+      fpRate: apiKpis.fpRate,
+      automationRate: apiKpis.automationRate,
+      totalEps: apiKpis.totalEps,
+      daysData: apiKpis.daysData,
+    }
+  }, [apiKpis])
 
   // Mutate a single alert's triage fields (status/owner/disposition) in place
   async function updateAlert(id: string, patch: Partial<SiemAlert>) {
@@ -1173,15 +1205,15 @@ export default function SIEMPage() {
           <div>
             <h1 className="font-display text-xl font-bold text-white">Security Information & Event Management</h1>
             <p className="text-xs text-ink-500 mt-0.5">
-              <span className="text-safe">{METRICS.totalEps.toLocaleString()} EPS</span>
+              <span className="text-safe">{metrics.totalEps.toLocaleString()} EPS</span>
               <span className="text-ink-700 mx-1.5">·</span>
               <span>{openCount} open alerts</span>
               <span className="text-ink-700 mx-1.5">·</span>
               <span className="text-magenta">{criticalOpen} critical</span>
               <span className="text-ink-700 mx-1.5">·</span>
-              <span>MTTD {METRICS.mttd}</span>
+              <span>MTTD {metrics.mttd}</span>
               <span className="text-ink-700 mx-1.5">·</span>
-              <span>MTTR {METRICS.mttr}</span>
+              <span>MTTR {metrics.mttr}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1194,12 +1226,12 @@ export default function SIEMPage() {
         {/* KPI strip */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 border-b border-white/5 shrink-0">
           {[
-            { label: 'Total Alerts Today', value: METRICS.totalAlerts.toLocaleString(), sub: '-12% vs yesterday', up: false, color: 'text-white' },
-            { label: 'Critical / High',     value: `${METRICS.critical} / ${METRICS.high}`,   sub: '+4 in last hour',  up: true,  color: 'text-magenta' },
-            { label: 'MTTD',                value: METRICS.mttd,                              sub: '↓ from 6m 04s',    up: false, color: 'text-safe' },
-            { label: 'MTTR',                value: METRICS.mttr,                              sub: '↑ from 19m 20s',   up: true,  color: 'text-amber' },
-            { label: 'MTTA',                value: METRICS.mtta,                              sub: '< 15m target ✓',   up: false, color: 'text-safe' },
-            { label: 'False Positive Rate', value: `${METRICS.fpRate}%`,                      sub: '↓ from 28% (7d)',  up: false, color: 'text-violet' },
+            { label: 'Total Alerts Today', value: metrics.totalAlerts.toLocaleString(), sub: '-12% vs yesterday', up: false, color: 'text-white' },
+            { label: 'Critical / High',     value: `${metrics.critical} / ${metrics.high}`,   sub: '+4 in last hour',  up: true,  color: 'text-magenta' },
+            { label: 'MTTD',                value: metrics.mttd,                              sub: '↓ from 6m 04s',    up: false, color: 'text-safe' },
+            { label: 'MTTR',                value: metrics.mttr,                              sub: '↑ from 19m 20s',   up: true,  color: 'text-amber' },
+            { label: 'MTTA',                value: metrics.mtta,                              sub: '< 15m target ✓',   up: false, color: 'text-safe' },
+            { label: 'False Positive Rate', value: `${metrics.fpRate}%`,                      sub: '↓ from 28% (7d)',  up: false, color: 'text-violet' },
           ].map((k) => (
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{k.label}</p>
@@ -1339,6 +1371,47 @@ export default function SIEMPage() {
                 </div>
               </div>
 
+              {/* Live alert correlations (grouped by shared pivot) */}
+              {correlations.length > 0 && (
+                <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-semibold text-white">Correlated Alert Clusters</p>
+                    <span className="text-[10px] text-ink-600">
+                      {correlations.length} cluster{correlations.length === 1 ? '' : 's'} · grouped by shared entity
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {correlations.slice(0, 8).map((c) => {
+                      const PivotIcon = c.pivot === 'src_ip' ? Network : c.pivot === 'hostname' ? Server : User
+                      const sev = SEV[c.severity]
+                      return (
+                        <div key={`${c.pivot}:${c.value}`} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                          <div className="p-1.5 rounded-lg shrink-0" style={{ background: `${sev.dot}18` }}>
+                            <PivotIcon className="w-3.5 h-3.5" style={{ color: sev.dot }} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-mono text-ink-200 truncate">{c.value}</span>
+                              <span className="text-[9px] text-ink-600 uppercase tracking-wide shrink-0">{c.pivot.replace('_', ' ')}</span>
+                            </div>
+                            <p className="text-[10px] text-ink-500 truncate mt-0.5">
+                              {c.alerts.slice(0, 3).map((a) => a.title).join(' · ')}
+                              {c.alerts.length > 3 && ` +${c.alerts.length - 3} more`}
+                            </p>
+                          </div>
+                          <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-semibold shrink-0 uppercase', sev.bg, sev.text, sev.border)}>
+                            {c.severity}
+                          </span>
+                          <span className="text-[11px] font-mono text-ink-300 w-14 text-right shrink-0">
+                            {c.alertCount} <span className="text-ink-600">hits</span>
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Alert funnel + severity breakdown */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
@@ -1400,12 +1473,12 @@ export default function SIEMPage() {
                 </div>
                 <div className="divide-y divide-white/5">
                   {[
-                    { metric: 'Mean Time to Detect (MTTD)',      value: '4m 12s', target: '< 10m', status: 'good' },
-                    { metric: 'Mean Time to Acknowledge (MTTA)', value: '8m 03s', target: '< 15m', status: 'good' },
-                    { metric: 'Mean Time to Respond (MTTR)',     value: '23m 41s',target: '< 30m', status: 'good' },
-                    { metric: 'False Positive Rate',             value: '22%',     target: '< 20%', status: 'warn' },
+                    { metric: 'Mean Time to Detect (MTTD)',      value: metrics.mttd, target: '< 10m', status: apiKpis ? (apiKpis.mttd < 10 ? 'good' : 'warn') : 'good' },
+                    { metric: 'Mean Time to Acknowledge (MTTA)', value: metrics.mtta, target: '< 15m', status: apiKpis ? (apiKpis.mtta < 15 ? 'good' : 'warn') : 'good' },
+                    { metric: 'Mean Time to Respond (MTTR)',     value: metrics.mttr, target: '< 30m', status: apiKpis ? (apiKpis.mttr < 30 ? 'good' : 'warn') : 'good' },
+                    { metric: 'False Positive Rate',             value: `${metrics.fpRate}%`, target: '< 20%', status: apiKpis ? (apiKpis.fpRate < 20 ? 'good' : 'warn') : 'warn' },
                     { metric: 'Alert-to-Incident Escalation',   value: '4.4%',    target: '1–5%',  status: 'good' },
-                    { metric: 'Automation Rate (SOAR)',          value: '68%',     target: '> 60%', status: 'good' },
+                    { metric: 'Automation Rate (SOAR)',          value: `${metrics.automationRate}%`, target: '> 60%', status: apiKpis ? (apiKpis.automationRate > 60 ? 'good' : 'warn') : 'good' },
                     { metric: 'SLA Compliance (P1 incidents)',   value: '94.2%',   target: '> 95%', status: 'warn' },
                     { metric: 'Analyst Throughput',              value: '47/shift', target: '30-50', status: 'good' },
                   ].map((row) => (
