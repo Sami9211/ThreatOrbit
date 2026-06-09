@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, CheckCircle, Clock, AlertTriangle, X, Shield, User,
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, type SoarMetrics } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -317,6 +317,20 @@ const SOAR_METRICS = {
   playbooksToday: 1243,
   avgPlaybookTime: '3m 08s',
   casesClosedWeek: 28,
+}
+
+/* Format a minutes value as "Xm" or "Hh MMm" for case-level MTTR display. */
+function fmtMinsShort(minutes: number): string {
+  const m = Math.round(minutes)
+  if (m < 60) return `${m}m`
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+
+/* Format a seconds value as "Xs" or "Mm SSs" for per-run timing display. */
+function fmtSecsShort(secs: number): string {
+  const s = Math.round(secs)
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
@@ -717,6 +731,7 @@ export default function SOARPage() {
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
   const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
   const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOKS)
+  const [soarApi, setSoarApi] = useState<SoarMetrics | null>(null)
   const selectedPB = playbooks.find((p) => p.id === selectedPBId) ?? null
 
   // Load from API
@@ -727,7 +742,25 @@ export default function SOARPage() {
     fetchPlaybooks()
       .then((data) => { if (data.length > 0) setPlaybooks(data as unknown as Playbook[]) })
       .catch(() => {})
+    fetchSoarMetrics().then(setSoarApi).catch(() => {})
   }, [])
+
+  // Prefer live SOAR metrics; fall back to static demo values. Trend deltas
+  // stay cosmetic (the backend exposes them as arrows, not signed numbers).
+  const metrics = useMemo(() => {
+    if (!soarApi) return SOAR_METRICS
+    return {
+      ...SOAR_METRICS,
+      openCases: soarApi.openCases,
+      criticalOpen: soarApi.criticalOpen,
+      mttr: fmtMinsShort(soarApi.mttr),
+      automationRate: Math.round(soarApi.automationRate),
+      timeSavedMonth: Math.round(soarApi.timeSavedMonth),
+      playbooksToday: soarApi.playbooksToday,
+      avgPlaybookTime: fmtSecsShort(soarApi.avgPlaybookTime),
+      casesClosedWeek: soarApi.casesClosedWeek,
+    }
+  }, [soarApi])
 
   useEffect(() => { if (isNormal && tab !== 'cases') setTab('cases') }, [isNormal, tab])
 
@@ -774,13 +807,13 @@ export default function SOARPage() {
           <div>
             <h1 className="font-display text-xl font-bold text-white">Security Orchestration, Automation & Response</h1>
             <p className="text-xs text-ink-500 mt-0.5">
-              <span className="text-magenta">{SOAR_METRICS.openCases} open cases</span>
+              <span className="text-magenta">{metrics.openCases} open cases</span>
               <span className="text-ink-700 mx-1.5">·</span>
-              <span className="text-safe">{SOAR_METRICS.automationRate}% automation rate</span>
+              <span className="text-safe">{metrics.automationRate}% automation rate</span>
               <span className="text-ink-700 mx-1.5">·</span>
-              <span>MTTR {SOAR_METRICS.mttr}</span>
+              <span>MTTR {metrics.mttr}</span>
               <span className="text-ink-700 mx-1.5">·</span>
-              <span className="text-safe">{SOAR_METRICS.timeSavedMonth}h saved this month</span>
+              <span className="text-safe">{metrics.timeSavedMonth}h saved this month</span>
             </p>
           </div>
           <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/15 transition-colors">
@@ -791,11 +824,11 @@ export default function SOARPage() {
         {/* KPI strip */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-0 border-b border-white/5 shrink-0">
           {[
-            { label: 'Open Cases',           value: `${SOAR_METRICS.openCases}`,          sub: `${SOAR_METRICS.criticalOpen} critical`,          color: 'text-magenta', trend: null },
-            { label: 'MTTR',                  value: SOAR_METRICS.mttr,                    sub: `-${SOAR_METRICS.mttrTrend}m from last week`,     color: 'text-safe',    trend: 'down' },
-            { label: 'Automation Rate',       value: `${SOAR_METRICS.automationRate}%`,    sub: `+${SOAR_METRICS.automationTrend}% from last month`, color: 'text-violet', trend: 'up' },
-            { label: 'Time Saved (month)',    value: `${SOAR_METRICS.timeSavedMonth}h`,    sub: '≈ $127K analyst time',                           color: 'text-amber',   trend: 'up' },
-            { label: 'Playbooks Today',       value: SOAR_METRICS.playbooksToday.toLocaleString(), sub: `avg ${SOAR_METRICS.avgPlaybookTime}/run`, color: 'text-white',   trend: null },
+            { label: 'Open Cases',           value: `${metrics.openCases}`,          sub: `${metrics.criticalOpen} critical`,          color: 'text-magenta', trend: null },
+            { label: 'MTTR',                  value: metrics.mttr,                    sub: `${metrics.mttrTrend}m from last week`,     color: 'text-safe',    trend: 'down' },
+            { label: 'Automation Rate',       value: `${metrics.automationRate}%`,    sub: `+${metrics.automationTrend}% from last month`, color: 'text-violet', trend: 'up' },
+            { label: 'Time Saved (month)',    value: `${metrics.timeSavedMonth}h`,    sub: '≈ $127K analyst time',                           color: 'text-amber',   trend: 'up' },
+            { label: 'Playbooks Today',       value: metrics.playbooksToday.toLocaleString(), sub: `avg ${metrics.avgPlaybookTime}/run`, color: 'text-white',   trend: null },
           ].map((k) => (
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{k.label}</p>
@@ -825,7 +858,7 @@ export default function SOARPage() {
               {label}
               {id === 'cases' && (
                 <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-magenta/15 text-magenta border border-magenta/25">
-                  {SOAR_METRICS.openCases}
+                  {metrics.openCases}
                 </span>
               )}
             </button>
