@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user, hash_password, require_role
-from dashboard_api.db import get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -41,7 +41,7 @@ def list_users(_: dict = Depends(current_user)):
 
 
 @router.post("", status_code=201)
-def create_user(body: UserCreate, _: dict = Depends(require_role("admin", "manager"))):
+def create_user(body: UserCreate, actor: dict = Depends(require_role("admin", "manager"))):
     if body.role not in ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {sorted(ROLES)}")
     if len(body.password) < 8:
@@ -57,13 +57,14 @@ def create_user(body: UserCreate, _: dict = Depends(require_role("admin", "manag
             (uid, body.email.lower(), body.name, body.role, "active", ph, salt,
              body.avatar_color, 0, None, _now()),
         )
+        audit(conn, actor["email"], "user.create", uid, f"email={body.email.lower()} role={body.role}")
         conn.commit()
         row = conn.execute(f"SELECT {_PUBLIC} FROM users WHERE id=?", (uid,)).fetchone()
     return row_to_dict(row)
 
 
 @router.patch("/{user_id}")
-def update_user(user_id: str, body: UserUpdate, _: dict = Depends(require_role("admin", "manager"))):
+def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_role("admin", "manager"))):
     fields, values = [], []
     for col in ("name", "role", "status", "avatar_color"):
         val = getattr(body, col)
@@ -79,6 +80,8 @@ def update_user(user_id: str, body: UserUpdate, _: dict = Depends(require_role("
         cur = conn.execute(f"UPDATE users SET {','.join(fields)} WHERE id=?", values)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="User not found")
+        changed = ",".join(f.split("=")[0] for f in fields)
+        audit(conn, actor["email"], "user.update", user_id, f"fields={changed}")
         conn.commit()
         row = conn.execute(f"SELECT {_PUBLIC} FROM users WHERE id=?", (user_id,)).fetchone()
     return row_to_dict(row)
@@ -92,5 +95,6 @@ def delete_user(user_id: str, actor: dict = Depends(require_role("admin"))):
         cur = conn.execute("DELETE FROM users WHERE id=?", (user_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="User not found")
+        audit(conn, actor["email"], "user.delete", user_id)
         conn.commit()
     return None

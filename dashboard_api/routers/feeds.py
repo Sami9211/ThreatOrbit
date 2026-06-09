@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
-from dashboard_api.db import get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/feeds", tags=["feeds"], dependencies=[Depends(current_user)])
 
@@ -40,7 +40,7 @@ def feeds_summary():
 
 
 @router.patch("/{feed_id}")
-def toggle_feed(feed_id: str, body: FeedToggle):
+def toggle_feed(feed_id: str, body: FeedToggle, user: dict = Depends(current_user)):
     with get_conn() as conn:
         cur = conn.execute(
             "UPDATE feeds SET enabled=?, status=? WHERE id=?",
@@ -48,6 +48,7 @@ def toggle_feed(feed_id: str, body: FeedToggle):
         )
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Feed not found")
+        audit(conn, user["email"], "feed.toggle", feed_id, f"enabled={body.enabled}")
         conn.commit()
         row = conn.execute("SELECT * FROM feeds WHERE id=?", (feed_id,)).fetchone()
     return row_to_dict(row)

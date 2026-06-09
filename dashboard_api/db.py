@@ -133,7 +133,10 @@ CREATE TABLE IF NOT EXISTS alerts (
     raw_log         TEXT,
     event_count     INTEGER NOT NULL DEFAULT 1,
     ti_hits         INTEGER NOT NULL DEFAULT 0,
-    bytes_out       INTEGER NOT NULL DEFAULT 0
+    bytes_out       INTEGER NOT NULL DEFAULT 0,
+    detect_latency_sec  INTEGER,   -- event→detection latency (drives MTTD)
+    ack_latency_sec     INTEGER,   -- detection→acknowledge latency (drives MTTA)
+    respond_latency_sec INTEGER    -- acknowledge→containment latency (drives MTTR)
 );
 
 CREATE TABLE IF NOT EXISTS detection_rules (
@@ -184,7 +187,10 @@ CREATE TABLE IF NOT EXISTS saved_hunts (
     technique   TEXT,
     last_run    TEXT,
     hit_count   INTEGER NOT NULL DEFAULT 0,
-    author      TEXT
+    author      TEXT,
+    status      TEXT NOT NULL DEFAULT 'idle',   -- idle|running|scheduled|complete
+    progress    INTEGER NOT NULL DEFAULT 0,
+    created     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS cases (
@@ -335,7 +341,39 @@ CREATE INDEX IF NOT EXISTS idx_iocs_type ON iocs(type);
 """
 
 
+def audit(conn: sqlite3.Connection, actor: str | None, action: str,
+          target: str | None = None, detail: str | None = None):
+    """Write a row to audit_log inside an open connection (caller must commit)."""
+    import datetime
+    ts = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+    conn.execute(
+        "INSERT INTO audit_log (ts, actor, action, target, detail) VALUES (?,?,?,?,?)",
+        (ts, actor, action, target, detail),
+    )
+
+
+# Columns added after the initial schema shipped. CREATE TABLE IF NOT EXISTS
+# never alters an existing table, so additive columns are applied here for
+# databases created before the column existed. (table, column, DDL type/default)
+_MIGRATIONS = [
+    ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
+    ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
+    ("saved_hunts", "created", "TEXT"),
+    ("alerts", "detect_latency_sec", "INTEGER"),
+    ("alerts", "ack_latency_sec", "INTEGER"),
+    ("alerts", "respond_latency_sec", "INTEGER"),
+]
+
+
+def _apply_migrations(conn: sqlite3.Connection):
+    for table, column, ddl in _MIGRATIONS:
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        _apply_migrations(conn)
         conn.commit()

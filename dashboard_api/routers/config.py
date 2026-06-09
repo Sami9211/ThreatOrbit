@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user, require_role
-from dashboard_api.db import get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -34,10 +34,11 @@ def get_settings(_: dict = Depends(current_user)):
 
 
 @router.put("/settings")
-def update_settings(body: SettingsUpdate, _: dict = Depends(require_role("admin", "manager"))):
+def update_settings(body: SettingsUpdate, actor: dict = Depends(require_role("admin", "manager"))):
     with get_conn() as conn:
         for k, v in body.values.items():
             conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (k, str(v)))
+        audit(conn, actor["email"], "settings.update", None, f"keys={','.join(body.values.keys())}")
         conn.commit()
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
     return {r["key"]: r["value"] for r in rows}
@@ -67,16 +68,37 @@ def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_role("admin"
             (kid, body.name, prefix, hashlib.sha256(secret.encode()).hexdigest(),
              body.scope, None, _now(), user["email"], 0),
         )
+        audit(conn, user["email"], "apikey.create", kid, f"name={body.name} scope={body.scope}")
         conn.commit()
     # Secret is returned exactly once, at creation.
     return {"id": kid, "name": body.name, "scope": body.scope, "secret": secret}
 
 
+@router.get("/audit-log")
+def list_audit_log(
+    limit: int = 100,
+    action: str | None = None,
+    _: dict = Depends(require_role("admin", "manager")),
+):
+    limit = max(1, min(limit, 500))
+    clause, params = "", []
+    if action:
+        clause = "WHERE action=?"; params.append(action)
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, ts, actor, action, target, detail FROM audit_log "
+            f"{clause} ORDER BY id DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return rows_to_dicts(rows)
+
+
 @router.delete("/api-keys/{key_id}", status_code=204)
-def revoke_api_key(key_id: str, _: dict = Depends(require_role("admin", "manager"))):
+def revoke_api_key(key_id: str, actor: dict = Depends(require_role("admin", "manager"))):
     with get_conn() as conn:
         cur = conn.execute("UPDATE api_keys SET revoked=1 WHERE id=?", (key_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="API key not found")
+        audit(conn, actor["email"], "apikey.revoke", key_id)
         conn.commit()
     return None

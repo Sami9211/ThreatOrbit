@@ -204,12 +204,21 @@ def _seed_alerts(conn, rng, rule_refs, assets, analysts):
         dport = rng.choice(list(services.keys()) + [8080, 8443, 53])
         disp = "undetermined" if status in ("new", "assigned", "in-progress") else \
             rng.choice(["true-positive", "false-positive", "benign", "duplicate"])
+        # SOC latency model (seconds). Detection is fast; higher severity is
+        # acknowledged/responded to faster (analysts prioritise it). Only the
+        # stages the alert has actually reached are populated.
+        sev_factor = {"critical": 0.6, "high": 0.8, "medium": 1.0, "low": 1.3, "info": 1.5}[sev]
+        detect_lat = int(rng.randint(45, 540) * sev_factor)  # ~1–9 min before scaling
+        ack_lat = int(rng.randint(120, 1500) * sev_factor) if status != "new" else None
+        respond_lat = int(rng.randint(600, 2700) * sev_factor) if status in (
+            "resolved", "closed", "pending") else None
         conn.execute(
             "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,rule_id,"
             "rule_name,mitre_tactic,mitre_tactic_id,mitre_tech,mitre_tech_id,src_ip,src_country,"
             "src_port,src_hostname,src_asn,dest_ip,dest_port,dest_service,username,hostname,"
-            "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,bytes_out) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,bytes_out,"
+            "detect_latency_sec,ack_latency_sec,respond_latency_sec) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), _ago(rng, 168), rname, sev, status, disp, owner, risk, rid, rname,
              tactic, tac_id, tech, tech_id, _rand_ip(rng), rng.choice(COUNTRIES), rng.randint(1024, 65535),
              f"host-{rng.randint(10,99)}", f"AS{rng.randint(1000,65000)}", asset_val if "." in asset_val else _rand_ip(rng),
@@ -218,7 +227,8 @@ def _seed_alerts(conn, rng, rule_refs, assets, analysts):
              "powershell -enc JABzAD0ATgBlAHcA..." if rng.random() > 0.6 else "/usr/sbin/sshd -D",
              f"{rname} observed on {asset_name} from a {rng.choice(COUNTRIES)} source.",
              f'{_iso(_now())} {asset_name} {rname} src={_rand_ip(rng)} dport={dport}',
-             rng.randint(1, 50), rng.randint(0, 5), rng.randint(0, 5_000_000)),
+             rng.randint(1, 50), rng.randint(0, 5), rng.randint(0, 5_000_000),
+             detect_lat, ack_lat, respond_lat),
         )
 
 
@@ -326,7 +336,9 @@ def _seed_cases(conn, rng, playbooks, analysts, assets):
             "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
             "alert_count,description,entities,war_room,tasks,evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ("CASE-" + str(rng.randint(1000, 9999)), title, typ, sev, status,
-             rng.choice(analysts), rng.choice(playbooks), rng.choice([4, 8, 24, 48]),
+             rng.choice(analysts),
+             rng.choice(playbooks) if rng.random() > 0.35 else "",  # ~35% handled manually
+             rng.choice([4, 8, 24, 48]),
              _iso(created), _iso(updated), rng.randint(1, 18),
              f"Investigation into {title.lower()} affecting {asset[0]}.",
              dumps(entities), dumps(war), dumps(tasks), dumps(evidence)),
@@ -463,12 +475,16 @@ def _seed_hunts(conn, rng):
         ("cti", "Credential phishing kits", "Track kit reuse across campaigns", "T1566"),
     ]
     for domain, name, desc, tech in hunts:
+        hits = rng.randint(0, 240)
+        status = rng.choice(["idle", "idle", "complete", "scheduled"])
+        progress = 100 if status == "complete" else (rng.randint(10, 90) if status == "running" else 0)
         conn.execute(
-            "INSERT INTO saved_hunts (id,domain,name,description,query,technique,last_run,hit_count,author) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO saved_hunts (id,domain,name,description,query,technique,last_run,hit_count,author,status,progress,created) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), domain, name, desc,
              f'index=* | where technique=="{tech}" | stats count by src_ip',
-             tech, _ago(rng, 96), rng.randint(0, 240), rng.choice(["sarah.chen", "marcus.webb", "priya.nair"])),
+             tech, _ago(rng, 96), hits, rng.choice(["sarah.chen", "marcus.webb", "priya.nair"]),
+             status, progress, _ago(rng, 720)),
         )
 
 
