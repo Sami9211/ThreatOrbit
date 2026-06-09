@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchActors, type Actor as ApiActor } from '@/lib/api'
+import { fetchActors, fetchCtiSummary, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
 import {
   UserSearch, Search, X, ChevronRight, ExternalLink, Shield,
   Crosshair, Bug, Clock, Activity, Building2, Filter,
@@ -607,8 +607,10 @@ export default function ActorProfilesPage() {
   const [filterType, setFilterType] = useState<string>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [actors, setActors] = useState<ThreatActor[]>(ACTORS)
+  const [summary, setSummary] = useState<CtiSummary | null>(null)
 
   useEffect(() => {
+    fetchCtiSummary().then(setSummary).catch(() => {})
     fetchActors().then((data: ApiActor[]) => {
       if (data.length > 0) {
         const mapped: ThreatActor[] = data.map((a) => {
@@ -619,7 +621,7 @@ export default function ActorProfilesPage() {
             aliases: a.aliases,
             origin: a.origin,
             flag: a.flag ?? seed?.flag ?? '🌐',
-            type: (a.type === 'nation-state' ? 'Nation-State' : a.type === 'cybercrime' ? 'Cybercrime' : 'Hacktivist') as ActorType,
+            type: ((t) => t === 'nation-state' ? 'Nation-State' : t === 'cybercrime' ? 'Cybercrime' : 'Hacktivist')((a.type ?? '').toLowerCase()) as ActorType,
             motivations: ([a.motivation].filter(Boolean) as Motivation[]),
             sophistication: a.sophistication,
             threatLevel: (a.threatLevel as 'critical' | 'high' | 'elevated') ?? 'high',
@@ -640,6 +642,18 @@ export default function ActorProfilesPage() {
   }, [])
 
   const selected = actors.find((a) => a.id === selectedId) ?? null
+
+  // Live KPI values from the API summary, falling back to the static demo figures.
+  const kpis = useMemo(() => {
+    if (!summary) return KPIS
+    const live: Record<string, number> = {
+      'Tracked Actors': summary.trackedActors,
+      'Active Campaigns': summary.activeCampaigns,
+      'Nation-State': summary.nationState,
+      'Ransomware Groups': summary.cybercrime,
+    }
+    return KPIS.map((k) => ({ ...k, value: live[k.label] ?? k.value }))
+  }, [summary])
 
   const origins = useMemo(() => {
     const set = new Set(actors.map((a) => a.origin))
@@ -679,7 +693,7 @@ export default function ActorProfilesPage() {
       {/* KPI strip */}
       <div className="px-6 py-4 border-b border-white/5 shrink-0">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {KPIS.map(({ label, value, icon: Icon, color, sub }) => (
+          {kpis.map(({ label, value, icon: Icon, color, sub }) => (
             <motion.div
               key={label}
               initial={{ opacity: 0, y: 8 }}

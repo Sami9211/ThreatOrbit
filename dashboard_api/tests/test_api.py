@@ -149,6 +149,18 @@ def test_cti(client, auth):
     assert "nodes" in graph and "links" in graph
 
 
+def test_cti_summary(client, auth):
+    """CTI summary counts are internally consistent with the actor list."""
+    s = client.get("/cti/summary", headers=auth).json()
+    actors = client.get("/cti/actors", headers=auth).json()
+    assert s["trackedActors"] == len(actors)
+    # type buckets are populated (casing-normalised) and sum to the total
+    assert s["nationState"] > 0
+    assert s["nationState"] + s["cybercrime"] + s["hacktivist"] == s["trackedActors"]
+    assert 0 <= s["activeActors"] <= s["trackedActors"]
+    assert s["totalIocs"] == client.get("/cti/iocs?limit=1", headers=auth).json()["total"]
+
+
 def test_assets(client, auth):
     data = client.get("/assets", headers=auth).json()
     assert data["total"] > 0
