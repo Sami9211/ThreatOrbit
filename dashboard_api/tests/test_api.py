@@ -177,6 +177,20 @@ def test_asset_detail_includes_risk_breakdown(client, auth):
     assert abs(sum(contribs) - bd["score"]) <= 1
 
 
+def test_fleet_risk_distribution(client, auth):
+    """Fleet distribution sums to the asset count and names a top driver."""
+    d = client.get("/assets/risk-distribution", headers=auth).json()
+    assert d["total"] > 0
+    assert sum(d["bands"].values()) == d["total"]
+    axes = {c["axis"] for c in d["axisContribution"]}
+    assert axes == {"vulnerability", "exposure", "patch", "alerts"}
+    # axisContribution is ordered, and topDriver is the leader
+    contribs = [c["avgContribution"] for c in d["axisContribution"]]
+    assert contribs == sorted(contribs, reverse=True)
+    assert d["topDriver"] == d["axisContribution"][0]["axis"]
+    assert 0 <= d["meanScore"] <= d["maxScore"] <= 100
+
+
 def test_scoring_model_units():
     """The pure scoring model is bounded and ordered as documented."""
     from dashboard_api.scoring import asset_risk, risk_band, org_risk

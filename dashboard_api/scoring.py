@@ -115,6 +115,42 @@ def org_risk(assets) -> int:
     return round(num / den) if den else 0
 
 
+def fleet_risk_distribution(assets) -> dict:
+    """Aggregate fleet risk: counts per band and the mean per-axis contribution
+    across all assets, so the worst org-wide driver is obvious.
+
+    ``assets`` is an iterable of mappings with cves/criticality/patch_age/alerts/
+    open_ports/tags (i.e. decoded asset rows).
+    """
+    bands = {"critical": 0, "at-risk": 0, "clean": 0}
+    axis_totals = {"vulnerability": 0.0, "exposure": 0.0, "patch": 0.0, "alerts": 0.0}
+    scores: list[int] = []
+    n = 0
+    for a in assets:
+        bd = risk_breakdown(
+            cves=a["cves"], criticality=a["criticality"], patch_age=a["patch_age"],
+            open_alerts=a.get("alerts", 0), open_ports=a.get("open_ports"), tags=a.get("tags"),
+        )
+        bands[bd["band"]] = bands.get(bd["band"], 0) + 1
+        for c in bd["components"]:
+            axis_totals[c["axis"]] += c["contribution"]
+        scores.append(bd["score"])
+        n += 1
+    axis_avg = [
+        {"axis": axis, "avgContribution": round(total / n, 1) if n else 0.0}
+        for axis, total in axis_totals.items()
+    ]
+    axis_avg.sort(key=lambda x: x["avgContribution"], reverse=True)
+    return {
+        "total": n,
+        "bands": bands,
+        "axisContribution": axis_avg,            # which axis drives org risk most
+        "topDriver": axis_avg[0]["axis"] if axis_avg else None,
+        "meanScore": round(sum(scores) / n) if n else 0,
+        "maxScore": max(scores) if scores else 0,
+    }
+
+
 def recompute_asset_risk(conn) -> int:
     """Recompute every asset's alert pressure, risk score and status band from
     the live alerts table, persisting the results. Returns the count updated.
