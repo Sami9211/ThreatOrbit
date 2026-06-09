@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
-from dashboard_api.scoring import recompute_asset_risk, risk_breakdown
+from dashboard_api.scoring import fleet_risk_distribution, recompute_asset_risk, risk_breakdown
 
 router = APIRouter(prefix="/assets", tags=["assets"], dependencies=[Depends(current_user)])
 
@@ -47,6 +47,16 @@ def assets_summary():
         "avgRiskScore": avg_risk, "openAlerts": sum(r["alerts"] for r in rows),
         "cves": cve_tot,
     }
+
+
+@router.get("/risk-distribution")
+def risk_distribution():
+    """Fleet-wide risk: band counts plus mean per-axis contribution (top driver)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT criticality, patch_age, cves, open_ports, tags, alerts FROM assets"
+        ).fetchall()
+    return fleet_risk_distribution(rows_to_dicts(rows))
 
 
 @router.get("/vulns")
