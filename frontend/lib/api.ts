@@ -173,6 +173,14 @@ export interface Rule {
   status: string
 }
 
+export interface Correlation {
+  pivot: 'src_ip' | 'hostname' | 'username'
+  value: string
+  alertCount: number
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
+  alerts: Array<{ id: string; title: string; severity: string; ts: string }>
+}
+
 export interface LogSource {
   id: string
   name: string
@@ -354,6 +362,15 @@ export interface ApiKey {
   revoked: boolean
 }
 
+export interface AuditEntry {
+  id: number
+  ts: string
+  actor: string | null
+  action: string
+  target: string | null
+  detail: string | null
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────
 export const authLogin = (email: string, password: string) =>
   api<{ token: string; user: User }>('/auth/login', {
@@ -388,8 +405,19 @@ export const patchAlert   = (id: string, body: Partial<Pick<SiemAlert, 'status' 
   api<SiemAlert>(`/siem/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const fetchSiemKpis = () => api<SiemKpis>('/siem/kpis')
 export const fetchRules    = () => api<Rule[]>('/siem/rules')
+export const patchRule     = (id: string, body: { status?: string; severityOverride?: string; suppressionWindow?: number }) =>
+  api<Rule>(`/siem/rules/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: body.status,
+      severity_override: body.severityOverride,
+      suppression_window: body.suppressionWindow,
+    }),
+  })
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const fetchSiemHunts  = () => api<SavedHunt[]>('/siem/hunts')
+export const fetchCorrelations = (minAlerts = 2) =>
+  api<Correlation[]>(`/siem/correlations?min_alerts=${minAlerts}`)
 
 // ── SOAR ─────────────────────────────────────────────────────────────
 export const fetchCases = (params?: Record<string, string>) => {
@@ -399,6 +427,8 @@ export const fetchCases = (params?: Record<string, string>) => {
 export const patchCase = (id: string, body: Partial<Pick<Case, 'status' | 'owner' | 'severity'>>) =>
   api<Case>(`/soar/cases/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const fetchPlaybooks = () => api<Playbook[]>('/soar/playbooks')
+export const runPlaybook = (id: string) =>
+  api<Playbook>(`/soar/playbooks/${id}/run`, { method: 'POST' })
 export const fetchSoarIntegrations = () => api<Integration[]>('/soar/integrations')
 export const fetchSoarMetrics = () => api<SoarMetrics>('/soar/metrics')
 
@@ -435,6 +465,10 @@ export const createApiKey    = (name: string, scope = 'read') =>
   api<ApiKey & { secret: string }>('/config/api-keys', { method: 'POST', body: JSON.stringify({ name, scope }) })
 export const revokeApiKey    = (id: string) =>
   api<void>(`/config/api-keys/${id}`, { method: 'DELETE' })
+export const fetchAuditLog   = (limit = 100, action?: string) => {
+  const q = new URLSearchParams({ limit: String(limit), ...(action ? { action } : {}) })
+  return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)
+}
 
 // ── Users ─────────────────────────────────────────────────────────────
 export const fetchUsers = () => api<User[]>('/users')

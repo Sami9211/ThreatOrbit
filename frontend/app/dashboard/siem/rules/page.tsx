@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchRules } from '@/lib/api'
+import { fetchRules, patchRule } from '@/lib/api'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -646,10 +646,13 @@ export default function RulesEnginePage() {
   }, [rulesData])
 
   function toggleRule(id: string) {
-    setStatuses((prev) => ({
-      ...prev,
-      [id]: prev[id] === 'enabled' ? 'disabled' : 'enabled',
-    }))
+    const prevStatus = statuses[id] ?? 'enabled'
+    const next = prevStatus === 'enabled' ? 'disabled' : 'enabled'
+    // Optimistic flip, persisted to the backend; revert on failure.
+    setStatuses((prev) => ({ ...prev, [id]: next }))
+    patchRule(id, { status: next }).catch(() => {
+      setStatuses((prev) => ({ ...prev, [id]: prevStatus }))
+    })
   }
 
   /* Escape to close */

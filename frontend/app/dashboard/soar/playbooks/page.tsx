@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchPlaybooks, type Playbook as ApiPlaybook } from '@/lib/api'
+import { fetchPlaybooks, runPlaybook, type Playbook as ApiPlaybook } from '@/lib/api'
 import {
   Zap, CheckCircle, RefreshCw, AlertTriangle, X, Shield, User,
   GitBranch, MessageSquare, Activity, Play, Edit2, Clock,
@@ -434,12 +434,14 @@ function StepDetailPanel({ pb, onClose }: { pb: Playbook; onClose: () => void })
 
 /* ── Playbook card ────────────────────────────────────────────────── */
 function PlaybookCard({
-  pb, selected, onClick, onToggle,
+  pb, selected, running, onClick, onToggle, onRun,
 }: {
   pb: Playbook
   selected: boolean
+  running: boolean
   onClick: () => void
   onToggle: (e: React.MouseEvent) => void
+  onRun: (e: React.MouseEvent) => void
 }) {
   const CatIcon = CAT_ICON[pb.category] || Globe
 
@@ -550,10 +552,16 @@ function PlaybookCard({
           <Edit2 className="w-3 h-3" /> Edit
         </button>
         <button
-          onClick={(e) => { e.stopPropagation() }}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] bg-violet/10 border border-violet/25 text-violet hover:bg-violet/20 transition-colors"
+          onClick={onRun}
+          disabled={running || !pb.enabled}
+          className={cn(
+            'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] border transition-colors',
+            running
+              ? 'bg-violet/20 border-violet/40 text-violet cursor-wait'
+              : 'bg-violet/10 border-violet/25 text-violet hover:bg-violet/20 disabled:opacity-40 disabled:cursor-not-allowed',
+          )}
         >
-          <Play className="w-3 h-3" /> Run
+          <Play className={cn('w-3 h-3', running && 'animate-pulse')} /> {running ? 'Running…' : 'Run'}
         </button>
         <div className="flex-1" />
         {/* Toggle */}
@@ -615,11 +623,32 @@ export default function PlaybooksPage() {
     }).catch(() => {})
   }, [])
 
+  const [runningId, setRunningId] = useState<string | null>(null)
+
   const selectedPB = playbooks.find((p) => p.id === selectedId) ?? null
 
   function toggleEnabled(id: string, e: React.MouseEvent) {
     e.stopPropagation()
     setPlaybooks((prev) => prev.map((p) => p.id === id ? { ...p, enabled: !p.enabled } : p))
+  }
+
+  async function runPlaybookById(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (runningId) return
+    setRunningId(id)
+    try {
+      const updated = await runPlaybook(id)
+      setPlaybooks((prev) => prev.map((p) => p.id === id ? {
+        ...p,
+        runCount: updated.runs,
+        lastRun: 'Just now',
+        lastRunStatus: 'success' as RunStatus,
+      } : p))
+    } catch {
+      setPlaybooks((prev) => prev.map((p) => p.id === id ? { ...p, lastRunStatus: 'failure' as RunStatus } : p))
+    } finally {
+      setRunningId(null)
+    }
   }
 
   const filtered = playbooks.filter((pb) => {
@@ -713,8 +742,10 @@ export default function PlaybooksPage() {
                   <PlaybookCard
                     pb={pb}
                     selected={selectedId === pb.id}
+                    running={runningId === pb.id}
                     onClick={() => setSelectedId((prev) => prev === pb.id ? null : pb.id)}
                     onToggle={(e) => toggleEnabled(pb.id, e)}
+                    onRun={(e) => runPlaybookById(pb.id, e)}
                   />
                 </motion.div>
               ))}

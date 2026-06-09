@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings, Key, Bell, Shield, Database, Globe, Plug,
   Eye, EyeOff, Copy, RefreshCw, CheckCircle, Save,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
-  PanelLeftOpen, PanelLeftClose, X,
+  PanelLeftOpen, PanelLeftClose, X, ScrollText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fetchAuditLog, type AuditEntry } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 import { useCursorEffect } from '@/lib/useCursorEffect'
@@ -477,6 +478,76 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+/* ── Audit trail ─────────────────────────────────────────────────── */
+const ACTION_COLOR: Record<string, string> = {
+  create: '#34F5C5', update: '#FFB23E', delete: '#FF4D6D',
+  revoke: '#FF4D6D', toggle: '#7A3CFF', run: '#FF2E97',
+}
+
+function actionTint(action: string): string {
+  const verb = action.split('.')[1] ?? action
+  return ACTION_COLOR[verb] ?? '#7A3CFF'
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return iso
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000))
+  if (secs < 60) return `${secs}s ago`
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+function AuditTrail() {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    fetchAuditLog(25)
+      .then(setEntries)
+      .catch(() => setError(true))
+  }, [])
+
+  return (
+    <Section title="Audit Trail" icon={ScrollText} color="#7A3CFF">
+      <p className="text-[11px] text-ink-500 mb-4">
+        Most recent mutations recorded server-side. Every state change — alerts, cases,
+        rules, users, keys, feeds — is captured with actor and target.
+      </p>
+      {error && (
+        <p className="text-xs text-ink-600 py-6 text-center">
+          Audit log unavailable. Start the dashboard API to see live activity.
+        </p>
+      )}
+      {!error && entries === null && (
+        <p className="text-xs text-ink-600 py-6 text-center animate-pulse">Loading audit trail…</p>
+      )}
+      {!error && entries !== null && entries.length === 0 && (
+        <p className="text-xs text-ink-600 py-6 text-center">No activity recorded yet.</p>
+      )}
+      {!error && entries !== null && entries.length > 0 && (
+        <div className="space-y-0.5 max-h-80 overflow-y-auto">
+          {entries.map((e) => (
+            <div key={e.id} className="flex items-center gap-3 py-2 border-b border-white/4 last:border-0 text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: actionTint(e.action) }} />
+              <span className="font-mono text-ink-200 shrink-0 w-32 truncate">{e.action}</span>
+              <span className="text-ink-500 flex-1 min-w-0 truncate">
+                {e.actor ?? 'system'}
+                {e.target && <span className="text-ink-600"> → {e.target}</span>}
+                {e.detail && <span className="text-ink-700"> · {e.detail}</span>}
+              </span>
+              <span className="text-ink-600 shrink-0 tabular-nums">{relativeTime(e.ts)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 export default function ConfigPage() {
   const [tab, setTab] = useState('general')
   const [saved, setSaved] = useState(false)
@@ -625,6 +696,8 @@ export default function ConfigPage() {
               <Toggle label="Automated Threat Blocking"    description="Auto-block IPs with confidence score > 90%"     checked={true}  />
             </Section>
           )}
+
+          {tab === 'security' && <AuditTrail />}
 
           {tab === 'integrations' && (
             <Section title="Integrations" icon={Plug} color="#FFB23E">
