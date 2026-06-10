@@ -10,9 +10,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchRules, patchRule, deleteRule } from '@/lib/api'
+import { fetchRules, patchRule, deleteRule, exportSigmaRule } from '@/lib/api'
 import RuleEditor from '@/components/dashboard/RuleEditor'
 import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
+import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -586,8 +587,20 @@ function RulePanel({ rule, onClose, onToggle }: {
         >
           <CheckCircle className="w-3.5 h-3.5" /> Save Changes
         </button>
-        <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
-          <Edit2 className="w-3.5 h-3.5" /> Edit in Builder
+        <button
+          onClick={() => {
+            exportSigmaRule(rule.id).then((r) => {
+              const blob = new Blob([r.yaml], { type: 'text/yaml;charset=utf-8' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${rule.id.toLowerCase()}-sigma.yml`
+              a.click()
+              URL.revokeObjectURL(url)
+            }).catch(() => {})
+          }}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
+          <Code2 className="w-3.5 h-3.5" /> Export Sigma
         </button>
         <button className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-threat/70 hover:text-threat border border-transparent hover:border-threat/30 hover:bg-threat/10 transition-colors">
           <Trash2 className="w-3.5 h-3.5" /> Delete Rule
@@ -720,12 +733,16 @@ export default function RulesEnginePage() {
           </div>
           <p className="text-sm text-ink-500">Detection rules powering your alert pipeline</p>
         </div>
-        <button
-          onClick={() => setShowNewRule(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
-          <Plus className="w-4 h-4" />
-          New Rule
-        </button>
+        <div className="flex items-center gap-2">
+          <SigmaImportButton onImported={() =>
+            fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
+          <button
+            onClick={() => setShowNewRule(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
+            <Plus className="w-4 h-4" />
+            New Rule
+          </button>
+        </div>
       </motion.div>
 
       {/* ── KPI strip ── */}

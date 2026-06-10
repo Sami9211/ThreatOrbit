@@ -39,11 +39,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 1 — SIEM depth (detection & monitoring)
 
-- [~] **Detection rule editor** — DONE: author rules with field conditions,
+- [x] **Detection rule editor** — DONE: author rules with field conditions,
       AND/OR logic, threshold-over-window aggregation, and a live backtest;
-      built-in rules now evaluate the raw event stream; per-rule/entity
-      suppression UI + FP tuning shipped (see CHANGELOG). Remaining: Sigma
-      import/export.
+      built-in rules evaluate the raw event stream; per-rule/entity
+      suppression UI + FP tuning; Sigma import/export (see CHANGELOG).
 - [~] **Real log-source ingestion** — DONE: native HTTP collector
       (`POST /siem/ingest`) parses syslog/Apache/JSON/key=value lines into
       events and runs detection on them; a Log Collector panel on SIEM →
@@ -145,6 +144,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Sigma rule import/export (Phase 1 close-out)** — community
+  detection content ports in: `POST /siem/rules/import-sigma` parses Sigma
+  YAML (selections + field modifiers |contains/|re/|cidr/|gt…/|startswith,
+  lists → `in`, and/or conditions, `count() by` aggregation → threshold rule,
+  level → severity, attack.* tags → MITRE) into a live, evaluable rule —
+  field names resolve through a Sigma map + the ECS alias layer, unmappable
+  fields degrade to raw-contains with explicit import notes; unsupported
+  grammar (`not`/`1 of`/grouping) is rejected with a clear error, never
+  silently weakened. `GET /siem/rules/{id}/sigma` exports: original YAML for
+  Sigma-imported rules, generated Sigma for native ones (round-trips, incl.
+  aggregation). UI: “Import Sigma” modal on SIEM → Rules + “Export Sigma”
+  download in the rule panel. Tested incl. detection firing on live ingest.
 
 - **2026-06-10 · Case depth: SLA tracking, linked evidence, post-incident
   reports (Phase 2)** — every case read now carries computed SLA state

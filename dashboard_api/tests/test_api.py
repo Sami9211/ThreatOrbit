@@ -1230,6 +1230,67 @@ def test_playbook_crud_validation(client, auth):
     assert client.patch("/soar/playbooks/missing", json={"enabled": False}, headers=auth).status_code == 404
 
 
+SIGMA_SAMPLE = """
+title: Suspicious brute force from scanner range
+status: experimental
+description: Multiple failed logins from a known scanner subnet
+tags:
+  - attack.credential_access
+  - attack.t1110
+logsource:
+  category: authentication
+detection:
+  selection:
+    event_type: failed_login
+    src_ip|cidr: 203.0.113.0/24
+  condition: selection
+level: high
+"""
+
+
+def test_sigma_import_export(client, auth):
+    """Sigma YAML imports as a live, evaluable rule (and actually detects);
+    export round-trips the original and generates Sigma for native rules."""
+    r = client.post("/siem/rules/import-sigma", json={"yaml": SIGMA_SAMPLE}, headers=auth)
+    assert r.status_code == 201, r.text
+    rule = r.json()
+    assert rule["severity"] == "high" and rule["source"] == "sigma"
+    assert rule["mitre_tech_id"] == "T1110" and rule["mitre_tactic"] == "Credential Access"
+    ops = {(c["field"], c["op"]) for c in rule["definition"]["conditions"]}
+    assert ("event_type", "equals") in ops and ("src_ip", "cidr") in ops
+
+    # the imported rule detects on live ingestion
+    client.post("/siem/ingest", json={
+        "lines": ["Jan 10 10:00:00 web01 sshd[9]: Failed password for root from 203.0.113.55 port 5050"]},
+        headers=auth)
+    hits = client.get("/siem/alerts?q=Suspicious brute force from scanner", headers=auth).json()
+    assert hits["total"] >= 1
+
+    # export: original YAML comes back for sigma-imported rules
+    exp = client.get(f"/siem/rules/{rule['id']}/sigma", headers=auth).json()
+    assert exp["source"] == "original" and "attack.t1110" in exp["yaml"]
+
+    # native rules export as generated Sigma that parses back
+    import yaml as _yaml
+    native = client.post("/siem/rules", json={
+        "name": "Native egress watch", "severity": "medium", "mitre_tech_id": "T1041",
+        "definition": {"conditions": [{"field": "bytes_out", "op": "gte", "value": 1000000}],
+                       "logic": "and",
+                       "aggregation": {"groupBy": "src_ip", "threshold": 3, "windowMinutes": 5}}},
+        headers=auth).json()
+    gen = client.get(f"/siem/rules/{native['id']}/sigma", headers=auth).json()
+    assert gen["source"] == "generated"
+    doc = _yaml.safe_load(gen["yaml"])
+    assert doc["title"] == "Native egress watch" and "count() by" in doc["detection"]["condition"]
+
+    # guard rails
+    assert client.post("/siem/rules/import-sigma", json={"yaml": "just a string"},
+                       headers=auth).status_code == 400
+    bad = SIGMA_SAMPLE.replace("condition: selection", "condition: selection and not filter")
+    assert client.post("/siem/rules/import-sigma", json={"yaml": bad}, headers=auth).status_code == 400
+    assert client.get("/siem/rules/NOPE/sigma", headers=auth).status_code == 404
+
+
 def test_case_sla_and_related_evidence(client, auth):
     """Cases carry computed SLA tracking; /related links alerts, IOCs, playbook
     runs and a MITRE-mapped timeline through the case's entities."""

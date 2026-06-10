@@ -446,6 +446,56 @@ def create_rule(body: RuleCreate, user: dict = Depends(current_user)):
     return row_to_dict(row)
 
 
+class SigmaImport(BaseModel):
+    yaml: str
+
+
+@router.post("/rules/import-sigma", status_code=201)
+def import_sigma_rule(body: SigmaImport, user: dict = Depends(current_user)):
+    """Import a Sigma YAML rule as a live, evaluable detection rule."""
+    from dashboard_api.sigma import sigma_to_rule
+    if not body.yaml.strip():
+        raise HTTPException(status_code=400, detail="Sigma YAML is required")
+    try:
+        mapped = sigma_to_rule(body.yaml)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    rid = f"R-{uuid.uuid4().hex[:6].upper()}"
+    now = _now_iso()
+    from dashboard_api.db import dumps
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tactic_id,"
+            "mitre_tech_id,mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,"
+            "created,updated_by,description,kql,suppression_window,severity_override,tags,definition) "
+            "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','sigma',NULL,?,?,?,?,0,NULL,?,?)",
+            (rid, mapped["name"], mapped["category"], mapped["severity"], mapped["mitre_tactic"],
+             mapped["mitre_tactic_id"], mapped["mitre_tech_id"], now, user["email"],
+             mapped["description"], body.yaml, dumps(mapped["tags"]), dumps(mapped["definition"])),
+        )
+        audit(conn, user["email"], "rule.import_sigma", rid, f"name={mapped['name']}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM detection_rules WHERE id=?", (rid,)).fetchone()
+    return {**row_to_dict(row), "importNotes": mapped["notes"]}
+
+
+@router.get("/rules/{rule_id}/sigma")
+def export_sigma_rule(rule_id: str):
+    """Export a rule as Sigma YAML — the original document for Sigma-imported
+    rules, generated Sigma for natively-authored ones."""
+    from dashboard_api.sigma import rule_to_sigma
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM detection_rules WHERE id=?", (rule_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    rule = row_to_dict(row)
+    if rule.get("source") == "sigma" and "detection" in (rule.get("kql") or ""):
+        return {"yaml": rule["kql"], "source": "original"}
+    if not (rule.get("definition") or {}).get("conditions"):
+        raise HTTPException(status_code=400, detail="Rule has no evaluable definition to export")
+    return {"yaml": rule_to_sigma(rule), "source": "generated"}
+
+
 @router.post("/ingest")
 def ingest(body: IngestBody, user: dict = Depends(current_user)):
     """Native log collector: POST raw log lines (syslog/apache/json/kv/auto),

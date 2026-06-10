@@ -498,6 +498,12 @@ export const patchRule     = (id: string, body: { status?: string; severityOverr
   })
 export const deleteRule = (id: string) =>
   api<void>(`/siem/rules/${id}`, { method: 'DELETE' })
+export const importSigmaRule = (yamlText: string) =>
+  api<Rule & { importNotes: string[] }>('/siem/rules/import-sigma', {
+    method: 'POST', body: JSON.stringify({ yaml: yamlText }),
+  })
+export const exportSigmaRule = (id: string) =>
+  api<{ yaml: string; source: 'original' | 'generated' }>(`/siem/rules/${id}/sigma`)
 
 // ── Alert tuning: suppressions / allow-lists ─────────────────────────
 export interface Suppression {
