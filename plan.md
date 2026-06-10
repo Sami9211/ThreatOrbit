@@ -38,21 +38,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       AND/OR logic, threshold-over-window aggregation, and a live backtest;
       built-in rules now evaluate the raw event stream (see CHANGELOG).
       Remaining: Sigma import/export, per-rule suppression UI, FP tuning.
-- [ ] **Real log-source ingestion** — a syslog/HTTP-collector listener and a
-      file/directory watcher so production logs stream in (not just uploads).
+- [~] **Real log-source ingestion** — DONE: native HTTP collector
+      (`POST /siem/ingest`) parses syslog/Apache/JSON/key=value lines into
+      events and runs detection on them; a Log Collector panel on SIEM →
+      Sources. Remaining: a long-running syslog UDP listener + file/dir watcher.
 - [ ] **Field normalization to ECS** (Elastic Common Schema) so rules and
       searches are vendor-neutral.
 - [ ] **UEBA** — per-entity (user/host) behavioural baselines and anomaly
       scoring over time; risk timelines.
 - [ ] **Alert tuning workflow** — false-positive feedback loop that adjusts rule
       confidence; allow/deny lists per rule+entity.
-- [ ] **Full ATT&CK navigator** — coverage matrix, technique drill-down to the
-      alerts/rules that cover it, gaps highlighted.
+- [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
+      tactic, per-technique drill-down to rules/alerts, gaps highlighted.
 - [ ] **Search/hunt language** — expand the hunt engine to real field operators,
       aggregations, joins, and saved/scheduled hunts that raise alerts.
-- [ ] **Threat-intel matching** — automatically match incoming events against
-      the CTI IOC store and raise enriched alerts (partly done; make it a first-
-      class, configurable detection).
+- [x] **Threat-intel matching** — DONE: ingested/generated events whose IP
+      matches a known malicious IOC raise an enriched intel alert (R-TIMATCH).
 
 ## Phase 2 — SOAR depth (orchestration & response)
 
@@ -112,6 +113,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Log ingestion + ATT&CK navigator + TI matching (Phase 1)** —
+  native log collector (`ingest.py`, `POST /siem/ingest`): parses syslog,
+  Apache/Nginx, JSON, and key=value lines into events (content-signature
+  inference for event_type/MITRE), then runs the detection rules on them — so
+  production logs stream in (a Log Collector panel on SIEM → Sources lets you
+  paste/forward lines). Threat-intel matching: any event IP matching a
+  critical/high IOC raises an enriched R-TIMATCH alert. ATT&CK Navigator
+  (`/siem/attack-coverage` + new page): coverage matrix by tactic, per-technique
+  rule/alert counts, gaps highlighted, drill-down to alerts/rules/MITRE.
 
 - **2026-06-10 · Detection rule engine + editor (Phase 1)** — the SIEM now
   works like a real SIEM: the live engine emits raw telemetry into an `events`

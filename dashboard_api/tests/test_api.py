@@ -943,3 +943,36 @@ def test_engine_rule_driven_detection(client, auth):
     assert after["total"] > before
     # alerts carry the rule's name + MITRE (came from a matched rule)
     assert any(a["rule_name"] and a["mitre_tech_id"] for a in after["items"])
+
+
+def test_log_ingestion_parses_and_detects(client, auth):
+    """Native collector: raw log lines → events → rule-driven alerts."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    before = client.get("/siem/alerts", headers=auth).json()["total"]
+    lines = [
+        "Jan 10 03:22:01 web01 sshd[2451]: Failed password for root from 45.9.1.2 port 51110",
+        '192.0.2.55 - admin [10/Jan/2025:03:22:05] "GET /index.php?id=1\' OR 1=1-- HTTP/1.1" 200',
+        '{"event_type":"beacon","src_ip":"10.0.0.9","dest_ip":"185.2.3.4","dest_port":443}',
+        "src=10.0.0.5 dst=8.8.8.8 user=svc-backup msg=normal traffic",
+    ]
+    r = client.post("/siem/ingest", json={"lines": lines, "format": "auto"}, headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["parsed"] == 4 and body["alerts"] >= 2  # failed_login, web sqli, beacon fire rules
+    assert client.get("/siem/alerts", headers=auth).json()["total"] > before
+    bf = client.get("/siem/alerts?q=45.9.1.2", headers=auth).json()
+    assert bf["total"] >= 1 and any(a["src_ip"] == "45.9.1.2" for a in bf["items"])
+    # guard rails
+    assert client.post("/siem/ingest", json={"lines": []}, headers=auth).status_code == 400
+    assert client.post("/siem/ingest", json={"lines": ["x"], "format": "bogus"}, headers=auth).status_code == 400
+
+
+def test_attack_coverage(client, auth):
+    cov = client.get("/siem/attack-coverage", headers=auth).json()
+    assert "tactics" in cov and "summary" in cov
+    assert cov["summary"]["techniques"] > 0
+    assert "coveragePct" in cov["summary"]
+    # each technique entry has the coverage fields
+    techs = [t for tac in cov["tactics"] for t in tac["techniques"]]
+    assert all("covered" in t and "rules" in t and "alerts" in t for t in techs)

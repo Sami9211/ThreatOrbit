@@ -520,6 +520,18 @@ export const createDetectionRule = (body: {
 }) })
 export const updateRuleDefinition = (id: string, definition: RuleDefinition) =>
   api<Rule>(`/siem/rules/${id}`, { method: 'PATCH', body: JSON.stringify({ definition }) })
+
+// ── Native log ingestion + ATT&CK coverage ──────────────────────────
+export const ingestLogs = (lines: string[], format = 'auto', source = 'collector') =>
+  api<{ ingested: number; parsed: number; alerts: number; tiMatches: number; source: string }>(
+    '/siem/ingest', { method: 'POST', body: JSON.stringify({ lines, format, source }) })
+
+export interface AttackTechnique { technique: string; name: string; rules: number; alerts: number; covered: boolean }
+export interface AttackCoverage {
+  tactics: Array<{ tactic: string; techniques: AttackTechnique[] }>
+  summary: { techniques: number; covered: number; gaps: number; coveragePct: number }
+}
+export const fetchAttackCoverage = () => api<AttackCoverage>('/siem/attack-coverage')
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const createLogSource = (body: { name: string; type?: string; host?: string; format?: string; tags?: string[] }) =>
   api<LogSource>('/siem/sources', { method: 'POST', body: JSON.stringify(body) })

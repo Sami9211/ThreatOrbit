@@ -78,6 +78,7 @@ const NAV: NavGroup[] = [
         sub: [
           { href: '/dashboard/siem',         label: 'Alert Queue' },
           { href: '/dashboard/siem/rules',   label: 'Rules Engine' },
+          { href: '/dashboard/siem/attack',  label: 'ATT&CK Navigator' },
           { href: '/dashboard/siem/sources', label: 'Log Sources' },
           { href: '/dashboard/siem/hunt',    label: 'Threat Hunt' },
         ],

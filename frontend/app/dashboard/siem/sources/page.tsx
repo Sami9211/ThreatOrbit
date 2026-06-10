@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { fetchSiemSources, createLogSource } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import LogAnalysisPanel from '@/components/dashboard/LogAnalysisPanel'
+import LogCollectorPanel from '@/components/dashboard/LogCollectorPanel'
 
 type SourceStatus = 'healthy' | 'degraded' | 'offline' | 'paused'
 type SourceType = 'Syslog' | 'Windows Event' | 'CEF/ArcSight' | 'API Pull' | 'Kafka' | 'S3 Bucket' | 'Splunk Forwarder'
@@ -121,8 +122,9 @@ export default function SiemSourcesPage() {
         ))}
       </div>
 
-      {/* Live log-analysis bridge */}
-      <div className="px-6 pt-4 shrink-0">
+      {/* Native log collector + deep-analysis bridge */}
+      <div className="px-6 pt-4 shrink-0 space-y-4">
+        <LogCollectorPanel />
         <LogAnalysisPanel />
       </div>
 

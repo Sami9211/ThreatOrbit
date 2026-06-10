@@ -65,6 +65,12 @@ class RuleTest(BaseModel):
     definition: dict
 
 
+class IngestBody(BaseModel):
+    lines: list[str]
+    format: str = "auto"
+    source: str = "collector"
+
+
 class SourceCreate(BaseModel):
     name: str
     type: str = "Syslog"
@@ -288,6 +294,76 @@ def create_rule(body: RuleCreate, user: dict = Depends(current_user)):
         conn.commit()
         row = conn.execute("SELECT * FROM detection_rules WHERE id=?", (rid,)).fetchone()
     return row_to_dict(row)
+
+
+@router.post("/ingest")
+def ingest(body: IngestBody, user: dict = Depends(current_user)):
+    """Native log collector: POST raw log lines (syslog/apache/json/kv/auto),
+    they're parsed into events and the detection rules + threat-intel matching
+    fire on them. This is how production logs stream into the SIEM."""
+    if not body.lines:
+        raise HTTPException(status_code=400, detail="No log lines supplied")
+    if len(body.lines) > 5000:
+        raise HTTPException(status_code=400, detail="Max 5000 lines per request")
+    if body.format not in ("auto", "json", "apache", "nginx", "kv", "syslog", "generic"):
+        raise HTTPException(status_code=400, detail="Unsupported format")
+    from dashboard_api.ingest import ingest_lines
+    result = ingest_lines(body.lines, body.format, body.source.strip() or "collector")
+    with get_conn() as conn:
+        audit(conn, user["email"], "siem.ingest", body.source,
+              f"lines={result['parsed']} alerts={result['alerts']}")
+        conn.commit()
+    return result
+
+
+@router.get("/attack-coverage")
+def attack_coverage():
+    """ATT&CK navigator data: per-technique rule coverage + observed alert
+    volume, grouped by tactic, with coverage gaps highlighted."""
+    import json as _json
+    # MITRE technique → human name (the subset our rules/alerts use, extensible).
+    TECH_NAME = {
+        "T1110": "Brute Force", "T1078": "Valid Accounts", "T1059.001": "PowerShell",
+        "T1190": "Exploit Public-Facing App", "T1083": "File & Directory Discovery",
+        "T1071.001": "Web Protocols", "T1041": "Exfiltration Over C2", "T1566.002": "Spearphishing Link",
+        "T1046": "Network Service Discovery", "T1204": "User Execution", "T1505.003": "Web Shell",
+        "T1003": "OS Credential Dumping", "T1021": "Remote Services", "T1486": "Data Encrypted for Impact",
+    }
+    TACTIC = {
+        "T1110": "Credential Access", "T1003": "Credential Access", "T1078": "Defense Evasion",
+        "T1059.001": "Execution", "T1204": "Execution", "T1190": "Initial Access",
+        "T1566.002": "Initial Access", "T1505.003": "Persistence", "T1083": "Discovery",
+        "T1046": "Discovery", "T1071.001": "Command and Control", "T1041": "Exfiltration",
+        "T1021": "Lateral Movement", "T1486": "Impact",
+    }
+    with get_conn() as conn:
+        rules = conn.execute(
+            "SELECT mitre_tech_id, status FROM detection_rules WHERE mitre_tech_id IS NOT NULL"
+        ).fetchall()
+        alerts = conn.execute(
+            "SELECT mitre_tech_id, COUNT(*) AS n FROM alerts WHERE mitre_tech_id IS NOT NULL GROUP BY mitre_tech_id"
+        ).fetchall()
+    rule_cov: dict[str, int] = {}
+    for r in rules:
+        if r["status"] == "enabled":
+            rule_cov[r["mitre_tech_id"]] = rule_cov.get(r["mitre_tech_id"], 0) + 1
+    alert_cnt = {a["mitre_tech_id"]: a["n"] for a in alerts}
+    techniques = set(TECH_NAME) | set(rule_cov) | set(alert_cnt)
+    by_tactic: dict[str, list] = {}
+    for t in sorted(techniques):
+        tactic = TACTIC.get(t.split(".")[0]) or TACTIC.get(t) or "Other"
+        by_tactic.setdefault(tactic, []).append({
+            "technique": t, "name": TECH_NAME.get(t, t),
+            "rules": rule_cov.get(t, 0), "alerts": alert_cnt.get(t, 0),
+            "covered": rule_cov.get(t, 0) > 0,
+        })
+    covered = sum(1 for t in techniques if rule_cov.get(t, 0) > 0)
+    return {
+        "tactics": [{"tactic": k, "techniques": v} for k, v in by_tactic.items()],
+        "summary": {"techniques": len(techniques), "covered": covered,
+                    "gaps": len(techniques) - covered,
+                    "coveragePct": round(covered / len(techniques) * 100) if techniques else 0},
+    }
 
 
 @router.get("/rule-schema")

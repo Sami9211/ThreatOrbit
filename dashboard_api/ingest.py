@@ -1,0 +1,219 @@
+"""Native log-source ingestion — the collector side of the SIEM.
+
+Accepts raw log lines (syslog, Apache/Nginx, JSON, key=value, or generic),
+parses them into normalised `events` rows, and lets the detection rule engine
+fire on them. This is how production logs stream into the SIEM (an agent or
+syslog forwarder POSTs lines to /siem/ingest), distinct from the deep-analysis
+path that hands a whole file to the Log API's ML detectors.
+
+Every parser returns the same normalised event shape the rule engine reads:
+{category, event_type, src_ip, dest_ip, dest_port, username, hostname,
+ process_name, action, bytes_out, severity_hint, mitre_tech_id, raw}.
+"""
+import json
+import re
+import uuid
+from datetime import datetime, timezone
+
+from dashboard_api.db import get_conn
+
+_IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+_USER = re.compile(r"(?:user(?:name)?|account|for)\s*[=:]?\s*([A-Za-z0-9._\\-]+)", re.I)
+_HOST = re.compile(r"\bhost(?:name)?\s*[=:]\s*([A-Za-z0-9._-]+)", re.I)
+
+# Content → (event_type, category, severity_hint, mitre) inference. First match wins.
+_SIGNATURES = [
+    (re.compile(r"failed password|authentication failure|invalid user|login failed", re.I),
+     ("failed_login", "auth", "high", "T1110")),
+    (re.compile(r"accepted password|session opened|login success", re.I),
+     ("login_success", "auth", "low", "T1078")),
+    (re.compile(r"sql(?:i| injection)|union select|' or '1'='1|1=1--", re.I),
+     ("web_request", "web", "high", "T1190")),
+    (re.compile(r"\.\./|directory traversal|/etc/passwd", re.I),
+     ("web_request", "web", "high", "T1083")),
+    (re.compile(r"powershell.{0,40}-enc|invoke-expression|downloadstring|mimikatz", re.I),
+     ("process_start", "endpoint", "high", "T1059.001")),
+    (re.compile(r"malware|trojan|ransom|verdict=malicious|virus", re.I),
+     ("process_start", "endpoint", "critical", "T1204")),
+    (re.compile(r"beacon|c2|command.?and.?control|cobalt", re.I),
+     ("beacon", "network", "critical", "T1071.001")),
+    (re.compile(r"added to .*(admin|sudoers)|EventID=4728|privilege", re.I),
+     ("group_change", "identity", "high", "T1078")),
+    (re.compile(r"port ?scan|nmap|masscan", re.I),
+     ("port_scan", "network", "medium", "T1046")),
+]
+
+
+def _infer(text: str) -> tuple[str, str, str, str | None]:
+    for rx, meta in _SIGNATURES:
+        if rx.search(text):
+            return meta
+    return ("log", "generic", "info", None)
+
+
+def _base_event(raw: str) -> dict:
+    et, cat, sev, mitre = _infer(raw)
+    ips = _IPV4.findall(raw)
+    user_m = _USER.search(raw)
+    host_m = _HOST.search(raw)
+    return {
+        "category": cat, "event_type": et, "severity_hint": sev, "mitre_tech_id": mitre,
+        "src_ip": ips[0] if ips else None,
+        "dest_ip": ips[1] if len(ips) > 1 else None,
+        "username": user_m.group(1) if user_m else None,
+        "hostname": host_m.group(1) if host_m else None,
+        "raw": raw[:1000],
+    }
+
+
+def _parse_json(line: str) -> dict | None:
+    try:
+        obj = json.loads(line)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    ev = _base_event(line)
+    # Map common JSON keys onto the normalised shape.
+    def pick(*keys):
+        for k in keys:
+            if obj.get(k) not in (None, ""):
+                return obj[k]
+        return None
+    ev["src_ip"] = pick("src_ip", "source_ip", "srcip", "client_ip", "ip") or ev["src_ip"]
+    ev["dest_ip"] = pick("dest_ip", "destination_ip", "dstip") or ev["dest_ip"]
+    ev["username"] = pick("user", "username", "user_name", "account") or ev["username"]
+    ev["hostname"] = pick("host", "hostname", "computer", "device") or ev["hostname"]
+    ev["process_name"] = pick("process", "process_name", "image")
+    dp = pick("dest_port", "dst_port", "port")
+    if dp is not None:
+        try:
+            ev["dest_port"] = int(dp)
+        except (ValueError, TypeError):
+            pass
+    bo = pick("bytes_out", "bytes", "bytes_sent")
+    if bo is not None:
+        try:
+            ev["bytes_out"] = int(bo)
+        except (ValueError, TypeError):
+            pass
+    if obj.get("event_type"):
+        ev["event_type"] = str(obj["event_type"])
+    return ev
+
+
+def _parse_kv(line: str) -> dict:
+    ev = _base_event(line)
+    for m in re.finditer(r"(\w+)=([^\s]+)", line):
+        k, v = m.group(1).lower(), m.group(2).strip('"')
+        if k in ("src", "src_ip", "srcip", "client"):
+            ev["src_ip"] = v
+        elif k in ("dst", "dest_ip", "dstip"):
+            ev["dest_ip"] = v
+        elif k in ("user", "username", "account"):
+            ev["username"] = v
+        elif k in ("host", "hostname", "computer"):
+            ev["hostname"] = v
+        elif k in ("dport", "dest_port", "port"):
+            try:
+                ev["dest_port"] = int(v)
+            except ValueError:
+                pass
+    return ev
+
+
+_APACHE = re.compile(r'^(\d{1,3}(?:\.\d{1,3}){3})\s+\S+\s+(\S+)\s+\[[^\]]+\]\s+"([^"]*)"\s+(\d{3})')
+
+
+def _parse_apache(line: str) -> dict | None:
+    m = _APACHE.match(line)
+    if not m:
+        return None
+    ev = _base_event(line)
+    ev["src_ip"] = m.group(1)
+    if m.group(2) not in ("-", ""):
+        ev["username"] = m.group(2)
+    ev["action"] = m.group(3).split()[0] if m.group(3) else "GET"
+    ev["category"], ev["event_type"] = "web", ev["event_type"] if ev["event_type"] != "log" else "web_request"
+    return ev
+
+
+def parse_line(line: str, fmt: str = "auto") -> dict | None:
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if fmt in ("json", "auto") and line[:1] in "{[":
+        ev = _parse_json(line)
+        if ev:
+            return ev
+    if fmt in ("apache", "nginx", "auto"):
+        ev = _parse_apache(line)
+        if ev:
+            return ev
+    if fmt == "kv" or (fmt == "auto" and "=" in line and " " in line):
+        return _parse_kv(line)
+    return _base_event(line)
+
+
+def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector") -> dict:
+    """Parse lines → events → run detection. Returns {ingested, parsed, alerts}."""
+    from dashboard_api.engine import run_detection, seed_builtin_rules
+    seed_builtin_rules()
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    parsed = 0
+    with get_conn() as conn:
+        for line in lines:
+            ev = parse_line(line, fmt)
+            if ev is None:
+                continue
+            conn.execute(
+                "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
+                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,processed) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+                (str(uuid.uuid4()), now, ev.get("category"), ev.get("event_type"),
+                 ev.get("src_ip"), ev.get("dest_ip"), ev.get("dest_port"), ev.get("username"),
+                 ev.get("hostname"), ev.get("process_name"), ev.get("action"),
+                 ev.get("bytes_out", 0), ev.get("country"), ev.get("severity_hint"),
+                 ev.get("mitre_tech_id"), ev.get("raw")),
+            )
+            parsed += 1
+        det = run_detection(conn)
+        # threat-intel matching over the just-ingested events
+        ti = match_threat_intel(conn)
+        conn.commit()
+    return {"ingested": len(lines), "parsed": parsed,
+            "alerts": det["alerts"] + ti, "tiMatches": ti, "source": source}
+
+
+def match_threat_intel(conn) -> int:
+    """First-class TI detection: any event whose src/dest IP or hostname matches
+    a known malicious IOC raises an enriched 'threat intel match' alert."""
+    from dashboard_api.detections import alert_from_intel
+    rows = conn.execute(
+        "SELECT id, src_ip, dest_ip, hostname FROM events WHERE processed IN (0,1) "
+        "ORDER BY ts DESC LIMIT 300"
+    ).fetchall()
+    raised = 0
+    seen = set()
+    for e in rows:
+        for val in (e["src_ip"], e["dest_ip"]):
+            if not val or val in seen:
+                continue
+            ioc = conn.execute(
+                "SELECT type, value, severity, confidence, threat_type, actor, source "
+                "FROM iocs WHERE value=? AND severity IN ('critical','high')", (val,)
+            ).fetchone()
+            if not ioc:
+                continue
+            # avoid duplicate intel alerts for the same value
+            if conn.execute("SELECT 1 FROM alerts WHERE src_ip=? AND rule_id='R-TIMATCH'", (val,)).fetchone():
+                seen.add(val)
+                continue
+            aid = alert_from_intel(conn, value=ioc["value"], ioc_type=ioc["type"],
+                                   severity=ioc["severity"], confidence=ioc["confidence"] or 70,
+                                   threat_type=ioc["threat_type"] or "", actor_name=ioc["actor"] or "",
+                                   source=ioc["source"] or "CTI")
+            conn.execute("UPDATE alerts SET rule_id='R-TIMATCH' WHERE id=?", (aid,))
+            raised += 1
+            seen.add(val)
+    return raised
