@@ -976,3 +976,58 @@ def test_attack_coverage(client, auth):
     # each technique entry has the coverage fields
     techs = [t for tac in cov["tactics"] for t in tac["techniques"]]
     assert all("covered" in t and "rules" in t and "alerts" in t for t in techs)
+
+
+def test_global_search(client, auth):
+    # seed some data via the engine, then search across stores
+    client.post("/config/engine", json={"generate": 6}, headers=auth)
+    r = client.get("/search?q=a", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert "results" in body and isinstance(body["results"], list)
+    assert all({"kind", "label", "link"} <= set(x) for x in body["results"])
+    assert client.get("/search?q=", headers=auth).status_code == 422  # min_length
+
+
+def test_notifications_centre(client, auth):
+    client.post("/config/engine", json={"generate": 8}, headers=auth)
+    n = client.get("/notifications", headers=auth).json()
+    assert "items" in n and "unread" in n
+    if n["items"]:
+        nid = n["items"][0]["id"]
+        assert client.post("/notifications/read", json={"id": nid}, headers=auth).json()["ok"]
+    # mark all read
+    client.post("/notifications/read", json={}, headers=auth)
+    assert client.get("/notifications", headers=auth).json()["unread"] == 0
+
+
+def test_report_schedules(client, auth):
+    s = client.post("/report-schedules", json={"kind": "executive", "cadence": "weekly",
+                                               "webhook_url": "https://example.com/hook"}, headers=auth)
+    assert s.status_code == 201, s.text
+    sid = s.json()["id"]
+    assert client.post("/report-schedules", json={"kind": "bogus"}, headers=auth).status_code == 400
+    run = client.post(f"/report-schedules/{sid}/run", headers=auth).json()
+    assert run["generated"] is True and "title" in run
+    assert any(x["id"] == sid for x in client.get("/report-schedules", headers=auth).json())
+    assert client.delete(f"/report-schedules/{sid}", headers=auth).status_code == 204
+
+
+def test_saved_views(client, auth):
+    v = client.post("/saved-views", json={"section": "siem", "name": "Critical only",
+                                          "filters": {"severity": "critical"}}, headers=auth)
+    assert v.status_code == 201
+    vid = v.json()["id"]
+    views = client.get("/saved-views?section=siem", headers=auth).json()
+    assert any(x["id"] == vid and x["filters"]["severity"] == "critical" for x in views)
+    assert client.delete(f"/saved-views/{vid}", headers=auth).status_code == 204
+
+
+def test_audit_export_and_retention(client, auth):
+    # generate some auditable activity
+    client.post("/config/engine", json={"generate": 4}, headers=auth)
+    exp = client.get("/config/audit-export", headers=auth)
+    assert exp.status_code == 200 and "text/csv" in exp.headers["content-type"]
+    assert "ts,actor,action" in exp.text
+    ret = client.post("/config/retention/enforce", headers=auth).json()
+    assert "retentionDays" in ret and "purged" in ret

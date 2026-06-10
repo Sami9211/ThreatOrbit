@@ -13,7 +13,7 @@ import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
   fetchApiKeys, createApiKey, revokeApiKey,
   fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
-  fetchEngineStatus, controlEngine,
+  fetchEngineStatus, controlEngine, enforceRetention,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
@@ -681,6 +681,7 @@ function ChangePassword() {
 function AuditTrail() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null)
   const [error, setError] = useState(false)
+  const [retentionMsg, setRetentionMsg] = useState<string | null>(null)
 
   useEffect(() => {
     fetchAuditLog(25)
@@ -690,10 +691,22 @@ function AuditTrail() {
 
   return (
     <Section title="Audit Trail" icon={ScrollText} color="#7A3CFF">
-      <p className="text-[11px] text-ink-500 mb-4">
-        Most recent mutations recorded server-side. Every state change — alerts, cases,
-        rules, users, keys, feeds — is captured with actor and target.
-      </p>
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+        <p className="text-[11px] text-ink-500">
+          Every state change — alerts, cases, rules, users, keys, feeds — captured with actor and target.
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          <a href={`${(typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:8002'}/config/audit-export`}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white hover:border-white/20 transition-colors">
+            <Copy className="w-3 h-3" /> Export CSV
+          </a>
+          <button onClick={() => { enforceRetention().then((r) => setRetentionMsg(`Purged ${Object.values(r.purged).reduce((a, b) => a + b, 0)} records older than ${r.retentionDays} days.`)).catch(() => {}) }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white hover:border-white/20 transition-colors">
+            Enforce retention
+          </button>
+        </div>
+      </div>
+      {retentionMsg && <p className="text-[11px] text-safe mb-3">{retentionMsg}</p>}
       {error && (
         <p className="text-xs text-ink-600 py-6 text-center">
           Audit log unavailable. Start the dashboard API to see live activity.

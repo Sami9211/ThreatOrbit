@@ -13,24 +13,29 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 0 — Cross-cutting platform (foundations everything needs)
 
-- [ ] **Scheduled & emailed reports** — cron the reporting engine to deliver
-      daily/weekly executive + section reports to recipients (webhook/email).
-      *(report engine itself is done — see CHANGELOG)*
-- [ ] **Deep-linking** — clicking a detail drawer action opens the target
-      section pre-filtered/scrolled to that exact record (e.g. `?alert=ID`).
-      *(generic drill-down drawer is done — see CHANGELOG)*
-- [ ] **Global search + command palette** across alerts, IOCs, assets, cases,
-      actors, dark-web findings (one box, typeahead, deep links).
-- [ ] **Saved views / filters** per section, persisted per user.
+- [x] **Scheduled & emailed reports** — DONE: report schedules (daily/weekly)
+      with webhook delivery + a background scheduler; "Schedule" in the report
+      viewer. Remaining: SMTP email channel (webhook works today).
+- [x] **Deep-linking** — DONE: the SIEM queue honours `?q=` from search / the
+      detail drawer / the ATT&CK navigator. (Extend to other sections as needed.)
+- [x] **Global search + command palette** — DONE: `/search` across alerts,
+      IOCs, assets, cases, actors, dark-web; wired into ⌘K with deep links.
+- [x] **Saved views / filters** — DONE (backend `/saved-views` per user +
+      section). Remaining: per-section "save this view" buttons in each page UI.
 - [ ] **Real-time push** — replace 15s polling with WebSocket/SSE so alerts,
-      cases, and findings stream in without refresh.
-- [ ] **Notifications centre** — in-app bell + per-user routing rules (email,
-      Slack, webhook) driven by the existing webhook engine.
+      cases, and findings stream in without refresh. *(DEFERRED — own unit:
+      SSE endpoint + client; polling works today.)*
+- [x] **Notifications centre** — DONE: live notification bell (real
+      `/notifications` feed from critical alerts, escalated cases, credential
+      leaks, scheduled reports), mark-read, deep-link on click. Remaining:
+      per-user routing rules (email/Slack) on top of the webhook engine.
 - [ ] **RBAC depth** — per-section, per-action permissions beyond the 4 roles;
-      audit who-saw-what.
+      audit who-saw-what. *(DEFERRED — own unit; touches every endpoint.)*
 - [ ] **Multi-tenancy / workspaces** — org isolation for an MSSP selling this.
-- [ ] **Audit & compliance pack** — immutable audit export, SOC2/ISO evidence
-      bundles, data-retention policy enforcement.
+      *(DEFERRED — large architectural unit: org_id scoping on every table/query.)*
+- [x] **Audit & compliance pack** — DONE: CSV audit export + retention
+      enforcement (purge past `data_retention_days`) with UI in Config →
+      Security. Remaining: signed/immutable evidence bundles.
 
 ## Phase 1 — SIEM depth (detection & monitoring)
 
@@ -113,6 +118,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Phase 0 platform bundle** — `routers/platform.py` +
+  `db.py` tables. (1) Notifications centre: live bell fed by real events
+  (critical alerts, auto-escalated cases, credential leaks, scheduled reports),
+  mark-read, click-to-navigate. (2) Global search: `/search` across alerts/
+  IOCs/assets/cases/actors/dark-web, wired into the ⌘K palette with deep links.
+  (3) Scheduled reports: `/report-schedules` (daily/weekly + webhook delivery)
+  run by the background scheduler; "Schedule" in the report viewer. (4) Saved
+  views: `/saved-views` per user+section. (5) Audit & compliance: CSV audit
+  export + retention enforcement (Config → Security). (6) Deep-linking: SIEM
+  queue honours `?q=`. DEFERRED as own units: real-time SSE push, per-action
+  RBAC, multi-tenancy.
 
 - **2026-06-10 · Log ingestion + ATT&CK navigator + TI matching (Phase 1)** —
   native log collector (`ingest.py`, `POST /siem/ingest`): parses syslog,

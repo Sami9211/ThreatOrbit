@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FileText, X, Printer, Download, Loader2, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchReport, type ReportData, type ReportFinding } from '@/lib/api'
+import { fetchReport, createReportSchedule, type ReportData, type ReportFinding } from '@/lib/api'
 
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
@@ -75,6 +75,15 @@ function ReportViewer({ kind, label, onClose }: { kind: string; label?: string; 
     URL.revokeObjectURL(url)
   }
 
+  function scheduleReport() {
+    const cadence = window.prompt('Deliver this report automatically — type "daily" or "weekly":', period === 'daily' ? 'daily' : 'weekly')
+    if (!cadence || !['daily', 'weekly'].includes(cadence)) return
+    const url = window.prompt('Webhook URL to deliver to (optional — leave blank to just record on the platform):', '') || undefined
+    createReportSchedule({ kind, period, cadence, webhook_url: url })
+      .then(() => setError(null))
+      .catch(() => setError('Could not create the schedule.'))
+  }
+
   function printReport() {
     if (!report) return
     const w = window.open('', '_blank')
@@ -117,6 +126,8 @@ function ReportViewer({ kind, label, onClose }: { kind: string; label?: string; 
             </button>
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={scheduleReport} title="Schedule this report (daily/weekly)"
+              className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors"><Calendar className="w-4 h-4" /></button>
             <button onClick={printReport} disabled={!report} title="Print / Save as PDF"
               className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40"><Printer className="w-4 h-4" /></button>
             <button onClick={downloadHtml} disabled={!report} title="Download HTML"

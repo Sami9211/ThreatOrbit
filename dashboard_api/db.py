@@ -19,7 +19,7 @@ JSON_COLUMNS = {
     "tags", "open_ports", "cves", "steps", "actions", "aliases", "motivations",
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
-    "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition",
+    "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
 }
 
 
@@ -342,6 +342,39 @@ CREATE TABLE IF NOT EXISTS scans (
     score      REAL NOT NULL DEFAULT 0,
     engines    TEXT,                -- display ratio e.g. "41/90"
     actor      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id        TEXT PRIMARY KEY,
+    ts        TEXT NOT NULL,
+    type      TEXT NOT NULL,   -- alert|case|darkweb|connector|report|system
+    severity  TEXT,            -- critical|high|medium|low|info
+    title     TEXT NOT NULL,
+    detail    TEXT,
+    link      TEXT,
+    read      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_notif_ts ON notifications(ts DESC);
+
+CREATE TABLE IF NOT EXISTS report_schedules (
+    id          TEXT PRIMARY KEY,
+    kind        TEXT NOT NULL,            -- executive|siem|soar|cti|assets|darkweb
+    period      TEXT NOT NULL DEFAULT 'weekly',
+    cadence     TEXT NOT NULL DEFAULT 'weekly',  -- daily|weekly
+    webhook_url TEXT,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    last_run    TEXT,
+    created_at  TEXT NOT NULL,
+    created_by  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS saved_views (
+    id         TEXT PRIMARY KEY,
+    section    TEXT NOT NULL,   -- siem|cti|assets|soar|darkweb
+    name       TEXT NOT NULL,
+    filters    TEXT NOT NULL DEFAULT '{}',
+    owner      TEXT,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS events (

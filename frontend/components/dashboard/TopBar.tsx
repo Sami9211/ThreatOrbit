@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Bell, RefreshCw, AlertTriangle, X, Search, Command, Menu, Zap } from 'lucide-react'
+import { fetchNotifications, markNotificationRead, type Notification } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
@@ -51,21 +52,19 @@ const LABELS: Record<string, string> = {
   '/dashboard/config': 'Configuration',
 }
 
-const NOTIFS = [
-  { id: 1, title: 'CVE-2024-6387 RCE attempt blocked',      severity: 'critical', src: '45.95.147.236',  time: '2m ago'  },
-  { id: 2, title: 'Lazarus Group C2 beacon detected',        severity: 'critical', src: '185.220.101.42', time: '7m ago'  },
-  { id: 3, title: 'SQL Injection on /api/users',             severity: 'high',     src: '192.168.10.44',  time: '12m ago' },
-  { id: 4, title: 'Large data exfiltration (4.2 GB)',        severity: 'critical', src: '172.16.0.44',    time: '24m ago' },
-  { id: 5, title: 'Brute-force SSH from 14 IPs',            severity: 'medium',   src: 'Multiple',       time: '31m ago' },
-  { id: 6, title: 'MISP feed sync failed',                   severity: 'medium',   src: 'Integrations',   time: '1h ago'  },
-  { id: 7, title: 'Playbook "Ransomware" triggered',         severity: 'high',     src: 'SOAR Engine',    time: '1h ago'  },
-]
-
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97',
   high:     '#FF4D6D',
   medium:   '#FFB23E',
-  low:      '#2DD4BF',
+  low:      '#34F5C5',
+  info:     '#7A3CFF',
+}
+
+function relTime(iso: string): string {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60); return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
 }
 
 export default function TopBar() {
@@ -75,10 +74,30 @@ export default function TopBar() {
   const pathname = raw.length > 1 ? raw.replace(/\/$/, '') : raw
   const label = LABELS[pathname] ?? LABELS['/dashboard']
 
+  const router = useRouter()
   const [notifOpen, setNotifOpen] = useState(false)
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
+  const [notifs, setNotifs] = useState<Notification[]>([])
+  const [unread, setUnread] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
+
+  const loadNotifs = useCallback(() => {
+    fetchNotifications().then((d) => { setNotifs(d.items); setUnread(d.unread) }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    loadNotifs()
+    const t = setInterval(loadNotifs, 12000)
+    return () => clearInterval(t)
+  }, [loadNotifs])
+
+  function openNotif(n: Notification) {
+    markNotificationRead(n.id).then(loadNotifs).catch(() => {})
+    setNotifOpen(false)
+    if (n.link) router.push(n.link)
+  }
+  function clearAllNotifs() {
+    markNotificationRead().then(loadNotifs).catch(() => {})
+  }
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -97,8 +116,7 @@ export default function TopBar() {
     setTimeout(() => setRefreshing(false), 1500)
   }
 
-  const visible = NOTIFS.filter((n) => !dismissed.has(n.id))
-  const unread = visible.length
+  const visible = notifs
 
   return (
     <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/60 backdrop-blur-sm sticky top-0 z-30">
@@ -173,42 +191,38 @@ export default function TopBar() {
                     )}
                   </div>
                   <button
-                    onClick={() => { const s = new Set<number>(); NOTIFS.forEach((n) => s.add(n.id)); setDismissed(s) }}
+                    onClick={clearAllNotifs}
                     className="text-[10px] text-ink-500 hover:text-magenta transition-colors"
                   >
-                    Clear all
+                    Mark all read
                   </button>
                 </div>
 
                 <div className="max-h-72 overflow-y-auto">
                   <AnimatePresence initial={false}>
                     {visible.length === 0 ? (
-                      <div className="py-8 text-center text-xs text-ink-600">No new notifications</div>
+                      <div className="py-8 text-center text-xs text-ink-600">No notifications yet</div>
                     ) : (
                       visible.map((n) => (
-                        <motion.div
+                        <motion.button
                           key={n.id}
                           initial={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="flex items-start gap-3 px-4 py-3 border-b border-white/4 hover:bg-white/3 group transition-colors"
+                          onClick={() => openNotif(n)}
+                          className={cn('w-full text-left flex items-start gap-3 px-4 py-3 border-b border-white/4 hover:bg-white/3 transition-colors',
+                            n.read ? 'opacity-60' : '')}
                         >
                           <span
                             className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ background: SEV_COLOR[n.severity] }}
+                            style={{ background: SEV_COLOR[n.severity ?? 'info'] }}
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-ink-200 truncate">{n.title}</p>
-                            <p className="text-[10px] text-ink-600 font-mono mt-0.5">{n.src} · {n.time}</p>
+                            <p className="text-[10px] text-ink-600 font-mono mt-0.5 capitalize">{n.type} · {relTime(n.ts)}</p>
                           </div>
-                          <button
-                            onClick={() => setDismissed((d) => { const s = new Set(d); s.add(n.id); return s })}
-                            aria-label="Dismiss"
-                            className="p-0.5 text-ink-700 hover:text-ink-300 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </motion.div>
+                          {!n.read && <span className="mt-1 w-1.5 h-1.5 rounded-full bg-magenta shrink-0" />}
+                        </motion.button>
                       ))
                     )}
                   </AnimatePresence>

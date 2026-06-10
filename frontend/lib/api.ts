@@ -532,6 +532,41 @@ export interface AttackCoverage {
   summary: { techniques: number; covered: number; gaps: number; coveragePct: number }
 }
 export const fetchAttackCoverage = () => api<AttackCoverage>('/siem/attack-coverage')
+
+// ── Platform: notifications, search, schedules, views, audit ─────────
+export interface Notification {
+  id: string; ts: string; type: string; severity: string | null
+  title: string; detail: string | null; link: string | null; read: number
+}
+export const fetchNotifications = (unreadOnly = false) =>
+  api<{ items: Notification[]; unread: number }>(`/notifications${unreadOnly ? '?unread_only=true' : ''}`)
+export const markNotificationRead = (id?: string) =>
+  api<{ ok: boolean }>('/notifications/read', { method: 'POST', body: JSON.stringify(id ? { id } : {}) })
+
+export interface SearchResult { kind: string; label: string; sub: string | null; severity: string | null; link: string }
+export const globalSearch = (q: string) =>
+  api<{ query: string; results: SearchResult[] }>(`/search?q=${encodeURIComponent(q)}`)
+
+export interface ReportSchedule {
+  id: string; kind: string; period: string; cadence: string
+  webhookUrl: string | null; enabled: number; lastRun: string | null; createdBy: string | null
+}
+export const fetchReportSchedules = () => api<ReportSchedule[]>('/report-schedules')
+export const createReportSchedule = (body: { kind: string; period?: string; cadence?: string; webhook_url?: string }) =>
+  api<ReportSchedule>('/report-schedules', { method: 'POST', body: JSON.stringify(body) })
+export const runReportSchedule = (id: string) =>
+  api<{ generated: boolean; delivered: boolean; title: string }>(`/report-schedules/${id}/run`, { method: 'POST' })
+export const deleteReportSchedule = (id: string) =>
+  api<void>(`/report-schedules/${id}`, { method: 'DELETE' })
+
+export interface SavedView { id: string; section: string; name: string; filters: Record<string, string>; createdAt: string }
+export const fetchSavedViews = (section: string) => api<SavedView[]>(`/saved-views?section=${section}`)
+export const createSavedView = (section: string, name: string, filters: Record<string, string>) =>
+  api<SavedView>('/saved-views', { method: 'POST', body: JSON.stringify({ section, name, filters }) })
+export const deleteSavedView = (id: string) => api<void>(`/saved-views/${id}`, { method: 'DELETE' })
+
+export const enforceRetention = () =>
+  api<{ retentionDays: number; cutoff: string; purged: Record<string, number> }>('/config/retention/enforce', { method: 'POST' })
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const createLogSource = (body: { name: string; type?: string; host?: string; format?: string; tags?: string[] }) =>
   api<LogSource>('/siem/sources', { method: 'POST', body: JSON.stringify(body) })

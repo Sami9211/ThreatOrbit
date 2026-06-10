@@ -32,7 +32,19 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
+  const [results, setResults] = useState<import('@/lib/api').SearchResult[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Live global search across alerts, IOCs, assets, cases, actors, dark web.
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setResults([]); return }
+    const t = setTimeout(() => {
+      import('@/lib/api').then(({ globalSearch }) =>
+        globalSearch(q).then((d) => setResults(d.results)).catch(() => setResults([])))
+    }, 220)
+    return () => clearTimeout(t)
+  }, [query])
 
   const filtered = query.trim()
     ? ITEMS.filter((i) =>
@@ -110,7 +122,24 @@ export default function CommandPalette() {
 
                 {/* Results */}
                 <div className="py-2 max-h-72 overflow-y-auto">
-                  {filtered.length === 0 ? (
+                  {/* Live search hits across the data */}
+                  {results.length > 0 && (
+                    <>
+                      <p className="text-[9px] uppercase tracking-widest text-ink-600 px-4 pt-1 pb-1.5">Results</p>
+                      {results.map((r, i) => (
+                        <a key={`${r.kind}-${i}`} href={r.link} onClick={close}
+                          className="flex items-center gap-3 mx-2 px-3 py-2 rounded-xl hover:bg-white/4 transition-colors">
+                          <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-violet/15 text-violet shrink-0 w-16 text-center">{r.kind}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-ink-100 truncate">{r.label}</p>
+                            {r.sub && <p className="text-[10px] text-ink-600 truncate font-mono">{r.sub}</p>}
+                          </div>
+                        </a>
+                      ))}
+                      <div className="h-px bg-white/5 mx-3 my-2" />
+                    </>
+                  )}
+                  {filtered.length === 0 && results.length === 0 ? (
                     <p className="text-xs text-ink-600 text-center py-6">No results</p>
                   ) : (
                     filtered.map((item, i) => (

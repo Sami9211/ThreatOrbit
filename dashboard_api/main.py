@@ -17,7 +17,8 @@ from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ORIGINS
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
     assets, auth, connectors as connectors_router, cti, config as config_router,
-    darkweb, feeds, overview, reports as reports_router, services, siem, soar, users,
+    darkweb, feeds, overview, platform as platform_router, reports as reports_router,
+    services, siem, soar, users,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -58,6 +59,11 @@ def _connector_scheduler():
     # Small initial delay so the companion services have time to come up.
     time.sleep(8)
     while True:
+        try:
+            from dashboard_api.routers.platform import run_due_report_schedules
+            run_due_report_schedules()
+        except Exception:
+            logger.exception("Report schedule tick failed")
         try:
             ran = run_due_connectors()
             for r in ran:
@@ -150,7 +156,8 @@ def ready():
 
 for r in (auth.router, users.router, overview.router, siem.router, soar.router,
           cti.router, assets.router, feeds.router, config_router.router, services.router,
-          connectors_router.router, darkweb.router, reports_router.router):
+          connectors_router.router, darkweb.router, reports_router.router,
+          platform_router.router):
     app.include_router(r)
 
 

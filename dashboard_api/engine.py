@@ -443,5 +443,36 @@ def process_tick(max_events: int = 6) -> dict:
             )
             dark += 1
         cases = _maybe_escalate_case(conn)
+        _emit_notifications(conn)
         conn.commit()
     return {"events": n, "alerts": alerts, "iocs": iocs, "darkWeb": dark, "casesEscalated": cases}
+
+
+def _emit_notifications(conn):
+    """Surface the most important fresh events to the notification bell.
+    Idempotent-ish: only items not already notified (tracked by a marker tag)."""
+    from dashboard_api.routers.platform import notify
+    # newest unnotified critical alert
+    a = conn.execute(
+        "SELECT id, title, severity FROM alerts WHERE severity='critical' "
+        "AND id NOT IN (SELECT COALESCE(detail,'') FROM notifications WHERE type='alert') "
+        "ORDER BY ts DESC LIMIT 1").fetchone()
+    if a:
+        notify(conn, type="alert", severity="critical", title=a["title"],
+               detail=a["id"], link="/dashboard/siem")
+    # newest unnotified credential leak
+    d = conn.execute(
+        "SELECT id, title FROM dark_web_findings WHERE category='credential-leak' "
+        "AND id NOT IN (SELECT COALESCE(detail,'') FROM notifications WHERE type='darkweb') "
+        "ORDER BY ts DESC LIMIT 1").fetchone()
+    if d:
+        notify(conn, type="darkweb", severity="critical", title=d["title"],
+               detail=d["id"], link="/dashboard/darkweb")
+    # newest unnotified open case
+    c = conn.execute(
+        "SELECT id, title, severity FROM cases WHERE status NOT IN ('resolved','closed') "
+        "AND id NOT IN (SELECT COALESCE(detail,'') FROM notifications WHERE type='case') "
+        "ORDER BY created DESC LIMIT 1").fetchone()
+    if c:
+        notify(conn, type="case", severity=c["severity"], title=c["title"],
+               detail=c["id"], link="/dashboard/soar")

@@ -47,6 +47,7 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Connectors| `/connectors` (GET/POST), `/connectors/kinds`, `/connectors/{id}` (PATCH/DELETE), `POST /connectors/{id}/run` — real threat-intel ingestion (threatorbit / nvd / otx / json / csv / stix) into the IOC store |
 | Dark Web  | `/darkweb/findings` (GET, filterable), `/darkweb/summary`, `PATCH /darkweb/findings/{id}` (triage status) |
 | Engine    | `GET /config/engine` (live engine status), `POST /config/engine` (pause/resume, or `generate` N bursts of live data) |
+| Platform  | `/notifications` (GET + read), `/search` (global), `/report-schedules` (CRUD + run), `/saved-views` (CRUD), `/config/audit-export` (CSV), `POST /config/retention/enforce` |
 | Reports   | `/reports/kinds`, `GET /reports/{kind}?period=daily\|weekly\|monthly\|custom&from=&to=` — structured reports (executive / siem / soar / cti / assets / darkweb) with summary, breakdowns, findings, recommendations |
 | Services  | `/services/status`, `/services/threat/source-health`, `/services/threat/iocs`, `POST /services/threat/fetch`, `/services/threat/jobs/{id}`, `/services/threat/opencti-status`, `POST /services/threat/sync-iocs`, `POST /services/logs/analyse` (multipart), `/services/logs/results/{id}`, `/services/logs/trends` |
 | Meta      | `/health`, `/ready` |

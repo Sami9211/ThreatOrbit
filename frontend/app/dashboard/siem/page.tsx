@@ -1210,6 +1210,12 @@ export default function SIEMPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedId])
   const [search, setSearch] = useState('')
+  // Deep-link: a ?q= param (from search, the detail drawer, or the ATT&CK
+  // navigator) pre-filters the alert queue.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
   const [filterSev, setFilterSev] = useState<Severity | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
   const [filterTactic, setFilterTactic] = useState('All')
