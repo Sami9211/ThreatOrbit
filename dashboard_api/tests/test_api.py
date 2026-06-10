@@ -415,3 +415,58 @@ def test_case_lifecycle(client, auth):
     # unknown task 404, bad status 400
     assert client.patch(f"/soar/cases/{cid}/tasks/NOPE", json={"status": "done"}, headers=auth).status_code == 404
     assert client.patch(f"/soar/cases/{cid}/tasks/{tid}", json={"status": "skipped"}, headers=auth).status_code == 400
+
+
+def test_hunt_query_engine(client, auth):
+    """Ad-hoc hunt queries return real alerts matched on extracted tokens."""
+    r = client.post("/siem/hunt-query", json={"query": "T1059 critical", "time_range": "7d"}, headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["scanned"] > 0
+    assert "T1059" in body["tokens"]["techniques"] and "critical" in body["tokens"]["severities"]
+    for row in body["results"]:
+        assert row["technique"].startswith("T1059")
+        assert row["severity"] == "critical"
+        assert row["alert_id"]
+    assert client.post("/siem/hunt-query", json={"query": "x", "time_range": "1y"}, headers=auth).status_code == 400
+
+
+def test_saved_hunt_create_and_run(client, auth):
+    created = client.post("/siem/hunts", json={
+        "name": "PowerShell abuse sweep", "description": "Encoded PowerShell launches",
+        "query": '"powershell" T1059', "technique": "T1059"}, headers=auth)
+    assert created.status_code == 201, created.text
+    hid = created.json()["id"]
+    assert created.json()["status"] == "idle"
+
+    run = client.post(f"/siem/hunts/{hid}/run", headers=auth)
+    assert run.status_code == 200
+    out = run.json()
+    assert out["hunt"]["status"] == "complete" and out["hunt"]["progress"] == 100
+    assert out["hunt"]["artifacts"] == out["run"]["hits"]
+    assert client.post("/siem/hunts/missing/run", headers=auth).status_code == 404
+
+    # CTI domain works against the IOC store
+    cti = client.post("/cti/hunts", json={"name": "Cobalt Strike infra", "query": '"cobalt"'}, headers=auth)
+    assert cti.status_code == 201
+    cti_run = client.post(f"/cti/hunts/{cti.json()['id']}/run", headers=auth)
+    assert cti_run.status_code == 200
+    assert cti_run.json()["run"]["scanned"] > 0
+
+
+def test_create_rule_feed_source(client, auth):
+    rule = client.post("/siem/rules", json={
+        "name": "Suspicious LSASS access", "severity": "high",
+        "mitre_tactic": "Credential Access", "mitre_tech_id": "T1003",
+        "kql": 'process where target.name == "lsass.exe"'}, headers=auth)
+    assert rule.status_code == 201 and rule.json()["status"] == "enabled"
+    assert rule.json()["id"].startswith("R-")
+    assert client.post("/siem/rules", json={"name": "x", "severity": "huge"}, headers=auth).status_code == 400
+
+    src = client.post("/siem/sources", json={"name": "K8s audit logs", "type": "JSON", "host": "k8s-audit"}, headers=auth)
+    assert src.status_code == 201 and src.json()["status"] == "healthy"
+
+    feed = client.post("/feeds", json={"name": "URLhaus", "type": "opensource",
+                                       "url": "https://urlhaus.abuse.ch/downloads/csv/"}, headers=auth)
+    assert feed.status_code == 201 and feed.json()["enabled"] == 1
+    assert client.post("/feeds", json={"name": "x", "type": "imaginary"}, headers=auth).status_code == 400

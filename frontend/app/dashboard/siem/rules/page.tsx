@@ -10,7 +10,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchRules, patchRule } from '@/lib/api'
+import { fetchRules, patchRule, createRule } from '@/lib/api'
+import CreateModal from '@/components/dashboard/CreateModal'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -618,12 +619,26 @@ export default function RulesEnginePage() {
   useExperienceMode()
 
   const [rulesData, setRulesData] = useState(RULES_DATA)
+  const [showNewRule, setShowNewRule] = useState(false)
 
   useEffect(() => {
     fetchRules()
       .then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) })
       .catch(() => {})
   }, [])
+
+  async function handleCreateRule(values: Record<string, string>) {
+    const created = await createRule({
+      name: values.name,
+      category: values.category,
+      severity: values.severity,
+      mitreTactic: values.mitreTactic || undefined,
+      mitreTechId: values.mitreTechId || undefined,
+      description: values.description || undefined,
+      kql: values.kql || undefined,
+    })
+    setRulesData((prev) => [created as unknown as DetectionRule, ...prev])
+  }
 
   /* filter state */
   const [search,     setSearch]     = useState('')
@@ -709,7 +724,9 @@ export default function RulesEnginePage() {
           </div>
           <p className="text-sm text-ink-500">Detection rules powering your alert pipeline</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
+        <button
+          onClick={() => setShowNewRule(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
           <Plus className="w-4 h-4" />
           New Rule
         </button>
@@ -976,6 +993,34 @@ export default function RulesEnginePage() {
               onToggle={toggleRule}
             />
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showNewRule && (
+          <CreateModal
+            title="New Detection Rule"
+            icon={Shield}
+            submitLabel="Create Rule"
+            onClose={() => setShowNewRule(false)}
+            onSubmit={handleCreateRule}
+            fields={[
+              { key: 'name', label: 'Rule name', required: true, placeholder: 'e.g. Suspicious LSASS memory access' },
+              { key: 'category', label: 'Category', type: 'select', options: [
+                { value: 'Endpoint', label: 'Endpoint' }, { value: 'Network', label: 'Network' },
+                { value: 'Identity', label: 'Identity' }, { value: 'Cloud', label: 'Cloud' },
+                { value: 'Email', label: 'Email' }, { value: 'Custom', label: 'Custom' },
+              ] },
+              { key: 'severity', label: 'Severity', type: 'select', default: 'medium', options: [
+                { value: 'critical', label: 'Critical' }, { value: 'high', label: 'High' },
+                { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' },
+              ] },
+              { key: 'mitreTactic', label: 'MITRE tactic', placeholder: 'e.g. Credential Access' },
+              { key: 'mitreTechId', label: 'MITRE technique ID', placeholder: 'e.g. T1003' },
+              { key: 'kql', label: 'Detection query (KQL)', type: 'textarea', placeholder: 'process where target.name == "lsass.exe" …' },
+              { key: 'description', label: 'Description', type: 'textarea', placeholder: 'What this rule detects and why it matters' },
+            ]}
+          />
         )}
       </AnimatePresence>
     </div>

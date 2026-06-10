@@ -29,6 +29,13 @@ class IocImport(BaseModel):
     tags: list[str] = []
 
 
+class HuntCreate(BaseModel):
+    name: str
+    description: str | None = None
+    query: str | None = None
+    technique: str | None = None
+
+
 @router.get("/actors")
 def list_actors(active: bool | None = None):
     where = "WHERE active=1" if active else ""
@@ -193,6 +200,24 @@ def list_hunts():
             "FROM saved_hunts WHERE domain='cti' ORDER BY last_run DESC"
         ).fetchall()
     return rows_to_dicts(rows)
+
+
+@router.post("/hunts", status_code=201)
+def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
+    from dashboard_api.hunting import create_saved_hunt
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Hunt name is required")
+    return create_saved_hunt("cti", name, body.description, body.query, body.technique, user["email"])
+
+
+@router.post("/hunts/{hunt_id}/run")
+def run_hunt(hunt_id: str, user: dict = Depends(current_user)):
+    from dashboard_api.hunting import run_saved_hunt
+    result = run_saved_hunt("cti", hunt_id, user["email"])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Hunt not found")
+    return result
 
 
 @router.get("/graph")

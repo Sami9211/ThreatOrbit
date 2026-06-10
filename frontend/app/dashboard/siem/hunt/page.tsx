@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { fetchSiemHunts, type SavedHunt as ApiSavedHunt } from '@/lib/api'
+import { fetchSiemHunts, runHuntQuery, createSiemHunt, type SavedHunt as ApiSavedHunt, type HuntQueryRow } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Terminal, Search, Play, Clock, Save, BookOpen,
@@ -239,22 +239,22 @@ export default function ThreatHuntPage() {
   const [savedHunts, setSavedHunts] = useState<SavedHunt[]>(SAVED_HUNTS)
   const [selectedHuntId, setSelectedHuntId] = useState<string>(SAVED_HUNTS[0].id)
 
+  const mapApiHunt = (h: ApiSavedHunt & { query?: string; technique?: string }): SavedHunt => ({
+    id: h.id,
+    name: h.name,
+    description: h.hypothesis,
+    query: h.query || `// ${h.name}\n// (no stored query — write one and Save Hunt)`,
+    technique: h.technique || '—',
+    lastRun: h.lastRun ?? 'Never',
+    hitCount: h.artifacts,
+    author: h.analyst,
+  })
+
   useEffect(() => {
-    fetchSiemHunts().then((data: ApiSavedHunt[]) => {
-      if (data.length > 0) {
-        const mapped: SavedHunt[] = data.map((h) => ({
-          id: h.id,
-          name: h.name,
-          description: h.hypothesis,
-          query: `// ${h.name}\n// Domain: ${h.domain}`,
-          technique: 'T1071',
-          lastRun: h.lastRun ?? 'Never',
-          hitCount: h.artifacts,
-          author: h.analyst,
-        }))
-        setSavedHunts(mapped)
-      }
+    fetchSiemHunts().then((data) => {
+      if (data.length > 0) setSavedHunts(data.map(mapApiHunt))
     }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /* Saved panel visibility (mobile) */
@@ -265,24 +265,46 @@ export default function ThreatHuntPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  /* Simulate query execution */
+  /* Run the query against the live alert store; fall back to the bundled
+   * demo result set when the dashboard API is unreachable. */
   const runQuery = useCallback(() => {
     if (running) return
     setRunning(true)
     setRunResult(null)
     const t = timeRange
-    setTimeout(() => {
-      setRunning(false)
-      setRunResult({
-        id:      `run-${Date.now()}`,
-        query,
-        range:   t,
-        scanned: TIME_RANGE_EVENTS[t],
-        elapsed: `${(0.4 + Math.random() * 1.2).toFixed(2)}s`,
-        hits:    BEACONING_RESULTS.length,
-        results: BEACONING_RESULTS,
+    runHuntQuery(query, t)
+      .then((out) => {
+        setRunResult({
+          id:      `run-${Date.now()}`,
+          query,
+          range:   t,
+          scanned: `${out.scanned.toLocaleString()} alerts`,
+          elapsed: `${(out.elapsedMs / 1000).toFixed(2)}s`,
+          hits:    out.hits,
+          results: out.results.map((r: HuntQueryRow): HuntResult => ({
+            ts: r.ts,
+            srcIp: r.srcIp ?? '-',
+            destIp: r.destIp ?? '-',
+            destPort: r.destPort ?? 0,
+            protocol: r.protocol,
+            bytes: r.bytes,
+            interval: r.interval,
+            host: r.host,
+          })),
+        })
       })
-    }, 1100)
+      .catch(() => {
+        setRunResult({
+          id:      `run-${Date.now()}`,
+          query,
+          range:   t,
+          scanned: TIME_RANGE_EVENTS[t],
+          elapsed: '0.92s',
+          hits:    BEACONING_RESULTS.length,
+          results: BEACONING_RESULTS,
+        })
+      })
+      .finally(() => setRunning(false))
   }, [running, query, timeRange])
 
   /* Ctrl/Cmd + Enter to run */
@@ -300,8 +322,22 @@ export default function ThreatHuntPage() {
     setRunResult(null)
   }
 
+  /* Save the current query as a named hunt in the library */
+  const [savePanelOpen, setSavePanelOpen] = useState(false)
+  const [saveName, setSaveName] = useState('')
+
   function saveQuery() {
-    setSavedMsg('Hunt saved to your library')
+    const name = saveName.trim()
+    if (!name) { setSavePanelOpen(true); return }
+    const technique = query.match(/\bT\d{4}(?:\.\d{3})?\b/)?.[0]
+    createSiemHunt({ name, query, technique, description: `Saved from the hunt console` })
+      .then((created) => {
+        setSavedHunts((prev) => [mapApiHunt(created), ...prev])
+        setSavedMsg('Hunt saved to your library')
+        setSavePanelOpen(false)
+        setSaveName('')
+      })
+      .catch(() => setSavedMsg('Could not save — is the dashboard API running?'))
     setTimeout(() => setSavedMsg(null), 2500)
   }
 
@@ -327,17 +363,27 @@ export default function ThreatHuntPage() {
           <p className="text-sm text-ink-500">Query your logs with KQL. Hunt for threats before they alert.</p>
         </div>
         <div className="flex items-center gap-2">
+          {savePanelOpen && (
+            <input
+              autoFocus
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveQuery(); if (e.key === 'Escape') setSavePanelOpen(false) }}
+              placeholder="Hunt name…"
+              className="px-3 py-2 rounded-xl bg-surface-2 border border-magenta/30 text-xs text-ink-100 placeholder-ink-600 focus:outline-none w-44"
+            />
+          )}
           <button
             onClick={saveQuery}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors"
           >
             <Save className="w-3.5 h-3.5" />
-            Save Hunt
+            {savePanelOpen ? 'Confirm Save' : 'Save Hunt'}
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
+          <a href="/docs/rest-api" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
             <BookOpen className="w-3.5 h-3.5" />
             Documentation
-          </button>
+          </a>
         </div>
       </motion.div>
 

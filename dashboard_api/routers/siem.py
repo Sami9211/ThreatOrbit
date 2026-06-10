@@ -1,11 +1,21 @@
-"""SIEM routes: alerts (list/detail/update), rules, log sources, saved hunts, KPIs."""
+"""SIEM routes: alerts (list/detail/update), rules, log sources, hunts, KPIs."""
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.hunting import run_alert_hunt
 
 router = APIRouter(prefix="/siem", tags=["siem"], dependencies=[Depends(current_user)])
+
+SEVERITIES = {"critical", "high", "medium", "low", "info"}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 class AlertUpdate(BaseModel):
@@ -18,6 +28,38 @@ class RuleUpdate(BaseModel):
     status: str | None = None
     severity_override: str | None = None
     suppression_window: int | None = None
+
+
+class RuleCreate(BaseModel):
+    name: str
+    category: str = "Custom"
+    severity: str = "medium"
+    mitre_tactic: str | None = None
+    mitre_tech_id: str | None = None
+    mitre_tech: str | None = None
+    description: str | None = None
+    kql: str | None = None
+    tags: list[str] = []
+
+
+class SourceCreate(BaseModel):
+    name: str
+    type: str = "Syslog"
+    host: str | None = None
+    format: str | None = None
+    tags: list[str] = []
+
+
+class HuntCreate(BaseModel):
+    name: str
+    description: str | None = None
+    query: str | None = None
+    technique: str | None = None
+
+
+class HuntQuery(BaseModel):
+    query: str
+    time_range: str = "24h"
 
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
@@ -165,6 +207,32 @@ def list_rules(category: str | None = None, status: str | None = None):
     return rows_to_dicts(rows)
 
 
+@router.post("/rules", status_code=201)
+def create_rule(body: RuleCreate, user: dict = Depends(current_user)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Rule name is required")
+    if body.severity not in SEVERITIES:
+        raise HTTPException(status_code=400, detail=f"Severity must be one of {sorted(SEVERITIES)}")
+    rid = f"R-{uuid.uuid4().hex[:6].upper()}"
+    now = _now_iso()
+    from dashboard_api.db import dumps
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tech_id,"
+            "mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,created,updated_by,"
+            "description,kql,suppression_window,severity_override,tags) "
+            "VALUES (?,?,?,?,?,?,?,0,0,0,'enabled','custom',NULL,?,?,?,?,0,NULL,?)",
+            (rid, name, body.category, body.severity, body.mitre_tactic, body.mitre_tech_id,
+             body.mitre_tech, now, user["email"],
+             body.description or f"Custom detection: {name}.", body.kql, dumps(body.tags)),
+        )
+        audit(conn, user["email"], "rule.create", rid, f"name={name} severity={body.severity}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM detection_rules WHERE id=?", (rid,)).fetchone()
+    return row_to_dict(row)
+
+
 @router.patch("/rules/{rule_id}")
 def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(current_user)):
     valid_statuses = {"enabled", "disabled", "suppressed"}
@@ -199,6 +267,26 @@ def list_sources():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM log_sources ORDER BY eps_avg DESC").fetchall()
     return rows_to_dicts(rows)
+
+
+@router.post("/sources", status_code=201)
+def create_source(body: SourceCreate, user: dict = Depends(current_user)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Source name is required")
+    sid = str(uuid.uuid4())
+    from dashboard_api.db import dumps
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO log_sources (id,name,type,host,status,eps_avg,eps_peak,last_event,"
+            "total_events_24h,latency_ms,parse_success,format,tags) "
+            "VALUES (?,?,?,?,'healthy',0,0,NULL,0,0,100,?,?)",
+            (sid, name, body.type, body.host, body.format or body.type, dumps(body.tags)),
+        )
+        audit(conn, user["email"], "source.create", sid, f"name={name} type={body.type}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM log_sources WHERE id=?", (sid,)).fetchone()
+    return row_to_dict(row)
 
 
 # ── Correlations ──────────────────────────────────────────────────────────────
@@ -261,3 +349,31 @@ def list_hunts():
             "FROM saved_hunts WHERE domain='siem' ORDER BY last_run DESC"
         ).fetchall()
     return rows_to_dicts(rows)
+
+
+@router.post("/hunts", status_code=201)
+def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
+    from dashboard_api.hunting import create_saved_hunt
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Hunt name is required")
+    return create_saved_hunt("siem", name, body.description, body.query, body.technique, user["email"])
+
+
+@router.post("/hunts/{hunt_id}/run")
+def run_hunt(hunt_id: str, user: dict = Depends(current_user)):
+    from dashboard_api.hunting import run_saved_hunt
+    result = run_saved_hunt("siem", hunt_id, user["email"])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Hunt not found")
+    return result
+
+
+@router.post("/hunt-query")
+def hunt_query(body: HuntQuery):
+    """Run an ad-hoc hunt query against the live alert store."""
+    if body.time_range not in ("1h", "6h", "24h", "7d"):
+        raise HTTPException(status_code=400, detail="time_range must be 1h|6h|24h|7d")
+    if not body.query.strip():
+        raise HTTPException(status_code=400, detail="Query is required")
+    return run_alert_hunt(body.query, body.time_range)

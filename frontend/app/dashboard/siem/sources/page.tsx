@@ -8,7 +8,8 @@ import {
   Activity, Clock, Cpu, Network, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchSiemSources } from '@/lib/api'
+import { fetchSiemSources, createLogSource } from '@/lib/api'
+import CreateModal from '@/components/dashboard/CreateModal'
 
 type SourceStatus = 'healthy' | 'degraded' | 'offline' | 'paused'
 type SourceType = 'Syslog' | 'Windows Event' | 'CEF/ArcSight' | 'API Pull' | 'Kafka' | 'S3 Bucket' | 'Splunk Forwarder'
@@ -54,12 +55,21 @@ export default function SiemSourcesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [sourcesData, setSourcesData] = useState(SOURCES)
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     fetchSiemSources()
       .then((data) => { if (data.length > 0) setSourcesData(data as unknown as typeof SOURCES) })
       .catch(() => {})
   }, [])
+
+  async function handleAddSource(values: Record<string, string>) {
+    const created = await createLogSource({
+      name: values.name, type: values.type, host: values.host || undefined,
+      format: values.format || undefined,
+    })
+    setSourcesData((prev) => [created as unknown as LogSource, ...prev])
+  }
 
   const SOURCES_ACTIVE = sourcesData
 
@@ -87,7 +97,9 @@ export default function SiemSourcesPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">Data ingestion pipeline — {SOURCES_ACTIVE.length} sources configured</p>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold">
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
           <Plus className="w-3.5 h-3.5" />
           Add Source
         </button>
@@ -243,6 +255,30 @@ export default function SiemSourcesPage() {
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showAdd && (
+          <CreateModal
+            title="Add Log Source"
+            icon={Database}
+            accent="#7A3CFF"
+            submitLabel="Add Source"
+            onClose={() => setShowAdd(false)}
+            onSubmit={handleAddSource}
+            fields={[
+              { key: 'name', label: 'Source name', required: true, placeholder: 'e.g. Kubernetes Audit Logs' },
+              { key: 'type', label: 'Type', type: 'select', options: [
+                { value: 'Syslog', label: 'Syslog' }, { value: 'Windows Event', label: 'Windows Event' },
+                { value: 'CEF/ArcSight', label: 'CEF/ArcSight' }, { value: 'API Pull', label: 'API Pull' },
+                { value: 'Kafka', label: 'Kafka' }, { value: 'S3 Bucket', label: 'S3 Bucket' },
+                { value: 'Splunk Forwarder', label: 'Splunk Forwarder' },
+              ] },
+              { key: 'host', label: 'Host / endpoint', placeholder: 'e.g. 10.0.1.254 or kafka:9092' },
+              { key: 'format', label: 'Log format', placeholder: 'e.g. RFC 5424, JSON' },
+            ]}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

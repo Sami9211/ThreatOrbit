@@ -10,7 +10,8 @@ import {
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
-import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph } from '@/lib/api'
+import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, type SavedHunt as ApiSavedHunt } from '@/lib/api'
+import CreateModal from '@/components/dashboard/CreateModal'
 
 /* ── Threat Actors ───────────────────────────────────────────────── */
 type Actor = {
@@ -332,8 +333,39 @@ const HUNTS = [
 const HUNT_COLOR: Record<HuntStatus, string> = { active: '#34F5C5', completed: '#7A3CFF', paused: '#FFB23E' }
 const HUNT_ICON: Record<HuntStatus, React.ElementType> = { active: Play, completed: CheckCircle, paused: Pause }
 
+type PanelHunt = typeof HUNTS[number]
+
+const apiHuntToPanel = (h: ApiSavedHunt & { created?: string }): PanelHunt => ({
+  id: h.id,
+  name: h.name,
+  hypothesis: h.hypothesis ?? '',
+  status: (h.status === 'complete' ? 'completed' : h.status === 'idle' ? 'paused' : 'active') as HuntStatus,
+  artifacts: h.artifacts,
+  analyst: h.analyst ?? 'you',
+  progress: h.progress,
+  created: h.created ?? 'just now',
+})
+
 function ThreatHuntPanel() {
   const [selected, setSelected] = useState<string | null>(null)
+  const [hunts, setHunts] = useState<PanelHunt[]>(HUNTS)
+  const [showNew, setShowNew] = useState(false)
+
+  useEffect(() => {
+    fetchCtiHunts().then((data) => {
+      if (data.length > 0) setHunts(data.map(apiHuntToPanel))
+    }).catch(() => {})
+  }, [])
+
+  async function handleCreate(values: Record<string, string>) {
+    const created = await createCtiHunt({
+      name: values.name,
+      description: values.hypothesis || undefined,
+      technique: values.technique || undefined,
+    })
+    setHunts((prev) => [apiHuntToPanel(created), ...prev])
+  }
+
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -341,15 +373,32 @@ function ThreatHuntPanel() {
           <Crosshair className="w-3.5 h-3.5 text-violet" />
           <h3 className="text-sm font-semibold text-white">Threat Hunt</h3>
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-safe font-medium">
-            {HUNTS.filter((h) => h.status === 'active').length} active
+            {hunts.filter((h) => h.status === 'active').length} active
           </span>
         </div>
-        <button className="flex items-center gap-1 text-xs text-magenta hover:underline">
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-1 text-xs text-magenta hover:underline">
           <Search className="w-3 h-3" /> New Hunt
         </button>
       </div>
+      <AnimatePresence>
+        {showNew && (
+          <CreateModal
+            title="New Threat Hunt"
+            icon={Crosshair}
+            accent="#7A3CFF"
+            submitLabel="Create Hunt"
+            onClose={() => setShowNew(false)}
+            onSubmit={handleCreate}
+            fields={[
+              { key: 'name', label: 'Hunt name', required: true, placeholder: 'e.g. Cobalt Strike infrastructure sweep' },
+              { key: 'hypothesis', label: 'Hypothesis', type: 'textarea', placeholder: 'What you suspect and where to look' },
+              { key: 'technique', label: 'MITRE technique', placeholder: 'e.g. T1071' },
+            ]}
+          />
+        )}
+      </AnimatePresence>
       <div className="divide-y divide-white/4">
-        {HUNTS.map((hunt) => {
+        {hunts.map((hunt) => {
           const Icon = HUNT_ICON[hunt.status]
           const color = HUNT_COLOR[hunt.status]
           return (

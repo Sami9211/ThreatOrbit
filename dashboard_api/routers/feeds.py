@@ -1,4 +1,6 @@
-"""Threat feed routes: list feeds/sources, toggle, and a summary."""
+"""Threat feed routes: list feeds/sources, create, toggle, and a summary."""
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -7,9 +9,21 @@ from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/feeds", tags=["feeds"], dependencies=[Depends(current_user)])
 
+_FEED_TYPES = {"commercial", "opensource", "community", "internal"}
+
 
 class FeedToggle(BaseModel):
     enabled: bool
+
+
+class FeedCreate(BaseModel):
+    name: str
+    provider: str | None = None
+    type: str = "opensource"
+    url: str | None = None
+    format: str = "STIX 2.1"
+    sync_interval: int = 3600
+    reliability: str = "B"
 
 
 @router.get("")
@@ -37,6 +51,29 @@ def feeds_summary():
         "byType": {t: sum(1 for r in rows if r["type"] == t)
                    for t in ("commercial", "opensource", "community", "internal")},
     }
+
+
+@router.post("", status_code=201)
+def create_feed(body: FeedCreate, user: dict = Depends(current_user)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Feed name is required")
+    if body.type not in _FEED_TYPES:
+        raise HTTPException(status_code=400, detail=f"type must be one of {sorted(_FEED_TYPES)}")
+    if body.reliability not in ("A", "B", "C"):
+        raise HTTPException(status_code=400, detail="reliability must be A, B or C")
+    fid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO feeds (id,name,provider,type,status,enabled,indicators,last_sync,"
+            "sync_interval,reliability,url,format) VALUES (?,?,?,?,'active',1,0,NULL,?,?,?,?)",
+            (fid, name, body.provider or name, body.type, body.sync_interval,
+             body.reliability, body.url, body.format),
+        )
+        audit(conn, user["email"], "feed.create", fid, f"name={name} type={body.type}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM feeds WHERE id=?", (fid,)).fetchone()
+    return row_to_dict(row)
 
 
 @router.patch("/{feed_id}")

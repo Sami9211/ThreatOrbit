@@ -473,7 +473,56 @@ export const patchRule     = (id: string, body: { status?: string; severityOverr
     }),
   })
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
+export const createLogSource = (body: { name: string; type?: string; host?: string; format?: string; tags?: string[] }) =>
+  api<LogSource>('/siem/sources', { method: 'POST', body: JSON.stringify(body) })
+export const createRule = (body: {
+  name: string; category?: string; severity?: string
+  mitreTactic?: string; mitreTechId?: string; mitreTech?: string
+  description?: string; kql?: string; tags?: string[]
+}) =>
+  api<Rule>('/siem/rules', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: body.name, category: body.category, severity: body.severity,
+      mitre_tactic: body.mitreTactic, mitre_tech_id: body.mitreTechId, mitre_tech: body.mitreTech,
+      description: body.description, kql: body.kql, tags: body.tags,
+    }),
+  })
 export const fetchSiemHunts  = () => api<SavedHunt[]>('/siem/hunts')
+
+export interface HuntQueryRow {
+  alertId: string
+  ts: string
+  srcIp: string | null
+  destIp: string | null
+  destPort: number | null
+  protocol: string
+  bytes: number
+  interval: number
+  host: string
+  title: string
+  severity: string
+  technique: string | null
+  riskScore: number | null
+}
+export interface HuntQueryResult {
+  scanned: number
+  hits: number
+  elapsedMs: number
+  tokens: { techniques: string[]; ips: string[]; severities: string[]; keywords: string[] }
+  results: HuntQueryRow[]
+}
+export const runHuntQuery = (query: string, timeRange: string) =>
+  api<HuntQueryResult>('/siem/hunt-query', {
+    method: 'POST',
+    body: JSON.stringify({ query, time_range: timeRange }),
+  })
+
+export interface HuntRunOutcome { hunt: SavedHunt; run: { scanned: number; hits: number; elapsedMs: number } }
+export const createSiemHunt = (body: { name: string; description?: string; query?: string; technique?: string }) =>
+  api<SavedHunt>('/siem/hunts', { method: 'POST', body: JSON.stringify(body) })
+export const runSiemHunt = (id: string) =>
+  api<HuntRunOutcome>(`/siem/hunts/${id}/run`, { method: 'POST' })
 export const fetchCorrelations = (minAlerts = 2) =>
   api<Correlation[]>(`/siem/correlations?min_alerts=${minAlerts}`)
 export const fetchMitreDistribution = () =>
@@ -528,6 +577,10 @@ export const importIocs = (body: {
   actor?: string; threat_type?: string; tags?: string[]
 }) => api<ImportResult>('/cti/iocs/import', { method: 'POST', body: JSON.stringify(body) })
 export const fetchCtiHunts  = () => api<SavedHunt[]>('/cti/hunts')
+export const createCtiHunt = (body: { name: string; description?: string; query?: string; technique?: string }) =>
+  api<SavedHunt>('/cti/hunts', { method: 'POST', body: JSON.stringify(body) })
+export const runCtiHunt = (id: string) =>
+  api<HuntRunOutcome>(`/cti/hunts/${id}/run`, { method: 'POST' })
 export const fetchCtiGraph  = () => api<CtiGraph>('/cti/graph')
 
 // ── Assets ───────────────────────────────────────────────────────────
@@ -544,6 +597,18 @@ export const recomputeAssetRisk = () =>
 
 // ── Feeds ─────────────────────────────────────────────────────────────
 export const fetchFeeds   = () => api<Feed[]>('/feeds')
+export const createFeed = (body: {
+  name: string; provider?: string; type?: string; url?: string
+  format?: string; syncInterval?: number; reliability?: string
+}) =>
+  api<Feed>('/feeds', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: body.name, provider: body.provider, type: body.type, url: body.url,
+      format: body.format, reliability: body.reliability,
+      ...(body.syncInterval !== undefined ? { sync_interval: body.syncInterval } : {}),
+    }),
+  })
 export const fetchFeedsSummary = () => api<FeedsSummary>('/feeds/summary')
 export const toggleFeed   = (id: string, enabled: boolean) =>
   api<Feed>(`/feeds/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) })

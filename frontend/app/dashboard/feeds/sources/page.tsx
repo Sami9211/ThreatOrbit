@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchFeeds, toggleFeed as apiToggleFeed, type Feed as ApiFeed } from '@/lib/api'
+import { fetchFeeds, toggleFeed as apiToggleFeed, createFeed, type Feed as ApiFeed } from '@/lib/api'
+import CreateModal from '@/components/dashboard/CreateModal'
 import {
   Radio, Plus, RefreshCw, XCircle, Settings, Key, Link2,
   Clock, Tag, SlidersHorizontal, Activity, ShieldCheck,
@@ -65,33 +66,45 @@ const RELIABILITY_COLOR: Record<Reliability, string> = {
   F: 'text-threat border-threat/30 bg-threat/10',
 }
 
+// API feed → UI row mapping shared by the initial load and add-feed flows.
+const apiFeedToRow = (f: ApiFeed): FeedSource => ({
+  id: f.id,
+  name: f.name,
+  type: (f.type === 'commercial' ? 'Commercial' : f.type === 'government' ? 'Government' : f.type === 'community' ? 'Community' : 'OSINT') as FeedType,
+  format: 'STIX 2.1' as FeedFormat,
+  iocsPerDay: f.indicators,
+  lastPull: f.lastSync ?? 'Never',
+  reliability: 'B' as Reliability,
+  enabled: f.enabled,
+  url: f.url ?? '',
+  apiKeyConfigured: false,
+  pullInterval: '30m',
+  taxiiCollection: 'n/a',
+  confidenceWeight: 75,
+  tagMapping: [],
+})
+
 export default function FeedSourcesPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | FeedType>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [feeds, setFeeds] = useState<FeedSource[]>(FEEDS)
+  const [showAdd, setShowAdd] = useState(false)
+
+  async function handleAddFeed(values: Record<string, string>) {
+    const created = await createFeed({
+      name: values.name,
+      type: values.type,
+      url: values.url || undefined,
+      format: values.format || undefined,
+      reliability: values.reliability,
+    })
+    setFeeds((prev) => [apiFeedToRow(created), ...prev])
+  }
 
   useEffect(() => {
     fetchFeeds().then((data: ApiFeed[]) => {
-      if (data.length > 0) {
-        const mapped: FeedSource[] = data.map(f => ({
-          id: f.id,
-          name: f.name,
-          type: (f.type === 'commercial' ? 'Commercial' : f.type === 'government' ? 'Government' : f.type === 'community' ? 'Community' : 'OSINT') as FeedType,
-          format: 'STIX 2.1' as FeedFormat,
-          iocsPerDay: f.indicators,
-          lastPull: f.lastSync ?? 'Never',
-          reliability: 'B' as Reliability,
-          enabled: f.enabled,
-          url: f.url ?? '',
-          apiKeyConfigured: false,
-          pullInterval: '30m',
-          taxiiCollection: 'n/a',
-          confidenceWeight: 75,
-          tagMapping: [],
-        }))
-        setFeeds(mapped)
-      }
+      if (data.length > 0) setFeeds(data.map(apiFeedToRow))
     }).catch(() => {})
   }, [])
 
@@ -130,7 +143,9 @@ export default function FeedSourcesPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">Manage upstream threat intelligence providers</p>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold">
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
           <Plus className="w-3.5 h-3.5" />
           Add Feed
         </button>
@@ -326,6 +341,35 @@ export default function FeedSourcesPage() {
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showAdd && (
+          <CreateModal
+            title="Add Threat Feed"
+            icon={Radio}
+            submitLabel="Add Feed"
+            onClose={() => setShowAdd(false)}
+            onSubmit={handleAddFeed}
+            fields={[
+              { key: 'name', label: 'Feed name', required: true, placeholder: 'e.g. URLhaus' },
+              { key: 'type', label: 'Type', type: 'select', default: 'opensource', options: [
+                { value: 'opensource', label: 'OSINT / open source' },
+                { value: 'commercial', label: 'Commercial' },
+                { value: 'community', label: 'Community' },
+                { value: 'internal', label: 'Internal' },
+              ] },
+              { key: 'url', label: 'Feed URL', placeholder: 'https://…', hint: 'Pull endpoint or TAXII collection URL' },
+              { key: 'format', label: 'Format', type: 'select', default: 'STIX 2.1', options: [
+                { value: 'STIX 2.1', label: 'STIX 2.1' }, { value: 'TAXII', label: 'TAXII' },
+                { value: 'JSON', label: 'JSON' }, { value: 'CSV', label: 'CSV' }, { value: 'MISP', label: 'MISP' },
+              ] },
+              { key: 'reliability', label: 'Reliability', type: 'select', default: 'B', options: [
+                { value: 'A', label: 'A — Reliable' }, { value: 'B', label: 'B — Usually reliable' }, { value: 'C', label: 'C — Fairly reliable' },
+              ] },
+            ]}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
