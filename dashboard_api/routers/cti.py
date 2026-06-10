@@ -283,6 +283,24 @@ def unwhitelist_ioc(ioc_id: str, user: dict = Depends(current_user)):
     return {**row_to_dict(row), "lifecycle": lifecycle_of(row_to_dict(row))}
 
 
+@router.get("/stix/bundle")
+def stix_bundle(type: str | None = None, limit: int = Query(2000, le=10000)):
+    """Export the IOC + actor stores as a STIX 2.1 bundle (downloadable; the
+    same content the TAXII server publishes). `type=indicator|threat-actor|…`
+    filters the objects."""
+    from dashboard_api import stix
+    with get_conn() as conn:
+        actors = rows_to_dicts(conn.execute("SELECT * FROM threat_actors").fetchall())
+        iocs = rows_to_dicts(conn.execute(
+            "SELECT * FROM iocs WHERE status != 'known-good' ORDER BY last_seen DESC LIMIT ?",
+            (limit,)).fetchall())
+    objects = stix.build_objects(iocs, actors)
+    if type:
+        wanted = {t.strip() for t in type.split(",")}
+        objects = [o for o in objects if o["type"] in wanted]
+    return stix.bundle(objects)
+
+
 @router.post("/iocs/decay")
 def run_decay(user: dict = Depends(require_role("admin", "manager"))):
     """Run IOC decay maintenance: expire stale indicators, reactivate refreshed."""

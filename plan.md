@@ -104,8 +104,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 3 — CTI depth (intelligence & library)
 
-- [ ] **Full STIX 2.1 / TAXII 2.1 server** — publish + subscribe collections so
-      ThreatOrbit is a real CTI hub others can pull from.
+- [~] **Full STIX 2.1 / TAXII 2.1 server** — DONE (see CHANGELOG): read-side
+      TAXII 2.1 server (discovery → collections → STIX 2.1 objects) + STIX
+      bundle export, auth by JWT or API key. Remaining: TAXII write/push
+      (POST objects to a collection) for true publish-subscribe.
 - [ ] **Relationship graph at scale** — actors ↔ campaigns ↔ malware ↔ IOCs ↔
       TTPs, interactive, with pivoting and path-finding.
 - [ ] **Enrichment pipeline** — pluggable enrichers (VirusTotal, GreyNoise,
@@ -146,6 +148,23 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · STIX 2.1 / TAXII 2.1 server (Phase 3)** — ThreatOrbit is now a
+  real CTI hub other tools can pull from. `stix.py` serializes the live stores
+  to STIX 2.1: IOCs → `indicator` SDOs with correct patterns per type
+  (`[ipv4-addr:value=…]`, `[domain-name:value=…]`, `[file:hashes.'SHA-256'=…]`,
+  url/email), CVEs → `vulnerability`, actors → `threat-actor`, attribution →
+  `relationship` (indicator *indicates* actor); ids are deterministic (uuid5)
+  so clients de-dupe across pulls, known-good IOCs are excluded/relabelled.
+  `routers/taxii.py` is a TAXII 2.1 read server (discovery → api-root →
+  collections `indicators`/`threat-actors` → STIX objects) with proper
+  `application/taxii+json;version=2.1` media types, `type`/`added_after`/`limit`
+  filtering, and auth by **either a dashboard JWT or a platform API key**
+  (`Authorization: Bearer to_rk_live_…`), so an external SIEM/CTI client can
+  subscribe. `GET /cti/stix/bundle` downloads the same content; an export
+  button + TAXII endpoint hint on the CTI IOC panel. Tested: STIX pattern/SDO
+  units + the full TAXII flow (discovery, collections, objects, filtering,
+  API-key auth, bundle).
 
 - **2026-06-10 · IOC lifecycle (Phase 3)** — threat indicators now age like real
   intel. `ioc_lifecycle.py`: per-type confidence **decay** (half-life: IPs 14d,

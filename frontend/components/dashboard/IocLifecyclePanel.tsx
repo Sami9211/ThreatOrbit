@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
-  TrendingDown, RefreshCw, Loader2,
+  TrendingDown, RefreshCw, Loader2, Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
-  type Ioc, type IocDetail,
+  fetchStixBundle, type Ioc, type IocDetail,
 } from '@/lib/api'
 
 const SEV_COLOR: Record<string, string> = {
@@ -75,6 +75,17 @@ export default function IocLifecyclePanel() {
     setDecaying(true)
     runIocDecay().then(() => load()).catch(() => {}).finally(() => setDecaying(false))
   }
+  function exportStix() {
+    fetchStixBundle().then((b) => {
+      const blob = new Blob([JSON.stringify(b, null, 2)], { type: 'application/stix+json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `threatorbit-stix-bundle-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    }).catch(() => {})
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -98,6 +109,10 @@ export default function IocLifecyclePanel() {
           <button onClick={decay} disabled={decaying} title="Run decay maintenance"
             className="ml-1 p-1.5 rounded-lg text-ink-500 hover:text-violet hover:bg-violet/10 transition-colors">
             {decaying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          </button>
+          <button onClick={exportStix} title="Export STIX 2.1 bundle (also served via TAXII 2.1 at /taxii2/)"
+            className="p-1.5 rounded-lg text-ink-500 hover:text-violet hover:bg-violet/10 transition-colors">
+            <Share2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

@@ -18,7 +18,7 @@ from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
     assets, auth, connectors as connectors_router, cti, config as config_router,
     darkweb, feeds, overview, platform as platform_router, reports as reports_router,
-    services, siem, soar, users,
+    services, siem, soar, taxii, users,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -162,7 +162,7 @@ def ready():
 for r in (auth.router, users.router, overview.router, siem.router, soar.router,
           cti.router, assets.router, feeds.router, config_router.router, services.router,
           connectors_router.router, darkweb.router, reports_router.router,
-          platform_router.router):
+          platform_router.router, taxii.router):
     app.include_router(r)
 
 

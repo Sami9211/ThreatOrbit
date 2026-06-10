@@ -1434,6 +1434,84 @@ def test_ioc_lifecycle_api(client, auth):
     assert client.get("/cti/iocs?status=bogus", headers=auth).status_code == 400
 
 
+def test_stix_serialization_units():
+    """STIX 2.1: correct patterns per indicator type, SDOs, deterministic ids."""
+    from dashboard_api import stix
+    ip = stix.ioc_to_stix({"type": "ip", "value": "203.0.113.9", "confidence": 80,
+                           "first_seen": "2025-01-01T00:00:00", "threat_type": "c2"})
+    assert ip["type"] == "indicator" and ip["pattern"] == "[ipv4-addr:value = '203.0.113.9']"
+    assert ip["pattern_type"] == "stix" and ip["spec_version"] == "2.1"
+    assert "command-and-control" in ip["indicator_types"]
+    assert stix.stix_pattern("domain", "evil.com") == "[domain-name:value = 'evil.com']"
+    assert stix.stix_pattern("hash", "a" * 64) == "[file:hashes.'SHA-256' = '" + "a" * 64 + "']"
+    assert stix.stix_pattern("hash", "b" * 32) == "[file:hashes.'MD5' = '" + "b" * 32 + "']"
+    assert stix.stix_pattern("url", "http://x/y") == "[url:value = 'http://x/y']"
+    # CVE → vulnerability SDO, not an indicator
+    cve = stix.ioc_to_stix({"type": "cve", "value": "CVE-2024-1234", "first_seen": "2025-01-01T00:00:00"})
+    assert cve["type"] == "vulnerability" and cve["external_references"][0]["external_id"] == "CVE-2024-1234"
+    # deterministic ids — re-serializing the same value is stable
+    assert ip["id"] == stix.ioc_to_stix({"type": "ip", "value": "203.0.113.9"})["id"]
+    # actor + relationship wiring
+    objs = stix.build_objects(
+        [{"type": "ip", "value": "203.0.113.9", "actor": "APT-Test", "confidence": 90}],
+        [{"name": "APT-Test", "type": "nation-state", "aliases": ["AT"], "sophistication": 4}])
+    types = [o["type"] for o in objs]
+    assert "threat-actor" in types and "indicator" in types and "relationship" in types
+    rel = next(o for o in objs if o["type"] == "relationship")
+    assert rel["relationship_type"] == "indicates"
+    b = stix.bundle(objs)
+    assert b["type"] == "bundle" and b["id"].startswith("bundle--") and b["objects"] == objs
+
+
+def test_taxii_server(client, auth):
+    """TAXII 2.1 read API: discovery → collections → STIX objects, with auth
+    by JWT or API key, type filtering, and a downloadable bundle."""
+    # discovery + api root
+    disc = client.get("/taxii2/", headers=auth)
+    assert disc.status_code == 200 and "taxii+json" in disc.headers["content-type"]
+    assert disc.json()["api_roots"] and disc.json()["api_roots"][0].endswith("/taxii2/api/")
+    assert TAXII_VERSIONS(client, auth)
+
+    # collections list has both served collections
+    cols = client.get("/taxii2/api/collections/", headers=auth).json()["collections"]
+    ids = {c["id"] for c in cols}
+    assert {"indicators", "threat-actors"} <= ids and all(c["can_read"] for c in cols)
+
+    # indicator objects are real STIX 2.1
+    objs = client.get("/taxii2/api/collections/indicators/objects/", headers=auth).json()
+    assert "objects" in objs and "more" in objs
+    kinds = {o["type"] for o in objs["objects"]}
+    assert kinds <= {"indicator", "vulnerability", "relationship"}
+    assert all(o.get("spec_version") == "2.1" for o in objs["objects"])
+    # type filter
+    only_ind = client.get("/taxii2/api/collections/indicators/objects/?type=indicator&limit=5",
+                          headers=auth).json()["objects"]
+    assert all(o["type"] == "indicator" for o in only_ind) and len(only_ind) <= 5
+    # actors collection
+    actors = client.get("/taxii2/api/collections/threat-actors/objects/", headers=auth).json()["objects"]
+    assert actors and all(o["type"] == "threat-actor" for o in actors)
+    # unknown collection
+    assert client.get("/taxii2/api/collections/nope/", headers=auth).status_code == 404
+
+    # auth is enforced; a platform API key also works as a bearer credential
+    assert client.get("/taxii2/api/").status_code == 401
+    key = client.post("/config/api-keys", json={"name": "TAXII puller", "scope": "read"},
+                      headers=auth).json()["secret"]
+    keyed = client.get("/taxii2/api/", headers={"Authorization": f"Bearer {key}"})
+    assert keyed.status_code == 200
+
+    # downloadable STIX bundle (same content the TAXII server publishes)
+    bundle = client.get("/cti/stix/bundle", headers=auth).json()
+    assert bundle["type"] == "bundle" and isinstance(bundle["objects"], list) and bundle["objects"]
+    ta = client.get("/cti/stix/bundle?type=threat-actor", headers=auth).json()
+    assert all(o["type"] == "threat-actor" for o in ta["objects"])
+
+
+def TAXII_VERSIONS(client, auth) -> bool:
+    root = client.get("/taxii2/api/", headers=auth).json()
+    return "application/taxii+json;version=2.1" in root["versions"]
+
+
 def test_ueba_entity_risk(client, auth):
     """UEBA: entities ranked by alert-derived risk, with drill-down timeline."""
     from dashboard_api.engine import seed_builtin_rules

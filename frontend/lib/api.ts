@@ -813,6 +813,9 @@ export const removeIocKnownGood = (id: string) =>
   api<Ioc & { lifecycle: IocLifecycle }>(`/cti/iocs/${id}/known-good`, { method: 'DELETE' })
 export const runIocDecay = () =>
   api<{ scanned: number; expired: number; reactivated: number }>('/cti/iocs/decay', { method: 'POST' })
+export const fetchStixBundle = (type?: string) =>
+  api<{ type: string; id: string; objects: Array<Record<string, unknown>> }>(
+    `/cti/stix/bundle${type ? `?type=${type}` : ''}`)
 export const lookupIoc = (value: string) =>
   api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
 export interface ImportResult { imported: number; duplicates: number; skipped: number; total: number }
