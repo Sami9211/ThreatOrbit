@@ -122,6 +122,8 @@ def startup():
             except Exception:
                 logger.exception("Initial engine prime failed")
         seed_builtin_connectors()
+        from dashboard_api.engine import seed_builtin_rules
+        seed_builtin_rules()
         threading.Thread(target=_connector_scheduler, daemon=True).start()
         threading.Thread(target=_engine_loop, daemon=True).start()
         logger.info("Live mode: connector scheduler + live engine started")

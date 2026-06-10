@@ -77,23 +77,18 @@ def _sha256(rng) -> str:
     return "".join(rng.choice("0123456789abcdef") for _ in range(64))
 
 
-# ── Detection scenarios ─────────────────────────────────────────────────────────
-# Each scenario builds a normalised event AND the alert it should raise. Returning
-# (alert_kwargs, iocs) keeps detection and IOC extraction real and explicit.
+# ── Telemetry scenarios ─────────────────────────────────────────────────────────
+# Each scenario emits a RAW EVENT (normalised fields) plus any IOCs it carries.
+# Severity / MITRE / titles come from the DETECTION RULES that match the event —
+# exactly like a real SIEM, where the rule defines the detection.
 
 def _scn_brute_force(rng):
     src = _pub_ip(rng); user = rng.choice(_USERS); host = rng.choice(_INTERNAL_HOSTS)
-    n = rng.randint(40, 400)
     return ({
-        "title": f"Brute-force authentication against {user}@{host}",
-        "severity": "high" if n < 200 else "critical",
-        "risk": rng.randint(70, 95), "rule_name": "Auth · Failed-login burst",
-        "src_ip": src, "username": user, "hostname": host,
-        "mitre_tech_id": "T1110", "mitre_tech": "Brute Force",
-        "mitre_tactic": "Credential Access", "mitre_tactic_id": "TA0006",
-        "description": f"{n} failed logons for {user} from {src} in 5 minutes, then a success.",
-        "raw_log": f"{_now()} sshd[{rng.randint(1000,9999)}]: Failed password for {user} from {src} port {rng.randint(1024,65535)}",
-        "event_count": n,
+        "category": "auth", "event_type": "failed_login", "src_ip": src,
+        "username": user, "hostname": host, "action": "auth_fail",
+        "severity_hint": "high", "mitre_tech_id": "T1110",
+        "raw": f"sshd[{rng.randint(1000,9999)}]: Failed password for {user} from {src} port {rng.randint(1024,65535)}",
     }, [{"type": "ip", "value": src, "threat_type": "brute-force-source", "confidence": 75}])
 
 
@@ -101,14 +96,10 @@ def _scn_c2_beacon(rng):
     src = _int_ip(rng); dst = _pub_ip(rng); host = rng.choice(_INTERNAL_HOSTS)
     mal = rng.choice(_MALWARE); actor = rng.choice(_ACTORS)
     return ({
-        "title": f"C2 beacon from {host} to {dst} ({mal})",
-        "severity": "critical", "risk": rng.randint(85, 99),
-        "rule_name": "Network · Beaconing", "src_ip": src, "hostname": host,
-        "mitre_tech_id": "T1071.001", "mitre_tech": "Web Protocols",
-        "mitre_tactic": "Command and Control", "mitre_tactic_id": "TA0011",
-        "description": f"Periodic low-jitter HTTPS callbacks from {host} to {dst}, consistent with {mal} attributed to {actor}.",
-        "raw_log": f"{_now()} fw: ALLOW {src}:{rng.randint(40000,60000)} -> {dst}:443 bytes={rng.randint(400,1200)} interval=58s",
-        "event_count": rng.randint(12, 80),
+        "category": "network", "event_type": "beacon", "src_ip": src, "dest_ip": dst,
+        "dest_port": 443, "hostname": host, "bytes_out": rng.randint(400, 1200),
+        "severity_hint": "critical", "mitre_tech_id": "T1071.001",
+        "raw": f"fw: ALLOW {src}:{rng.randint(40000,60000)} -> {dst}:443 interval=58s family={mal}",
     }, [{"type": "ip", "value": dst, "threat_type": "c2", "confidence": 90, "actor": actor, "severity": "critical"}])
 
 
@@ -116,30 +107,20 @@ def _scn_malware(rng):
     host = rng.choice(_INTERNAL_HOSTS); user = rng.choice(_USERS)
     h = _sha256(rng); mal = rng.choice(_MALWARE); proc = rng.choice(_PROCS)
     return ({
-        "title": f"Malware execution on {host} ({mal})",
-        "severity": rng.choice(["high", "critical"]), "risk": rng.randint(78, 97),
-        "rule_name": "Endpoint · Malicious process", "hostname": host, "username": user,
-        "mitre_tech_id": "T1059.001", "mitre_tech": "PowerShell",
-        "mitre_tactic": "Execution", "mitre_tactic_id": "TA0002",
-        "description": f"{proc} spawned an encoded payload identified as {mal} (SHA256 {h[:16]}…) on {host}.",
-        "raw_log": f"{_now()} EDR: {host} {proc} -enc <b64> sha256={h} verdict=malicious family={mal}",
-        "event_count": 1,
+        "category": "endpoint", "event_type": "process_start", "hostname": host,
+        "username": user, "process_name": proc, "action": "malicious",
+        "severity_hint": "high", "mitre_tech_id": "T1059.001",
+        "raw": f"EDR: {host} {proc} -enc <b64> sha256={h} verdict=malicious family={mal}",
     }, [{"type": "hash", "value": h, "threat_type": mal, "confidence": 88, "severity": "high"}])
 
 
 def _scn_web_attack(rng):
     src = _pub_ip(rng); host = rng.choice(["WEB-LB-01", "PROD-API-04", "wordpress-mkt"])
-    kind = rng.choice([("SQL injection", "T1190", "SQLi"), ("Path traversal", "T1083", "LFI"),
-                       ("Web shell upload", "T1505.003", "WebShell")])
+    action = rng.choice(["sqli", "lfi", "webshell"])
     return ({
-        "title": f"{kind[0]} attempt on {host}",
-        "severity": rng.choice(["medium", "high"]), "risk": rng.randint(55, 82),
-        "rule_name": "Web · Application attack", "src_ip": src, "hostname": host,
-        "mitre_tech_id": kind[1], "mitre_tech": kind[2],
-        "mitre_tactic": "Initial Access", "mitre_tactic_id": "TA0001",
-        "description": f"{kind[0]} payload from {src} against {host}.",
-        "raw_log": f'{_now()} nginx: {src} "GET /index.php?id=1\' OR 1=1-- HTTP/1.1" 200',
-        "event_count": rng.randint(1, 12),
+        "category": "web", "event_type": "web_request", "src_ip": src, "hostname": host,
+        "action": action, "severity_hint": "medium", "mitre_tech_id": "T1190",
+        "raw": f'nginx: {src} "GET /index.php?id=1\' OR 1=1-- HTTP/1.1" 200 ({action})',
     }, [{"type": "ip", "value": src, "threat_type": "web-attack", "confidence": 65}])
 
 
@@ -147,42 +128,28 @@ def _scn_exfil(rng):
     src = _int_ip(rng); dst = _pub_ip(rng); host = rng.choice(_INTERNAL_HOSTS)
     mb = rng.randint(200, 4000)
     return ({
-        "title": f"Possible data exfiltration from {host} ({mb} MB)",
-        "severity": "critical" if mb > 1000 else "high", "risk": rng.randint(72, 96),
-        "rule_name": "Network · Large egress", "src_ip": src, "hostname": host,
-        "mitre_tech_id": "T1041", "mitre_tech": "Exfiltration Over C2 Channel",
-        "mitre_tactic": "Exfiltration", "mitre_tactic_id": "TA0010",
-        "description": f"{mb} MB transferred from {host} to external {dst} over an unusual port.",
-        "raw_log": f"{_now()} fw: {src} -> {dst}:8443 bytes_out={mb*1024*1024}",
-        "event_count": 1,
+        "category": "network", "event_type": "large_egress", "src_ip": src, "dest_ip": dst,
+        "dest_port": 8443, "hostname": host, "bytes_out": mb * 1024 * 1024,
+        "severity_hint": "high", "mitre_tech_id": "T1041",
+        "raw": f"fw: {src} -> {dst}:8443 bytes_out={mb*1024*1024}",
     }, [{"type": "ip", "value": dst, "threat_type": "exfil-destination", "confidence": 70}])
 
 
 def _scn_phishing(rng):
     user = rng.choice(_USERS); dom = rng.choice(_BAD_DOMAINS); actor = rng.choice(_ACTORS)
     return ({
-        "title": f"Phishing link clicked by {user}",
-        "severity": rng.choice(["medium", "high"]), "risk": rng.randint(50, 80),
-        "rule_name": "Email · Credential phishing", "username": user,
-        "mitre_tech_id": "T1566.002", "mitre_tech": "Spearphishing Link",
-        "mitre_tactic": "Initial Access", "mitre_tactic_id": "TA0001",
-        "description": f"{user} submitted credentials to {dom}, a known phishing domain linked to {actor}.",
-        "raw_log": f"{_now()} proxy: {user} GET https://{dom}/login category=phishing action=allowed",
-        "event_count": 1,
+        "category": "web", "event_type": "proxy_request", "username": user,
+        "action": "phishing_click", "severity_hint": "medium", "mitre_tech_id": "T1566.002",
+        "raw": f"proxy: {user} GET https://{dom}/login category=phishing action=allowed",
     }, [{"type": "domain", "value": dom, "threat_type": "phishing", "confidence": 80, "actor": actor}])
 
 
 def _scn_priv_esc(rng):
     user = rng.choice(_USERS); host = rng.choice(_INTERNAL_HOSTS)
     return ({
-        "title": f"Privilege escalation by {user} on {host}",
-        "severity": "high", "risk": rng.randint(68, 88),
-        "rule_name": "Identity · Privilege escalation", "username": user, "hostname": host,
-        "mitre_tech_id": "T1078", "mitre_tech": "Valid Accounts",
-        "mitre_tactic": "Privilege Escalation", "mitre_tactic_id": "TA0004",
-        "description": f"{user} was added to Domain Admins on {host} outside change control.",
-        "raw_log": f"{_now()} winlog: EventID=4728 member={user} group='Domain Admins' host={host}",
-        "event_count": 1,
+        "category": "identity", "event_type": "group_change", "username": user, "hostname": host,
+        "action": "add_admin", "severity_hint": "high", "mitre_tech_id": "T1078",
+        "raw": f"winlog: EventID=4728 member={user} group='Domain Admins' host={host}",
     }, [])
 
 
@@ -199,6 +166,142 @@ def _pick_scenario(rng):
         if r <= acc:
             return fn
     return _SCENARIOS[0][0]
+
+
+# ── Built-in detection rules (definitions that match the events above) ───────────
+# Each maps an event_type to an alert with severity, MITRE, and a title template.
+# These are real rules — they evaluate via rule_engine.evaluate(), exactly like
+# any rule an analyst authors in the editor.
+BUILTIN_RULES = [
+    {"id": "R-BRUTEFORCE", "name": "Brute-force authentication", "category": "Identity",
+     "severity": "high", "mitre_tactic": "Credential Access", "mitre_tactic_id": "TA0006",
+     "mitre_tech_id": "T1110", "mitre_tech": "Brute Force",
+     "title_tmpl": "Brute-force authentication against {username}@{hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "failed_login"}], "logic": "and"}},
+    {"id": "R-C2BEACON", "name": "C2 beaconing", "category": "Network",
+     "severity": "critical", "mitre_tactic": "Command and Control", "mitre_tactic_id": "TA0011",
+     "mitre_tech_id": "T1071.001", "mitre_tech": "Web Protocols",
+     "title_tmpl": "C2 beacon from {hostname} to {dest_ip}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "beacon"}], "logic": "and"}},
+    {"id": "R-MALPROC", "name": "Malicious process execution", "category": "Endpoint",
+     "severity": "high", "mitre_tactic": "Execution", "mitre_tactic_id": "TA0002",
+     "mitre_tech_id": "T1059.001", "mitre_tech": "PowerShell",
+     "title_tmpl": "Malware execution on {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "process_start"},
+                                    {"field": "action", "op": "equals", "value": "malicious"}], "logic": "and"}},
+    {"id": "R-WEBATTACK", "name": "Web application attack", "category": "Network",
+     "severity": "medium", "mitre_tactic": "Initial Access", "mitre_tactic_id": "TA0001",
+     "mitre_tech_id": "T1190", "mitre_tech": "Exploit Public-Facing Application",
+     "title_tmpl": "Web attack ({action}) on {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "web_request"}], "logic": "and"}},
+    {"id": "R-EXFIL", "name": "Large data egress", "category": "Network",
+     "severity": "high", "mitre_tactic": "Exfiltration", "mitre_tactic_id": "TA0010",
+     "mitre_tech_id": "T1041", "mitre_tech": "Exfiltration Over C2 Channel",
+     "title_tmpl": "Possible data exfiltration from {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "large_egress"},
+                                    {"field": "bytes_out", "op": "gte", "value": 104857600}], "logic": "and"}},
+    {"id": "R-PHISH", "name": "Credential phishing click", "category": "Email",
+     "severity": "medium", "mitre_tactic": "Initial Access", "mitre_tactic_id": "TA0001",
+     "mitre_tech_id": "T1566.002", "mitre_tech": "Spearphishing Link",
+     "title_tmpl": "Phishing link clicked by {username}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "proxy_request"},
+                                    {"field": "action", "op": "equals", "value": "phishing_click"}], "logic": "and"}},
+    {"id": "R-PRIVESC", "name": "Privilege escalation", "category": "Identity",
+     "severity": "high", "mitre_tactic": "Privilege Escalation", "mitre_tactic_id": "TA0004",
+     "mitre_tech_id": "T1078", "mitre_tech": "Valid Accounts",
+     "title_tmpl": "Privilege escalation by {username} on {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "group_change"}], "logic": "and"}},
+]
+
+
+def seed_builtin_rules():
+    """Insert the built-in detection rules (idempotent). Live-mode bootstrap."""
+    now = _now()
+    with get_conn() as conn:
+        for r in BUILTIN_RULES:
+            if conn.execute("SELECT 1 FROM detection_rules WHERE id=?", (r["id"],)).fetchone():
+                continue
+            conn.execute(
+                "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tactic_id,"
+                "mitre_tech_id,mitre_tech,status,source,created,description,definition,tags) "
+                "VALUES (?,?,?,?,?,?,?,?, 'enabled','builtin',?,?,?, '[\"builtin\"]')",
+                (r["id"], r["name"], r["category"], r["severity"], r["mitre_tactic"],
+                 r["mitre_tactic_id"], r["mitre_tech_id"], r["mitre_tech"], now,
+                 f"Built-in detection: {r['name']}.", dumps(r["definition"])),
+            )
+        conn.commit()
+
+
+_RISK = {"critical": 92, "high": 76, "medium": 52, "low": 28, "info": 12}
+
+
+def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -> dict:
+    """Evaluate enabled rules over unprocessed events → create alerts.
+
+    If preview_rule is given, evaluate ONLY that rule and return matches without
+    creating alerts (backtest). Returns a summary."""
+    import json
+    from dashboard_api.rule_engine import evaluate
+    from dashboard_api.detections import _insert_alert, _TACTIC  # reuse writer
+
+    rows = conn.execute(
+        "SELECT * FROM events WHERE processed=0 ORDER BY ts DESC LIMIT ?", (limit,)
+    ).fetchall() if preview_rule is None else conn.execute(
+        "SELECT * FROM events ORDER BY ts DESC LIMIT ?", (limit,)
+    ).fetchall()
+    events = [dict(e) for e in rows]
+    if preview_rule is not None:
+        matches = evaluate(preview_rule, events)
+        return {"matched": len(matches),
+                "sample": [{"entity": m["entity"], "count": m["count"],
+                            "ts": m["event"].get("ts"), "raw": m["event"].get("raw")}
+                           for m in matches[:15]],
+                "scanned": len(events)}
+
+    rule_rows = conn.execute(
+        "SELECT * FROM detection_rules WHERE status='enabled'").fetchall()
+    rules = []
+    for r in rule_rows:
+        d = r["definition"]
+        if isinstance(d, str):
+            try:
+                d = json.loads(d)
+            except (ValueError, TypeError):
+                d = {}
+        if d.get("conditions"):
+            rules.append({**dict(r), "definition": d})
+
+    created = 0
+    for rule in rules:
+        for m in evaluate(rule, events):
+            ev = m["event"]
+            title = rule.get("name", "Detection")
+            tmpl = next((br["title_tmpl"] for br in BUILTIN_RULES if br["id"] == rule["id"]), None)
+            if tmpl:
+                try:
+                    title = tmpl.format(**{k: ev.get(k, "—") for k in
+                                           ("username", "hostname", "dest_ip", "src_ip", "action")})
+                except (KeyError, IndexError):
+                    pass
+            else:
+                title = f"{rule['name']} · {m['entity']}"
+            sev = rule.get("severity_override") or rule["severity"]
+            _insert_alert(
+                conn, title=title, severity=sev, risk=_RISK.get(sev, 50),
+                rule_name=rule["name"], src_ip=ev.get("src_ip"), username=ev.get("username"),
+                hostname=ev.get("hostname"), mitre_tech_id=rule.get("mitre_tech_id"),
+                mitre_tech=rule.get("mitre_tech"), mitre_tactic=rule.get("mitre_tactic"),
+                mitre_tactic_id=rule.get("mitre_tactic_id"),
+                description=f"Rule '{rule['name']}' matched. {ev.get('raw', '')}",
+                raw_log=ev.get("raw"), event_count=m["count"],
+            )
+            created += 1
+        # bump the rule's hit counter + last_fired
+        conn.execute("UPDATE detection_rules SET last_fired=? WHERE id=?", (_now(), rule["id"]))
+    event_ids = [e["id"] for e in events]
+    if event_ids:
+        conn.executemany("UPDATE events SET processed=1 WHERE id=?", [(i,) for i in event_ids])
+    return {"alerts": created, "events": len(events), "rules": len(rules)}
 
 
 # ── Dark-web monitoring ──────────────────────────────────────────────────────────
@@ -302,19 +405,33 @@ def _maybe_escalate_case(conn, actor_email="engine") -> int:
 
 # ── Tick ─────────────────────────────────────────────────────────────────────────
 def process_tick(max_events: int = 6) -> dict:
-    """One pass of the live engine. Returns a summary of what it produced."""
+    """One pass of the live engine: generate telemetry → run detection rules →
+    alerts, extract IOCs, monitor dark web, correlate/escalate."""
+    import uuid as _uuid
+    seed_builtin_rules()  # idempotent — guarantees detection rules exist
     rng = _rng()
     n = rng.randint(2, max(2, max_events))
-    alerts = iocs = dark = 0
+    iocs = dark = 0
     with get_conn() as conn:
         for _ in range(n):
             scn = _pick_scenario(rng)
-            alert_kw, scn_iocs = scn(rng)
-            _insert_alert(conn, **alert_kw)
-            alerts += 1
+            event, scn_iocs = scn(rng)
+            conn.execute(
+                "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
+                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,processed) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+                (str(_uuid.uuid4()), _now(), event.get("category"), event.get("event_type"),
+                 event.get("src_ip"), event.get("dest_ip"), event.get("dest_port"),
+                 event.get("username"), event.get("hostname"), event.get("process_name"),
+                 event.get("action"), event.get("bytes_out", 0), event.get("country"),
+                 event.get("severity_hint"), event.get("mitre_tech_id"), event.get("raw")),
+            )
             for ioc in scn_iocs:
-                if _write_ioc(conn, ioc, source=f"engine:{alert_kw['rule_name']}"):
+                if _write_ioc(conn, ioc, source="engine:telemetry"):
                     iocs += 1
+        # Detection: enabled rules evaluate the new events → alerts.
+        det = run_detection(conn)
+        alerts = det["alerts"]
         # dark-web monitoring: a finding every few ticks
         if rng.random() < 0.5:
             f = _dark_web_finding(rng)

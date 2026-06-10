@@ -493,6 +493,33 @@ export const patchRule     = (id: string, body: { status?: string; severityOverr
   })
 export const deleteRule = (id: string) =>
   api<void>(`/siem/rules/${id}`, { method: 'DELETE' })
+
+// ── Detection rule editor ────────────────────────────────────────────
+export interface RuleCondition { field: string; op: string; value: string }
+export interface RuleDefinition {
+  conditions: RuleCondition[]
+  logic: 'and' | 'or'
+  aggregation?: { groupBy: string; threshold: number; windowMinutes: number }
+  throttleMinutes?: number
+}
+export interface RuleSchema {
+  fields: string[]; operators: string[]; eventTypes: string[]; groupByFields: string[]
+}
+export const fetchRuleSchema = () => api<RuleSchema>('/siem/rule-schema')
+export const testRule = (definition: RuleDefinition) =>
+  api<{ matched: number; scanned: number; sample: Array<{ entity: string; count: number; ts: string; raw: string }> }>(
+    '/siem/rules/test', { method: 'POST', body: JSON.stringify({ definition }) })
+export const createDetectionRule = (body: {
+  name: string; category?: string; severity?: string
+  mitreTactic?: string; mitreTechId?: string; mitreTech?: string
+  description?: string; definition: RuleDefinition
+}) => api<Rule>('/siem/rules', { method: 'POST', body: JSON.stringify({
+  name: body.name, category: body.category, severity: body.severity,
+  mitre_tactic: body.mitreTactic, mitre_tech_id: body.mitreTechId, mitre_tech: body.mitreTech,
+  description: body.description, definition: body.definition,
+}) })
+export const updateRuleDefinition = (id: string, definition: RuleDefinition) =>
+  api<Rule>(`/siem/rules/${id}`, { method: 'PATCH', body: JSON.stringify({ definition }) })
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const createLogSource = (body: { name: string; type?: string; host?: string; format?: string; tags?: string[] }) =>
   api<LogSource>('/siem/sources', { method: 'POST', body: JSON.stringify(body) })

@@ -45,6 +45,7 @@ class RuleUpdate(BaseModel):
     status: str | None = None
     severity_override: str | None = None
     suppression_window: int | None = None
+    definition: dict | None = None
 
 
 class RuleCreate(BaseModel):
@@ -56,7 +57,12 @@ class RuleCreate(BaseModel):
     mitre_tech: str | None = None
     description: str | None = None
     kql: str | None = None
+    definition: dict = {}
     tags: list[str] = []
+
+
+class RuleTest(BaseModel):
+    definition: dict
 
 
 class SourceCreate(BaseModel):
@@ -271,16 +277,39 @@ def create_rule(body: RuleCreate, user: dict = Depends(current_user)):
         conn.execute(
             "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tech_id,"
             "mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,created,updated_by,"
-            "description,kql,suppression_window,severity_override,tags) "
-            "VALUES (?,?,?,?,?,?,?,0,0,0,'enabled','custom',NULL,?,?,?,?,0,NULL,?)",
+            "description,kql,suppression_window,severity_override,tags,definition) "
+            "VALUES (?,?,?,?,?,?,?,0,0,0,'enabled','custom',NULL,?,?,?,?,0,NULL,?,?)",
             (rid, name, body.category, body.severity, body.mitre_tactic, body.mitre_tech_id,
              body.mitre_tech, now, user["email"],
-             body.description or f"Custom detection: {name}.", body.kql, dumps(body.tags)),
+             body.description or f"Custom detection: {name}.", body.kql, dumps(body.tags),
+             dumps(body.definition or {})),
         )
         audit(conn, user["email"], "rule.create", rid, f"name={name} severity={body.severity}")
         conn.commit()
         row = conn.execute("SELECT * FROM detection_rules WHERE id=?", (rid,)).fetchone()
     return row_to_dict(row)
+
+
+@router.get("/rule-schema")
+def rule_schema():
+    """Fields + operators the rule editor offers, with sample event types."""
+    from dashboard_api.rule_engine import FIELDS, OPERATORS
+    return {"fields": FIELDS, "operators": OPERATORS,
+            "eventTypes": ["failed_login", "beacon", "process_start", "web_request",
+                           "large_egress", "proxy_request", "group_change"],
+            "groupByFields": ["src_ip", "dest_ip", "username", "hostname"]}
+
+
+@router.post("/rules/test")
+def test_rule(body: RuleTest):
+    """Backtest a rule definition against recent events — returns matches without
+    creating any alerts, so analysts can tune before enabling."""
+    if not (body.definition.get("conditions")):
+        raise HTTPException(status_code=400, detail="Rule needs at least one condition")
+    from dashboard_api.engine import run_detection
+    with get_conn() as conn:
+        return run_detection(conn, preview_rule={"id": "preview", "name": "preview",
+                                                 "severity": "medium", "definition": body.definition})
 
 
 @router.patch("/rules/{rule_id}")
@@ -295,6 +324,9 @@ def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(current_use
         fields.append("severity_override=?"); values.append(body.severity_override)
     if body.suppression_window is not None:
         fields.append("suppression_window=?"); values.append(body.suppression_window)
+    if body.definition is not None:
+        from dashboard_api.db import dumps
+        fields.append("definition=?"); values.append(dumps(body.definition))
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
     fields.append("updated_by=?"); values.append(user["email"])

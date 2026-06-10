@@ -884,3 +884,62 @@ def test_reports_all_kinds(client, auth):
     assert ok.status_code == 200
     # daily window works on a fresh demo DB
     assert client.get("/reports/executive?period=daily", headers=auth).status_code == 200
+
+
+def test_rule_engine_matching():
+    """Pure rule_engine: conditions, operators, and aggregation thresholds."""
+    from dashboard_api.rule_engine import matches_event, evaluate
+    from datetime import datetime, timezone
+    e = {"event_type": "failed_login", "src_ip": "10.0.0.5", "bytes_out": 200, "username": "root"}
+    assert matches_event(e, {"conditions": [{"field": "event_type", "op": "equals", "value": "failed_login"}], "logic": "and"})
+    assert not matches_event(e, {"conditions": [{"field": "event_type", "op": "equals", "value": "beacon"}], "logic": "and"})
+    assert matches_event(e, {"conditions": [{"field": "bytes_out", "op": "gt", "value": 100}], "logic": "and"})
+    assert matches_event(e, {"conditions": [{"field": "src_ip", "op": "cidr", "value": "10.0.0.0/8"}], "logic": "and"})
+    assert matches_event(e, {"conditions": [{"field": "username", "op": "in", "value": "root,admin"}], "logic": "and"})
+    # aggregation: 3 same-ip events within window with threshold 3 → one match
+    now = datetime.now(timezone.utc)
+    evs = [{"event_type": "failed_login", "src_ip": "1.2.3.4", "ts": now.isoformat()} for _ in range(3)]
+    rule = {"definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "failed_login"}],
+                           "logic": "and", "aggregation": {"groupBy": "src_ip", "threshold": 3, "windowMinutes": 60}}}
+    out = evaluate(rule, evs, now=now)
+    assert len(out) == 1 and out[0]["entity"] == "1.2.3.4" and out[0]["count"] == 3
+    # below threshold → no match
+    assert evaluate({"definition": {**rule["definition"], "aggregation": {"groupBy": "src_ip", "threshold": 5, "windowMinutes": 60}}}, evs, now=now) == []
+
+
+def test_detection_rule_crud_and_backtest(client, auth):
+    # schema metadata
+    sch = client.get("/siem/rule-schema", headers=auth).json()
+    assert "event_type" in sch["fields"] and "equals" in sch["operators"]
+    # create a rule with a real definition
+    r = client.post("/siem/rules", json={
+        "name": "Suspicious egress", "severity": "high", "mitre_tech_id": "T1041",
+        "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "large_egress"}], "logic": "and"}},
+        headers=auth)
+    assert r.status_code == 201, r.text
+    rid = r.json()["id"]
+    assert r.json()["definition"]["conditions"][0]["field"] == "event_type"
+    # backtest endpoint runs without creating alerts
+    bt = client.post("/siem/rules/test", json={
+        "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "failed_login"}], "logic": "and"}},
+        headers=auth)
+    assert bt.status_code == 200 and "matched" in bt.json() and "scanned" in bt.json()
+    # empty definition rejected
+    assert client.post("/siem/rules/test", json={"definition": {}}, headers=auth).status_code == 400
+    # update the definition
+    upd = client.patch(f"/siem/rules/{rid}", json={"definition": {"conditions": [{"field": "bytes_out", "op": "gte", "value": 1000}], "logic": "and"}}, headers=auth)
+    assert upd.json()["definition"]["conditions"][0]["op"] == "gte"
+
+
+def test_engine_rule_driven_detection(client, auth):
+    """The live engine now generates events and rules fire alerts over them."""
+    # seed built-in rules (live-mode would do this at boot)
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    before = client.get("/siem/alerts", headers=auth).json()["total"]
+    g = client.post("/config/engine", json={"generate": 12}, headers=auth).json()["generated"]
+    assert g["alerts"] > 0  # rules matched generated events
+    after = client.get("/siem/alerts?sort=ts&order=desc&limit=20", headers=auth).json()
+    assert after["total"] > before
+    # alerts carry the rule's name + MITRE (came from a matched rule)
+    assert any(a["rule_name"] and a["mitre_tech_id"] for a in after["items"])

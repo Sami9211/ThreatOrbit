@@ -34,9 +34,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 1 — SIEM depth (detection & monitoring)
 
-- [ ] **Detection rule editor** — author/edit correlation rules in the UI
-      (conditions, thresholds, time windows, suppression), test against live
-      events, enable/disable. Sigma-rule import/export.
+- [~] **Detection rule editor** — DONE: author rules with field conditions,
+      AND/OR logic, threshold-over-window aggregation, and a live backtest;
+      built-in rules now evaluate the raw event stream (see CHANGELOG).
+      Remaining: Sigma import/export, per-rule suppression UI, FP tuning.
 - [ ] **Real log-source ingestion** — a syslog/HTTP-collector listener and a
       file/directory watcher so production logs stream in (not just uploads).
 - [ ] **Field normalization to ECS** (Elastic Common Schema) so rules and
@@ -111,6 +112,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Detection rule engine + editor (Phase 1)** — the SIEM now
+  works like a real SIEM: the live engine emits raw telemetry into an `events`
+  table, and enabled detection rules evaluate that stream to fire alerts.
+  `rule_engine.py` supports field conditions (equals/contains/in/gt/lt/regex/
+  cidr…), AND/OR logic, and threshold-over-window aggregation (brute-force /
+  beaconing style). 7 built-in rules ship; analysts author custom rules in a
+  new visual `RuleEditor` (condition builder + aggregation + **live backtest**
+  via `POST /siem/rules/test`) and `/siem/rule-schema` exposes the fields/
+  operators. Rules carry MITRE mapping; alerts are produced by the matching
+  rule, so triage/KPIs/correlation all flow from real detections.
 
 - **2026-06-10 · Reporting engine** — structured, sectioned reports
   (`dashboard_api/reports.py` + `/reports/*`): executive + SIEM + SOAR + CTI +

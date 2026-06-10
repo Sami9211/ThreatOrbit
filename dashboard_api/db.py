@@ -19,7 +19,7 @@ JSON_COLUMNS = {
     "tags", "open_ports", "cves", "steps", "actions", "aliases", "motivations",
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
-    "hypotheses", "meta", "config", "scopes", "events", "field_map",
+    "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition",
 }
 
 
@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS detection_rules (
     category          TEXT NOT NULL,
     severity          TEXT NOT NULL,
     mitre_tactic      TEXT,
+    mitre_tactic_id   TEXT,
     mitre_tech_id     TEXT,
     mitre_tech        TEXT,
     hits_24h          INTEGER NOT NULL DEFAULT 0,
@@ -343,6 +344,28 @@ CREATE TABLE IF NOT EXISTS scans (
     actor      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS events (
+    id           TEXT PRIMARY KEY,
+    ts           TEXT NOT NULL,
+    category     TEXT,            -- auth|network|endpoint|web|cloud|identity
+    event_type   TEXT,            -- failed_login|connection|process_start|…
+    src_ip       TEXT,
+    dest_ip      TEXT,
+    dest_port    INTEGER,
+    username     TEXT,
+    hostname     TEXT,
+    process_name TEXT,
+    action       TEXT,
+    bytes_out    INTEGER NOT NULL DEFAULT 0,
+    country      TEXT,
+    severity_hint TEXT,
+    mitre_tech_id TEXT,
+    raw          TEXT,
+    processed    INTEGER NOT NULL DEFAULT 0   -- 0 until the detection pass evaluates it
+);
+CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_events_proc ON events(processed);
+
 CREATE TABLE IF NOT EXISTS dark_web_findings (
     id        TEXT PRIMARY KEY,
     ts        TEXT NOT NULL,
@@ -432,6 +455,8 @@ _MIGRATIONS = [
     ("alerts", "detect_latency_sec", "INTEGER"),
     ("alerts", "ack_latency_sec", "INTEGER"),
     ("alerts", "respond_latency_sec", "INTEGER"),
+    ("detection_rules", "definition", "TEXT NOT NULL DEFAULT '{}'"),
+    ("detection_rules", "mitre_tactic_id", "TEXT"),
 ]
 
 
