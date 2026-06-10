@@ -384,7 +384,7 @@ function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => vo
           <p className="text-[10px] text-ink-500 mt-1 truncate">{actor.aliases.slice(0, 2).join(' · ')}</p>
         </div>
         <span
-          className="text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded-full border shrink-0"
+          className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full border shrink-0"
           style={{ color: threat.color, background: `${threat.color}15`, borderColor: `${threat.color}33` }}
         >
           {threat.label}
@@ -622,13 +622,13 @@ export default function ActorProfilesPage() {
             origin: a.origin,
             flag: a.flag ?? seed?.flag ?? '🌐',
             type: ((t) => t === 'nation-state' ? 'Nation-State' : t === 'cybercrime' ? 'Cybercrime' : 'Hacktivist')((a.type ?? '').toLowerCase()) as ActorType,
-            motivations: ([a.motivation].filter(Boolean) as Motivation[]),
+            motivations: ((Array.isArray(a.motivations) ? a.motivations : []) as Motivation[]),
             sophistication: a.sophistication,
             threatLevel: (a.threatLevel as 'critical' | 'high' | 'elevated') ?? 'high',
             sectors: a.sectors,
-            campaignCount: a.campaigns.length,
+            campaignCount: a.campaignCount ?? (Array.isArray(a.campaigns) ? a.campaigns.length : 0),
             firstSeen: a.firstSeen?.split('-')[0] ?? 'Unknown',
-            malware: seed?.malware ?? [],
+            malware: seed?.malware ?? (Array.isArray(a.malware) ? a.malware : []),
             ttps: a.ttps,
             recentActivity: seed?.recentActivity ?? a.description,
             description: a.description,

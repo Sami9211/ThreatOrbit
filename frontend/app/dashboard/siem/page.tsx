@@ -1505,7 +1505,7 @@ export default function SIEMPage() {
                     { sev: 'Critical', count: 43,   color: '#FF2E97' },
                     { sev: 'High',     count: 81,   color: '#FF4D6D' },
                     { sev: 'Medium',   count: 224,  color: '#FFB23E' },
-                    { sev: 'Low',      count: 1847, color: '#2DD4BF' },
+                    { sev: 'Low',      count: 1847, color: '#34F5C5' },
                     { sev: 'Info',     count: 652,  color: '#7A3CFF' },
                   ].map((s, i) => (
                     <div key={s.sev} className="flex items-center gap-3 mb-2">

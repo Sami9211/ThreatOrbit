@@ -641,7 +641,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 function NormalSOAR({ cases: casesData }: { cases: CaseRecord[] }) {
   const CASES = casesData
   const SEV_COLOR: Record<string, string> = {
-    critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#2DD4BF',
+    critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5',
   }
   const COLS = [
     { id: 'todo',       label: 'New',         statuses: ['new'],                                  color: '#FFB23E', border: 'border-amber/25',   header: 'bg-amber/10 text-amber'   },

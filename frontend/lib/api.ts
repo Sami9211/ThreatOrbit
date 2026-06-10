@@ -253,14 +253,17 @@ export interface Actor {
   aliases: string[]
   origin: string
   type: string
-  motivation: string
-  active: boolean
+  motivations: string[]
+  active: boolean | number
   firstSeen: string
   lastSeen: string
   sophistication: number
   sectors: string[]
   ttps: string[]
+  malware?: string[]
   iocCount: number
+  campaignCount?: number
+  recentActivity?: string | null
   campaigns: string[]
   description: string
   threatLevel: string

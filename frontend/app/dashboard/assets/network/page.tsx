@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { fetchAssets, type Asset as ApiAsset } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Network, Server, Monitor, Shield, Cloud, Database, Globe,
-  Cpu, X, MapPin, Lock, Activity, Layers,
+  Cpu, X, MapPin, Lock, Activity, Layers, Search, Plus, Minus,
+  Maximize2, Route, MousePointer2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,7 @@ interface Node {
   ports: number[]
   x: number
   y: number
+  live?: boolean   // came from the live asset inventory, not the seed topology
 }
 
 interface Link {
@@ -36,7 +38,7 @@ interface Link {
 const ZONE_META: Record<Zone, { label: string; color: string }> = {
   dmz:      { label: 'DMZ',      color: '#FFB23E' },
   internal: { label: 'Internal', color: '#7A3CFF' },
-  cloud:    { label: 'Cloud',    color: '#34F5C5' },
+  cloud:    { label: 'Cloud',    color: '#2DD4BF' },
   ot:       { label: 'OT / ICS', color: '#FF2E97' },
 }
 
@@ -47,60 +49,56 @@ const RISK_META: Record<Risk, { label: string; color: string }> = {
 }
 
 const TYPE_ICON: Record<NodeType, React.ElementType> = {
-  internet: Globe,
-  firewall: Shield,
-  server: Server,
-  workstation: Monitor,
-  cloud: Cloud,
-  database: Database,
-  ot: Cpu,
+  internet: Globe, firewall: Shield, server: Server,
+  workstation: Monitor, cloud: Cloud, database: Database, ot: Cpu,
 }
 
 const TYPE_LABEL: Record<NodeType, string> = {
-  internet: 'Internet Gateway',
-  firewall: 'Firewall',
-  server: 'Server',
-  workstation: 'Workstation',
-  cloud: 'Cloud Resource',
-  database: 'Database',
-  ot: 'OT / ICS Device',
+  internet: 'Internet Gateway', firewall: 'Firewall', server: 'Server',
+  workstation: 'Workstation', cloud: 'Cloud Resource', database: 'Database', ot: 'OT / ICS Device',
 }
 
-/* ── Seed data (hardcoded force-directed-looking layout) ─────────── */
+/* ── Topology coordinate space and zone panels ───────────────────── */
 const VB_W = 1000
-const VB_H = 620
+const VB_H = 640
+
+const ZONE_RECTS: Record<Zone, { x: number; y: number; w: number; h: number }> = {
+  dmz:      { x: 215, y: 115, w: 560, h: 195 },
+  ot:       { x: 30,  y: 200, w: 165, h: 240 },
+  internal: { x: 130, y: 350, w: 510, h: 250 },
+  cloud:    { x: 690, y: 320, w: 285, h: 250 },
+}
 
 const NODES: Node[] = [
-  // Internet
-  { id: 'inet', hostname: 'internet', type: 'internet', zone: 'dmz', ip: '0.0.0.0/0', risk: 'critical', riskScore: 100, ports: [], x: 500, y: 50 },
+  { id: 'inet', hostname: 'internet', type: 'internet', zone: 'dmz', ip: '0.0.0.0/0', risk: 'critical', riskScore: 100, ports: [], x: 495, y: 52 },
 
   // DMZ
-  { id: 'fw-edge-01', hostname: 'fw-edge-01', type: 'firewall', zone: 'dmz', ip: '203.0.113.1', risk: 'warning', riskScore: 58, ports: [443, 500, 4500], x: 360, y: 150 },
-  { id: 'fw-edge-02', hostname: 'fw-edge-02', type: 'firewall', zone: 'dmz', ip: '203.0.113.2', risk: 'healthy', riskScore: 22, ports: [443, 500, 4500], x: 640, y: 150 },
-  { id: 'web-lb-01', hostname: 'web-lb-01', type: 'server', zone: 'dmz', ip: '10.10.1.10', risk: 'healthy', riskScore: 18, ports: [80, 443], x: 250, y: 250 },
-  { id: 'wordpress-mkt', hostname: 'wordpress-mkt', type: 'server', zone: 'dmz', ip: '10.10.1.22', risk: 'critical', riskScore: 88, ports: [80, 443, 22], x: 410, y: 270 },
-  { id: 'mail-relay-01', hostname: 'mail-relay-01', type: 'server', zone: 'dmz', ip: '10.10.1.30', risk: 'warning', riskScore: 47, ports: [25, 587, 993], x: 720, y: 255 },
+  { id: 'fw-edge-01', hostname: 'fw-edge-01', type: 'firewall', zone: 'dmz', ip: '203.0.113.1', risk: 'warning', riskScore: 58, ports: [443, 500, 4500], x: 370, y: 168 },
+  { id: 'fw-edge-02', hostname: 'fw-edge-02', type: 'firewall', zone: 'dmz', ip: '203.0.113.2', risk: 'healthy', riskScore: 22, ports: [443, 500, 4500], x: 625, y: 168 },
+  { id: 'web-lb-01', hostname: 'web-lb-01', type: 'server', zone: 'dmz', ip: '10.10.1.10', risk: 'healthy', riskScore: 18, ports: [80, 443], x: 270, y: 258 },
+  { id: 'wordpress-mkt', hostname: 'wordpress-mkt', type: 'server', zone: 'dmz', ip: '10.10.1.22', risk: 'critical', riskScore: 88, ports: [80, 443, 22], x: 460, y: 262 },
+  { id: 'mail-relay-01', hostname: 'mail-relay-01', type: 'server', zone: 'dmz', ip: '10.10.1.30', risk: 'warning', riskScore: 47, ports: [25, 587, 993], x: 700, y: 252 },
 
   // Internal
-  { id: 'PROD-API-04', hostname: 'PROD-API-04', type: 'server', zone: 'internal', ip: '10.0.4.14', risk: 'critical', riskScore: 82, ports: [443, 8443, 9090], x: 180, y: 400 },
-  { id: 'jenkins-ci-01', hostname: 'jenkins-ci-01', type: 'server', zone: 'internal', ip: '10.0.4.31', risk: 'warning', riskScore: 61, ports: [8080, 50000, 22], x: 330, y: 470 },
-  { id: 'dc-prod-01', hostname: 'dc-prod-01', type: 'server', zone: 'internal', ip: '10.0.2.5', risk: 'warning', riskScore: 44, ports: [88, 389, 445, 636], x: 480, y: 420 },
-  { id: 'DESKTOP-FIN-087', hostname: 'DESKTOP-FIN-087', type: 'workstation', zone: 'internal', ip: '10.0.8.87', risk: 'healthy', riskScore: 15, ports: [], x: 250, y: 540 },
-  { id: 'DESKTOP-HR-012', hostname: 'DESKTOP-HR-012', type: 'workstation', zone: 'internal', ip: '10.0.8.12', risk: 'healthy', riskScore: 12, ports: [], x: 420, y: 555 },
-  { id: 'LAPTOP-EXEC-03', hostname: 'LAPTOP-EXEC-03', type: 'workstation', zone: 'internal', ip: '10.0.8.103', risk: 'warning', riskScore: 39, ports: [], x: 560, y: 545 },
+  { id: 'PROD-API-04', hostname: 'PROD-API-04', type: 'server', zone: 'internal', ip: '10.0.4.14', risk: 'critical', riskScore: 82, ports: [443, 8443, 9090], x: 215, y: 415 },
+  { id: 'jenkins-ci-01', hostname: 'jenkins-ci-01', type: 'server', zone: 'internal', ip: '10.0.4.31', risk: 'warning', riskScore: 61, ports: [8080, 50000, 22], x: 360, y: 475 },
+  { id: 'dc-prod-01', hostname: 'dc-prod-01', type: 'server', zone: 'internal', ip: '10.0.2.5', risk: 'warning', riskScore: 44, ports: [88, 389, 445, 636], x: 510, y: 425 },
+  { id: 'DESKTOP-FIN-087', hostname: 'DESKTOP-FIN-087', type: 'workstation', zone: 'internal', ip: '10.0.8.87', risk: 'healthy', riskScore: 15, ports: [], x: 255, y: 552 },
+  { id: 'DESKTOP-HR-012', hostname: 'DESKTOP-HR-012', type: 'workstation', zone: 'internal', ip: '10.0.8.12', risk: 'healthy', riskScore: 12, ports: [], x: 420, y: 562 },
+  { id: 'LAPTOP-EXEC-03', hostname: 'LAPTOP-EXEC-03', type: 'workstation', zone: 'internal', ip: '10.0.8.103', risk: 'warning', riskScore: 39, ports: [], x: 565, y: 548 },
 
   // Cloud
-  { id: 'k8s-prod-node-1', hostname: 'k8s-prod-node-1', type: 'cloud', zone: 'cloud', ip: '172.31.4.10', risk: 'healthy', riskScore: 24, ports: [6443, 10250], x: 820, y: 380 },
-  { id: 'k8s-prod-node-2', hostname: 'k8s-prod-node-2', type: 'cloud', zone: 'cloud', ip: '172.31.4.11', risk: 'healthy', riskScore: 20, ports: [6443, 10250], x: 900, y: 460 },
-  { id: 'rds-customers', hostname: 'rds-customers', type: 'database', zone: 'cloud', ip: '172.31.6.20', risk: 'critical', riskScore: 76, ports: [5432], x: 770, y: 500 },
-  { id: 's3-data-lake', hostname: 's3-data-lake', type: 'cloud', zone: 'cloud', ip: 's3://data-lake', risk: 'warning', riskScore: 41, ports: [443], x: 910, y: 330 },
+  { id: 'k8s-prod-node-1', hostname: 'k8s-prod-node-1', type: 'cloud', zone: 'cloud', ip: '172.31.4.10', risk: 'healthy', riskScore: 24, ports: [6443, 10250], x: 790, y: 385 },
+  { id: 'k8s-prod-node-2', hostname: 'k8s-prod-node-2', type: 'cloud', zone: 'cloud', ip: '172.31.4.11', risk: 'healthy', riskScore: 20, ports: [6443, 10250], x: 905, y: 450 },
+  { id: 'rds-customers', hostname: 'rds-customers', type: 'database', zone: 'cloud', ip: '172.31.6.20', risk: 'critical', riskScore: 76, ports: [5432], x: 775, y: 510 },
+  { id: 's3-data-lake', hostname: 's3-data-lake', type: 'cloud', zone: 'cloud', ip: 's3://data-lake', risk: 'warning', riskScore: 41, ports: [443], x: 915, y: 358 },
 
   // OT / ICS
-  { id: 'plc-line-a', hostname: 'plc-line-a', type: 'ot', zone: 'ot', ip: '192.168.50.10', risk: 'critical', riskScore: 91, ports: [502, 44818], x: 110, y: 250 },
-  { id: 'scada-hmi-01', hostname: 'scada-hmi-01', type: 'ot', zone: 'ot', ip: '192.168.50.20', risk: 'warning', riskScore: 53, ports: [502, 102], x: 90, y: 360 },
+  { id: 'plc-line-a', hostname: 'plc-line-a', type: 'ot', zone: 'ot', ip: '192.168.50.10', risk: 'critical', riskScore: 91, ports: [502, 44818], x: 112, y: 262 },
+  { id: 'scada-hmi-01', hostname: 'scada-hmi-01', type: 'ot', zone: 'ot', ip: '192.168.50.20', risk: 'warning', riskScore: 53, ports: [502, 102], x: 100, y: 380 },
 ]
 
-const LINKS: Link[] = [
+const BASE_LINKS: Link[] = [
   { from: 'inet', to: 'fw-edge-01' },
   { from: 'inet', to: 'fw-edge-02' },
   { from: 'fw-edge-01', to: 'web-lb-01' },
@@ -123,6 +121,72 @@ const LINKS: Link[] = [
   { from: 'web-lb-01', to: 'plc-line-a' },
 ]
 
+/* Live assets that aren't part of the seed topology get auto-placed into
+ * their zone on a spiral of free slots, attached to that zone's hub. */
+const ZONE_HUB: Record<Zone, string> = {
+  dmz: 'fw-edge-01', internal: 'dc-prod-01', cloud: 'k8s-prod-node-1', ot: 'scada-hmi-01',
+}
+
+const API_TYPE_TO_NODE: Record<string, { type: NodeType; zone: Zone }> = {
+  domain:   { type: 'server',      zone: 'dmz' },
+  ip:       { type: 'server',      zone: 'dmz' },
+  server:   { type: 'server',      zone: 'internal' },
+  endpoint: { type: 'workstation', zone: 'internal' },
+  cloud:    { type: 'cloud',       zone: 'cloud' },
+  database: { type: 'database',    zone: 'cloud' },
+}
+
+const riskFromScore = (score: number): Risk =>
+  score >= 70 ? 'critical' : score >= 40 ? 'warning' : 'healthy'
+
+function placeInZone(zone: Zone, index: number): { x: number; y: number } {
+  const r = ZONE_RECTS[zone]
+  const cols = 3
+  const col = index % cols
+  const row = Math.floor(index / cols)
+  return {
+    x: r.x + 42 + col * ((r.w - 84) / (cols - 1 || 1)),
+    y: r.y + r.h - 38 - row * 52,
+  }
+}
+
+/* Curved link path: a gentle quadratic bend perpendicular to the segment. */
+function linkPath(a: Node, b: Node): string {
+  const mx = (a.x + b.x) / 2
+  const my = (a.y + b.y) / 2
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy) || 1
+  const bend = Math.min(26, len * 0.16)
+  const cx = mx - (dy / len) * bend
+  const cy = my + (dx / len) * bend
+  return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`
+}
+
+/* BFS shortest path over the undirected link graph. */
+function shortestPath(links: Link[], from: string, to: string): string[] | null {
+  const adj = new Map<string, string[]>()
+  links.forEach((l) => {
+    adj.set(l.from, [...(adj.get(l.from) ?? []), l.to])
+    adj.set(l.to, [...(adj.get(l.to) ?? []), l.from])
+  })
+  const prev = new Map<string, string>()
+  const seen = new Set([from])
+  const queue = [from]
+  while (queue.length) {
+    const cur = queue.shift()!
+    if (cur === to) {
+      const path = [to]
+      while (path[0] !== from) path.unshift(prev.get(path[0])!)
+      return path
+    }
+    for (const nxt of adj.get(cur) ?? []) {
+      if (!seen.has(nxt)) { seen.add(nxt); prev.set(nxt, cur); queue.push(nxt) }
+    }
+  }
+  return null
+}
+
 /* ── Main page ─────────────────────────────────────────────────── */
 export default function NetworkMapPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -131,18 +195,48 @@ export default function NetworkMapPage() {
     dmz: true, internal: true, cloud: true, ot: true,
   })
   const [nodes, setNodes] = useState<Node[]>(NODES)
+  const [links, setLinks] = useState<Link[]>(BASE_LINKS)
+  const [search, setSearch] = useState('')
+  const [tracePath, setTracePath] = useState(false)
 
+  // Viewport (zoom + pan) expressed as an SVG viewBox.
+  const [vb, setVb] = useState({ x: 0, y: 0, w: VB_W, h: VB_H })
+  const svgRef = useRef<SVGSVGElement>(null)
+  const dragRef = useRef<{ kind: 'node' | 'pan'; id?: string; startX: number; startY: number; vb?: typeof vb; moved: boolean } | null>(null)
+
+  /* Merge live inventory: update seed-node risk from matching assets and
+   * place unknown assets into their zone as live nodes. */
   useEffect(() => {
     fetchAssets({ limit: '100' }).then(({ items }) => {
-      if (items.length > 0) {
-        setNodes((prev) => prev.map((n) => {
+      if (items.length === 0) return
+      setNodes((prev) => {
+        const known = new Set(prev.map((n) => n.id))
+        const knownNames = new Set(prev.map((n) => n.hostname.toLowerCase()))
+        const updated = prev.map((n) => {
           const api = items.find((a: ApiAsset) => a.name === n.hostname || a.id === n.id)
           if (!api) return n
           const score = api.riskScore ?? n.riskScore
-          const risk: Risk = score >= 70 ? 'critical' : score >= 40 ? 'warning' : 'healthy'
-          return { ...n, riskScore: score, risk, ports: api.openPorts ?? n.ports }
-        }))
-      }
+          return { ...n, riskScore: score, risk: riskFromScore(score), ports: api.openPorts ?? n.ports }
+        })
+        const zoneCounts: Record<Zone, number> = { dmz: 0, internal: 0, cloud: 0, ot: 0 }
+        const extras: Node[] = []
+        const extraLinks: Link[] = []
+        for (const a of items as ApiAsset[]) {
+          if (known.has(a.id) || knownNames.has(a.name.toLowerCase())) continue
+          const meta = API_TYPE_TO_NODE[a.type] ?? { type: 'server' as NodeType, zone: 'internal' as Zone }
+          if (zoneCounts[meta.zone] >= 4) continue   // keep the canvas readable
+          const pos = placeInZone(meta.zone, zoneCounts[meta.zone]++)
+          extras.push({
+            id: a.id, hostname: a.name, type: meta.type, zone: meta.zone,
+            ip: a.value, risk: riskFromScore(a.riskScore ?? 0),
+            riskScore: a.riskScore ?? 0, ports: a.openPorts ?? [],
+            x: pos.x, y: pos.y, live: true,
+          })
+          extraLinks.push({ from: ZONE_HUB[meta.zone], to: a.id })
+        }
+        if (extras.length > 0) setLinks([...BASE_LINKS, ...extraLinks])
+        return [...updated, ...extras]
+      })
     }).catch(() => {})
   }, [])
 
@@ -158,59 +252,165 @@ export default function NetworkMapPage() {
   )
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleLinks = useMemo(
-    () => LINKS.filter((l) => visibleIds.has(l.from) && visibleIds.has(l.to)),
-    [visibleIds],
+    () => links.filter((l) => visibleIds.has(l.from) && visibleIds.has(l.to)),
+    [links, visibleIds],
   )
 
   const selected = selectedId ? nodeMap[selectedId] ?? null : null
+  const focusId = hoverId ?? selectedId
 
-  const connectedIds = useMemo(() => {
-    if (!selected) return new Set<string>()
-    const set = new Set<string>()
-    LINKS.forEach((l) => {
-      if (l.from === selected.id) set.add(l.to)
-      if (l.to === selected.id) set.add(l.from)
+  const neighborhood = useMemo(() => {
+    if (!focusId) return null
+    const set = new Set<string>([focusId])
+    links.forEach((l) => {
+      if (l.from === focusId) set.add(l.to)
+      if (l.to === focusId) set.add(l.from)
     })
     return set
-  }, [selected])
+  }, [focusId, links])
+
+  const attackPath = useMemo(() => {
+    if (!tracePath || !selected || selected.id === 'inet') return null
+    return shortestPath(visibleLinks, 'inet', selected.id)
+  }, [tracePath, selected, visibleLinks])
+
+  const attackEdges = useMemo(() => {
+    if (!attackPath) return new Set<string>()
+    const s = new Set<string>()
+    for (let i = 0; i < attackPath.length - 1; i++) {
+      s.add(`${attackPath[i]}|${attackPath[i + 1]}`)
+      s.add(`${attackPath[i + 1]}|${attackPath[i]}`)
+    }
+    return s
+  }, [attackPath])
+
+  const searchMatch = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return null
+    return visibleNodes.find((n) => n.hostname.toLowerCase().includes(q) || n.ip.includes(q)) ?? null
+  }, [search, visibleNodes])
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setSelectedId(null) }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { setSelectedId(null); setTracePath(false) } }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  /* ── Pointer interactions: drag nodes, pan canvas, wheel zoom ──── */
+  const toSvg = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const rect = svg.getBoundingClientRect()
+    return {
+      x: vb.x + ((clientX - rect.left) / rect.width) * vb.w,
+      y: vb.y + ((clientY - rect.top) / rect.height) * vb.h,
+    }
+  }, [vb])
+
+  const onNodePointerDown = (id: string) => (e: React.PointerEvent) => {
+    e.stopPropagation()
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    const p = toSvg(e.clientX, e.clientY)
+    dragRef.current = { kind: 'node', id, startX: p.x, startY: p.y, moved: false }
+  }
+
+  const onCanvasPointerDown = (e: React.PointerEvent) => {
+    const p = toSvg(e.clientX, e.clientY)
+    dragRef.current = { kind: 'pan', startX: p.x, startY: p.y, vb: { ...vb }, moved: false }
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const drag = dragRef.current
+    if (!drag) return
+    const p = toSvg(e.clientX, e.clientY)
+    if (drag.kind === 'node' && drag.id) {
+      drag.moved = true
+      setNodes((prev) => prev.map((n) => (n.id === drag.id
+        ? { ...n, x: Math.max(20, Math.min(VB_W - 20, p.x)), y: Math.max(20, Math.min(VB_H - 20, p.y)) }
+        : n)))
+    } else if (drag.kind === 'pan' && drag.vb) {
+      drag.moved = true
+      setVb({ ...drag.vb, x: drag.vb.x - (p.x - drag.startX), y: drag.vb.y - (p.y - drag.startY) })
+    }
+  }
+
+  const onPointerUp = (id?: string) => () => {
+    const drag = dragRef.current
+    dragRef.current = null
+    if (drag && !drag.moved && drag.kind === 'node' && id) {
+      setSelectedId((cur) => (cur === id ? null : id))
+      setTracePath(false)
+    }
+    if (drag && !drag.moved && drag.kind === 'pan') {
+      setSelectedId(null)
+      setTracePath(false)
+    }
+  }
+
+  const zoomBy = useCallback((factor: number, cx?: number, cy?: number) => {
+    setVb((prev) => {
+      const w = Math.max(280, Math.min(VB_W * 1.4, prev.w * factor))
+      const h = w * (VB_H / VB_W)
+      const px = cx ?? prev.x + prev.w / 2
+      const py = cy ?? prev.y + prev.h / 2
+      const kx = (px - prev.x) / prev.w
+      const ky = (py - prev.y) / prev.h
+      return { x: px - kx * w, y: py - ky * h, w, h }
+    })
+  }, [])
+
+  const onWheel = (e: React.WheelEvent) => {
+    const p = toSvg(e.clientX, e.clientY)
+    zoomBy(e.deltaY > 0 ? 1.12 : 0.89, p.x, p.y)
+  }
 
   function toggleZone(z: Zone) {
     setZoneVisibility((prev) => ({ ...prev, [z]: !prev[z] }))
   }
 
-  const kpis = [
-    { label: 'Total Nodes',         value: '148', color: 'text-white'  },
-    { label: 'Subnets',             value: '12',  color: 'text-violet' },
-    { label: 'Exposed Services',    value: '34',  color: 'text-amber'  },
-    { label: 'External Connections', value: '89', color: 'text-threat' },
-  ]
+  /* KPIs computed from the actual graph, not hardcoded. */
+  const kpis = useMemo(() => {
+    const real = visibleNodes.filter((n) => n.id !== 'inet')
+    return [
+      { label: 'Nodes',            value: String(real.length),                                          color: 'text-white' },
+      { label: 'Connections',      value: String(visibleLinks.length),                                  color: 'text-violet' },
+      { label: 'Exposed Services', value: String(real.reduce((s, n) => s + n.ports.length, 0)),         color: 'text-amber' },
+      { label: 'Critical Assets',  value: String(real.filter((n) => n.risk === 'critical').length),     color: 'text-threat' },
+    ]
+  }, [visibleNodes, visibleLinks])
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-white/5 shrink-0 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
             <Network className="w-4 h-4 text-violet" />
             <h1 className="text-lg font-display font-semibold text-white">Network Map</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Asset topology and connectivity view</p>
+          <p className="text-xs text-ink-500 mt-0.5">Asset topology · drag nodes, scroll to zoom, click for detail</p>
         </div>
-        <div className="flex items-center gap-1.5">
-          {(Object.keys(ZONE_META) as Zone[]).map((z) => (
-            <button key={z} onClick={() => toggleZone(z)}
-              className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors',
-                zoneVisibility[z] ? 'bg-white/5 text-ink-200 border-white/10' : 'bg-transparent text-ink-700 border-white/5 opacity-60')}>
-              <span className="w-2 h-2 rounded-full" style={{ background: zoneVisibility[z] ? ZONE_META[z].color : '#3a3350' }} />
-              {ZONE_META[z].label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-600" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && searchMatch) { setSelectedId(searchMatch.id); setSearch('') } }}
+              placeholder="Find host or IP…"
+              className="w-44 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {(Object.keys(ZONE_META) as Zone[]).map((z) => (
+              <button key={z} onClick={() => toggleZone(z)}
+                className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors',
+                  zoneVisibility[z] ? 'bg-white/5 text-ink-200 border-white/10' : 'bg-transparent text-ink-700 border-white/5 opacity-60')}>
+                <span className="w-2 h-2 rounded-full" style={{ background: zoneVisibility[z] ? ZONE_META[z].color : '#3a3350' }} />
+                {ZONE_META[z].label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -224,32 +424,89 @@ export default function NetworkMapPage() {
         ))}
       </div>
 
-      {/* Map + legend */}
-      <div className="flex-1 relative overflow-hidden">
-        <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
+      {/* Map */}
+      <div className="flex-1 relative overflow-hidden select-none">
+        <svg
+          ref={svgRef}
+          viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="w-full h-full touch-none"
+          onPointerDown={onCanvasPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp()}
+          onWheel={onWheel}
+          style={{ cursor: 'grab' }}
+        >
           <defs>
-            <radialGradient id="bgGlow" cx="50%" cy="40%" r="70%">
-              <stop offset="0%" stopColor="#1a1030" stopOpacity="0.6" />
+            <radialGradient id="nm-bg" cx="50%" cy="38%" r="75%">
+              <stop offset="0%" stopColor="#171030" stopOpacity="0.85" />
               <stop offset="100%" stopColor="#0A0612" stopOpacity="0" />
             </radialGradient>
+            <linearGradient id="nm-link" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#7A3CFF" stopOpacity="0.55" />
+              <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0.4" />
+            </linearGradient>
+            <filter id="nm-glow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="3.5" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <pattern id="nm-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(122,60,255,0.07)" strokeWidth="1" />
+            </pattern>
           </defs>
-          <rect x="0" y="0" width={VB_W} height={VB_H} fill="url(#bgGlow)" />
+
+          <rect x={-VB_W} y={-VB_H} width={VB_W * 3} height={VB_H * 3} fill="url(#nm-grid)" />
+          <rect x="0" y="0" width={VB_W} height={VB_H} fill="url(#nm-bg)" />
+
+          {/* Zone panels */}
+          {(Object.keys(ZONE_RECTS) as Zone[]).map((z) => {
+            if (!zoneVisibility[z]) return null
+            const r = ZONE_RECTS[z]
+            const meta = ZONE_META[z]
+            return (
+              <g key={z} pointerEvents="none">
+                <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={18}
+                  fill={meta.color} fillOpacity={0.045}
+                  stroke={meta.color} strokeOpacity={0.22} strokeWidth={1} strokeDasharray="3 6" />
+                <rect x={r.x + 12} y={r.y - 9} width={meta.label.length * 6.4 + 22} height={18} rx={9}
+                  fill="#100A1C" stroke={meta.color} strokeOpacity={0.45} strokeWidth={1} />
+                <circle cx={r.x + 22} cy={r.y} r={2.6} fill={meta.color} />
+                <text x={r.x + 30} y={r.y + 3.2} fontSize={9} fontWeight={600} fill={meta.color}
+                  fontFamily="system-ui,sans-serif" letterSpacing="0.08em">{meta.label.toUpperCase()}</text>
+              </g>
+            )
+          })}
 
           {/* Links */}
-          <g>
+          <g pointerEvents="none">
             {visibleLinks.map((l, i) => {
               const a = nodeMap[l.from]
               const b = nodeMap[l.to]
-              const active = !!selected && (l.from === selected.id || l.to === selected.id)
-              const dim = !!selected && !active
+              if (!a || !b) return null
+              const onAttackPath = attackEdges.has(`${l.from}|${l.to}`)
+              const active = !!focusId && (l.from === focusId || l.to === focusId)
+              const dim = (!!focusId && !active && !onAttackPath) || (!!attackPath && !onAttackPath)
+              const d = linkPath(a, b)
+              const pid = `lk-${i}`
               return (
-                <line key={`${l.from}-${l.to}-${i}`}
-                  x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke={active ? '#FF2E97' : '#7A3CFF'}
-                  strokeWidth={active ? 2 : 1}
-                  strokeOpacity={dim ? 0.08 : active ? 0.8 : 0.28}
-                  strokeDasharray="6 8"
-                  className="topo-flow" />
+                <g key={pid}>
+                  <path id={pid} d={d} fill="none"
+                    stroke={onAttackPath ? '#FF2E97' : active ? '#B98AFF' : 'url(#nm-link)'}
+                    strokeWidth={onAttackPath ? 2.4 : active ? 1.8 : 1.1}
+                    strokeOpacity={dim ? 0.07 : onAttackPath ? 0.95 : active ? 0.85 : 0.4} />
+                  {/* Traffic particle */}
+                  {!dim && (
+                    <circle r={onAttackPath ? 3 : 1.8}
+                      fill={onAttackPath ? '#FF2E97' : '#B98AFF'}
+                      opacity={onAttackPath ? 1 : 0.75}
+                      filter={onAttackPath ? 'url(#nm-glow)' : undefined}>
+                      <animateMotion dur={`${2.4 + (i % 5) * 0.45}s`} repeatCount="indefinite"
+                        begin={`${(i % 7) * 0.35}s`}>
+                        <mpath href={`#${pid}`} />
+                      </animateMotion>
+                    </circle>
+                  )}
+                </g>
               )
             })}
           </g>
@@ -258,37 +515,70 @@ export default function NetworkMapPage() {
           <g>
             {visibleNodes.map((n) => {
               const Icon = TYPE_ICON[n.type]
-              const color = RISK_META[n.risk].color
-              const isSel = selected?.id === n.id
-              const isConn = connectedIds.has(n.id)
-              const dim = !!selected && !isSel && !isConn
-              const r = n.type === 'internet' ? 26 : 20
+              const riskColor = RISK_META[n.risk].color
+              const zoneColor = n.id === 'inet' ? '#FF2E97' : ZONE_META[n.zone].color
+              const isSel = selectedId === n.id
+              const isFocus = focusId === n.id
+              const inHood = !focusId || neighborhood?.has(n.id)
+              const onPath = attackPath?.includes(n.id)
+              const dim = (!inHood && !onPath) || (!!attackPath && !onPath)
+              const isMatch = searchMatch?.id === n.id
+              const r = n.type === 'internet' ? 24 : n.type === 'workstation' ? 15 : 18
+              const arc = 2 * Math.PI * (r + 4)
               return (
                 <g key={n.id}
                   transform={`translate(${n.x}, ${n.y})`}
-                  className="cursor-pointer"
-                  opacity={dim ? 0.3 : 1}
-                  onClick={() => setSelectedId(isSel ? null : n.id)}
+                  opacity={dim ? 0.22 : 1}
+                  style={{ cursor: 'pointer', transition: 'opacity 0.25s' }}
+                  onPointerDown={onNodePointerDown(n.id)}
+                  onPointerUp={onPointerUp(n.id)}
                   onMouseEnter={() => setHoverId(n.id)}
                   onMouseLeave={() => setHoverId(null)}>
-                  {(isSel || n.risk === 'critical') && (
-                    <circle r={r + 8} fill="none" stroke={color} strokeWidth={1} opacity={0.4}>
-                      <animate attributeName="r" values={`${r + 4};${r + 12};${r + 4}`} dur="2.4s" repeatCount="indefinite" />
-                      <animate attributeName="opacity" values="0.4;0;0.4" dur="2.4s" repeatCount="indefinite" />
+
+                  {/* Critical pulse / selection ring */}
+                  {(isSel || isMatch || (n.risk === 'critical' && !dim)) && (
+                    <circle r={r + 11} fill="none" stroke={isMatch ? '#34F5C5' : riskColor} strokeWidth={1.2} opacity={0.5}>
+                      <animate attributeName="r" values={`${r + 7};${r + 15};${r + 7}`} dur="2.2s" repeatCount="indefinite" />
+                      <animate attributeName="opacity" values="0.5;0;0.5" dur="2.2s" repeatCount="indefinite" />
                     </circle>
                   )}
-                  <circle r={r} fill="rgb(var(--surface))" stroke={color} strokeWidth={isSel ? 2.5 : 1.5} />
-                  <circle r={r} fill={color} fillOpacity={0.12} />
-                  <foreignObject x={-9} y={-9} width={18} height={18} style={{ pointerEvents: 'none' }}>
-                    <div className="w-[18px] h-[18px] flex items-center justify-center">
-                      <Icon width={14} height={14} color={color} />
+
+                  {/* Risk arc: how much of the ring is filled = risk score */}
+                  <circle r={r + 4} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={2.4} />
+                  <circle r={r + 4} fill="none" stroke={riskColor} strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeDasharray={`${(n.riskScore / 100) * arc} ${arc}`}
+                    transform="rotate(-90)" opacity={0.9} />
+
+                  {/* Body */}
+                  <circle r={r} fill="#130C24" stroke={zoneColor} strokeWidth={isSel || isFocus ? 2 : 1.2}
+                    strokeOpacity={isSel || isFocus ? 1 : 0.65}
+                    filter={n.risk === 'critical' && !dim ? 'url(#nm-glow)' : undefined} />
+                  <circle r={r} fill={riskColor} fillOpacity={0.1} />
+                  {n.live && (
+                    <circle cx={r - 3} cy={-r + 3} r={3.4} fill="#34F5C5" stroke="#0A0612" strokeWidth={1.4}>
+                      <animate attributeName="opacity" values="1;0.4;1" dur="1.8s" repeatCount="indefinite" />
+                    </circle>
+                  )}
+                  <foreignObject x={-10} y={-10} width={20} height={20} style={{ pointerEvents: 'none' }}>
+                    <div className="w-[20px] h-[20px] flex items-center justify-center">
+                      <Icon width={n.type === 'internet' ? 16 : 13} height={n.type === 'internet' ? 16 : 13} color={isFocus ? '#fff' : zoneColor} />
                     </div>
                   </foreignObject>
-                  {(hoverId === n.id || isSel) && (
-                    <g>
-                      <rect x={-n.hostname.length * 3.4 - 6} y={r + 5} width={n.hostname.length * 6.8 + 12} height={16} rx={4}
-                        fill="rgb(var(--surface))" stroke={color} strokeOpacity={0.4} strokeWidth={0.75} />
-                      <text x={0} y={r + 16} textAnchor="middle" fontSize={9} fill="#E8E0F5" fontFamily="monospace">{n.hostname}</text>
+
+                  {/* Persistent label */}
+                  <text y={r + 14} textAnchor="middle" fontSize={8.5}
+                    fill={isFocus ? '#FFFFFF' : '#9C92B8'} fontFamily="ui-monospace,monospace"
+                    style={{ pointerEvents: 'none', transition: 'fill 0.2s' }}>
+                    {n.hostname.length > 18 ? n.hostname.slice(0, 17) + '…' : n.hostname}
+                  </text>
+                  {/* Risk score on hover/selection */}
+                  {isFocus && (
+                    <g pointerEvents="none">
+                      <rect x={-17} y={-r - 22} width={34} height={15} rx={7.5}
+                        fill="#100A1C" stroke={riskColor} strokeOpacity={0.6} strokeWidth={1} />
+                      <text y={-r - 11} textAnchor="middle" fontSize={8.5} fontWeight={700}
+                        fill={riskColor} fontFamily="ui-monospace,monospace">{n.riskScore}</text>
                     </g>
                   )}
                 </g>
@@ -297,10 +587,20 @@ export default function NetworkMapPage() {
           </g>
         </svg>
 
+        {/* Zoom controls */}
+        <div className="absolute top-4 left-4 flex flex-col gap-1 rounded-xl border border-white/10 bg-surface/90 backdrop-blur-sm p-1">
+          <button onClick={() => zoomBy(0.8)} title="Zoom in"
+            className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
+          <button onClick={() => zoomBy(1.25)} title="Zoom out"
+            className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Minus className="w-3.5 h-3.5" /></button>
+          <button onClick={() => setVb({ x: 0, y: 0, w: VB_W, h: VB_H })} title="Reset view"
+            className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Maximize2 className="w-3.5 h-3.5" /></button>
+        </div>
+
         {/* Legend */}
         <div className="absolute bottom-4 left-4 rounded-xl border border-white/8 bg-surface/90 backdrop-blur-sm px-3 py-2.5 space-y-2">
           <div>
-            <p className="text-[9px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Layers className="w-2.5 h-2.5" /> Zones</p>
+            <p className="text-[9px] text-ink-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Layers className="w-2.5 h-2.5" /> Ring = zone</p>
             <div className="flex flex-col gap-1">
               {(Object.keys(ZONE_META) as Zone[]).map((z) => (
                 <div key={z} className="flex items-center gap-1.5">
@@ -311,7 +611,7 @@ export default function NetworkMapPage() {
             </div>
           </div>
           <div className="pt-1.5 border-t border-white/5">
-            <p className="text-[9px] text-ink-600 uppercase tracking-wider mb-1">Risk</p>
+            <p className="text-[9px] text-ink-500 uppercase tracking-wider mb-1">Arc = risk score</p>
             <div className="flex flex-col gap-1">
               {(Object.keys(RISK_META) as Risk[]).map((rk) => (
                 <div key={rk} className="flex items-center gap-1.5">
@@ -321,7 +621,18 @@ export default function NetworkMapPage() {
               ))}
             </div>
           </div>
+          <div className="pt-1.5 border-t border-white/5 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-safe animate-pulse" />
+            <span className="text-[10px] text-ink-400">Live inventory asset</span>
+          </div>
         </div>
+
+        {/* Hint */}
+        {!selected && (
+          <div className="absolute bottom-4 right-4 flex items-center gap-1.5 text-[10px] text-ink-600 pointer-events-none">
+            <MousePointer2 className="w-3 h-3" /> drag to pan · scroll to zoom · drag nodes to rearrange
+          </div>
+        )}
 
         {/* Detail side panel */}
         <AnimatePresence>
@@ -336,7 +647,10 @@ export default function NetworkMapPage() {
                 const n = selected
                 const Icon = TYPE_ICON[n.type]
                 const color = RISK_META[n.risk].color
-                const conns = Array.from(connectedIds).map((id) => nodeMap[id]).filter(Boolean)
+                const conns = links
+                  .filter((l) => l.from === n.id || l.to === n.id)
+                  .map((l) => nodeMap[l.from === n.id ? l.to : l.from])
+                  .filter(Boolean)
                 return (
                   <div className="p-4 space-y-4">
                     <div className="flex items-start justify-between gap-2">
@@ -346,23 +660,37 @@ export default function NetworkMapPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-white truncate">{n.hostname}</p>
-                          <p className="text-[10px] text-ink-500">{TYPE_LABEL[n.type]}</p>
+                          <p className="text-[10px] text-ink-500">{TYPE_LABEL[n.type]}{n.live ? ' · live inventory' : ''}</p>
                         </div>
                       </div>
-                      <button onClick={() => setSelectedId(null)} className="p-1 rounded text-ink-500 hover:text-white shrink-0">
+                      <button onClick={() => { setSelectedId(null); setTracePath(false) }} className="p-1 rounded text-ink-500 hover:text-white shrink-0">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-3 py-2.5">
                       <div>
-                        <p className="text-[9px] text-ink-600 uppercase tracking-wider">Risk Score</p>
+                        <p className="text-[9px] text-ink-500 uppercase tracking-wider">Risk Score</p>
                         <p className="text-lg font-bold font-mono" style={{ color }}>{n.riskScore}</p>
                       </div>
                       <span className="px-2 py-1 rounded-full text-[10px] font-semibold" style={{ color, background: color + '18' }}>
                         {RISK_META[n.risk].label}
                       </span>
                     </div>
+
+                    {n.id !== 'inet' && (
+                      <button
+                        onClick={() => setTracePath((t) => !t)}
+                        className={cn('w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
+                          tracePath
+                            ? 'bg-magenta/15 text-magenta border-magenta/40'
+                            : 'text-ink-300 border-white/10 hover:text-white hover:border-white/20')}>
+                        <Route className="w-3.5 h-3.5" />
+                        {tracePath
+                          ? (attackPath ? `Attack path: ${attackPath.length - 1} hops from internet` : 'No path from internet')
+                          : 'Trace attack path from internet'}
+                      </button>
+                    )}
 
                     <div className="space-y-1.5">
                       {[
@@ -371,25 +699,25 @@ export default function NetworkMapPage() {
                         { label: 'Type', value: TYPE_LABEL[n.type], icon: Activity },
                       ].map(({ label, value, icon: I }) => (
                         <div key={label} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/4 last:border-0">
-                          <span className="text-[10px] text-ink-600 flex items-center gap-1.5"><I className="w-3 h-3" />{label}</span>
+                          <span className="text-[10px] text-ink-500 flex items-center gap-1.5"><I className="w-3 h-3" />{label}</span>
                           <span className="text-[10px] text-ink-200 font-mono text-right truncate">{value}</span>
                         </div>
                       ))}
                     </div>
 
                     <div>
-                      <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Lock className="w-3 h-3" /> Open Ports</p>
+                      <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Lock className="w-3 h-3" /> Open Ports</p>
                       {n.ports.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {n.ports.map((p) => (
                             <span key={p} className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/8 text-ink-300">{p}</span>
                           ))}
                         </div>
-                      ) : <p className="text-[10px] text-ink-700">No exposed ports</p>}
+                      ) : <p className="text-[10px] text-ink-600">No exposed ports</p>}
                     </div>
 
                     <div>
-                      <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Network className="w-3 h-3" /> Connected Nodes ({conns.length})</p>
+                      <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Network className="w-3 h-3" /> Connected Nodes ({conns.length})</p>
                       <div className="space-y-1">
                         {conns.map((c) => (
                           <button key={c.id} onClick={() => setSelectedId(c.id)}
@@ -408,15 +736,6 @@ export default function NetworkMapPage() {
           )}
         </AnimatePresence>
       </div>
-
-      <style jsx>{`
-        .topo-flow {
-          animation: dashflow 1s linear infinite;
-        }
-        @keyframes dashflow {
-          to { stroke-dashoffset: -14; }
-        }
-      `}</style>
     </div>
   )
 }

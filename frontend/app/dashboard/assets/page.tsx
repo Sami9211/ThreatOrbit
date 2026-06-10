@@ -338,7 +338,7 @@ export default function AssetsPage() {
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{k.label}</p>
               <p className={cn('text-lg font-bold mt-0.5', k.color)}>{k.value}</p>
-              <p className="text-[10px] text-ink-700 mt-0.5">{k.sub}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">{k.sub}</p>
             </div>
           ))}
         </div>

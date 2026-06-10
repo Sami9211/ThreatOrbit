@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
-import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, type SavedHunt as ApiSavedHunt } from '@/lib/api'
+import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, type SavedHunt as ApiSavedHunt, type Actor as ApiActor } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 
 /* ── Threat Actors ───────────────────────────────────────────────── */
@@ -635,6 +635,37 @@ function NormalCTI() {
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+// API actors use a different shape (motivations[], campaign_count, integer
+// sophistication, ISO dates). Map them explicitly — a blind cast crashes the
+// page as soon as live data loads.
+const SOPHISTICATION_LABEL: Record<number, string> = {
+  1: 'Basic', 2: 'Intermediate', 3: 'High', 4: 'Advanced', 5: 'Expert',
+}
+
+function apiActorToPage(a: ApiActor): Actor {
+  const year = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : '—')
+  return {
+    id: a.id,
+    name: a.name,
+    aliases: Array.isArray(a.aliases) ? a.aliases : [],
+    origin: a.origin ?? 'Unknown',
+    flag: a.flag || '🌐',
+    type: a.type ?? 'Unknown',
+    motivation: Array.isArray(a.motivations) ? a.motivations : [],
+    active: Boolean(a.active),
+    firstSeen: year(a.firstSeen),
+    lastSeen: year(a.lastSeen),
+    sophistication: typeof a.sophistication === 'number'
+      ? (SOPHISTICATION_LABEL[a.sophistication] ?? `Level ${a.sophistication}`)
+      : String(a.sophistication ?? 'Unknown'),
+    sectors: Array.isArray(a.sectors) ? a.sectors : [],
+    ttps: Array.isArray(a.ttps) ? a.ttps : [],
+    iocCount: a.iocCount ?? 0,
+    campaigns: a.campaignCount ?? (Array.isArray(a.campaigns) ? a.campaigns.length : 0),
+    description: a.description ?? '',
+  }
+}
+
 export default function CTIPage() {
   const [actors, setActors] = useState<Actor[]>(ACTORS)
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
@@ -647,7 +678,7 @@ export default function CTIPage() {
     fetchActors()
       .then((data) => {
         if (data.length > 0) {
-          const mapped = data as unknown as Actor[]
+          const mapped = data.map(apiActorToPage)
           setActors(mapped)
           setSelectedActor(mapped[0])
         }
@@ -683,7 +714,7 @@ export default function CTIPage() {
           <h1 className="font-display text-xl font-bold text-white">Cyber Threat Intelligence</h1>
           <p className="text-xs text-ink-500 mt-0.5">
             {actors.length} tracked actors · {actors.reduce((s, a) => s + a.iocCount, 0).toLocaleString()} IOCs ·
-            {' '}{actors.reduce((s: number, a) => s + (Array.isArray(a.campaigns) ? a.campaigns.length : 0), 0)} campaigns
+            {' '}{actors.reduce((s, a) => s + a.campaigns, 0)} campaigns
           </p>
         </div>
         <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',

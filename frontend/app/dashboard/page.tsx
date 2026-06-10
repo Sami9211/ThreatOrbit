@@ -23,7 +23,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   critical: '#FF2E97',
   high:     '#FF4D6D',
   medium:   '#FFB23E',
-  low:      '#2DD4BF',
+  low:      '#34F5C5',
 } as const
 
 /* ── KPI Card ────────────────────────────────────────────────────── */
@@ -181,8 +181,10 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
   )
 }
 
-const STATUS_COLOR: Record<string, string> = { active: '#FF2E97', triaged: '#FFB23E', open: '#FF2E97', 'in-progress': '#FFB23E', resolved: '#2DD4BF', closed: '#2DD4BF' }
-const STATUS_BG:    Record<string, string> = { active: '#FF2E9710', triaged: '#FFB23E10', open: '#FF2E9710', 'in-progress': '#FFB23E10', resolved: '#2DD4BF10', closed: '#2DD4BF10' }
+// Aligned with the platform-wide STATUS_COLORS semantics (lib/colors.ts):
+// open work = threat red, active alerts = magenta, resolved work = safe green.
+const STATUS_COLOR: Record<string, string> = { active: '#FF2E97', triaged: '#FFB23E', open: '#FF4D6D', 'in-progress': '#FFB23E', resolved: '#34F5C5', closed: '#34F5C5' }
+const STATUS_BG:    Record<string, string> = { active: '#FF2E9710', triaged: '#FFB23E10', open: '#FF4D6D10', 'in-progress': '#FFB23E10', resolved: '#34F5C510', closed: '#34F5C510' }
 
 function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
   return (

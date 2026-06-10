@@ -293,14 +293,86 @@ function ConnectorCard({ connector, onConfigure }: { connector: Connector; onCon
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+// User-defined vendor connectors persist in the settings store under this key
+// so they survive reloads and appear alongside the built-in catalogue.
+const CUSTOM_CONNECTORS_KEY = 'custom_connectors'
+
+interface StoredCustomConnector {
+  id: string
+  name: string
+  vendor: string
+  category: ConnCategory
+  endpoint: string
+  dataTypes: string[]
+}
+
+const customToConnector = (c: StoredCustomConnector): Connector => ({
+  id: c.id,
+  name: c.name,
+  vendor: c.vendor,
+  category: c.category,
+  status: 'connected',
+  color: '#34F5C5',
+  dataTypes: c.dataTypes,
+  endpoint: c.endpoint,
+})
+
 export default function DataSourcesPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [connectors, setConnectors] = useState<Connector[]>(CONNECTORS)
   const [customSource, setCustomSource] = useState<CustomSourceType | null>(null)
+  const [showAddConnector, setShowAddConnector] = useState(false)
   const selectedConnector = connectors.find((c) => c.id === selected) ?? null
 
   function markConnected(id: string) {
     setConnectors((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'connected' } : c)))
+  }
+
+  // Load previously added custom connectors from the settings store.
+  useEffect(() => {
+    fetchSettings().then((s) => {
+      const raw = s[CUSTOM_CONNECTORS_KEY]
+      if (!raw) return
+      try {
+        const stored = JSON.parse(raw) as StoredCustomConnector[]
+        if (Array.isArray(stored) && stored.length > 0) {
+          setConnectors((prev) => {
+            const known = new Set(prev.map((c) => c.id))
+            return [...prev, ...stored.filter((c) => !known.has(c.id)).map(customToConnector)]
+          })
+        }
+      } catch { /* malformed stored value — ignore */ }
+    }).catch(() => {})
+  }, [])
+
+  // Add any vendor as a connector: persists the definition, registers a live
+  // log source so the platform actually tracks it, and shows the card.
+  async function addCustomConnector(values: Record<string, string>) {
+    const entry: StoredCustomConnector = {
+      id: `custom-${Date.now().toString(36)}`,
+      name: values.name.trim(),
+      vendor: (values.vendor || values.name).trim(),
+      category: (values.category || 'SaaS') as ConnCategory,
+      endpoint: values.endpoint?.trim() ?? '',
+      dataTypes: (values.dataTypes || 'Events')
+        .split(',').map((t) => t.trim()).filter(Boolean).slice(0, 6),
+    }
+    // Read-modify-write the stored list so multiple adds accumulate.
+    let stored: StoredCustomConnector[] = []
+    try {
+      const s = await fetchSettings()
+      stored = s[CUSTOM_CONNECTORS_KEY] ? JSON.parse(s[CUSTOM_CONNECTORS_KEY]) : []
+      if (!Array.isArray(stored)) stored = []
+    } catch { stored = [] }
+    await updateSettings({ [CUSTOM_CONNECTORS_KEY]: JSON.stringify([...stored, entry]) })
+    await createLogSource({
+      name: entry.name,
+      type: 'API Pull',
+      host: entry.endpoint || `${entry.vendor.toLowerCase().replace(/\s+/g, '-')}.api`,
+      format: entry.dataTypes[0] ?? 'JSON',
+      tags: [entry.category, entry.vendor, 'custom-connector'],
+    })
+    setConnectors((prev) => [...prev, customToConnector(entry)])
   }
 
   async function addCustomSource(values: Record<string, string>) {
@@ -322,10 +394,14 @@ export default function DataSourcesPage() {
       const liveNames = sources
         .filter((s) => s.status !== 'offline')
         .map((s) => s.name.toLowerCase())
-      setConnectors(CONNECTORS.map((c) => {
-        const kws = CONNECTOR_MATCH[c.id] ?? [c.vendor.toLowerCase()]
+      // Update statuses in place so custom connectors loaded from settings
+      // are preserved; customs match a live source by their own name.
+      setConnectors((prev) => prev.map((c) => {
+        const kws = c.id.startsWith('custom-')
+          ? [c.name.toLowerCase()]
+          : CONNECTOR_MATCH[c.id] ?? [c.vendor.toLowerCase()]
         const connected = liveNames.some((n) => kws.some((kw) => n.includes(kw)))
-        return connected ? { ...c, status: 'connected' } : { ...c, status: 'unconfigured' }
+        return { ...c, status: connected ? 'connected' : 'unconfigured' }
       }))
     }).catch(() => {})
   }, [])
@@ -343,9 +419,17 @@ export default function DataSourcesPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">Configure data ingestion connectors</p>
         </div>
-        <div className="text-right">
-          <span className="text-sm font-bold font-mono text-safe">{connectedCount}</span>
-          <span className="text-xs text-ink-500"> / {connectors.length} connected</span>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <span className="text-sm font-bold font-mono text-safe">{connectedCount}</span>
+            <span className="text-xs text-ink-500"> / {connectors.length} connected</span>
+          </div>
+          <button
+            onClick={() => setShowAddConnector(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
+            <Plus className="w-3.5 h-3.5" />
+            Add Connector
+          </button>
         </div>
       </div>
 
@@ -408,6 +492,32 @@ export default function DataSourcesPage() {
             connector={selectedConnector}
             onClose={() => setSelected(null)}
             onConnected={() => markConnected(selectedConnector.id)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAddConnector && (
+          <CreateModal
+            title="Add Your Own Connector"
+            icon={Database}
+            accent="#34F5C5"
+            submitLabel="Add Connector"
+            onClose={() => setShowAddConnector(false)}
+            onSubmit={addCustomConnector}
+            fields={[
+              { key: 'name', label: 'Connector name', required: true, placeholder: 'e.g. Rapid7 InsightIDR' },
+              { key: 'vendor', label: 'Vendor', placeholder: 'e.g. Rapid7' },
+              { key: 'category', label: 'Category', type: 'select', default: 'SaaS', options: [
+                { value: 'Cloud', label: 'Cloud' }, { value: 'Identity', label: 'Identity' },
+                { value: 'Endpoint', label: 'Endpoint' }, { value: 'Network', label: 'Network' },
+                { value: 'SaaS', label: 'SaaS' },
+              ] },
+              { key: 'endpoint', label: 'API endpoint', placeholder: 'https://us.api.insight.rapid7.com',
+                hint: 'Where the platform pulls events from' },
+              { key: 'dataTypes', label: 'Data types', placeholder: 'Investigations, Alerts, Asset Events',
+                hint: 'Comma-separated labels shown on the card' },
+            ]}
           />
         )}
       </AnimatePresence>

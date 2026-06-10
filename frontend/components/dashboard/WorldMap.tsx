@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState, useRef, useCallback } from 'react'
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { fetchLiveFeed, type LiveFeedItem } from '@/lib/api'
 
 const W = 360
 const H = 180
@@ -133,23 +134,41 @@ const CITIES: City[] = [
   { name: 'Sydney',      lat: -33.9, lon: 151.2,  color: '#7A3CFF', intensity: 0.55 },
 ]
 
-type Attack = { from: string; to: string; color: string }
-const ATTACKS: Attack[] = [
-  { from: 'Moscow',    to: 'New York',    color: '#FF2E97' },
-  { from: 'Beijing',   to: 'Washington',  color: '#FF4D6D' },
-  { from: 'Tehran',    to: 'London',      color: '#FFB23E' },
-  { from: 'Moscow',    to: 'Berlin',      color: '#FF2E97' },
-  { from: 'Beijing',   to: 'Tokyo',       color: '#7A3CFF' },
-  { from: 'Singapore', to: 'Sydney',      color: '#2DD4BF' },
-  { from: 'Lagos',     to: 'London',      color: '#FFB23E' },
-  { from: 'Tehran',    to: 'Dubai',       color: '#FF4D6D' },
-  { from: 'Beijing',   to: 'Mumbai',      color: '#7A3CFF' },
-  { from: 'Moscow',    to: 'Kyiv',        color: '#FF2E97' },
-  { from: 'São Paulo', to: 'New York',    color: '#2DD4BF' },
-  { from: 'Seoul',     to: 'Los Angeles', color: '#FFB23E' },
+/* Severity → color, matching the platform-wide severity palette. */
+const SEV_COLOR: Record<string, string> = {
+  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
+}
+
+/* Fallback attack routes used until (or instead of) the live feed. */
+type AttackRoute = { from: string; to: string; severity: string; label: string }
+const FALLBACK_ROUTES: AttackRoute[] = [
+  { from: 'Moscow',    to: 'New York',    severity: 'critical', label: 'Ransomware C2 beacon' },
+  { from: 'Beijing',   to: 'Washington',  severity: 'high',     label: 'APT espionage attempt' },
+  { from: 'Tehran',    to: 'London',      severity: 'medium',   label: 'Credential phishing wave' },
+  { from: 'Moscow',    to: 'Berlin',      severity: 'critical', label: 'Wiper staging' },
+  { from: 'Beijing',   to: 'Tokyo',       severity: 'high',     label: 'Supply-chain probe' },
+  { from: 'Singapore', to: 'Sydney',      severity: 'low',      label: 'Scanner sweep' },
+  { from: 'Lagos',     to: 'London',      severity: 'medium',   label: 'BEC campaign' },
+  { from: 'Tehran',    to: 'Dubai',       severity: 'high',     label: 'Spyware delivery' },
+  { from: 'Beijing',   to: 'Mumbai',      severity: 'medium',   label: 'Mobile malware push' },
+  { from: 'Moscow',    to: 'Kyiv',        severity: 'critical', label: 'DDoS burst' },
+  { from: 'São Paulo', to: 'New York',    severity: 'low',      label: 'Banking trojan relay' },
+  { from: 'Seoul',     to: 'Los Angeles', severity: 'medium',   label: 'Credential stuffing' },
 ]
 
 const cityMap = Object.fromEntries(CITIES.map((c) => [c.name, c]))
+
+/* Deterministic city pick from any string — used to geolocate feed entries. */
+function hashCity(seed: string, exclude?: string): City {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  let city = CITIES[h % CITIES.length]
+  if (exclude && city.name === exclude) city = CITIES[(h + 7) % CITIES.length]
+  return city
+}
+
+/* A live arc currently animating on the map. */
+type LiveArc = { key: number; from: string; to: string; color: string; label: string }
 
 function arcPath(x1: number, y1: number, x2: number, y2: number): string {
   const mx = (x1 + x2) / 2
@@ -166,12 +185,16 @@ function CountryTooltip({
   screenY,
   containerW,
   containerH,
+  pinned,
+  onClose,
 }: {
   city: string
   screenX: number
   screenY: number
   containerW: number
   containerH: number
+  pinned?: boolean
+  onClose?: () => void
 }) {
   const data = COUNTRY_STATS[city]
   if (!data) return null
@@ -187,7 +210,7 @@ function CountryTooltip({
 
   return (
     <div
-      className="absolute pointer-events-none z-50"
+      className={cn('absolute z-50', pinned ? 'pointer-events-auto' : 'pointer-events-none')}
       style={{ left, top, width: tooltipW }}
     >
       <div
@@ -201,12 +224,21 @@ function CountryTooltip({
         {/* Header */}
         <div className="flex items-center gap-2 mb-2">
           <span className="text-base">{data.flag}</span>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="font-semibold text-white">{data.country}</p>
             <p style={{ color: data.color }} className="text-[10px] font-mono font-bold">
               {data.attacks.toLocaleString()} attacks · origin
             </p>
           </div>
+          {pinned && (
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="p-1 -m-1 rounded text-ink-500 hover:text-white transition-colors shrink-0"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Top attack types */}
@@ -256,11 +288,53 @@ export default function WorldMap() {
   const [view, setView] = useState<'continents' | 'countries'>('continents')
   const [hoveredRegion, setHoveredRegion] = useState<RegionStat | null>(null)
   const [hoveredCity, setHoveredCity] = useState<string | null>(null)
+  const [pinnedCity, setPinnedCity] = useState<string | null>(null)
   const [cityTooltipPos, setCityTooltipPos] = useState({ x: 0, y: 0 })
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const clearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cityLeaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /* ── Live attack stream ─────────────────────────────────────────
+     Real IOC events from /overview/live-feed drive the arcs and the
+     ticker; the bundled routes take over when the API is offline. */
+  const [feed, setFeed] = useState<LiveFeedItem[]>([])
+  const [arcs, setArcs] = useState<LiveArc[]>([])
+  const [ticker, setTicker] = useState<Array<{ key: number; color: string; text: string }>>([])
+  const [attackCount, setAttackCount] = useState(0)
+  const seqRef = useRef(0)
+
+  useEffect(() => {
+    fetchLiveFeed(20).then(setFeed).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const launch = () => {
+      const key = ++seqRef.current
+      let arc: LiveArc
+      let text: string
+      if (feed.length > 0) {
+        const item = feed[key % feed.length]
+        const from = hashCity(item.ip ?? String(key))
+        const to = hashCity(item.detail ?? item.id ?? String(key * 7), from.name)
+        const color = SEV_COLOR[item.severity] ?? '#7A3CFF'
+        arc = { key, from: from.name, to: to.name, color, label: item.detail ?? item.type }
+        text = `${item.ip} · ${item.detail ?? item.type}`
+      } else {
+        const r = FALLBACK_ROUTES[key % FALLBACK_ROUTES.length]
+        arc = { key, from: r.from, to: r.to, color: SEV_COLOR[r.severity], label: r.label }
+        text = `${r.from} → ${r.to} · ${r.label}`
+      }
+      setArcs((prev) => [...prev.slice(-6), arc])
+      setTicker((prev) => [{ key, color: arc.color, text }, ...prev].slice(0, 3))
+      setAttackCount((c) => c + 1)
+      // retire the arc after its flight completes
+      setTimeout(() => setArcs((prev) => prev.filter((a) => a.key !== key)), 4200)
+    }
+    launch()
+    const t = setInterval(launch, 2100)
+    return () => clearInterval(t)
+  }, [feed])
 
   function enterRegion(r: RegionStat) {
     if (clearRef.current) clearTimeout(clearRef.current)
@@ -367,34 +441,60 @@ export default function WorldMap() {
           return <circle key={i} cx={d.x} cy={d.y} r={0.62} fill={d.color} opacity={isHov ? Math.min(d.baseOpacity + 0.22, 0.97) : d.baseOpacity} />
         })}
 
-        {/* Attack arcs */}
-        {ATTACKS.map((a, i) => {
+        {/* Live attack arcs: comet travels the arc, target gets an impact ripple */}
+        {arcs.map((a) => {
           const s = cityMap[a.from]; const t = cityMap[a.to]
           if (!s || !t) return null
           const [x1, y1] = project(s.lon, s.lat)
           const [x2, y2] = project(t.lon, t.lat)
+          const d = arcPath(x1, y1, x2, y2)
+          const pid = `wm-arc-${a.key}`
           return (
-            <path
-              key={`arc-${i}`}
-              d={arcPath(x1, y1, x2, y2)}
-              fill="none" stroke={a.color} strokeWidth={0.45} strokeLinecap="round"
-              strokeDasharray="14" strokeDashoffset="14"
-              style={{ animation: `wmArc 3s ease-in-out ${i * 0.28}s infinite`, filter: 'url(#wm-glow)' }}
-            />
+            <g key={a.key}>
+              <path
+                id={pid} d={d}
+                fill="none" stroke={a.color} strokeWidth={0.5} strokeLinecap="round"
+                strokeDasharray="3 2.2"
+                style={{ animation: 'wmArcFade 4s ease-in-out forwards', filter: 'url(#wm-glow)' }}
+              />
+              {/* Comet head */}
+              <circle r={1.1} fill="#fff" filter="url(#city-glow)">
+                <animateMotion dur="2.6s" begin="0s" fill="freeze" keyPoints="0;1" keyTimes="0;1"
+                  calcMode="spline" keySplines="0.3 0 0.4 1">
+                  <mpath href={`#${pid}`} />
+                </animateMotion>
+                <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" dur="2.6s" fill="freeze" />
+                <animate attributeName="fill" values={`#fff;${a.color}`} dur="2.6s" fill="freeze" />
+              </circle>
+              {/* Impact ripple at the target */}
+              <circle cx={x2} cy={y2} r={1} fill="none" stroke={a.color} strokeWidth={0.5} opacity={0}>
+                <animate attributeName="r" values="0.8;5.5" begin="2.5s" dur="1.2s" fill="freeze" />
+                <animate attributeName="opacity" values="0;0.9;0" keyTimes="0;0.15;1" begin="2.5s" dur="1.2s" fill="freeze" />
+              </circle>
+              <circle cx={x2} cy={y2} r={1.1} fill={a.color} opacity={0}>
+                <animate attributeName="opacity" values="0;1;0" begin="2.5s" dur="1.1s" fill="freeze" />
+              </circle>
+            </g>
           )
         })}
 
-        {/* City nodes — larger tap targets for mobile */}
+        {/* City nodes — hover previews, click pins the tooltip */}
         {CITIES.map((c) => {
           const [cx, cy] = project(c.lon, c.lat)
-          const isHov = hoveredCity === c.name
+          const isPinned = pinnedCity === c.name
+          const isHov = hoveredCity === c.name || isPinned
           const hasData = !!COUNTRY_STATS[c.name]
           return (
             <g
               key={c.name}
               style={{ cursor: hasData ? 'pointer' : 'default' }}
               onMouseEnter={() => hasData && enterCity(c.name, cx, cy)}
-              onMouseLeave={leaveCitySchedule}
+              onMouseLeave={() => { if (!isPinned) leaveCitySchedule() }}
+              onClick={() => {
+                if (!hasData) return
+                if (isPinned) { setPinnedCity(null); setHoveredCity(null) }
+                else { const pos = svgToScreen(cx, cy); setCityTooltipPos(pos); setPinnedCity(c.name); setHoveredCity(c.name) }
+              }}
               onTouchStart={(e) => hasData && handleTouchCity(c.name, cx, cy, e)}
             >
               {/* Invisible tap target (larger area for mobile) */}
@@ -413,16 +513,23 @@ export default function WorldMap() {
                 filter={isHov ? 'url(#city-glow)' : 'url(#wm-glow)'}
                 style={{ transition: 'r 0.15s' }}
               />
-              {/* City name on hover */}
+              {/* City name chip on hover */}
               {isHov && (
-                <text
-                  x={cx} y={cy - 4}
-                  textAnchor="middle" fill="white"
-                  fontSize={4.5} fontWeight="600" fontFamily="system-ui,sans-serif"
-                  style={{ pointerEvents: 'none' }}
-                >
-                  {c.name}
-                </text>
+                <g style={{ pointerEvents: 'none' }}>
+                  <rect
+                    x={cx - c.name.length * 1.45 - 3} y={cy - 10.5}
+                    width={c.name.length * 2.9 + 6} height={7.5} rx={3.75}
+                    fill="#100A1C" fillOpacity={0.95}
+                    stroke={c.color} strokeOpacity={0.55} strokeWidth={0.35}
+                  />
+                  <text
+                    x={cx} y={cy - 5.2}
+                    textAnchor="middle" fill="white"
+                    fontSize={4.2} fontWeight="600" fontFamily="system-ui,sans-serif"
+                  >
+                    {c.name}
+                  </text>
+                </g>
               )}
             </g>
           )
@@ -475,32 +582,53 @@ export default function WorldMap() {
       </svg>
 
       {/* Country tooltip (HTML overlay — richer, supports flex layout) */}
-      {hoveredCity && COUNTRY_STATS[hoveredCity] && (
+      {(pinnedCity ?? hoveredCity) && COUNTRY_STATS[(pinnedCity ?? hoveredCity)!] && (
         <CountryTooltip
-          city={hoveredCity}
+          city={(pinnedCity ?? hoveredCity)!}
           screenX={cityTooltipPos.x}
           screenY={cityTooltipPos.y}
           containerW={containerRef.current?.clientWidth ?? 400}
           containerH={containerRef.current?.clientHeight ?? 220}
+          pinned={!!pinnedCity}
+          onClose={() => { setPinnedCity(null); setHoveredCity(null) }}
         />
       )}
 
       <style>{`
-        @keyframes wmArc {
-          0%   { stroke-dashoffset: 14; opacity: 0; }
-          15%  { opacity: 0.85; }
-          85%  { stroke-dashoffset: 0; opacity: 0.55; }
-          100% { stroke-dashoffset: 0; opacity: 0; }
+        @keyframes wmArcFade {
+          0%   { opacity: 0; }
+          12%  { opacity: 0.8; }
+          70%  { opacity: 0.55; }
+          100% { opacity: 0; }
         }
         @keyframes wmPulse {
           0%   { r: 1; opacity: 0.7; }
           100% { r: 4.5; opacity: 0; }
         }
+        @keyframes wmTickerIn {
+          from { opacity: 0; transform: translateY(5px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
 
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 text-[10px] text-safe pointer-events-none">
-        <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
-        Live Attack Map
+      <div className="absolute top-3 left-3 pointer-events-none">
+        <div className="flex items-center gap-1.5 text-[10px] text-safe">
+          <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
+          Live Attack Map
+          <span className="font-mono text-ink-400 ml-1">{attackCount.toLocaleString()} this session</span>
+        </div>
+      </div>
+
+      {/* Live event ticker — the three most recent attacks */}
+      <div className="absolute bottom-3 left-3 space-y-1 pointer-events-none max-w-[58%]">
+        {ticker.map((t) => (
+          <div key={t.key}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface/85 border border-white/8 backdrop-blur-sm"
+            style={{ animation: 'wmTickerIn 0.3s ease-out' }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.color }} />
+            <span className="text-[9px] font-mono text-ink-300 truncate">{t.text}</span>
+          </div>
+        ))}
       </div>
 
       {/* View toggle: Continents (hover regions) ↔ Top Countries leaderboard */}
@@ -552,8 +680,8 @@ export default function WorldMap() {
         </div>
       )}
 
-      <div className="absolute bottom-3 right-3 flex items-center gap-3 text-[10px] text-slate-500 pointer-events-none">
-        {([['Critical','#FF2E97'],['High','#FF4D6D'],['Medium','#FFB23E'],['Low','#2DD4BF']] as const).map(([l, c]) => (
+      <div className="absolute bottom-3 right-3 flex items-center gap-3 text-[10px] text-ink-400 pointer-events-none">
+        {([['Critical','#FF2E97'],['High','#FF4D6D'],['Medium','#FFB23E'],['Low','#34F5C5']] as const).map(([l, c]) => (
           <div key={l} className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: c }} />
             {l}
