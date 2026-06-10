@@ -968,6 +968,26 @@ export const scanAllVulns = () =>
   api<{ assets: number; findings: number }>('/assets/scan-all', { method: 'POST' })
 export const fetchAssetVulns = (id: string) => api<VulnFinding[]>(`/assets/${id}/vulns`)
 
+// Attack-surface discovery + exposure.
+export interface ExposureItem {
+  id: string; name: string; type: string; value: string; criticality: string
+  riskScore: number; score: number; band: string; internetFacing: boolean
+  factors: Array<{ factor: string; weight: number }>
+}
+export const fetchExposure = () =>
+  api<{ items: ExposureItem[]; summary: { assets: number; internetFacing: number; criticalExposure: number; avgExposure: number; topFactor: string | null } }>(
+    '/assets/exposure')
+export interface DiscoveredAsset {
+  hostname: string; events: number; alerts: number
+  firstSeen: string | null; lastSeen: string | null; sample: string
+}
+export const fetchDiscoveredAssets = (limit = 50) =>
+  api<{ items: DiscoveredAsset[] }>(`/assets/discovered?limit=${limit}`)
+export const promoteDiscoveredAsset = (hostname: string, criticality = 'medium', type = 'endpoint') =>
+  api<Asset>('/assets/discovered/promote', {
+    method: 'POST', body: JSON.stringify({ hostname, criticality, type }),
+  })
+
 // ── Feeds ─────────────────────────────────────────────────────────────
 export const fetchFeeds   = () => api<Feed[]>('/feeds')
 export const createFeed = (body: {

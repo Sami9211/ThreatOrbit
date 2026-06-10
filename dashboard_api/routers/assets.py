@@ -120,6 +120,60 @@ def vulnerabilities():
     return out
 
 
+@router.get("/exposure")
+def attack_surface_exposure():
+    """Internet-facing inventory: every asset's transparent exposure score
+    (public address, risky ports, plaintext web, CVEs on the exposed surface),
+    ranked, with a fleet summary."""
+    from dashboard_api.attack_surface import exposure_inventory
+    with get_conn() as conn:
+        return exposure_inventory(conn)
+
+
+@router.get("/discovered")
+def discovered_assets(limit: int = 50):
+    """Passive attack-surface discovery: hosts emitting telemetry that are NOT
+    in the asset inventory (shadow IT), with observed activity for vetting."""
+    from dashboard_api.attack_surface import discover_unmanaged
+    with get_conn() as conn:
+        return {"items": discover_unmanaged(conn, limit=min(limit, 200))}
+
+
+class PromoteBody(BaseModel):
+    hostname: str
+    criticality: str = "medium"
+    type: str = "endpoint"
+
+
+@router.post("/discovered/promote", status_code=201)
+def promote_discovered(body: PromoteBody, user: dict = Depends(require_perm("assets.write"))):
+    """Register a discovered host into the managed inventory."""
+    name = body.hostname.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="hostname is required")
+    if body.criticality not in _CRITICALITIES:
+        raise HTTPException(status_code=400, detail=f"criticality must be one of {sorted(_CRITICALITIES)}")
+    if body.type not in _ASSET_TYPES:
+        raise HTTPException(status_code=400, detail=f"type must be one of {sorted(_ASSET_TYPES)}")
+    aid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM assets WHERE name=?", (name,)).fetchone():
+            raise HTTPException(status_code=409, detail="Asset already in the inventory")
+        conn.execute(
+            "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
+            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software) "
+            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,NULL,?,0,?,100.0,?,'[]')",
+            (aid, name, body.type, name, body.criticality,
+             dumps({"critical": 0, "high": 0, "medium": 0, "low": 0}), dumps([]),
+             user["email"], dumps(["discovered"]), now),
+        )
+        audit(conn, user["email"], "asset.promote_discovered", aid, f"hostname={name}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM assets WHERE id=?", (aid,)).fetchone()
+    return row_to_dict(row)
+
+
 @router.post("/recompute-risk")
 def recompute_risk(user: dict = Depends(current_user)):
     """Recalculate every asset's risk from current CVEs and live alert pressure."""

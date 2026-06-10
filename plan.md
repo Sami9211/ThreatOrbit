@@ -149,8 +149,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       fixed-in) that drive asset risk. `/assets/{id}/scan`, `/assets/scan-all`,
       `/assets/{id}/vulns`. Remaining: live NVD feed sync into the catalogue +
       a findings UI panel (API + clients shipped).
-- [ ] **Attack-surface discovery** — passive/active asset discovery, exposure
-      scoring, internet-facing inventory.
+- [~] **Attack-surface discovery** — DONE (see CHANGELOG): passive discovery of
+      unmanaged hosts from real telemetry (+ one-call promotion into the
+      inventory) and transparent factor-based exposure scoring with an
+      internet-facing inventory (`/assets/exposure`, `/assets/discovered`).
+      Remaining: an attack-surface UI panel (API + clients shipped) + active
+      probing.
 - [ ] **Asset ↔ alert ↔ case linkage** everywhere (one click from a host to all
       its activity).
 - [ ] **Dark-web depth** — real source connectors (paste sites, leak DBs,
@@ -173,6 +177,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Attack-surface discovery (Phase 4)** — `attack_surface.py`.
+  **Passive discovery**: hosts emitting telemetry that are NOT in the asset
+  inventory (shadow IT) surface as vetted candidates with their observed
+  activity (event/alert counts, first/last seen, sample line);
+  `POST /assets/discovered/promote` registers one into the inventory (tagged
+  `discovered`, 409 on duplicates, assets.write). **Exposure scoring**: a
+  transparent, factor-weighted score per asset — public IP/domain,
+  internet-facing tag, risky listening ports (RDP/Telnet/SMB/databases/
+  plaintext HTTP), and open critical/high CVEs on the exposed surface — with
+  the factors returned alongside the score so it's explainable;
+  `GET /assets/exposure` ranks the fleet and summarises (internet-facing
+  count, critical exposure, top factor). Frontend clients shipped. Tested:
+  scoring units (weights, ordering, cap, public-IP detection) + the
+  discover→promote lifecycle (telemetry host found, promoted, vanishes from
+  candidates, 409/400/403 guards).
 
 - **2026-06-10 · Real vulnerability scanning (Phase 4)** — assets carry CVE
   *findings*, not fabricated counts. `vuln_scanner.py` matches each asset's

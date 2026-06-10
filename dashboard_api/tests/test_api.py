@@ -1440,6 +1440,60 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_attack_surface_units():
+    """Exposure scoring is transparent and weighted by real risk factors."""
+    from dashboard_api.attack_surface import exposure_of, _is_public_ip
+    assert _is_public_ip("8.8.8.8") and not _is_public_ip("10.0.0.5") and not _is_public_ip("not-an-ip")
+    bad = exposure_of({"type": "server", "value": "203.0.113.7", "tags": ["internet-facing"],
+                       "open_ports": [3389, 445, 80], "cves": {"critical": 1, "high": 2}})
+    assert bad["score"] >= 70 and bad["band"] == "critical" and bad["internetFacing"] is True
+    labels = {f["factor"] for f in bad["factors"]}
+    assert any("RDP" in l for l in labels) and any("SMB" in l for l in labels)
+    assert any("critical CVE" in l for l in labels)
+    # factors are sorted by weight, score capped at 100
+    weights = [f["weight"] for f in bad["factors"]]
+    assert weights == sorted(weights, reverse=True) and bad["score"] <= 100
+    clean = exposure_of({"type": "endpoint", "value": "10.0.20.14", "tags": ["monitored"],
+                         "open_ports": [443], "cves": {"critical": 0, "high": 0}})
+    assert clean["score"] < 20 and clean["internetFacing"] is False
+
+
+def test_attack_surface_discovery(client, auth):
+    """Exposure inventory ranks the fleet; passive discovery surfaces hosts in
+    telemetry that aren't inventoried, and promotion registers them."""
+    inv = client.get("/assets/exposure", headers=auth).json()
+    assert inv["items"] and inv["summary"]["assets"] == len(inv["items"])
+    scores = [i["score"] for i in inv["items"]]
+    assert scores == sorted(scores, reverse=True)
+    assert all({"score", "band", "factors", "internetFacing"} <= set(i) for i in inv["items"])
+    assert inv["summary"]["internetFacing"] >= 1  # seeded vpn-gateway has a public IP
+
+    # generate telemetry → engine hostnames (DC-PROD-01 …) aren't in inventory
+    client.post("/config/engine", json={"generate": 8}, headers=auth)
+    disc = client.get("/assets/discovered", headers=auth).json()["items"]
+    assert disc, "telemetry hosts should be discovered"
+    cand = disc[0]
+    assert cand["events"] > 0 and cand["hostname"] and "lastSeen" in cand
+    inventory_names = {a["name"] for a in client.get("/assets?limit=500", headers=auth).json()["items"]}
+    assert cand["hostname"] not in inventory_names
+
+    # promote → asset registered with the discovered tag; vanishes from candidates
+    p = client.post("/assets/discovered/promote", json={"hostname": cand["hostname"]}, headers=auth)
+    assert p.status_code == 201, p.text
+    assert "discovered" in p.json()["tags"]
+    assert client.post("/assets/discovered/promote", json={"hostname": cand["hostname"]},
+                       headers=auth).status_code == 409
+    after = client.get("/assets/discovered", headers=auth).json()["items"]
+    assert all(d["hostname"] != cand["hostname"] for d in after)
+
+    # guard rails + RBAC
+    assert client.post("/assets/discovered/promote", json={"hostname": "x", "criticality": "huge"},
+                       headers=auth).status_code == 400
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post("/assets/discovered/promote", json={"hostname": "y"},
+                       headers=viewer).status_code == 403
+
+
 def test_vuln_scanner_units():
     """Real CVE matching from software versions (version ranges + lt)."""
     from dashboard_api.vuln_scanner import scan_software, _lt
