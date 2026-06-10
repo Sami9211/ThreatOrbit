@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchRules, patchRule, deleteRule } from '@/lib/api'
 import RuleEditor from '@/components/dashboard/RuleEditor'
+import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -969,6 +970,15 @@ export default function RulesEnginePage() {
             </span>
           </div>
         </div>
+      </motion.div>
+
+      {/* ── Alert tuning: suppressions & allow-lists ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+      >
+        <SuppressionsPanel />
       </motion.div>
 
       {/* ── Rule detail panel (slide-over) ── */}

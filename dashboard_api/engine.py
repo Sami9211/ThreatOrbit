@@ -271,10 +271,32 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -
         if d.get("conditions"):
             rules.append({**dict(r), "definition": d})
 
+    # Alert-tuning: active suppressions/allow-lists drop matching detections
+    # before they ever become an alert (analyst feedback loop, not a hack).
+    supp_rows = conn.execute(
+        "SELECT id, rule_id, field, value FROM suppressions").fetchall()
+    suppressions = [dict(s) for s in supp_rows]
+
+    def _suppressed(rule_id: str, event: dict):
+        for s in suppressions:
+            if s["rule_id"] not in ("*", rule_id):
+                continue
+            ev_val = event.get(s["field"])
+            if ev_val is not None and str(ev_val) == str(s["value"]):
+                return s["id"]
+        return None
+
     created = 0
+    suppressed = 0
+    supp_hits: dict[str, int] = {}
     for rule in rules:
         for m in evaluate(rule, events):
             ev = m["event"]
+            sid = _suppressed(rule["id"], ev) if suppressions else None
+            if sid:
+                supp_hits[sid] = supp_hits.get(sid, 0) + 1
+                suppressed += 1
+                continue
             title = rule.get("name", "Detection")
             tmpl = next((br["title_tmpl"] for br in BUILTIN_RULES if br["id"] == rule["id"]), None)
             if tmpl:
@@ -298,10 +320,13 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -
             created += 1
         # bump the rule's hit counter + last_fired
         conn.execute("UPDATE detection_rules SET last_fired=? WHERE id=?", (_now(), rule["id"]))
+    for sid, n in supp_hits.items():
+        conn.execute("UPDATE suppressions SET hits=hits+? WHERE id=?", (n, sid))
     event_ids = [e["id"] for e in events]
     if event_ids:
         conn.executemany("UPDATE events SET processed=1 WHERE id=?", [(i,) for i in event_ids])
-    return {"alerts": created, "events": len(events), "rules": len(rules)}
+    return {"alerts": created, "events": len(events), "rules": len(rules),
+            "suppressed": suppressed}
 
 
 # ── Dark-web monitoring ──────────────────────────────────────────────────────────

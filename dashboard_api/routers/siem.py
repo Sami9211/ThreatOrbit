@@ -197,10 +197,75 @@ def update_alert(alert_id: str, body: AlertUpdate, user: dict = Depends(current_
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Alert not found")
         changed = ",".join(f.split("=")[0] for f in fields)
+        # FP feedback loop: marking an alert false-positive bumps its rule's FP rate.
+        if body.disposition == "false-positive":
+            row = conn.execute("SELECT rule_id, rule_name FROM alerts WHERE id=?", (alert_id,)).fetchone()
+            rid = row["rule_id"] if row else None
+            if rid:
+                conn.execute(
+                    "UPDATE detection_rules SET fp_rate=MIN(100, fp_rate+2) "
+                    "WHERE id=? OR name=?", (rid, row["rule_name"]))
         audit(conn, user["email"], "alert.update", alert_id, f"fields={changed}")
         conn.commit()
         row = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
     return row_to_dict(row)
+
+
+class SuppressionCreate(BaseModel):
+    value: str
+    field: str = "src_ip"
+    rule_id: str = "*"
+    mode: str = "suppress"
+    reason: str | None = None
+
+
+@router.get("/suppressions")
+def list_suppressions():
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM suppressions ORDER BY created_at DESC").fetchall()
+    return rows_to_dicts(rows)
+
+
+@router.post("/suppressions", status_code=201)
+def create_suppression(body: SuppressionCreate, user: dict = Depends(current_user)):
+    if body.field not in ("src_ip", "username", "hostname"):
+        raise HTTPException(status_code=400, detail="field must be src_ip|username|hostname")
+    if body.mode not in ("suppress", "allow"):
+        raise HTTPException(status_code=400, detail="mode must be suppress|allow")
+    value = body.value.strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="value is required")
+    sid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO suppressions (id,rule_id,field,value,mode,reason,created_at,created_by) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (sid, body.rule_id or "*", body.field, value, body.mode, body.reason,
+             _now_iso(), user["email"]),
+        )
+        # retro-close any currently-open alerts this suppression covers
+        clause = f"{body.field}=?"
+        params = [value]
+        if body.rule_id and body.rule_id != "*":
+            clause += " AND rule_id=?"; params.append(body.rule_id)
+        conn.execute(
+            f"UPDATE alerts SET status='closed', disposition='false-positive' "
+            f"WHERE {clause} AND status NOT IN ('resolved','closed')", params)
+        audit(conn, user["email"], "suppression.create", sid, f"{body.field}={value} mode={body.mode}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM suppressions WHERE id=?", (sid,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.delete("/suppressions/{suppression_id}", status_code=204)
+def delete_suppression(suppression_id: str, user: dict = Depends(current_user)):
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM suppressions WHERE id=?", (suppression_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Suppression not found")
+        audit(conn, user["email"], "suppression.delete", suppression_id)
+        conn.commit()
+    return None
 
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────

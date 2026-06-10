@@ -344,6 +344,18 @@ CREATE TABLE IF NOT EXISTS scans (
     actor      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS suppressions (
+    id         TEXT PRIMARY KEY,
+    rule_id    TEXT NOT NULL DEFAULT '*',   -- specific rule id, or '*' for any
+    field      TEXT NOT NULL DEFAULT 'src_ip',  -- src_ip|username|hostname
+    value      TEXT NOT NULL,
+    mode       TEXT NOT NULL DEFAULT 'suppress',  -- suppress (drop) | allow (auto-benign)
+    reason     TEXT,
+    hits       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    created_by TEXT
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
     id        TEXT PRIMARY KEY,
     ts        TEXT NOT NULL,

@@ -41,8 +41,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 - [~] **Detection rule editor** — DONE: author rules with field conditions,
       AND/OR logic, threshold-over-window aggregation, and a live backtest;
-      built-in rules now evaluate the raw event stream (see CHANGELOG).
-      Remaining: Sigma import/export, per-rule suppression UI, FP tuning.
+      built-in rules now evaluate the raw event stream; per-rule/entity
+      suppression UI + FP tuning shipped (see CHANGELOG). Remaining: Sigma
+      import/export.
 - [~] **Real log-source ingestion** — DONE: native HTTP collector
       (`POST /siem/ingest`) parses syslog/Apache/JSON/key=value lines into
       events and runs detection on them; a Log Collector panel on SIEM →
@@ -53,8 +54,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       from alert history (severity-weighted volume + technique diversity), an
       Entity Risk page with ranking + drill-down timeline. Remaining: true
       learned baselines / deviation-from-norm anomaly scoring.
-- [ ] **Alert tuning workflow** — false-positive feedback loop that adjusts rule
-      confidence; allow/deny lists per rule+entity.
+- [x] **Alert tuning workflow** — DONE (see CHANGELOG): false-positive feedback
+      bumps rule FP rate; suppressions/allow-lists per entity (and rule) that
+      retro-close open alerts and drop future matches, with a hit counter.
+      Remaining: time-boxed/recurring suppression windows.
 - [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
       tactic, per-technique drill-down to rules/alerts, gaps highlighted.
 - [ ] **Search/hunt language** — expand the hunt engine to real field operators,
@@ -120,6 +123,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Alert tuning workflow (Phase 1)** — the false-positive feedback
+  loop. Marking an alert false-positive now bumps its detection rule's FP rate
+  (a real tuning signal surfaced on the Rules page). New `suppressions` store +
+  `/siem/suppressions` CRUD: a suppression matches an entity (src_ip / username /
+  hostname, optionally scoped to a rule, mode `suppress` or `allow`); creating
+  one retro-closes every open alert it covers and the shared `run_detection`
+  drops future matching detections before they become alerts, incrementing a
+  per-suppression hit counter (so analysts see how much noise it removed). The
+  SIEM alert "Suppress" action now creates a real suppression for the alert's
+  entity instead of just closing the alert, and a Suppressions & allow-lists
+  panel on SIEM → Rules manages them. Enforcement is centralised, so it applies
+  to engine telemetry and native log ingestion alike. Tested: lifecycle
+  (create → retro-close → future-drop + hit bump → delete → re-fire) and the
+  FP-rate feedback.
 
 - **2026-06-10 · UEBA entity risk (Phase 1)** — `/siem/entities` ranks
   users/hosts/IPs by behavioural risk (severity-weighted alert volume +

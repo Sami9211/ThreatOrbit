@@ -1054,3 +1054,61 @@ def test_ueba_entity_risk(client, auth):
     # all-types ranking works
     assert client.get("/siem/entities?type=all", headers=auth).status_code == 200
     assert client.get("/siem/entities?type=bogus", headers=auth).status_code == 422
+
+
+def test_alert_suppression_lifecycle(client, auth):
+    """Alert tuning: a suppression retro-closes open alerts for an entity and
+    drops future matching detections (with a hit counter), then can be removed."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "203.0.113.201"
+    bf = f"Jan 10 04:00:00 web01 sshd[111]: Failed password for root from {ip} port 51110"
+
+    # 1) Baseline: a brute-force line produces an open alert for this IP.
+    client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
+    got = client.get(f"/siem/alerts?q={ip}", headers=auth).json()
+    assert got["total"] >= 1 and any(a["status"] not in ("resolved", "closed") for a in got["items"])
+
+    # 2) Suppress the IP → retro-closes the open alert(s) as false-positive.
+    s = client.post("/siem/suppressions",
+                    json={"value": ip, "field": "src_ip", "reason": "known scanner"}, headers=auth)
+    assert s.status_code == 201, s.text
+    sid = s.json()["id"]
+    assert s.json()["rule_id"] == "*" and s.json()["mode"] == "suppress"
+    closed = client.get(f"/siem/alerts?q={ip}", headers=auth).json()
+    assert all(a["status"] == "closed" and a["disposition"] == "false-positive" for a in closed["items"])
+    base = closed["total"]
+
+    # 3) Re-ingest the same line → the suppression drops it (no new alert) and
+    #    its hit counter increments.
+    client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
+    again = client.get(f"/siem/alerts?q={ip}", headers=auth).json()
+    assert again["total"] == base  # nothing new fired
+    supp = next(x for x in client.get("/siem/suppressions", headers=auth).json() if x["id"] == sid)
+    assert supp["hits"] >= 1
+
+    # validation guards
+    assert client.post("/siem/suppressions", json={"value": ip, "field": "x"}, headers=auth).status_code == 400
+    assert client.post("/siem/suppressions", json={"value": ip, "mode": "x"}, headers=auth).status_code == 400
+    assert client.post("/siem/suppressions", json={"value": "   "}, headers=auth).status_code == 400
+
+    # 4) Remove the suppression → detection fires again for the entity.
+    assert client.delete(f"/siem/suppressions/{sid}", headers=auth).status_code == 204
+    assert client.delete(f"/siem/suppressions/{sid}", headers=auth).status_code == 404
+    client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
+    revived = client.get(f"/siem/alerts?q={ip}", headers=auth).json()
+    assert revived["total"] > base and any(a["status"] not in ("resolved", "closed") for a in revived["items"])
+
+
+def test_fp_feedback_bumps_rule_fp_rate(client, auth):
+    """Marking an alert false-positive raises its rule's FP rate (a tuning signal)."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "203.0.113.214"
+    bf = f"Jan 10 05:00:00 web01 sshd[222]: Failed password for root from {ip} port 33000"
+    client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
+    alert = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]
+    before = next(r for r in client.get("/siem/rules", headers=auth).json() if r["id"] == "R-BRUTEFORCE")["fp_rate"]
+    client.patch(f"/siem/alerts/{alert['id']}", json={"disposition": "false-positive"}, headers=auth)
+    after = next(r for r in client.get("/siem/rules", headers=auth).json() if r["id"] == "R-BRUTEFORCE")["fp_rate"]
+    assert after == min(100, before + 2)

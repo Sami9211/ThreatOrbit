@@ -494,6 +494,26 @@ export const patchRule     = (id: string, body: { status?: string; severityOverr
 export const deleteRule = (id: string) =>
   api<void>(`/siem/rules/${id}`, { method: 'DELETE' })
 
+// ── Alert tuning: suppressions / allow-lists ─────────────────────────
+export interface Suppression {
+  id: string; ruleId: string; field: 'src_ip' | 'username' | 'hostname'
+  value: string; mode: 'suppress' | 'allow'; reason: string | null
+  hits: number; createdAt: string; createdBy: string | null
+}
+export const fetchSuppressions = () => api<Suppression[]>('/siem/suppressions')
+export const createSuppression = (body: {
+  value: string; field?: string; ruleId?: string; mode?: string; reason?: string
+}) =>
+  api<Suppression>('/siem/suppressions', {
+    method: 'POST',
+    body: JSON.stringify({
+      value: body.value, field: body.field, rule_id: body.ruleId,
+      mode: body.mode, reason: body.reason,
+    }),
+  })
+export const deleteSuppression = (id: string) =>
+  api<void>(`/siem/suppressions/${id}`, { method: 'DELETE' })
+
 // ── Detection rule editor ────────────────────────────────────────────
 export interface RuleCondition { field: string; op: string; value: string }
 export interface RuleDefinition {

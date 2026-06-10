@@ -13,7 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -604,7 +604,21 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                   .catch(() => flash('Could not create case — is the dashboard API running?'))
               } },
             { label: 'Suppress', icon: Lock, color: 'text-ink-400',
-              run: () => { onUpdate(alert.id, { status: 'closed', disposition: 'false-positive' }); flash(`Rule ${alert.ruleId} suppressed for this entity`) } },
+              run: () => {
+                // Real alert-tuning: mark this alert FP (bumps the rule's FP rate)
+                // AND create a suppression that retro-closes siblings and drops
+                // future matches for this entity.
+                onUpdate(alert.id, { status: 'closed', disposition: 'false-positive' })
+                const ent = alert.srcIp ? { field: 'src_ip', value: alert.srcIp }
+                  : alert.hostname ? { field: 'hostname', value: alert.hostname }
+                  : alert.username ? { field: 'username', value: alert.username }
+                  : null
+                if (!ent) { flash('Alert closed as false-positive'); return }
+                createSuppression({ value: ent.value, field: ent.field,
+                  reason: `From alert ${alert.id} · ${alert.ruleName}` })
+                  .then(() => flash(`Suppression added for ${ent.field}=${ent.value} — future matches dropped`))
+                  .catch(() => flash('Could not create suppression — is the dashboard API running?'))
+              } },
             { label: 'Run Playbook', icon: Zap, color: 'text-safe',
               run: () => {
                 onUpdate(alert.id, { status: 'in-progress' })
