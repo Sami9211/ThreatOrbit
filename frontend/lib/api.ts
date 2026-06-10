@@ -1122,12 +1122,15 @@ export interface DarkWebFinding {
   actor: string
   detail: string
   url: string
-  status: 'new' | 'investigating' | 'mitigated' | 'dismissed'
+  status: 'new' | 'investigating' | 'takedown-requested' | 'mitigated' | 'dismissed'
+  matchedUser?: string | null
 }
 export interface DarkWebSummary {
   total: number
   critical: number
   credentialLeaks: number
+  workforceMatches: number
+  takedownsRequested: number
   open: number
   byCategory: Record<string, number>
   last24h: number
@@ -1139,6 +1142,10 @@ export const fetchDarkWebFindings = (params?: Record<string, string>) => {
 export const fetchDarkWebSummary = () => api<DarkWebSummary>('/darkweb/summary')
 export const updateDarkWebFinding = (id: string, status: string) =>
   api<DarkWebFinding>(`/darkweb/findings/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+export const requestTakedown = (id: string) =>
+  api<DarkWebFinding>(`/darkweb/findings/${id}/takedown`, { method: 'POST' })
+export const matchCredentialLeaks = () =>
+  api<{ scanned: number; matched: number }>('/darkweb/match-credentials', { method: 'POST' })
 
 // ── Live engine control ──────────────────────────────────────────────
 export interface EngineStatus {

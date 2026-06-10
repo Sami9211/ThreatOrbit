@@ -160,9 +160,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       findings and responding playbook runs; “Linked activity” section in the
       asset drawer with SIEM/SOAR deep links. The page’s fake re-scan simulator
       was replaced with the real vulnerability scanner.
-- [ ] **Dark-web depth** — real source connectors (paste sites, leak DBs,
-      Telegram), credential-leak matching against your user list, takedown
-      workflow.
+- [x] **Dark-web depth** — DONE (see CHANGELOG): `darkweb-json` connector kind
+      (any leak-DB/paste-monitor API → findings, deduped), credential-leak
+      matching against the real user directory (stamp + escalate + notify),
+      and a takedown workflow (status + `darkweb.takedown` webhook + UI button).
 
 ## Phase 5 — Product polish & scale
 
@@ -180,6 +181,24 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Dark-web depth (Phase 4, closes Phase 4)** —
+  `darkweb_logic.py` + connector/router wiring. (1) **Credential matching**:
+  credential-leak findings are checked against the *real* user directory —
+  exact email or org-domain match stamps `matched_user`, escalates to critical
+  and raises a force-reset notification; runs on engine ticks, on feed import,
+  and on demand (`POST /darkweb/match-credentials`). (2) **Takedown workflow**:
+  `POST /darkweb/findings/{id}/takedown` stamps the request (status
+  `takedown-requested`, audit note) and emits a `darkweb.takedown` webhook for
+  external takedown/ticketing services; new status in the lifecycle + a
+  Request-takedown button in the finding drawer; summary gains
+  workforceMatches/takedownsRequested. (3) **Real source connectors**: new
+  `darkweb-json` connector kind — any leak-DB / paste-site / breach-monitor
+  API returning JSON maps (field-mapped) into findings, deduped by URL, with
+  credential matching on the way in; darkweb mutations now require
+  darkweb.write. Tested: directory match + escalation + notification, takedown
+  flow + 404/403, feed connector import/dedupe/workforce-match.
+  **Phase 4 (Asset, Vuln & Dark Web depth) is now complete.**
 
 - **2026-06-10 · Asset ↔ alert ↔ case linkage (Phase 4)** — one click from a
   host to all its activity. `GET /assets/{id}/activity` joins everything tied

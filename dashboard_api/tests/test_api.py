@@ -1440,6 +1440,83 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_darkweb_credential_matching_and_takedown(client, auth):
+    """Credential leaks matching the real user directory are stamped + escalated;
+    the takedown workflow stamps requests and fires its webhook event."""
+    import uuid as _uuid
+    from dashboard_api.db import get_conn
+
+    # a leak for an email on the org's own domain (directory-derived)
+    fid = str(_uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO dark_web_findings (id,ts,category,severity,source,title,entity,actor,"
+            "detail,url,status) VALUES (?,datetime('now'),'credential-leak','high','LeakBase',"
+            "'Leaked credentials for admin@threatorbit.space','admin@threatorbit.space','',"
+            "'Plaintext password present','darkweb://leakbase/test1','new')", (fid,))
+        conn.commit()
+
+    res = client.post("/darkweb/match-credentials", headers=auth).json()
+    assert res["matched"] >= 1
+    f = next(x for x in client.get("/darkweb/findings?q=admin@threatorbit.space",
+                                   headers=auth).json()["items"] if x["id"] == fid)
+    assert f["matched_user"] == "admin@threatorbit.space" and f["severity"] == "critical"
+    # a workforce-credential notification was raised
+    notes = client.get("/notifications?limit=100", headers=auth).json()["items"]
+    assert any("force a reset" in (n["title"] or "") for n in notes)
+    assert client.get("/darkweb/summary", headers=auth).json()["workforceMatches"] >= 1
+
+    # takedown workflow
+    td = client.post(f"/darkweb/findings/{fid}/takedown", headers=auth)
+    assert td.status_code == 200 and td.json()["status"] == "takedown-requested"
+    assert "takedown requested by" in td.json()["detail"]
+    assert client.get("/darkweb/summary", headers=auth).json()["takedownsRequested"] >= 1
+    # the new status is a legal PATCH transition too
+    assert client.patch(f"/darkweb/findings/{fid}", json={"status": "mitigated"},
+                        headers=auth).json()["status"] == "mitigated"
+    assert client.post("/darkweb/findings/NOPE/takedown", headers=auth).status_code == 404
+
+    # RBAC: viewers can read but not mutate
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.get("/darkweb/findings", headers=viewer).status_code == 200
+    assert client.post(f"/darkweb/findings/{fid}/takedown", headers=viewer).status_code == 403
+    assert client.post("/darkweb/match-credentials", headers=viewer).status_code == 403
+
+
+def test_darkweb_feed_connector(client, auth, monkeypatch):
+    """The darkweb-json connector imports a leak feed into findings (deduped)
+    and runs credential matching on the way in."""
+    import dashboard_api.connectors as conn_mod
+
+    class FakeResp:
+        def json(self):
+            return [
+                {"headline": "Combo list with acme creds", "kind": "credential-leak",
+                 "level": "high", "who": "admin@threatorbit.space",
+                 "link": "https://leaksite.test/p/1",
+                 "note": "contains admin@threatorbit.space:hunter2"},
+                {"headline": "Brand mention on forum", "kind": "brand-mention",
+                 "level": "medium", "who": "ThreatOrbit", "link": "https://leaksite.test/p/2"},
+                {"headline": "", "kind": "x"},  # no title → skipped
+            ]
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp())
+
+    c = client.post("/connectors", json={
+        "name": "LeakWatch", "kind": "darkweb-json", "url": "https://leaksite.test/api",
+        "field_map": {"title": "headline", "category": "kind", "severity": "level",
+                      "entity": "who", "url": "link", "detail": "note"}}, headers=auth)
+    assert c.status_code == 201, c.text
+    run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert run["result"]["imported"] == 2 and run["result"]["skipped"] == 1
+    assert run["result"]["workforceMatches"] >= 1  # the org-domain credential matched
+    # findings landed with the connector as source
+    items = client.get("/darkweb/findings?q=Combo list", headers=auth).json()["items"]
+    assert items and items[0]["source"] == "LeakWatch" and items[0]["matched_user"]
+    # re-run dedupes by URL
+    again = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert again["result"]["imported"] == 0 and again["result"]["duplicates"] == 2
+
+
 def test_asset_activity_linkage(client, auth):
     """One click from an asset to all its activity: alerts, cases, events,
     CVE findings, and the playbook runs that responded."""

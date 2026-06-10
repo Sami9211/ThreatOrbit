@@ -10,12 +10,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.webhooks import dispatch
 
 router = APIRouter(prefix="/darkweb", tags=["darkweb"], dependencies=[Depends(current_user)])
 
-_STATUSES = {"new", "investigating", "mitigated", "dismissed"}
+_STATUSES = {"new", "investigating", "takedown-requested", "mitigated", "dismissed"}
 _CATEGORIES = {"credential-leak", "data-for-sale", "brand-mention", "actor-chatter", "infrastructure"}
 
 
@@ -47,7 +48,8 @@ def list_findings(category: str | None = None, severity: str | None = None,
 @router.get("/summary")
 def summary():
     with get_conn() as conn:
-        rows = conn.execute("SELECT category, severity, status FROM dark_web_findings").fetchall()
+        rows = conn.execute(
+            "SELECT category, severity, status, matched_user FROM dark_web_findings").fetchall()
     total = len(rows)
     by_cat = {c: 0 for c in _CATEGORIES}
     for r in rows:
@@ -57,14 +59,46 @@ def summary():
         "total": total,
         "critical": sum(1 for r in rows if r["severity"] == "critical"),
         "credentialLeaks": by_cat["credential-leak"],
-        "open": sum(1 for r in rows if r["status"] in ("new", "investigating")),
+        "workforceMatches": sum(1 for r in rows if r["matched_user"]),
+        "takedownsRequested": sum(1 for r in rows if r["status"] == "takedown-requested"),
+        "open": sum(1 for r in rows if r["status"] in ("new", "investigating", "takedown-requested")),
         "byCategory": by_cat,
         "last24h": total,  # engine-produced, all recent
     }
 
 
+@router.post("/match-credentials")
+def run_credential_matching(user: dict = Depends(require_perm("darkweb.write"))):
+    """Match credential-leak findings against the org's user directory; matches
+    are stamped, escalated to critical, and notified (force-reset events)."""
+    from dashboard_api.darkweb_logic import match_credential_leaks
+    with get_conn() as conn:
+        result = match_credential_leaks(conn)
+        audit(conn, user["email"], "darkweb.match_credentials", None,
+              f"matched={result['matched']}")
+        conn.commit()
+    return result
+
+
+@router.post("/findings/{finding_id}/takedown")
+def takedown(finding_id: str, user: dict = Depends(require_perm("darkweb.write"))):
+    """Start the takedown workflow for a finding: stamps the request and emits
+    a `darkweb.takedown` webhook for external takedown/ticketing services."""
+    from dashboard_api.darkweb_logic import request_takedown
+    with get_conn() as conn:
+        updated = request_takedown(conn, finding_id, user["email"])
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Finding not found")
+        audit(conn, user["email"], "darkweb.takedown", finding_id)
+        conn.commit()
+    dispatch("darkweb.takedown", {"id": finding_id, "title": updated["title"],
+                                  "source": updated["source"], "url": updated["url"],
+                                  "requestedBy": user["email"]})
+    return updated
+
+
 @router.patch("/findings/{finding_id}")
-def update_finding(finding_id: str, body: FindingUpdate, user: dict = Depends(current_user)):
+def update_finding(finding_id: str, body: FindingUpdate, user: dict = Depends(require_perm("darkweb.write"))):
     if body.status not in _STATUSES:
         raise HTTPException(status_code=400, detail=f"status must be one of {sorted(_STATUSES)}")
     with get_conn() as conn:

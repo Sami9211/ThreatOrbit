@@ -474,6 +474,10 @@ def process_tick(max_events: int = 6) -> dict:
         if rng.random() < 0.15:
             from dashboard_api.ioc_lifecycle import decay_iocs
             decay_iocs(conn)
+        # Credential-leak matching: new leaks are checked against the directory.
+        if dark:
+            from dashboard_api.darkweb_logic import match_credential_leaks
+            match_credential_leaks(conn)
         # SOAR automation: auto-trigger playbooks whose criteria match new alerts.
         from dashboard_api.playbook_engine import auto_trigger_playbooks
         pb_runs, pb_dispatches = auto_trigger_playbooks(conn)

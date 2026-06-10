@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-  fetchDarkWebFindings, fetchDarkWebSummary, updateDarkWebFinding,
+  fetchDarkWebFindings, fetchDarkWebSummary, updateDarkWebFinding, requestTakedown,
   type DarkWebFinding, type DarkWebSummary,
 } from '@/lib/api'
 import ReportButton from '@/components/dashboard/ReportButton'
@@ -26,10 +26,11 @@ const SEV_COLOR: Record<string, string> = {
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  new:           { label: 'New',           cls: 'text-threat border-threat/25 bg-threat/10' },
-  investigating: { label: 'Investigating', cls: 'text-amber border-amber/25 bg-amber/10' },
-  mitigated:     { label: 'Mitigated',     cls: 'text-safe border-safe/25 bg-safe/10' },
-  dismissed:     { label: 'Dismissed',     cls: 'text-ink-400 border-white/10 bg-white/5' },
+  new:                  { label: 'New',           cls: 'text-threat border-threat/25 bg-threat/10' },
+  investigating:        { label: 'Investigating', cls: 'text-amber border-amber/25 bg-amber/10' },
+  'takedown-requested': { label: 'Takedown requested', cls: 'text-violet border-violet/25 bg-violet/10' },
+  mitigated:            { label: 'Mitigated',     cls: 'text-safe border-safe/25 bg-safe/10' },
+  dismissed:            { label: 'Dismissed',     cls: 'text-ink-400 border-white/10 bg-white/5' },
 }
 
 function relTime(iso: string): string {
@@ -218,6 +219,18 @@ export default function DarkWebPage() {
                           </button>
                         ))}
                       </div>
+                      {/* Takedown workflow: stamps the request + notifies external services */}
+                      <button onClick={() => {
+                        requestTakedown(selected.id).then(() => load()).catch(() => {})
+                      }}
+                        disabled={selected.status === 'takedown-requested'}
+                        className={cn('w-full mt-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold border transition-colors',
+                          selected.status === 'takedown-requested'
+                            ? 'text-violet border-violet/25 bg-violet/10 cursor-default'
+                            : 'text-violet border-violet/30 bg-violet/12 hover:bg-violet/20')}>
+                        <ShieldAlert className="w-3 h-3" />
+                        {selected.status === 'takedown-requested' ? 'Takedown requested' : 'Request takedown'}
+                      </button>
                     </div>
                   </div>
                 )

@@ -62,6 +62,13 @@ KIND_PRESETS = {
         "default_url": "",
         "default_interval": 60,
     },
+    "darkweb-json": {
+        "label": "Dark-web / leak feed (JSON)",
+        "description": "Any leak-DB, paste-site or breach-monitor API returning JSON. Records map into dark-web findings (title/category/severity/entity/url) and credential leaks are matched against your user directory.",
+        "needs_key": False,
+        "default_url": "",
+        "default_interval": 120,
+    },
     "csv": {
         "label": "Custom CSV source",
         "description": "Any endpoint returning CSV. Map which columns hold the value/type.",
@@ -342,9 +349,36 @@ def _fetch_stix(c: dict) -> list[dict]:
     return out
 
 
+def _fetch_darkweb_json(c: dict) -> list[dict]:
+    """Like _fetch_json but keeps the dark-web *finding* shape: the field_map
+    maps source keys onto title/category/severity/entity/actor/url/detail
+    (unmapped sources pass records through as-is)."""
+    if not c.get("url"):
+        raise ValueError("Dark-web connector requires a URL")
+    headers = {}
+    if c.get("api_key"):
+        headers[c.get("auth_header") or "Authorization"] = c["api_key"]
+    data = _http_get(c["url"], headers=headers).json()
+    if isinstance(data, dict):
+        for key in ("data", "results", "findings", "items"):
+            if isinstance(data.get(key), list):
+                data = data[key]
+                break
+    if not isinstance(data, list):
+        raise ValueError("Dark-web source did not return a list of findings")
+    fm = c.get("field_map") or {}
+    out = []
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        out.append({k: rec.get(col) for k, col in fm.items()} if fm else dict(rec))
+    return out
+
+
 _FETCHERS = {
     "threatorbit": _fetch_threatorbit, "otx": _fetch_otx, "nvd": _fetch_nvd,
     "json": _fetch_json, "csv": _fetch_csv, "stix": _fetch_stix,
+    "darkweb-json": _fetch_darkweb_json,
 }
 
 
@@ -364,12 +398,23 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
 
     try:
         indicators = fetch(connector)
-        result = _import(indicators, connector["name"])
+        if connector["kind"] == "darkweb-json":
+            # dark-web feeds sink into findings (not the IOC store) and run
+            # credential matching against the user directory.
+            from dashboard_api.darkweb_logic import import_findings
+            result = import_findings(indicators, connector["name"])
+        else:
+            result = _import(indicators, connector["name"])
         with get_conn() as conn:
-            total_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM iocs WHERE source LIKE ?",
-                (f"%{connector['name']}%",),
-            ).fetchone()["n"]
+            if connector["kind"] == "darkweb-json":
+                total_count = conn.execute(
+                    "SELECT COUNT(*) AS n FROM dark_web_findings WHERE source=?",
+                    (connector["name"],)).fetchone()["n"]
+            else:
+                total_count = conn.execute(
+                    "SELECT COUNT(*) AS n FROM iocs WHERE source LIKE ?",
+                    (f"%{connector['name']}%",),
+                ).fetchone()["n"]
             conn.execute(
                 "UPDATE connectors SET status='ok', last_run=?, last_error=NULL, "
                 "indicator_count=indicator_count+? WHERE id=?",

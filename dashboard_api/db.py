@@ -589,6 +589,7 @@ _MIGRATIONS = [
     ("iocs", "sightings", "INTEGER NOT NULL DEFAULT 1"),
     ("users", "org_id", "TEXT"),
     ("assets", "software", "TEXT NOT NULL DEFAULT '[]'"),
+    ("dark_web_findings", "matched_user", "TEXT"),
 ]
 
 
