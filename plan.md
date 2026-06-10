@@ -49,8 +49,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       Sources. Remaining: a long-running syslog UDP listener + file/dir watcher.
 - [ ] **Field normalization to ECS** (Elastic Common Schema) so rules and
       searches are vendor-neutral.
-- [ ] **UEBA** — per-entity (user/host) behavioural baselines and anomaly
-      scoring over time; risk timelines.
+- [x] **UEBA** — DONE (see CHANGELOG): per-entity (user/host/ip) risk scoring
+      from alert history (severity-weighted volume + technique diversity), an
+      Entity Risk page with ranking + drill-down timeline. Remaining: true
+      learned baselines / deviation-from-norm anomaly scoring.
 - [ ] **Alert tuning workflow** — false-positive feedback loop that adjusts rule
       confidence; allow/deny lists per rule+entity.
 - [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
@@ -118,6 +120,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · UEBA entity risk (Phase 1)** — `/siem/entities` ranks
+  users/hosts/IPs by behavioural risk (severity-weighted alert volume +
+  ATT&CK technique diversity, banded normal→critical); `/siem/entities/detail`
+  gives a per-entity risk timeline, top techniques, and contributing alerts.
+  New Entity Risk page under SIEM with ranking bars + a drill-down panel and
+  deep-link into the alert queue. Auto-refreshes.
 
 - **2026-06-10 · Phase 0 platform bundle** — `routers/platform.py` +
   `db.py` tables. (1) Notifications centre: live bell fed by real events

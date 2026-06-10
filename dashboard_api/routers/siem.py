@@ -242,6 +242,86 @@ def siem_kpis():
 
 # ── MITRE distribution ────────────────────────────────────────────────────────
 
+_SEV_WEIGHT = {"critical": 25, "high": 15, "medium": 7, "low": 3, "info": 1}
+_ENTITY_FIELD = {"user": "username", "host": "hostname", "ip": "src_ip"}
+
+
+@router.get("/entities")
+def list_entities(type: str = Query("all", pattern="^(all|user|host|ip)$"),
+                  limit: int = Query(25, le=100)):
+    """UEBA: rank users/hosts/IPs by behavioural risk derived from their alert
+    history — severity-weighted volume plus ATT&CK technique diversity."""
+    types = [type] if type != "all" else ["user", "host", "ip"]
+    out = []
+    with get_conn() as conn:
+        for etype in types:
+            field = _ENTITY_FIELD[etype]
+            rows = conn.execute(
+                f"SELECT {field} AS entity, severity, mitre_tech_id, ts, status "
+                f"FROM alerts WHERE {field} IS NOT NULL AND {field} != ''"
+            ).fetchall()
+            agg: dict[str, dict] = {}
+            for r in rows:
+                e = agg.setdefault(r["entity"], {
+                    "value": r["entity"], "type": etype, "alerts": 0, "score": 0,
+                    "techniques": set(), "open": 0, "lastSeen": None,
+                    "bySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
+                })
+                e["alerts"] += 1
+                e["score"] += _SEV_WEIGHT.get(r["severity"], 1)
+                if r["mitre_tech_id"]:
+                    e["techniques"].add(r["mitre_tech_id"])
+                if r["severity"] in e["bySeverity"]:
+                    e["bySeverity"][r["severity"]] += 1
+                if r["status"] not in ("resolved", "closed"):
+                    e["open"] += 1
+                if e["lastSeen"] is None or (r["ts"] or "") > e["lastSeen"]:
+                    e["lastSeen"] = r["ts"]
+            for e in agg.values():
+                tdiv = len(e["techniques"])
+                e["techniqueCount"] = tdiv
+                e["techniques"] = sorted(e["techniques"])[:6]
+                # risk: severity-weighted volume + technique-diversity bonus, capped.
+                e["risk"] = min(100, e["score"] + tdiv * 4)
+                e["band"] = ("critical" if e["risk"] >= 70 else "high" if e["risk"] >= 45
+                             else "elevated" if e["risk"] >= 20 else "normal")
+                out.append(e)
+    out.sort(key=lambda x: -x["risk"])
+    return {"entities": out[:limit],
+            "summary": {"tracked": len(out),
+                        "highRisk": sum(1 for e in out if e["risk"] >= 45)}}
+
+
+@router.get("/entities/detail")
+def entity_detail(type: str = Query(..., pattern="^(user|host|ip)$"), value: str = Query(...)):
+    """Per-entity risk timeline + contributing alerts (the UEBA drill-down)."""
+    field = _ENTITY_FIELD[type]
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id,title,severity,risk_score,mitre_tech_id,mitre_tactic,ts,status,rule_name "
+            f"FROM alerts WHERE {field}=? ORDER BY ts DESC LIMIT 200", (value,)
+        ).fetchall()
+    alerts = [dict(r) for r in rows]
+    # day-bucketed timeline of alert counts
+    timeline: dict[str, int] = {}
+    for a in alerts:
+        day = (a["ts"] or "")[:10]
+        if day:
+            timeline[day] = timeline.get(day, 0) + 1
+    techniques: dict[str, int] = {}
+    for a in alerts:
+        if a["mitre_tech_id"]:
+            techniques[a["mitre_tech_id"]] = techniques.get(a["mitre_tech_id"], 0) + 1
+    score = min(100, sum(_SEV_WEIGHT.get(a["severity"], 1) for a in alerts) + len(techniques) * 4)
+    return {
+        "value": value, "type": type, "risk": score, "alertCount": len(alerts),
+        "timeline": [{"day": k, "count": v} for k, v in sorted(timeline.items())],
+        "topTechniques": [{"technique": k, "count": v}
+                          for k, v in sorted(techniques.items(), key=lambda x: -x[1])[:8]],
+        "alerts": alerts[:50],
+    }
+
+
 @router.get("/mitre-distribution")
 def mitre_distribution():
     with get_conn() as conn:

@@ -1031,3 +1031,26 @@ def test_audit_export_and_retention(client, auth):
     assert "ts,actor,action" in exp.text
     ret = client.post("/config/retention/enforce", headers=auth).json()
     assert "retentionDays" in ret and "purged" in ret
+
+
+def test_ueba_entity_risk(client, auth):
+    """UEBA: entities ranked by alert-derived risk, with drill-down timeline."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    client.post("/config/engine", json={"generate": 12}, headers=auth)
+    ent = client.get("/siem/entities?type=ip&limit=10", headers=auth).json()
+    assert "entities" in ent and "summary" in ent
+    if ent["entities"]:
+        e = ent["entities"][0]
+        assert {"value", "type", "risk", "alerts", "band", "techniqueCount"} <= set(e)
+        assert 0 <= e["risk"] <= 100
+        # risk is sorted descending
+        risks = [x["risk"] for x in ent["entities"]]
+        assert risks == sorted(risks, reverse=True)
+        # drill-down
+        d = client.get(f"/siem/entities/detail?type=ip&value={e['value']}", headers=auth).json()
+        assert d["value"] == e["value"] and "timeline" in d and "alerts" in d
+        assert "topTechniques" in d
+    # all-types ranking works
+    assert client.get("/siem/entities?type=all", headers=auth).status_code == 200
+    assert client.get("/siem/entities?type=bogus", headers=auth).status_code == 422

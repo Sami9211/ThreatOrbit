@@ -533,6 +533,25 @@ export interface AttackCoverage {
 }
 export const fetchAttackCoverage = () => api<AttackCoverage>('/siem/attack-coverage')
 
+// ── UEBA (entity risk analytics) ─────────────────────────────────────
+export interface RiskEntity {
+  value: string; type: 'user' | 'host' | 'ip'; risk: number; alerts: number
+  band: 'critical' | 'high' | 'elevated' | 'normal'; open: number
+  techniques: string[]; techniqueCount: number; lastSeen: string | null
+  bySeverity: Record<string, number>
+}
+export const fetchEntities = (type = 'all', limit = 25) =>
+  api<{ entities: RiskEntity[]; summary: { tracked: number; highRisk: number } }>(
+    `/siem/entities?type=${type}&limit=${limit}`)
+export interface EntityDetail {
+  value: string; type: string; risk: number; alertCount: number
+  timeline: Array<{ day: string; count: number }>
+  topTechniques: Array<{ technique: string; count: number }>
+  alerts: Array<{ id: string; title: string; severity: string; ts: string; status: string; rule_name: string; mitre_tech_id: string }>
+}
+export const fetchEntityDetail = (type: string, value: string) =>
+  api<EntityDetail>(`/siem/entities/detail?type=${type}&value=${encodeURIComponent(value)}`)
+
 // ── Platform: notifications, search, schedules, views, audit ─────────
 export interface Notification {
   id: string; ts: string; type: string; severity: string | null
