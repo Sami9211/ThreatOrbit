@@ -631,3 +631,28 @@ def test_background_jobs_recorded(client, auth):
     job = next(j for j in jobs if j["kind"] == "assets.recompute_risk")
     assert job["status"] == "completed" and job["progress"] == 100
     assert job["meta"]["updated"] >= 1
+
+
+def test_create_alert(client, auth, monkeypatch):
+    import dashboard_api.webhooks as wh
+    monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
+    captured: list = []
+    monkeypatch.setattr(wh, "_deliver", lambda event, payload, subs: captured.append(event))
+    hook = client.post("/config/webhooks", json={
+        "url": "https://example.com/sink", "events": ["alert.created"]}, headers=auth).json()
+
+    r = client.post("/siem/alerts", json={
+        "title": "Escalated: FortiOS SSL VPN exploitation", "severity": "critical",
+        "src_ip": "91.92.251.103", "mitre_tech_id": "T1190",
+        "rule_name": "Threat Intel Escalation", "ti_hits": 4}, headers=auth)
+    assert r.status_code == 201, r.text
+    alert = r.json()
+    assert alert["status"] == "new" and alert["risk_score"] == 92
+    # appears in the queue
+    found = client.get("/siem/alerts?q=FortiOS&limit=5", headers=auth).json()["items"]
+    assert any(a["id"] == alert["id"] for a in found)
+    # alert.created webhook fired
+    assert "alert.created" in captured
+    assert client.post("/siem/alerts", json={"title": "x", "severity": "apocalyptic"},
+                       headers=auth).status_code == 400
+    client.delete(f"/config/webhooks/{hook['id']}", headers=auth)

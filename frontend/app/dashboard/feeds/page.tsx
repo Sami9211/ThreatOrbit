@@ -9,7 +9,18 @@ import {
   TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchFeeds, toggleFeed, fetchFeedsSummary, type Feed as ApiFeed, type FeedsSummary } from '@/lib/api'
+import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary } from '@/lib/api'
+
+/* Classify a raw IOC string for the CTI store; returns null for values that
+ * are not importable indicators (filenames, command lines, …). */
+function classifyIoc(v: string): 'ip' | 'cve' | 'hash' | 'url' | 'domain' | null {
+  if (/^(?:\d{1,3}\.){3}\d{1,3}(?:\/\d+)?$/.test(v)) return 'ip'
+  if (/^CVE-\d{4}-\d+$/i.test(v)) return 'cve'
+  if (/^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$/i.test(v)) return 'hash'
+  if (v.includes('://')) return 'url'
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(v)) return 'domain'
+  return null
+}
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -281,6 +292,49 @@ function ThreatCard({
   isNew?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
+
+  function note(msg: string) {
+    setActionMsg(msg)
+    setTimeout(() => setActionMsg(null), 4000)
+  }
+
+  // Raise a real SIEM alert from this intel entry.
+  function sendToSiem(e: React.MouseEvent) {
+    e.stopPropagation()
+    createAlert({
+      title: entry.title,
+      severity: entry.severity,
+      description: entry.summary,
+      srcIp: classifyIoc(entry.source) === 'ip' ? entry.source : undefined,
+      srcCountry: entry.sourceCountry,
+      mitreTechId: entry.mitre[0],
+      ruleName: 'Threat Intel Escalation',
+      tiHits: entry.feedSources.length,
+    })
+      .then((a) => note(`SIEM alert raised (${a.id.slice(0, 8)}…)`))
+      .catch(() => note('Could not raise alert — is the dashboard API running?'))
+  }
+
+  // Push this entry's importable indicators into the CTI store as a blocklist.
+  function blockIocs(e: React.MouseEvent) {
+    e.stopPropagation()
+    const indicators = entry.iocs.flatMap((v) => {
+      const type = classifyIoc(v)
+      return type ? [{ type, value: v }] : []
+    })
+    if (indicators.length === 0) { note('No importable indicators on this entry'); return }
+    importIocs({
+      indicators,
+      severity: entry.severity === 'info' ? 'low' : entry.severity,
+      confidence: entry.aiConfidence,
+      source: 'feed-blocklist',
+      threat_type: entry.attackType,
+      tags: ['blocklist', ...entry.tags.slice(0, 3)],
+    })
+      .then((out) => note(`${out.imported} IOC${out.imported === 1 ? '' : 's'} added to blocklist (${out.duplicates} already known)`))
+      .catch(() => note('Could not import IOCs — is the dashboard API running?'))
+  }
 
   return (
     <motion.div
@@ -417,19 +471,22 @@ function ThreatCard({
                   </button>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation() }}
+                  onClick={sendToSiem}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-magenta/12 text-magenta border border-magenta/25 text-xs font-medium hover:bg-magenta/20 transition-colors"
                 >
                   <Zap className="w-3.5 h-3.5" />
                   Send to SIEM
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation() }}
+                  onClick={blockIocs}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-ink-300 border border-white/10 text-xs font-medium hover:bg-white/8 transition-colors"
                 >
                   <Shield className="w-3.5 h-3.5" />
                   Block IOCs
                 </button>
+                {actionMsg && (
+                  <span className="text-[10px] text-safe basis-full sm:basis-auto" role="status">{actionMsg}</span>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onDismiss(entry.id) }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/4 text-ink-500 border border-white/8 text-xs font-medium hover:text-ink-300 transition-colors ml-auto"
@@ -512,6 +569,38 @@ export default function FeedsPage() {
     setConfirmed(prev => prev.filter(e => e.id !== id))
   }
 
+  // Download the live IOC store as CSV; fall back to the visible entries'
+  // indicators when the API is unreachable.
+  const [exporting, setExporting] = useState(false)
+  async function exportIocs() {
+    if (exporting) return
+    setExporting(true)
+    const download = (csv: string) => {
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `threatorbit-iocs-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    try {
+      const { items } = await fetchIocs({ limit: '1000' })
+      download([
+        'type,value,severity,confidence,threat_type,actor,source,first_seen,last_seen',
+        ...items.map((i) => [i.type, i.value, i.severity, i.confidence, i.threatType, i.actor, i.source, i.firstSeen, i.lastSeen].map(esc).join(',')),
+      ].join('\n'))
+    } catch {
+      const rows = [...confirmed, ...unconfirmed].flatMap((e) =>
+        e.iocs.map((v) => [classifyIoc(v) ?? 'unknown', v, e.severity, e.aiConfidence, e.attackType, '', e.feedSources[0] ?? '', '', '']))
+      download(['type,value,severity,confidence,threat_type,actor,source,first_seen,last_seen',
+        ...rows.map((r) => r.map(esc).join(','))].join('\n'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const filteredConfirmed = severityFilter === 'all'
     ? confirmed
     : confirmed.filter(e => e.severity === severityFilter)
@@ -539,13 +628,12 @@ export default function FeedsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white transition-colors">
+          <button
+            onClick={exportIocs}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white transition-colors disabled:opacity-50">
             <Download className="w-3.5 h-3.5" />
-            Export IOCs
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-magenta/15 border border-magenta/25 text-xs text-magenta font-medium hover:bg-magenta/25 transition-colors">
-            <Filter className="w-3.5 h-3.5" />
-            Filters
+            {exporting ? 'Exporting…' : 'Export IOCs'}
           </button>
         </div>
       </div>

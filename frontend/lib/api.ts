@@ -461,6 +461,22 @@ export const fetchSiemAlerts = (params?: Record<string, string>) => {
 }
 export const patchAlert   = (id: string, body: Partial<Pick<SiemAlert, 'status' | 'disposition' | 'owner'>>) =>
   api<SiemAlert>(`/siem/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const createAlert = (body: {
+  title: string; severity?: string; description?: string
+  srcIp?: string; srcCountry?: string; mitreTechId?: string; mitreTactic?: string
+  ruleName?: string; hostname?: string; username?: string; tiHits?: number
+}) =>
+  api<SiemAlert>('/siem/alerts', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: body.title, severity: body.severity, description: body.description,
+      src_ip: body.srcIp, src_country: body.srcCountry,
+      mitre_tech_id: body.mitreTechId, mitre_tactic: body.mitreTactic,
+      ...(body.ruleName ? { rule_name: body.ruleName } : {}),
+      hostname: body.hostname, username: body.username,
+      ...(body.tiHits !== undefined ? { ti_hits: body.tiHits } : {}),
+    }),
+  })
 export const fetchSiemKpis = () => api<SiemKpis>('/siem/kpis')
 export const fetchRules    = () => api<Rule[]>('/siem/rules')
 export const patchRule     = (id: string, body: { status?: string; severityOverride?: string; suppressionWindow?: number }) =>

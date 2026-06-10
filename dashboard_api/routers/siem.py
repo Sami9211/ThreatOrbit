@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.hunting import run_alert_hunt
+from dashboard_api.webhooks import dispatch
 
 router = APIRouter(prefix="/siem", tags=["siem"], dependencies=[Depends(current_user)])
 
@@ -22,6 +23,22 @@ class AlertUpdate(BaseModel):
     status: str | None = None
     disposition: str | None = None
     owner: str | None = None
+
+
+class AlertCreate(BaseModel):
+    title: str
+    severity: str = "medium"
+    description: str | None = None
+    src_ip: str | None = None
+    src_country: str | None = None
+    mitre_tactic: str | None = None
+    mitre_tactic_id: str | None = None
+    mitre_tech: str | None = None
+    mitre_tech_id: str | None = None
+    rule_name: str = "Manual escalation"
+    hostname: str | None = None
+    username: str | None = None
+    ti_hits: int = 0
 
 
 class RuleUpdate(BaseModel):
@@ -109,6 +126,39 @@ def list_alerts(
             params + [limit, offset],
         ).fetchall()
     return {"total": total, "items": rows_to_dicts(rows)}
+
+
+@router.post("/alerts", status_code=201)
+def create_alert(body: AlertCreate, user: dict = Depends(current_user)):
+    """Raise a SIEM alert manually or from escalated threat intelligence."""
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    if body.severity not in SEVERITIES:
+        raise HTTPException(status_code=400, detail=f"Severity must be one of {sorted(SEVERITIES)}")
+    risk = {"critical": 92, "high": 75, "medium": 50, "low": 25, "info": 10}[body.severity]
+    aid = str(uuid.uuid4())
+    now = _now_iso()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,rule_id,"
+            "rule_name,mitre_tactic,mitre_tactic_id,mitre_tech,mitre_tech_id,src_ip,src_country,"
+            "src_port,src_hostname,src_asn,dest_ip,dest_port,dest_service,username,hostname,"
+            "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,bytes_out,"
+            "detect_latency_sec,ack_latency_sec,respond_latency_sec) "
+            "VALUES (?,?,?,?,'new','undetermined','',?,'R-MANUAL',?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,"
+            "NULL,NULL,?,?,NULL,NULL,NULL,?,?,1,?,0,0,NULL,NULL)",
+            (aid, now, title, body.severity, risk, body.rule_name,
+             body.mitre_tactic, body.mitre_tactic_id, body.mitre_tech, body.mitre_tech_id,
+             body.src_ip, body.src_country, body.username, body.hostname,
+             body.description or title, f"{now} {body.rule_name}: {title}", body.ti_hits),
+        )
+        audit(conn, user["email"], "alert.create", aid, f"title={title} severity={body.severity}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM alerts WHERE id=?", (aid,)).fetchone()
+    dispatch("alert.created", {"id": aid, "title": title, "severity": body.severity,
+                               "srcIp": body.src_ip, "raisedBy": user["email"]})
+    return row_to_dict(row)
 
 
 @router.get("/alerts/{alert_id}")
