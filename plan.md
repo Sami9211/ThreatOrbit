@@ -136,7 +136,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       intel reports (CRUD, TLP, draft/publish, actor/IOC refs) + MISP Event
       import/export (store, per-report, and ingest). Remaining: a dedicated
       report-authoring UI panel (API + clients shipped).
-- [ ] **Attribution scoring** — evidence-weighted actor attribution.
+- [x] **Attribution scoring** — DONE (see CHANGELOG): evidence-weighted actor
+      attribution (`/cti/attribution` + per-case) ranking tracked actors by
+      shared IOCs/malware/TTPs/sectors/origin with transparent weighted evidence
+      and confidence bands.
 
 ## Phase 4 — Asset, Vuln & Dark Web depth
 
@@ -166,6 +169,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Actor attribution scoring (Phase 3, closes Phase 3)** —
+  `attribution.py` scores which tracked actor observed activity maps to, with
+  transparent weighted evidence: IOC overlap (strongest — an indicator already
+  attributed to the actor), then malware, ATT&CK technique (base-id matched so
+  T1059==T1059.001), targeted sector, and origin. Scores normalise 0–100
+  against the top candidate; confidence bands reflect corroboration across
+  independent signal types. `POST /cti/attribution` (techniques/iocs/malware/
+  sectors/origin) and `GET /cti/attribution/case/{id}` (pulls a case's linked
+  alert techniques + entity indicators and attributes it). Frontend clients
+  shipped. Tested: pure scoring/weighting/normalisation/confidence units +
+  the API (decisive IOC match → 100/high, technique evidence, case
+  attribution, 400/404 guards). **Phase 3 (CTI depth) is now complete.**
 
 - **2026-06-10 · Campaign & report management + MISP interop (Phase 3)** —
   analyst-authored CTI reports and community sharing. New `intel_reports` store

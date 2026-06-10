@@ -882,6 +882,20 @@ export const exportMispEvent = (severity?: string) =>
 export const importMispEvent = (event: Record<string, unknown>) =>
   api<{ imported: number; duplicates: number; skipped: number; total: number; tlp: string }>(
     '/cti/misp/import', { method: 'POST', body: JSON.stringify({ event }) })
+
+// Evidence-weighted actor attribution.
+export interface AttributionCandidate {
+  actor: string; type: string; origin: string | null; threatLevel: string | null
+  score: number; raw: number; confidence: 'high' | 'medium' | 'low'
+  evidence: Array<{ type: string; weight: number; detail: string }>
+}
+export const attributeActivity = (body: {
+  techniques?: string[]; iocs?: string[]; malware?: string[]; sectors?: string[]; origin?: string
+}) => api<{ candidates: AttributionCandidate[] }>('/cti/attribution',
+  { method: 'POST', body: JSON.stringify(body) })
+export const attributeCase = (caseId: string) =>
+  api<{ caseId: string; observed: { techniques: string[]; indicators: string[] }; candidates: AttributionCandidate[] }>(
+    `/cti/attribution/case/${caseId}`)
 export const fetchStixBundle = (type?: string) =>
   api<{ type: string; id: string; objects: Array<Record<string, unknown>> }>(
     `/cti/stix/bundle${type ? `?type=${type}` : ''}`)

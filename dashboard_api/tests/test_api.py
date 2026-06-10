@@ -1440,6 +1440,71 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_actor_attribution(client, auth):
+    """Evidence-weighted attribution ranks actors by shared IOCs/TTPs/malware
+    with transparent evidence; case attribution pulls from linked activity."""
+    # pick an indicator attributed to a *tracked* actor (strongest signal)
+    actor_names = {a["name"] for a in client.get("/cti/actors", headers=auth).json()}
+    ioc = client.get("/cti/iocs?limit=500", headers=auth).json()["items"]
+    attributed = next((i for i in ioc if i["actor"] in actor_names), None)
+
+    if attributed:
+        res = client.post("/cti/attribution", json={"iocs": [attributed["value"]]}, headers=auth)
+        assert res.status_code == 200, res.text
+        cands = res.json()["candidates"]
+        top = cands[0]
+        assert top["actor"] == attributed["actor"] and top["score"] == 100
+        assert any(e["type"] == "ioc" for e in top["evidence"])
+        assert top["confidence"] == "high"  # IOC overlap is decisive
+
+    # technique-only attribution surfaces evidence + a normalised score
+    g = client.get("/cti/graph", headers=auth).json()
+    techs = [n["label"] for n in g["nodes"] if n["group"] == "technique"][:3]
+    if techs:
+        r2 = client.post("/cti/attribution", json={"techniques": techs}, headers=auth).json()
+        if r2["candidates"]:
+            c = r2["candidates"][0]
+            assert 0 < c["score"] <= 100 and c["evidence"]
+            assert any(e["type"] == "technique" for e in c["evidence"])
+
+    # no observables → 400
+    assert client.post("/cti/attribution", json={}, headers=auth).status_code == 400
+
+    # case attribution
+    case = client.post("/soar/cases", json={
+        "title": "Attribution test case", "severity": "high",
+        "entities": [{"type": "ip", "value": attributed["value"] if attributed else "1.2.3.4"}]},
+        headers=auth).json()
+    ca = client.get(f"/cti/attribution/case/{case['id']}", headers=auth)
+    assert ca.status_code == 200 and "candidates" in ca.json() and "observed" in ca.json()
+    assert client.get("/cti/attribution/case/NOPE", headers=auth).status_code == 404
+
+
+def test_attribution_scoring_units():
+    """Pure scoring: weighting + normalisation + confidence bands."""
+    import sqlite3
+    from dashboard_api.attribution import score_actors, W_IOC
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE threat_actors (name TEXT, type TEXT, origin TEXT, "
+                 "threat_level TEXT, sectors TEXT, ttps TEXT, malware TEXT)")
+    conn.execute("CREATE TABLE iocs (value TEXT, actor TEXT)")
+    conn.execute("INSERT INTO threat_actors VALUES ('APT-A','nation-state','Russia','critical',"
+                 "'[\"Finance\"]','[\"T1059.001\",\"T1566\"]','[\"Cobalt Strike\"]')")
+    conn.execute("INSERT INTO threat_actors VALUES ('APT-B','cybercrime','Iran','high',"
+                 "'[\"Energy\"]','[\"T1110\"]','[\"Emotet\"]')")
+    conn.execute("INSERT INTO iocs VALUES ('1.2.3.4','APT-A')")
+    # technique base-id match (T1059 == T1059.001) + malware + sector for APT-A
+    ranked = score_actors(conn, techniques=["T1059"], malware=["cobalt strike"], sectors=["Finance"])
+    assert ranked[0]["actor"] == "APT-A" and ranked[0]["score"] == 100
+    kinds = {e["type"] for e in ranked[0]["evidence"]}
+    assert {"technique", "malware", "sector"} <= kinds
+    # an attributed IOC alone is high confidence
+    byioc = score_actors(conn, iocs=["1.2.3.4"])
+    assert byioc[0]["actor"] == "APT-A" and byioc[0]["raw"] >= W_IOC and byioc[0]["confidence"] == "high"
+    conn.close()
+
+
 def test_misp_serialization_units():
     """MISP Event mapping both ways, with correct types and TLP."""
     from dashboard_api import misp

@@ -441,6 +441,37 @@ def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write")
             "total": len(parsed), "tlp": tlp}
 
 
+class AttributionQuery(BaseModel):
+    techniques: list[str] = []
+    iocs: list[str] = []
+    malware: list[str] = []
+    sectors: list[str] = []
+    origin: str | None = None
+
+
+@router.post("/attribution")
+def attribute(body: AttributionQuery):
+    """Evidence-weighted actor attribution for observed activity."""
+    from dashboard_api.attribution import score_actors
+    if not any([body.techniques, body.iocs, body.malware, body.sectors, body.origin]):
+        raise HTTPException(status_code=400, detail="Provide at least one observable")
+    with get_conn() as conn:
+        candidates = score_actors(conn, techniques=body.techniques, iocs=body.iocs,
+                                  malware=body.malware, sectors=body.sectors, origin=body.origin)
+    return {"candidates": candidates}
+
+
+@router.get("/attribution/case/{case_id}")
+def attribute_case_endpoint(case_id: str):
+    """Attribute a SOAR case from its linked alerts' techniques + indicators."""
+    from dashboard_api.attribution import attribute_case
+    with get_conn() as conn:
+        result = attribute_case(conn, case_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return result
+
+
 @router.get("/enrichers")
 def list_enrichers():
     """Available enrichers and whether each external provider is configured."""
