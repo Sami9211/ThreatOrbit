@@ -48,8 +48,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       (`POST /siem/ingest`) parses syslog/Apache/JSON/key=value lines into
       events and runs detection on them; a Log Collector panel on SIEM →
       Sources. Remaining: a long-running syslog UDP listener + file/dir watcher.
-- [ ] **Field normalization to ECS** (Elastic Common Schema) so rules and
-      searches are vendor-neutral.
+- [x] **Field normalization to ECS** — DONE (see CHANGELOG): an ECS alias layer
+      resolves Elastic Common Schema names (`source.ip`, `user.name`,
+      `destination.port`, `event.action`, …) to native event fields at match
+      time, so detection rules and event searches authored in vendor-neutral ECS
+      work unchanged; `/siem/rule-schema` advertises the alias map. Remaining:
+      full ECS ingest-time normalization of stored events (alias layer covers
+      read/query today).
 - [x] **UEBA** — DONE (see CHANGELOG): per-entity (user/host/ip) risk scoring
       from alert history (severity-weighted volume + technique diversity), an
       Entity Risk page with ranking + drill-down timeline. Remaining: true
@@ -128,6 +133,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · ECS field normalization (Phase 1)** — detection rules and event
+  searches are now vendor-neutral. `rule_engine.ECS_ALIASES` + `canonical_field`
+  resolve Elastic Common Schema names (source.ip → src_ip, user.name → username,
+  destination.port → dest_port, event.action → action, threat.technique.id →
+  mitre_tech_id, message → raw, …) to native fields at evaluation time, so rules
+  ported from Elastic/Splunk content match unchanged. The search parser
+  recognises ECS names (including the `| stats count by` field, grouped on the
+  native column) and `/siem/rule-schema` advertises the alias map. Tested:
+  alias resolution, ECS-authored conditions/searches, and the schema endpoint.
 
 - **2026-06-10 · Event-stream search language (Phase 1)** — a real, compact
   field-operator query language over the raw `events` stream (what hunting

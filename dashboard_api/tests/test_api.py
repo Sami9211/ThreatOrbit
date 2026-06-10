@@ -1147,6 +1147,40 @@ def test_event_search_language(client, auth):
     assert client.post("/siem/search", json={"query": "x", "time_range": "1y"}, headers=auth).status_code == 400
 
 
+def test_ecs_field_normalization():
+    """ECS aliases resolve to native fields so rules/searches are vendor-neutral."""
+    from dashboard_api.rule_engine import matches_event, canonical_field
+    from dashboard_api.hunting import parse_query
+    assert canonical_field("source.ip") == "src_ip"
+    assert canonical_field("user.name") == "username"
+    assert canonical_field("src_ip") == "src_ip"  # native passes through
+    e = {"src_ip": "10.0.0.5", "username": "root", "event_type": "failed_login", "dest_port": 443}
+    # an ECS-authored condition matches the native event field
+    assert matches_event(e, {"conditions": [{"field": "source.ip", "op": "equals", "value": "10.0.0.5"}], "logic": "and"})
+    assert matches_event(e, {"conditions": [{"field": "user.name", "op": "equals", "value": "root"}], "logic": "and"})
+    assert matches_event(e, {"conditions": [{"field": "destination.port", "op": "gte", "value": 443}], "logic": "and"})
+    assert not matches_event(e, {"conditions": [{"field": "source.ip", "op": "equals", "value": "1.1.1.1"}], "logic": "and"})
+    # the search parser recognises ECS names (and the stats clause groups native)
+    p = parse_query("source.ip=10.0.0.5 event.action=block | stats count by user.name")
+    fields = {(c["field"], c["op"]) for c in p["conditions"]}
+    assert ("source.ip", "equals") in fields and ("event.action", "equals") in fields
+    assert p["stats"] == {"by": "username"}  # canonicalised for grouping
+
+
+def test_ecs_search_endpoint(client, auth):
+    """An ECS-authored event search resolves to native fields and returns hits."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    client.post("/siem/ingest", json={"lines": [
+        "Jan 10 07:00:00 web01 sshd[9]: Failed password for root from 203.0.113.77 port 9000",
+    ], "format": "auto"}, headers=auth)
+    r = client.post("/siem/search", json={"query": "source.ip=203.0.113.77"}, headers=auth).json()
+    assert r["hits"] >= 1 and all(x["src_ip"] == "203.0.113.77" for x in r["results"])
+    # rule-schema advertises the ECS alias map
+    sch = client.get("/siem/rule-schema", headers=auth).json()
+    assert sch["ecsAliases"]["source.ip"] == "src_ip"
+
+
 def test_event_search_parser_units():
     """Pure parser: operators, membership, freetext, and the stats clause."""
     from dashboard_api.hunting import parse_query

@@ -518,9 +518,14 @@ def attack_coverage():
 
 @router.get("/rule-schema")
 def rule_schema():
-    """Fields + operators the rule editor offers, with sample event types."""
-    from dashboard_api.rule_engine import FIELDS, OPERATORS
+    """Fields + operators the rule editor offers, with sample event types.
+
+    `ecsAliases` maps Elastic Common Schema names to native fields so rules and
+    searches authored in vendor-neutral ECS resolve transparently.
+    """
+    from dashboard_api.rule_engine import ECS_ALIASES, FIELDS, OPERATORS
     return {"fields": FIELDS, "operators": OPERATORS,
+            "ecsAliases": ECS_ALIASES,
             "eventTypes": ["failed_login", "beacon", "process_start", "web_request",
                            "large_egress", "proxy_request", "group_change"],
             "groupByFields": ["src_ip", "dest_ip", "username", "hostname"]}

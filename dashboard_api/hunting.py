@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from dashboard_api.db import get_conn, rows_to_dicts
-from dashboard_api.rule_engine import FIELDS, matches_event
+from dashboard_api.rule_engine import ALL_FIELDS, canonical_field, matches_event
 
 TECHNIQUE_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b")
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
@@ -182,12 +182,15 @@ def run_saved_hunt(domain: str, hunt_id: str, actor: str) -> dict | None:
 # Each term compiles to the SAME condition shape the detection rule engine
 # evaluates (rule_engine.matches_event), so search and detection stay consistent.
 
-_FIELD_ALT = "|".join(sorted(FIELDS, key=len, reverse=True))
+# Recognise native AND ECS field names (longest first so dotted ECS names and
+# multi-word natives win over shorter prefixes). Escaped: ECS names contain dots.
+_RECOGNISED = set(ALL_FIELDS)
+_FIELD_ALT = "|".join(re.escape(f) for f in sorted(ALL_FIELDS, key=len, reverse=True))
 _TERM_RE = re.compile(rf"^({_FIELD_ALT})(>=|<=|!=|=|>|<|~|:)(.*)$", re.I)
 _SYM_OP = {">=": "gte", "<=": "lte", "!=": "not_equals", "=": "equals",
            ">": "gt", "<": "lt", "~": "regex", ":": "contains"}
-_IN_RE = re.compile(r"\b([a-z_]+)\s+in\s+([^\s|]+)", re.I)
-_STATS_RE = re.compile(r"stats\s+count\s+by\s+([a-z_]+)", re.I)
+_IN_RE = re.compile(r"\b([a-z_.]+)\s+in\s+([^\s|]+)", re.I)
+_STATS_RE = re.compile(r"stats\s+count\s+by\s+([a-z_.]+)", re.I)
 
 
 def parse_query(q: str) -> dict:
@@ -202,14 +205,15 @@ def parse_query(q: str) -> dict:
     if "|" in search:
         search, _, tail = search.partition("|")
         m = _STATS_RE.search(tail)
-        if m and m.group(1).lower() in FIELDS:
-            stats = {"by": m.group(1).lower()}
+        if m and m.group(1).lower() in _RECOGNISED:
+            # group on the native field even when an ECS alias was used
+            stats = {"by": canonical_field(m.group(1).lower())}
     conditions: list[dict] = []
 
     # word operator first: `field in a,b,c`
     def _in_sub(m):
         f = m.group(1).lower()
-        if f in FIELDS:
+        if f in _RECOGNISED:
             conditions.append({"field": f, "op": "in", "value": m.group(2)})
             return " "
         return m.group(0)

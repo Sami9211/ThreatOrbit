@@ -26,6 +26,47 @@ FIELDS = ["event_type", "category", "src_ip", "dest_ip", "dest_port", "username"
           "mitre_tech_id", "raw"]
 OPERATORS = ["equals", "not_equals", "contains", "in", "gt", "lt", "gte", "lte", "regex", "cidr"]
 
+# Elastic Common Schema (ECS) field aliases → ThreatOrbit's native event fields.
+# This makes detection rules and searches vendor-neutral: an analyst can write
+# `source.ip` / `user.name` / `destination.port` and it resolves to the stored
+# field, so rules ported from Elastic/Splunk content work unchanged.
+ECS_ALIASES = {
+    "source.ip": "src_ip",
+    "source.address": "src_ip",
+    "client.ip": "src_ip",
+    "destination.ip": "dest_ip",
+    "server.ip": "dest_ip",
+    "destination.port": "dest_port",
+    "user.name": "username",
+    "user.id": "username",
+    "host.name": "hostname",
+    "host.hostname": "hostname",
+    "observer.hostname": "hostname",
+    "process.name": "process_name",
+    "process.executable": "process_name",
+    "event.action": "action",
+    "event.category": "category",
+    "event.type": "event_type",
+    "event.kind": "event_type",
+    "network.bytes": "bytes_out",
+    "source.bytes": "bytes_out",
+    "destination.bytes": "bytes_out",
+    "source.geo.country_name": "country",
+    "threat.technique.id": "mitre_tech_id",
+    "message": "raw",
+    "event.original": "raw",
+}
+
+# Every field name a rule/search may legitimately reference (native + ECS).
+ALL_FIELDS = FIELDS + sorted(ECS_ALIASES)
+
+
+def canonical_field(field: str | None) -> str | None:
+    """Resolve an ECS field alias to the native event field (identity otherwise)."""
+    if field is None:
+        return None
+    return ECS_ALIASES.get(field, field)
+
 
 def _coerce_num(v):
     try:
@@ -35,7 +76,7 @@ def _coerce_num(v):
 
 
 def _match_condition(event: dict, cond: dict) -> bool:
-    field = cond.get("field")
+    field = canonical_field(cond.get("field"))
     op = cond.get("op")
     expected = cond.get("value")
     actual = event.get(field)

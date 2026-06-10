@@ -12,6 +12,7 @@ const EXAMPLES = [
   'src_ip=10.0.0.5 bytes_out>=104857600',
   'event_type=beacon | stats count by dest_ip',
   'username in svc-backup,svc-deploy',
+  'source.ip=10.0.0.5',          // ECS field names resolve too
   'raw~"OR 1=1"',
 ]
 
