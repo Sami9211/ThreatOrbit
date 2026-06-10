@@ -164,9 +164,11 @@ _LOG_FORMATS = {"syslog", "apache", "windows_event", "generic"}
 async def logs_analyse(
     file: UploadFile = File(...),
     log_format: str = Form("generic"),
+    create_alerts: bool = Form(True),
     user: dict = Depends(current_user),
 ):
-    """Forward a log file to the Log API for anomaly analysis."""
+    """Forward a log file to the Log API for anomaly analysis. By default each
+    finding is also persisted as a real SIEM alert (the live detection pipeline)."""
     if log_format not in _LOG_FORMATS:
         raise HTTPException(status_code=400, detail=f"log_format must be one of {sorted(_LOG_FORMATS)}")
     content = await file.read()
@@ -193,14 +195,22 @@ async def logs_analyse(
         raise HTTPException(status_code=e.response.status_code, detail=detail)
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Log API is unreachable — start it on " + LOG_API_URL)
+
+    findings = body.get("findings", []) if isinstance(body, dict) else []
+    alerts_created = 0
+    if create_alerts and findings:
+        from dashboard_api.detections import alerts_from_log_findings
+        alerts_created = alerts_from_log_findings(findings, file.filename or "upload.log", user["email"])
     with get_conn() as conn:
         audit(conn, user["email"], "services.log_analyse", file.filename,
-              f"format={log_format} bytes={len(content)}")
+              f"format={log_format} bytes={len(content)} alerts={alerts_created}")
         record_job(conn, "logs.analyse", "completed",
                    {"file": file.filename, "format": log_format,
-                    "findings": len(body.get("findings", [])) if isinstance(body, dict) else 0,
+                    "findings": len(findings), "alertsCreated": alerts_created,
                     "actor": user["email"]})
         conn.commit()
+    if isinstance(body, dict):
+        body["alertsCreated"] = alerts_created
     return body
 
 

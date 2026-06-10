@@ -127,10 +127,18 @@ def _severity_from_confidence(c: int) -> str:
     return "critical" if c >= 85 else "high" if c >= 70 else "medium" if c >= 40 else "low"
 
 
+# Cap on how many SIEM alerts a single connector run may raise from critical
+# indicators, so a large feed can't flood the alert queue.
+_MAX_INTEL_ALERTS_PER_RUN = 10
+
+
 def _import(indicators: list[dict], source: str) -> dict:
-    """Dedup-by-value upsert of normalised indicators into the IOC store."""
+    """Dedup-by-value upsert of normalised indicators into the IOC store.
+    Critical indicators also raise a (capped) SIEM 'threat intel match' alert,
+    so the SIEM reflects newly ingested high-confidence threats."""
+    from dashboard_api.detections import alert_from_intel
     now = _now()
-    imported = duplicates = skipped = 0
+    imported = duplicates = skipped = alerts = 0
     with get_conn() as conn:
         for ind in indicators:
             value = (ind.get("value") or "").strip()
@@ -142,20 +150,26 @@ def _import(indicators: list[dict], source: str) -> dict:
                 duplicates += 1
                 continue
             conf = max(0, min(100, int(ind.get("confidence") or 50)))
+            severity = ind.get("severity") or _severity_from_confidence(conf)
             conn.execute(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
                 "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (str(uuid.uuid4()), itype, value,
-                 ind.get("threat_type") or "malicious-activity", conf,
-                 ind.get("severity") or _severity_from_confidence(conf),
+                 ind.get("threat_type") or "malicious-activity", conf, severity,
                  ind.get("source") or source, ind.get("actor") or "",
                  ind.get("first_seen") or now, ind.get("last_seen") or now,
                  dumps(list(ind.get("tags") or []))),
             )
             imported += 1
+            if severity == "critical" and alerts < _MAX_INTEL_ALERTS_PER_RUN:
+                alert_from_intel(conn, value=value, ioc_type=itype, severity=severity,
+                                 confidence=conf, threat_type=ind.get("threat_type") or "",
+                                 actor_name=ind.get("actor") or "",
+                                 source=ind.get("source") or source)
+                alerts += 1
         conn.commit()
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
-            "total": len(indicators)}
+            "total": len(indicators), "alertsRaised": alerts}
 
 
 # ── Per-kind fetchers (return normalised indicator dicts) ───────────────────────

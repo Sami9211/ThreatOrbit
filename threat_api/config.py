@@ -40,6 +40,10 @@ VT_RATE_LIMIT_SECONDS = int(os.getenv("VT_RATE_LIMIT_SECONDS", "15"))
 ABUSECH_URLHAUS_URL = os.getenv("ABUSECH_URLHAUS_URL", "https://urlhaus-api.abuse.ch/v1/urls/recent/")
 ABUSECH_MALWARE_URL = os.getenv("ABUSECH_MALWARE_URL", "https://mb-api.abuse.ch/api/v1/")
 ABUSECH_FEODO_URL = os.getenv("ABUSECH_FEODO_URL", "https://feodotracker.abuse.ch/downloads/ipblocklist.json")
+# abuse.ch added an Auth-Key requirement to its query APIs in 2024. Get a free
+# key at https://auth.abuse.ch/ and set ABUSECH_AUTH_KEY to enable URLHaus.
+# The Feodo ipblocklist.json download below still works without a key.
+ABUSECH_AUTH_KEY = os.getenv("ABUSECH_AUTH_KEY", "")
 
 # STIX
 STIX_IDENTITY_NAME = os.getenv("STIX_IDENTITY_NAME", "ThreatOrbit CTI Platform")

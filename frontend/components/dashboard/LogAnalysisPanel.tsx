@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileSearch, Upload, Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { FileSearch, Upload, Loader2, CheckCircle, XCircle, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { analyseLogFile, fetchServicesStatus, type LogAnalysisResult } from '@/lib/api'
 
@@ -113,6 +113,14 @@ export default function LogAnalysisPanel() {
         <AnimatePresence>
           {result && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+              {/* Real detection pipeline: findings became SIEM alerts */}
+              {Number(result.alertsCreated ?? 0) > 0 && (
+                <a href="/dashboard/siem"
+                  className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-magenta/10 border border-magenta/25 text-[11px] text-magenta hover:bg-magenta/15 transition-colors">
+                  <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                  <span><b>{Number(result.alertsCreated)}</b> real SIEM alert{Number(result.alertsCreated) === 1 ? '' : 's'} raised from this analysis — open SIEM →</span>
+                </a>
+              )}
               {/* Summary strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                 <div className="px-3 py-2 rounded-lg bg-surface-2/60 border border-white/5">

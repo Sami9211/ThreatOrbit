@@ -767,3 +767,61 @@ def test_connector_run_records_failure(client, auth, monkeypatch):
                                          "url": "https://nope.test/x"}, headers=auth)
     run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
     assert "error" in run["result"] and run["connector"]["status"] == "error"
+
+
+def test_log_analysis_creates_real_siem_alerts(client, auth, monkeypatch):
+    """Uploading a log → the Log API's findings become real SIEM alerts."""
+    import dashboard_api.routers.services as svc
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self):
+            return {"total_lines": 120, "parsed_lines": 118, "detectors_used": ["pattern", "ml"],
+                    "findings": [
+                        {"detector": "pattern", "finding_type": "brute_force",
+                         "description": "SSH brute force from 45.9.1.2", "severity": "CRITICAL",
+                         "severity_score": 95, "source_ip": "45.9.1.2", "username": "root",
+                         "evidence": ["Failed password for root", "Failed password for root"],
+                         "mitre_tags": [{"technique_id": "T1110", "name": "Brute Force"}], "count": 240},
+                        {"detector": "statistical", "finding_type": "beaconing",
+                         "description": "Periodic outbound to 185.2.3.4", "severity": "HIGH",
+                         "severity_score": 78, "source_ip": "10.0.0.5",
+                         "mitre_tags": [{"technique_id": "T1071", "name": "C2"}], "count": 60},
+                    ]}
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: FakeResp())
+
+    before = client.get("/siem/alerts", headers=auth).json()["total"]
+    r = client.post("/services/logs/analyse",
+                    files={"file": ("auth.log", b"line1\nline2\n")},
+                    data={"log_format": "syslog"}, headers=auth)
+    assert r.status_code == 200, r.text
+    assert r.json()["alertsCreated"] == 2
+    after = client.get("/siem/alerts?sort=ts&order=desc&limit=10", headers=auth).json()
+    assert after["total"] == before + 2
+    bf = next(a for a in after["items"] if "brute force" in a["title"].lower())
+    assert bf["severity"] == "critical" and bf["src_ip"] == "45.9.1.2"
+    assert bf["mitre_tech_id"] == "T1110" and bf["mitre_tactic"] == "Credential Access"
+    assert bf["rule_name"].startswith("LogEngine")
+
+
+def test_connector_critical_ioc_raises_siem_alert(client, auth, monkeypatch):
+    """A critical indicator ingested by a connector raises a SIEM intel alert."""
+    import dashboard_api.connectors as conn_mod
+
+    class FakeResp:
+        def json(self):
+            return [{"value": "198.51.100.66", "type": "ip", "confidence": 95,
+                     "threat_type": "c2", "severity": "critical"}]
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp())
+
+    before = client.get("/siem/alerts", headers=auth).json()["total"]
+    c = client.post("/connectors", json={"name": "CritFeed", "kind": "json",
+                                         "url": "https://x/iocs.json",
+                                         "field_map": {"value": "value", "type": "type",
+                                                       "confidence": "confidence",
+                                                       "severity": "severity"}}, headers=auth)
+    run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert run["result"]["imported"] == 1 and run["result"]["alertsRaised"] == 1
+    after = client.get("/siem/alerts?q=198.51.100.66", headers=auth).json()
+    assert after["total"] == 1 and after["items"][0]["ti_hits"] == 1

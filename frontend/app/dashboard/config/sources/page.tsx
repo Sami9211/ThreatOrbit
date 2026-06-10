@@ -71,6 +71,7 @@ const CUSTOM_SOURCES: CustomSourceType[] = [
   { id: 'webhook', name: 'Webhook',  description: 'Inbound HTTP POST with JSON payloads',  icon: AppWindow },
   { id: 's3',      name: 'Amazon S3', description: 'Pull log files from an S3 bucket',     icon: Cloud },
   { id: 'kafka',   name: 'Kafka',    description: 'Consume events from a Kafka topic',      icon: Network },
+  { id: 'custom',  name: 'Custom / Other', description: 'Any source — name it and set the type yourself', icon: Plus },
 ]
 
 const CATEGORIES: { id: ConnCategory; icon: React.ElementType; color: string }[] = [
@@ -377,11 +378,14 @@ export default function DataSourcesPage() {
 
   async function addCustomSource(values: Record<string, string>) {
     if (!customSource) return
+    // For the free-form "Custom / Other" tile the user names the type; presets
+    // use their own label.
+    const type = customSource.id === 'custom' ? (values.type || 'Custom') : customSource.name
     await createLogSource({
       name: values.name,
-      type: customSource.name,
+      type,
       host: values.host || undefined,
-      format: values.format || customSource.name,
+      format: values.format || type,
       tags: ['custom'],
     })
   }
@@ -532,9 +536,12 @@ export default function DataSourcesPage() {
             onClose={() => setCustomSource(null)}
             onSubmit={addCustomSource}
             fields={[
-              { key: 'name', label: 'Source name', required: true, placeholder: `e.g. Prod ${customSource.name}` },
-              { key: 'host', label: 'Host / endpoint', placeholder: customSource.id === 's3' ? 's3://bucket/prefix' : customSource.id === 'kafka' ? 'kafka:9092 / topic' : '10.0.0.1:514' },
-              { key: 'format', label: 'Format', placeholder: 'e.g. RFC 5424, JSON' },
+              { key: 'name', label: 'Source name', required: true, placeholder: customSource.id === 'custom' ? 'e.g. Rapid7 InsightIDR' : `e.g. Prod ${customSource.name}` },
+              ...(customSource.id === 'custom'
+                ? [{ key: 'type', label: 'Source type', required: true, placeholder: 'e.g. EDR, Firewall, API Pull' }]
+                : []),
+              { key: 'host', label: 'Host / endpoint', placeholder: customSource.id === 's3' ? 's3://bucket/prefix' : customSource.id === 'kafka' ? 'kafka:9092 / topic' : customSource.id === 'custom' ? 'https://api.vendor.com/v1/logs' : '10.0.0.1:514' },
+              { key: 'format', label: 'Format', placeholder: 'e.g. RFC 5424, JSON, CEF' },
             ]}
           />
         )}

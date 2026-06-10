@@ -140,6 +140,67 @@ ThreatOrbit-V2/
 
 ---
 
+## 2a. How the ThreatOrbit engine works (the real data pipeline)
+
+ThreatOrbit is not a mockup with hardcoded numbers — it is a working pipeline.
+Here is exactly where data comes from and how each service processes and
+displays it. (In **demo mode** these stores are pre-filled with realistic
+sample data so you can evaluate the UI; in **live mode** they start empty and
+fill from the real pipeline below — see [§4a](#4a-real-data-vs-demo-mode).)
+
+### The engine (Threat API, `:8000`)
+
+`threat_api` is the ingestion engine. One `POST /fetch` (or the built-in
+scheduler) runs this pipeline (`threat_api/main.py` → `_run_pipeline`):
+
+```
+  ┌── abuse.ch (Feodo blocklist — keyless; URLHaus — free Auth-Key)
+  ├── RSS security feeds (keyless — IOCs extracted from articles)
+  ├── AlienVault OTX (free API key)            ── parallel fetch ──┐
+  ├── dark-web OSINT sources                                       │
+  └── social OSINT sources                                         ▼
+                                              normalise → dedup → trust-score
+                                              → confidence-correlate
+                                              → VirusTotal enrich (optional key)
+                                              → persist (WAL SQLite) + STIX 2.1
+```
+
+Every indicator carries a type, source, threat-type, a trust-weighted
+confidence, tags, and (if enriched) a VirusTotal detection ratio. This is real
+OSINT — abuse.ch's Feodo blocklist alone returns thousands of live malicious
+IPs **with no API key**.
+
+### How the engine feeds each dashboard service
+
+The dashboard reads from one SQLite store; the engine and connectors fill it.
+Data flows in one direction, and every page renders whatever is in the store:
+
+| Service (dashboard page)        | Where its data comes from                                                                 | How it's processed & displayed |
+| ------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------ |
+| **Intelligence / Library** (CTI, IOCs, actors) | The engine's indicators, pulled in by the **ThreatOrbit OSINT connector** (Feeds → Sources). | Indicators are deduped and grouped by type; `GET /cti/iocs`, `/cti/lookup`, `/cti/ioc-types`, `/cti/summary` drive the CTI pages, the IOC scanner, and the library counts. |
+| **SIEM** (alerts, rules, hunts) | **Real log analysis** — upload a log on SIEM → Sources (or Feeds → Sources). The Log API's four detectors (pattern, statistical, ML, temporal) find anomalies; **each finding becomes a real SIEM alert** with severity, MITRE technique, source IP/user, and raw evidence. Critical ingested IOCs also raise intel-match alerts. | Alerts are scored, sorted, and filtered; `GET /siem/alerts` drives the queue, `/siem/kpis` computes MTTD/MTTA/MTTR from per-alert latency, `/siem/correlations` clusters by shared pivot, `/siem/mitre-distribution` builds the heatmap. The hunt console runs real queries against this store. |
+| **SOAR** (cases, playbooks)     | Cases are opened from SIEM alerts (the **Create Case** button on any alert) or by hand; playbooks run on demand. | `GET /soar/cases`, war-room notes and IR tasks persist; `/soar/metrics` computes open/critical counts, MTTR, and the real automation rate from playbook-driven closures. |
+| **Assets** (surface, vulns, network) | Assets you add (or import); NVD CVEs from the **NVD connector**. | Each asset's 0–100 risk score is a transparent four-axis model (`scoring.py`); `/assets/risk-distribution` finds the top fleet driver; the network map lays out real assets by zone. |
+| **Overview** (dashboard home)   | Aggregates of everything above.                                                           | `/overview/kpis`, `/overview/threat-vectors`, the live attack map, and recent-activity widgets are all derived from the stores in real time. |
+
+So the chain is: **real OSINT + real log analysis → the stores → every page**.
+Nothing on a page is invented client-side (with one labelled exception: the
+Feeds page runs a demo "incoming threat" simulator *only* when the IOC store is
+empty; the moment real indicators exist, it shows those instead).
+
+### Try the real pipeline in 2 minutes
+
+1. Start in live mode (Windows launcher does this automatically; otherwise set
+   `DASHBOARD_DATA_MODE=live` and run all three APIs).
+2. **Intelligence/Library:** Feeds → Sources → **Sync now** on *ThreatOrbit
+   OSINT Engine* and *NVD CVE Feed*. Real IOCs and CVEs appear in CTI and the
+   scanner within seconds (needs internet).
+3. **SIEM:** SIEM → Sources → upload a log file (a sample lives at
+   `log_api/sample_logs/sample_apache.log`). The detectors run and real alerts
+   appear in the SIEM queue — the panel links straight to them.
+4. **SOAR:** open any alert → **Create Case** → a real case appears on the SOAR
+   board with an IR task list and war room.
+
 ## 3. Requirements
 
 **Minimum (Path A — Windows, or Path C — Mac/Linux, no Docker)**
