@@ -118,8 +118,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       TAXII 2.1 server (discovery → collections → STIX 2.1 objects) + STIX
       bundle export, auth by JWT or API key. Remaining: TAXII write/push
       (POST objects to a collection) for true publish-subscribe.
-- [ ] **Relationship graph at scale** — actors ↔ campaigns ↔ malware ↔ IOCs ↔
-      TTPs, interactive, with pivoting and path-finding.
+- [x] **Relationship graph at scale** — DONE (see CHANGELOG): a multi-entity
+      graph (actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors) built from the
+      live stores, with pivot (`/cti/graph/expand`) and shortest-path
+      (`/cti/graph/path`) over shared nodes; `?focus=&depth=` narrows to a
+      neighbourhood.
 - [ ] **Enrichment pipeline** — pluggable enrichers (VirusTotal, GreyNoise,
       Shodan, WHOIS, geo/ASN) with caching and per-IOC enrichment history.
 - [x] **IOC lifecycle** — DONE (see CHANGELOG): per-type confidence decay,
@@ -158,6 +161,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · CTI relationship graph at scale (Phase 3)** — the intelligence
+  graph went from an actor→IOC star to a navigable multi-entity graph.
+  `cti_graph.py` builds actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors from the
+  live stores, with shared malware/technique/sector nodes as connective tissue
+  (two actors using the same tool/TTP are linked through it). Two analyst
+  operations on it: **pivot** (`/cti/graph/expand?node=` → a node's neighbours,
+  grouped by relationship) and **path-finding** (`/cti/graph/path?from=&to=` →
+  BFS shortest chain, the "why are these related?" answer); `/cti/graph` gains
+  `?focus=&depth=` to narrow to a neighbourhood, plus per-group counts. Frontend
+  clients (fetchCtiGraph focus, expandGraphNode, findGraphPath) exposed. Tested:
+  multi-group graph integrity, pivot, focus-narrowing, path-find + no-path, and
+  the pure adjacency/BFS units.
 
 - **2026-06-10 · Multi-tenancy foundation (Phase 0)** — the org/workspace model,
   shipped non-breaking. New `orgs` table + `users.org_id` (migrated); a

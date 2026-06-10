@@ -360,8 +360,18 @@ export interface SavedHunt {
   domain: string
 }
 
+export interface CtiGraphNode {
+  id: string; label: string; group: string; level?: string; size: number; iocType?: string
+}
 export interface CtiGraph {
-  nodes: Array<{ id: string; label: string; group: string; level?: string; size: number; iocType?: string }>
+  nodes: CtiGraphNode[]
+  links: Array<{ source: string; target: string; kind: string }>
+  focus?: string | null
+  counts?: Record<string, number>
+}
+export interface GraphPath {
+  found: boolean; reason?: string; hops?: number
+  path: CtiGraphNode[]
   links: Array<{ source: string; target: string; kind: string }>
 }
 
@@ -868,7 +878,13 @@ export const createCtiHunt = (body: { name: string; description?: string; query?
   api<SavedHunt>('/cti/hunts', { method: 'POST', body: JSON.stringify(body) })
 export const runCtiHunt = (id: string) =>
   api<HuntRunOutcome>(`/cti/hunts/${id}/run`, { method: 'POST' })
-export const fetchCtiGraph  = () => api<CtiGraph>('/cti/graph')
+export const fetchCtiGraph = (focus?: string, depth = 2) =>
+  api<CtiGraph>(`/cti/graph${focus ? `?focus=${encodeURIComponent(focus)}&depth=${depth}` : ''}`)
+export const expandGraphNode = (node: string) =>
+  api<{ node: CtiGraphNode | null; neighbours: Array<CtiGraphNode & { kind: string }> }>(
+    `/cti/graph/expand?node=${encodeURIComponent(node)}`)
+export const findGraphPath = (from: string, to: string) =>
+  api<GraphPath>(`/cti/graph/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
 
 // ── Assets ───────────────────────────────────────────────────────────
 export const fetchAssets = (params?: Record<string, string>) => {

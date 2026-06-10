@@ -343,29 +343,33 @@ def run_hunt(hunt_id: str, user: dict = Depends(current_user)):
 
 
 @router.get("/graph")
-def relationship_graph(limit: int = Query(40, le=200)):
-    """Build a force-graph of actors -> IOCs they are attributed to."""
-    nodes, links, seen = [], [], set()
+def relationship_graph(limit: int = Query(120, le=600),
+                       focus: str | None = None, depth: int = Query(2, ge=1, le=4)):
+    """Interactive intelligence graph: actors ↔ malware ↔ techniques ↔ IOCs ↔
+    sectors. Pass `focus=<nodeId>` to pivot to that node's `depth`-hop
+    neighbourhood."""
+    from dashboard_api import cti_graph
     with get_conn() as conn:
-        actors = conn.execute("SELECT name, threat_level, ioc_count FROM threat_actors").fetchall()
-        iocs = conn.execute(
-            "SELECT value, type, actor, severity FROM iocs WHERE actor != '' LIMIT ?", (limit,)
-        ).fetchall()
-    for a in actors:
-        nid = f"actor:{a['name']}"
-        nodes.append({"id": nid, "label": a["name"], "group": "actor",
-                      "level": a["threat_level"], "size": min(30, 10 + a["ioc_count"] // 20)})
-        seen.add(nid)
-    for i in iocs:
-        nid = f"ioc:{i['value']}"
-        if nid not in seen:
-            nodes.append({"id": nid, "label": i["value"], "group": "ioc",
-                          "iocType": i["type"], "level": i["severity"], "size": 6})
-            seen.add(nid)
-        anid = f"actor:{i['actor']}"
-        if anid in seen:
-            links.append({"source": anid, "target": nid, "kind": "attributed"})
-    return {"nodes": nodes, "links": links}
+        return cti_graph.build(conn, focus=focus, depth=depth, ioc_limit=limit)
+
+
+@router.get("/graph/expand")
+def graph_expand(node: str):
+    """Pivot: the immediate neighbours of a graph node, grouped by relationship."""
+    from dashboard_api import cti_graph
+    with get_conn() as conn:
+        result = cti_graph.neighbours(conn, node)
+    if result["node"] is None:
+        raise HTTPException(status_code=404, detail="Node not found in graph")
+    return result
+
+
+@router.get("/graph/path")
+def graph_path(from_: str = Query(..., alias="from"), to: str = Query(...)):
+    """Path-finding: the shortest relationship chain between two graph nodes."""
+    from dashboard_api import cti_graph
+    with get_conn() as conn:
+        return cti_graph.shortest_path(conn, from_, to)
 
 
 # ── Scanner history ────────────────────────────────────────────────────────────

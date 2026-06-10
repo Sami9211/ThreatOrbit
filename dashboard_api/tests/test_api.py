@@ -1079,7 +1079,7 @@ def test_playbook_real_execution(client, auth):
     assert after["status"] == "resolved" and after["disposition"] == "true-positive"
     # the run is in the history feeds
     assert any(x["id"] == run["id"] for x in client.get(f"/soar/playbooks/{pid}/runs", headers=auth).json())
-    assert any(x["id"] == run["id"] for x in client.get("/soar/runs", headers=auth).json()["items"])
+    assert any(x["id"] == run["id"] for x in client.get("/soar/runs?limit=100", headers=auth).json()["items"])
     # a playbook notification was raised
     notes = client.get("/notifications", headers=auth).json()["items"]
     assert any(n["type"] == "playbook" for n in notes)
@@ -1438,6 +1438,52 @@ def _token(client, email, password="Password123!"):
     r = client.post("/auth/login", json={"email": email, "password": password})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+def test_cti_relationship_graph(client, auth):
+    """The graph spans actors↔malware↔techniques↔IOCs↔sectors and supports
+    pivot (expand) + path-finding."""
+    g = client.get("/cti/graph", headers=auth).json()
+    assert {"nodes", "links", "counts"} <= g.keys()
+    groups = {n["group"] for n in g["nodes"]}
+    # richer than the old actor→ioc star: malware/technique/sector nodes exist
+    assert {"actor", "malware", "technique"} <= groups
+    assert g["counts"]["actor"] > 0
+    # every link references real nodes
+    ids = {n["id"] for n in g["nodes"]}
+    assert all(l["source"] in ids and l["target"] in ids for l in g["links"])
+
+    actor = next(n for n in g["nodes"] if n["group"] == "actor")
+    # pivot: expanding an actor yields its malware/technique/sector neighbours
+    exp = client.get(f"/cti/graph/expand?node={actor['id']}", headers=auth).json()
+    assert exp["node"]["id"] == actor["id"] and exp["neighbours"]
+    assert any(nb["group"] in ("malware", "technique", "sector") for nb in exp["neighbours"])
+    assert all("kind" in nb for nb in exp["neighbours"])
+    assert client.get("/cti/graph/expand?node=actor:does-not-exist", headers=auth).status_code == 404
+
+    # focus narrows the graph to a neighbourhood
+    focused = client.get(f"/cti/graph?focus={actor['id']}&depth=1", headers=auth).json()
+    assert focused["focus"] == actor["id"]
+    assert len(focused["nodes"]) <= len(g["nodes"]) and actor["id"] in {n["id"] for n in focused["nodes"]}
+
+    # path-finding: an actor reaches one of its own malware nodes in one hop
+    mal = next(nb for nb in exp["neighbours"] if nb["group"] == "malware")
+    p = client.get(f"/cti/graph/path?from={actor['id']}&to={mal['id']}", headers=auth).json()
+    assert p["found"] is True and p["hops"] >= 1
+    assert p["path"][0]["id"] == actor["id"] and p["path"][-1]["id"] == mal["id"]
+    # an unknown node → no path, handled gracefully
+    miss = client.get(f"/cti/graph/path?from={actor['id']}&to=ioc:nope", headers=auth).json()
+    assert miss["found"] is False
+
+
+def test_cti_graph_engine_units():
+    """Pure path-finding over a hand-built graph."""
+    from dashboard_api import cti_graph
+    links = [{"source": "a", "target": "t1", "kind": "employs"},
+             {"source": "b", "target": "t1", "kind": "employs"},
+             {"source": "b", "target": "x", "kind": "indicates"}]
+    adj = cti_graph._adjacency(links)
+    assert adj["t1"] == {"a", "b"} and adj["a"] == {"t1"}
 
 
 def test_workspace_foundation(client, auth):
