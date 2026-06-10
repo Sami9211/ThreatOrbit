@@ -68,7 +68,12 @@ const WH_STATUS_CFG: Record<WebhookStatus, { label: string; cls: string; dot: st
   paused:  { label: 'Paused',  cls: 'text-ink-400 border-white/10 bg-white/5',   dot: 'bg-ink-500'            },
 }
 
-const NEW_KEY_FALLBACK = 'to_sk_live_a7f8e92b1d47c61e83dd2a9f7c4b5e01abcd1234'
+const SCOPE_PREFIX: Record<string, string> = {
+  admin: 'to_ak_live_', write: 'to_sk_live_', read: 'to_rk_live_',
+}
+
+const maskKey = (scope: string, fragment: string) =>
+  `${SCOPE_PREFIX[scope] ?? 'to_sk_live_'}••••${fragment}`
 
 const CURL_SNIPPET = `curl https://api.threatorbit.space/v2/alerts \\
   -H "Authorization: Bearer to_sk_live_••••4f2a" \\
@@ -99,8 +104,30 @@ function CopyBtn({ value, className }: { value: string; className?: string }) {
   )
 }
 
-/* ── Generate key modal ──────────────────────────────────────────── */
-function GenerateModal({ keySecret, onClose }: { keySecret: string; onClose: () => void }) {
+/* ── Generate key modal: name+scope form, then the one-time secret ── */
+function GenerateModal({ onCreate, onClose }: {
+  onCreate: (name: string, scope: Scope) => Promise<string>
+  onClose: () => void
+}) {
+  const [name, setName] = useState('')
+  const [scope, setScope] = useState<Scope>('read')
+  const [secret, setSecret] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim() || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      setSecret(await onCreate(name.trim(), scope))
+    } catch {
+      setError('Could not create the key. Check the API is running and you have admin access.')
+      setSubmitting(false)
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -121,80 +148,89 @@ function GenerateModal({ keySecret, onClose }: { keySecret: string; onClose: () 
             <div className="p-2 rounded-lg bg-magenta/15">
               <Key className="w-4 h-4 text-magenta" />
             </div>
-            <h2 className="text-sm font-semibold text-white">New API Key Generated</h2>
+            <h2 className="text-sm font-semibold text-white">{secret ? 'New API Key Generated' : 'Generate New Key'}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber/10 border border-amber/20 mb-4">
-          <AlertTriangle className="w-4 h-4 text-amber shrink-0 mt-0.5" />
-          <p className="text-[11px] text-amber leading-snug">
-            Save this key now &mdash; it is shown only once. You will not be able to retrieve it again after closing this dialog.
-          </p>
-        </div>
+        {secret === null ? (
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-ink-300 mb-1.5">Key name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CI pipeline"
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-300 mb-1.5">Scope</label>
+              <select value={scope} onChange={(e) => setScope(e.target.value as Scope)}
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                <option value="read">Read only</option>
+                <option value="write">Read + write</option>
+                <option value="admin">Full admin</option>
+              </select>
+            </div>
+            {error && <p className="px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert">{error}</p>}
+            <button type="submit" disabled={!name.trim() || submitting}
+              className={cn('w-full px-4 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                name.trim() && !submitting ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
+              {submitting ? 'Generating…' : 'Generate Key'}
+            </button>
+          </form>
+        ) : (
+          <>
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber/10 border border-amber/20 mb-4">
+              <AlertTriangle className="w-4 h-4 text-amber shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber leading-snug">
+                Save this key now &mdash; it is shown only once. You will not be able to retrieve it again after closing this dialog.
+              </p>
+            </div>
 
-        <label className="block text-xs font-medium text-ink-300 mb-1.5">Your API Key</label>
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-surface-3 border border-white/8 mb-4">
-          <code className="flex-1 font-mono text-xs text-safe break-all">{keySecret}</code>
-          <CopyBtn value={keySecret} />
-        </div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Your API Key</label>
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-surface-3 border border-white/8 mb-4">
+              <code className="flex-1 font-mono text-xs text-safe break-all">{secret}</code>
+              <CopyBtn value={secret} />
+            </div>
 
-        <button
-          onClick={onClose}
-          className="w-full px-4 py-2.5 rounded-xl bg-plasma text-white text-sm font-semibold hover:shadow-magenta-sm transition-all"
-        >
-          I&apos;ve saved my key
-        </button>
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2.5 rounded-xl bg-plasma text-white text-sm font-semibold hover:shadow-magenta-sm transition-all"
+            >
+              I&apos;ve saved my key
+            </button>
+          </>
+        )}
       </motion.div>
     </motion.div>
   )
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+const remoteToRow = (k: RemoteApiKey): ApiKey => ({
+  id: k.id,
+  label: k.name,
+  masked: maskKey(k.scope, k.prefix),
+  scopes: [k.scope as Scope],
+  created: new Date(k.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+  lastUsed: k.lastUsed ? new Date(k.lastUsed).toLocaleDateString() : 'Never',
+  requests: 0,
+  status: k.revoked ? 'revoked' : 'active',
+})
+
 export default function ApiKeysPage() {
   const [showModal, setShowModal] = useState(false)
-  const [newKeySecret, setNewKeySecret] = useState(NEW_KEY_FALLBACK)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>(API_KEYS)
 
   useEffect(() => {
-    fetchApiKeys().then((data) => {
-      if (data.length > 0) {
-        setKeys(data.map((k: RemoteApiKey) => ({
-          id: k.id,
-          label: k.name,
-          masked: `to_sk_live_••••${k.prefix}`,
-          scopes: [k.scope as Scope],
-          created: new Date(k.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          lastUsed: k.lastUsed ? new Date(k.lastUsed).toLocaleDateString() : 'Never',
-          requests: 0,
-          status: k.revoked ? 'revoked' : 'active' as KeyStatus,
-        })))
-      }
-    }).catch(() => {})
+    fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => {})
   }, [])
 
-  async function handleGenerate() {
-    try {
-      const result = await createApiKey('New Key')
-      setNewKeySecret(result.secret ?? NEW_KEY_FALLBACK)
-      const newEntry: ApiKey = {
-        id: result.id,
-        label: result.name,
-        masked: `to_sk_live_••••${result.prefix}`,
-        scopes: [result.scope as Scope],
-        created: new Date(result.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        lastUsed: 'Never',
-        requests: 0,
-        status: 'active',
-      }
-      setKeys((prev) => [newEntry, ...prev])
-    } catch {
-      setNewKeySecret(NEW_KEY_FALLBACK)
-    }
-    setShowModal(true)
+  async function handleGenerate(name: string, scope: Scope): Promise<string> {
+    const result = await createApiKey(name, scope)
+    setKeys((prev) => [remoteToRow(result), ...prev])
+    return result.secret
   }
 
   async function handleRevoke(id: string) {
@@ -222,7 +258,7 @@ export default function ApiKeysPage() {
           <p className="text-xs text-ink-500 mt-0.5">Manage API access tokens and webhooks</p>
         </div>
         <button
-          onClick={handleGenerate}
+          onClick={() => setShowModal(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -256,6 +292,13 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody>
+                {keys.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-xs text-ink-600">
+                      No API keys yet — generate one to integrate with the ThreatOrbit API.
+                    </td>
+                  </tr>
+                )}
                 {keys.map((k) => (
                   <tr key={k.id} className="border-b border-white/4 last:border-0 hover:bg-white/4 transition-colors">
                     <td className="px-4 py-3 text-xs font-medium text-white">{k.label}</td>
@@ -369,7 +412,7 @@ export default function ApiKeysPage() {
       </div>
 
       <AnimatePresence>
-        {showModal && <GenerateModal keySecret={newKeySecret} onClose={() => setShowModal(false)} />}
+        {showModal && <GenerateModal onCreate={handleGenerate} onClose={() => setShowModal(false)} />}
       </AnimatePresence>
     </div>
   )

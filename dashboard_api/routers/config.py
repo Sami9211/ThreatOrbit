@@ -58,20 +58,28 @@ def list_api_keys(_: dict = Depends(require_role("admin", "manager"))):
 def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_role("admin", "manager"))):
     if body.scope not in ("read", "write", "admin"):
         raise HTTPException(status_code=400, detail="scope must be read|write|admin")
-    prefix = {"admin": "to_ak_live_", "write": "to_sk_live_", "read": "to_rk_live_"}[body.scope]
-    secret = prefix + os.urandom(18).hex()
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Key name is required")
+    scope_prefix = {"admin": "to_ak_live_", "write": "to_sk_live_", "read": "to_rk_live_"}[body.scope]
+    secret = scope_prefix + os.urandom(18).hex()
+    # `prefix` stores a non-sensitive display fragment (last 4 chars of the secret).
+    display_fragment = secret[-4:]
     kid = str(uuid.uuid4())
+    created_at = _now()
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO api_keys (id,name,prefix,secret_hash,scope,last_used,created_at,created_by,revoked) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
-            (kid, body.name, prefix, hashlib.sha256(secret.encode()).hexdigest(),
-             body.scope, None, _now(), user["email"], 0),
+            (kid, name, display_fragment, hashlib.sha256(secret.encode()).hexdigest(),
+             body.scope, None, created_at, user["email"], 0),
         )
-        audit(conn, user["email"], "apikey.create", kid, f"name={body.name} scope={body.scope}")
+        audit(conn, user["email"], "apikey.create", kid, f"name={name} scope={body.scope}")
         conn.commit()
     # Secret is returned exactly once, at creation.
-    return {"id": kid, "name": body.name, "scope": body.scope, "secret": secret}
+    return {"id": kid, "name": name, "prefix": display_fragment, "scope": body.scope,
+            "last_used": None, "created_at": created_at, "created_by": user["email"],
+            "revoked": 0, "secret": secret}
 
 
 @router.get("/audit-log")

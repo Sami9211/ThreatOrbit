@@ -318,7 +318,15 @@ def test_config_settings_and_keys(client, auth):
     assert updated["timezone"] == "Europe/London"
     key = client.post("/config/api-keys", json={"name": "CI", "scope": "read"}, headers=auth).json()
     assert key["secret"].startswith("to_rk_live_")
-    assert any(k["name"] == "CI" for k in client.get("/config/api-keys", headers=auth).json())
+    # the stored prefix is a non-sensitive display fragment: last 4 of the secret
+    assert key["prefix"] == key["secret"][-4:]
+    assert key["created_at"] and key["revoked"] == 0
+    listed = client.get("/config/api-keys", headers=auth).json()
+    assert any(k["name"] == "CI" and "secret_hash" not in k for k in listed)
+    # revoke flow
+    assert client.delete(f"/config/api-keys/{key['id']}", headers=auth).status_code == 204
+    assert any(k["id"] == key["id"] and k["revoked"] == 1
+               for k in client.get("/config/api-keys", headers=auth).json())
 
 
 def test_viewer_cannot_create_user(client):
