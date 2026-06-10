@@ -167,8 +167,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 5 — Product polish & scale
 
-- [ ] **Onboarding wizard** — first-run setup (org, users, connectors, log
-      sources) so a buyer is productive in minutes.
+- [x] **Onboarding wizard** — DONE (see CHANGELOG): a first-run checklist
+      computed from real platform state (org, admin password rotated, team,
+      connector, log source + events, rules, webhook, first report) with deep
+      links, progress, and a persisted dismiss — on the overview.
 - [ ] **Billing/licensing** for the plan tiers already designed.
 - [ ] **Postgres option** for scale beyond single-file SQLite; migrations.
 - [ ] **Performance** — pagination/virtualisation on big tables, server-side
@@ -181,6 +183,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Onboarding wizard (Phase 5)** — `GET /config/onboarding`
+  computes the first-run checklist from REAL platform state (a step is done
+  only when the thing actually exists — org named, bootstrap admin password
+  rotated (verified against the hash), 2+ users, an enabled connector, a log
+  source with events flowing, enabled detection rules, a delivery webhook, a
+  generated report), so the wizard can never drift from reality;
+  `POST /config/onboarding/dismiss` persists dismissal. The overview shows an
+  OnboardingCard (progress bar, next undone steps deep-linked) that hides once
+  complete or dismissed. Tested: state-derived steps, the report step flipping
+  after a real generation, dismiss persistence.
 
 - **2026-06-10 · Dark-web depth (Phase 4, closes Phase 4)** —
   `darkweb_logic.py` + connector/router wiring. (1) **Credential matching**:

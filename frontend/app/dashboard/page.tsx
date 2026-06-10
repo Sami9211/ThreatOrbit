@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { openDetail } from '@/components/dashboard/DetailDrawer'
 import ReportButton from '@/components/dashboard/ReportButton'
 import WorldMap from '@/components/dashboard/WorldMap'
+import OnboardingCard from '@/components/dashboard/OnboardingCard'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
@@ -845,6 +846,9 @@ export default function DashboardOverview() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* First-run onboarding (real-state checklist; hides when done/dismissed) */}
+      <OnboardingCard />
+
       {/* Header / mode pill */}
       <div className="flex items-center justify-between">
         <div>

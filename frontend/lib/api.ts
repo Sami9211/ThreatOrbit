@@ -1147,6 +1147,15 @@ export const requestTakedown = (id: string) =>
 export const matchCredentialLeaks = () =>
   api<{ scanned: number; matched: number }>('/darkweb/match-credentials', { method: 'POST' })
 
+// First-run onboarding checklist (computed from real platform state).
+export interface OnboardingStatus {
+  steps: Array<{ id: string; label: string; done: boolean; link: string }>
+  done: number; total: number; pct: number; complete: boolean; dismissed: boolean
+}
+export const fetchOnboarding = () => api<OnboardingStatus>('/config/onboarding')
+export const dismissOnboarding = () =>
+  api<{ dismissed: boolean }>('/config/onboarding/dismiss', { method: 'POST' })
+
 // ── Live engine control ──────────────────────────────────────────────
 export interface EngineStatus {
   mode: string

@@ -1440,6 +1440,25 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_onboarding_checklist(client, auth):
+    """The first-run checklist is computed from real platform state."""
+    ob = client.get("/config/onboarding", headers=auth).json()
+    assert ob["total"] == 8 and 0 <= ob["done"] <= ob["total"]
+    byid = {s["id"]: s for s in ob["steps"]}
+    # seeded demo state: org named, team present, rules enabled, logs flowing
+    assert byid["org"]["done"] is True
+    assert byid["team"]["done"] is True       # multiple seeded users
+    assert byid["rules"]["done"] is True      # seeded + builtin rules enabled
+    assert all({"id", "label", "done", "link"} <= set(s) for s in ob["steps"])
+    # the report step flips when a report is actually generated
+    client.get("/reports/siem?period=daily", headers=auth)
+    assert {s["id"]: s for s in client.get("/config/onboarding", headers=auth).json()["steps"]}["report"]["done"] is True
+    # dismiss persists
+    assert ob["dismissed"] is False
+    client.post("/config/onboarding/dismiss", headers=auth)
+    assert client.get("/config/onboarding", headers=auth).json()["dismissed"] is True
+
+
 def test_darkweb_credential_matching_and_takedown(client, auth):
     """Credential leaks matching the real user directory are stamped + escalated;
     the takedown workflow stamps requests and fires its webhook event."""

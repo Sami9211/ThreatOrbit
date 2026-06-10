@@ -67,6 +67,68 @@ def list_api_keys(user: dict = Depends(require_role("admin", "manager"))):
     return rows_to_dicts(rows)
 
 
+@router.get("/onboarding")
+def onboarding_status(user: dict = Depends(current_user)):
+    """First-run checklist, computed from REAL platform state (never stored):
+    each step is done when the thing actually exists. A buyer can see exactly
+    what's left to be productive — and the wizard can never drift from reality."""
+    from dashboard_api.config import SEED_ADMIN_PASSWORD
+    with get_conn() as conn:
+        org = conn.execute("SELECT value FROM settings WHERE key='organization'").fetchone()
+        users_n = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        connectors_n = conn.execute("SELECT COUNT(*) FROM connectors WHERE enabled=1").fetchone()[0]
+        sources_n = conn.execute("SELECT COUNT(*) FROM log_sources").fetchone()[0]
+        events_n = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        rules_n = conn.execute("SELECT COUNT(*) FROM detection_rules WHERE status='enabled'").fetchone()[0]
+        hooks_n = conn.execute("SELECT COUNT(*) FROM webhooks").fetchone()[0]
+        reports_n = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='report.generate'").fetchone()[0]
+        dismissed = conn.execute(
+            "SELECT value FROM settings WHERE key='onboarding_dismissed'").fetchone()
+        # default admin password still in use? (only checkable when env default known)
+        admin = conn.execute(
+            "SELECT password_hash, password_salt FROM users WHERE role='admin' "
+            "ORDER BY created_at LIMIT 1").fetchone()
+    pw_changed = True
+    if admin and SEED_ADMIN_PASSWORD:
+        from dashboard_api.auth import verify_password
+        pw_changed = not verify_password(SEED_ADMIN_PASSWORD, admin["password_hash"],
+                                         admin["password_salt"])
+    steps = [
+        {"id": "org", "label": "Name your organization",
+         "done": bool(org and org["value"].strip()), "link": "/dashboard/config"},
+        {"id": "password", "label": "Change the bootstrap admin password",
+         "done": pw_changed, "link": "/dashboard/config"},
+        {"id": "team", "label": "Invite your team (2+ users)",
+         "done": users_n >= 2, "link": "/dashboard/config"},
+        {"id": "connector", "label": "Enable an intelligence connector",
+         "done": connectors_n >= 1, "link": "/dashboard/feeds/sources"},
+        {"id": "logs", "label": "Connect a log source / ingest logs",
+         "done": sources_n >= 1 and events_n >= 1, "link": "/dashboard/siem/sources"},
+        {"id": "rules", "label": "Enable detection rules",
+         "done": rules_n >= 1, "link": "/dashboard/siem/rules"},
+        {"id": "notify", "label": "Add a webhook for alert delivery",
+         "done": hooks_n >= 1, "link": "/dashboard/config"},
+        {"id": "report", "label": "Generate your first report",
+         "done": reports_n >= 1, "link": "/dashboard"},
+    ]
+    done = sum(1 for s in steps if s["done"])
+    return {"steps": steps, "done": done, "total": len(steps),
+            "pct": round(done / len(steps) * 100),
+            "complete": done == len(steps),
+            "dismissed": bool(dismissed and dismissed["value"] == "true")}
+
+
+@router.post("/onboarding/dismiss")
+def dismiss_onboarding(user: dict = Depends(current_user)):
+    with get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES "
+                     "('onboarding_dismissed','true')")
+        audit(conn, user["email"], "onboarding.dismiss", None)
+        conn.commit()
+    return {"dismissed": True}
+
+
 @router.get("/roles")
 def list_roles(_: dict = Depends(require_role("admin", "manager"))):
     """The full RBAC matrix: every capability and which roles hold it."""
