@@ -517,3 +517,41 @@ def test_create_asset(client, auth):
     assert "riskBreakdown" in detail and "components" in detail["riskBreakdown"]
     assert client.post("/assets", json={"name": "x", "type": "spaceship", "value": "v"},
                        headers=auth).status_code == 400
+
+
+def test_services_bridge_degrades_gracefully(client, auth, monkeypatch):
+    """With no companion services running, reads degrade and actions 503."""
+    status = client.get("/services/status", headers=auth).json()
+    assert status["threatApi"]["available"] is False
+    assert status["logApi"]["available"] is False
+    health = client.get("/services/threat/source-health", headers=auth).json()
+    assert health == {"available": False, "sources": []}
+    assert client.post("/services/threat/fetch", headers=auth).status_code == 503
+    assert client.post("/services/threat/sync-iocs", headers=auth).status_code == 503
+    assert client.post("/services/logs/analyse",
+                       files={"file": ("a.log", b"line\n")}, headers=auth).status_code == 503
+
+
+def test_services_sync_iocs_imports_upstream(client, auth, monkeypatch):
+    """sync-iocs maps Threat API indicators into the dashboard IOC store."""
+    import dashboard_api.routers.services as services
+
+    upstream = [
+        {"ioc_type": "ip", "value": "203.0.113.99", "source": "otx",
+         "threat_type": "c2", "confidence": 90, "tags": ["botnet"]},
+        {"ioc_type": "sha256", "value": "f" * 64, "source": "abusech",
+         "threat_type": "malware", "confidence": 60, "malware_family": "AgentTesla"},
+        {"ioc_type": "carrier-pigeon", "value": "nope", "source": "x"},   # skipped
+        {"ioc_type": "ip", "value": "203.0.113.99", "source": "otx"},      # duplicate
+    ]
+    monkeypatch.setattr(services, "_get", lambda base, path, admin=False, params=None: upstream)
+
+    out = client.post("/services/threat/sync-iocs", headers=auth).json()
+    assert out["imported"] == 2 and out["skipped"] == 1 and out["duplicates"] == 1
+
+    hit = client.get("/cti/lookup?value=203.0.113.99", headers=auth).json()
+    assert hit["found"] is True and hit["verdict"] == "malicious"
+    assert hit["source"] == "threat-api:otx"
+    # hash type was normalised
+    items = client.get("/cti/iocs?q=" + "f" * 64, headers=auth).json()["items"]
+    assert items and items[0]["type"] == "hash" and items[0]["actor"] == "AgentTesla"

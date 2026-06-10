@@ -34,6 +34,15 @@ AUTH_FAILURE_WINDOW_SEC = int(os.environ.get("DASHBOARD_AUTH_FAILURE_WINDOW_SEC"
 # Public self-service signup can be disabled for closed deployments.
 ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lower() != "false"
 
+# --- Companion services ---------------------------------------------------------
+# The Threat API (ingestion engine) and Log API (anomaly analysis) are proxied
+# server-side so the browser never needs their X-API-Key credentials.
+THREAT_API_URL = os.environ.get("THREAT_API_URL", "http://127.0.0.1:8000").rstrip("/")
+LOG_API_URL = os.environ.get("LOG_API_URL", "http://127.0.0.1:8001").rstrip("/")
+SERVICES_API_KEY = os.environ.get("SERVICES_API_KEY", os.environ.get("APP_API_KEY", ""))
+SERVICES_ADMIN_KEY = os.environ.get("SERVICES_ADMIN_KEY",
+                                    os.environ.get("ADMIN_API_KEY", SERVICES_API_KEY))
+
 # --- Seed -------------------------------------------------------------------
 # Deterministic seed so generated demo data is stable across restarts.
 SEED_RANDOM = int(os.environ.get("DASHBOARD_SEED", "1337"))

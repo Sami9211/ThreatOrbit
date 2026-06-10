@@ -663,6 +663,55 @@ export const fetchAuditLog   = (limit = 100, action?: string) => {
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)
 }
 
+// ── Companion services (Threat API + Log API, proxied server-side) ───
+export interface ServiceState { url: string; available: boolean; health: unknown }
+export interface ServicesStatus { threatApi: ServiceState; logApi: ServiceState; keyConfigured: boolean }
+export const fetchServicesStatus = () => api<ServicesStatus>('/services/status')
+
+export interface SourceHealthEntry {
+  source: string
+  status: string
+  lastSuccess?: string | null
+  lastError?: string | null
+  consecutiveFailures?: number
+}
+export const fetchThreatSourceHealth = () =>
+  api<{ available: boolean; sources: SourceHealthEntry[] | Record<string, unknown> }>('/services/threat/source-health')
+export const triggerThreatFetch = () =>
+  api<{ jobId?: string; job_id?: string; status?: string }>('/services/threat/fetch', { method: 'POST' })
+export const syncThreatIocs = () =>
+  api<ImportResult>('/services/threat/sync-iocs', { method: 'POST' })
+export const fetchOpenCtiStatus = () =>
+  api<{ available: boolean; connected?: boolean }>('/services/threat/opencti-status')
+
+export interface LogAnalysisResult {
+  resultId?: string
+  status?: string
+  jobId?: string
+  summary?: Record<string, unknown>
+  findings?: Array<Record<string, unknown>>
+  anomalies?: Array<Record<string, unknown>>
+  [key: string]: unknown
+}
+// Multipart upload — bypasses the JSON wrapper so the browser sets the boundary.
+export async function analyseLogFile(file: globalThis.File, logFormat = 'generic'): Promise<LogAnalysisResult> {
+  const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+  const form = new FormData()
+  form.append('file', file)
+  form.append('log_format', logFormat)
+  const res = await fetch(`${BASE}/services/logs/analyse`, {
+    method: 'POST',
+    headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+    body: form,
+  })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try { const j = await res.json(); msg = j.detail ?? j.error ?? msg } catch { /* ignore */ }
+    throw new Error(msg)
+  }
+  return toCamel(await res.json()) as LogAnalysisResult
+}
+
 // ── Users ─────────────────────────────────────────────────────────────
 export const fetchUsers = () => api<User[]>('/users')
 export const createUser = (body: { email: string; password: string; name: string; role: UserRole }) =>
