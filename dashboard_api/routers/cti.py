@@ -259,6 +259,188 @@ def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(require_p
     return {**updated, "lifecycle": lifecycle_of(updated)}
 
 
+class ReportCreate(BaseModel):
+    title: str
+    summary: str | None = None
+    body: str | None = None
+    tlp: str = "amber"
+    actors: list[str] = []
+    iocs: list[str] = []
+    tags: list[str] = []
+
+
+class ReportUpdate(BaseModel):
+    title: str | None = None
+    summary: str | None = None
+    body: str | None = None
+    tlp: str | None = None
+    status: str | None = None
+    actors: list[str] | None = None
+    iocs: list[str] | None = None
+    tags: list[str] | None = None
+
+
+class MispImport(BaseModel):
+    event: dict
+
+
+_TLP = {"white", "green", "amber", "red"}
+
+
+@router.get("/reports")
+def list_reports(status: str | None = None):
+    where = "WHERE status=?" if status else ""
+    params = [status] if status else []
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM intel_reports {where} ORDER BY updated_at DESC", params).fetchall()
+    return rows_to_dicts(rows)
+
+
+@router.post("/reports", status_code=201)
+def create_report(body: ReportCreate, user: dict = Depends(require_perm("cti.write"))):
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Report title is required")
+    if body.tlp not in _TLP:
+        raise HTTPException(status_code=400, detail=f"tlp must be one of {sorted(_TLP)}")
+    from dashboard_api.db import dumps
+    rid = f"INTEL-{uuid.uuid4().hex[:8].upper()}"
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO intel_reports (id,title,tlp,status,summary,body,actors,iocs,tags,"
+            "author,created_at,updated_at) VALUES (?,?,?,'draft',?,?,?,?,?,?,?,?)",
+            (rid, title, body.tlp, body.summary, body.body, dumps(body.actors),
+             dumps(body.iocs), dumps(body.tags), user["email"], now, now))
+        audit(conn, user["email"], "intel.report_create", rid, f"title={title}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (rid,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.get("/reports/{report_id}")
+def get_report(report_id: str):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (report_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return row_to_dict(row)
+
+
+@router.patch("/reports/{report_id}")
+def update_report(report_id: str, body: ReportUpdate, user: dict = Depends(require_perm("cti.write"))):
+    from dashboard_api.db import dumps
+    fields, values = [], []
+    for col in ("title", "summary", "body", "tlp", "status"):
+        v = getattr(body, col)
+        if v is not None:
+            if col == "tlp" and v not in _TLP:
+                raise HTTPException(status_code=400, detail="invalid tlp")
+            if col == "status" and v not in ("draft", "published"):
+                raise HTTPException(status_code=400, detail="status must be draft|published")
+            fields.append(f"{col}=?"); values.append(v)
+    for col in ("actors", "iocs", "tags"):
+        v = getattr(body, col)
+        if v is not None:
+            fields.append(f"{col}=?"); values.append(dumps(v))
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    fields.append("updated_at=?")
+    values.append(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
+    values.append(report_id)
+    with get_conn() as conn:
+        cur = conn.execute(f"UPDATE intel_reports SET {','.join(fields)} WHERE id=?", values)
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Report not found")
+        audit(conn, user["email"], "intel.report_update", report_id)
+        conn.commit()
+        row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (report_id,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.delete("/reports/{report_id}", status_code=204)
+def delete_report(report_id: str, user: dict = Depends(require_perm("cti.write"))):
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM intel_reports WHERE id=?", (report_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Report not found")
+        audit(conn, user["email"], "intel.report_delete", report_id)
+        conn.commit()
+    return None
+
+
+@router.get("/reports/{report_id}/misp")
+def export_report_misp(report_id: str):
+    """Export an intel report (its referenced indicators) as a MISP Event."""
+    from dashboard_api import misp
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (report_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Report not found")
+        report = row_to_dict(row)
+        values = report.get("iocs") or []
+        iocs = []
+        if values:
+            ph = ",".join("?" * len(values))
+            iocs = rows_to_dicts(conn.execute(
+                f"SELECT type, value, severity, threat_type FROM iocs WHERE value IN ({ph})",
+                values).fetchall())
+    return misp.to_misp_event(iocs, info=report["title"], tlp=report["tlp"],
+                              tags=report.get("tags") or [])
+
+
+@router.get("/misp/export")
+def export_misp(severity: str | None = None, limit: int = Query(500, le=5000)):
+    """Export the IOC store (optionally filtered) as a MISP Event."""
+    from dashboard_api import misp
+    clauses = ["status != 'known-good'"]
+    params: list = []
+    if severity:
+        clauses.append("severity=?"); params.append(severity)
+    where = "WHERE " + " AND ".join(clauses)
+    with get_conn() as conn:
+        iocs = rows_to_dicts(conn.execute(
+            f"SELECT type, value, severity, threat_type FROM iocs {where} "
+            f"ORDER BY last_seen DESC LIMIT ?", params + [limit]).fetchall())
+    return misp.to_misp_event(iocs, info="ThreatOrbit IOC export")
+
+
+@router.post("/misp/import", status_code=201)
+def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write"))):
+    """Import a MISP Event's attributes into the IOC store."""
+    from dashboard_api import misp
+    from dashboard_api.db import dumps
+    parsed = misp.parse_misp_event(body.event)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="No importable attributes in the MISP event")
+    tlp = misp.misp_tlp(body.event)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    imported = duplicates = skipped = 0
+    with get_conn() as conn:
+        for a in parsed:
+            if a.get("skipped") or a["type"] not in _IOC_TYPES:
+                skipped += 1
+                continue
+            val = a["value"].strip()
+            if conn.execute("SELECT 1 FROM iocs WHERE value=?", (val,)).fetchone():
+                duplicates += 1
+                continue
+            sev = "high" if a.get("to_ids") else "medium"
+            conn.execute(
+                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
+                "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), a["type"], val, a.get("comment") or "misp-import",
+                 70 if a.get("to_ids") else 50, sev, "MISP import", "", now, now,
+                 dumps([f"tlp:{tlp}", "misp"])))
+            imported += 1
+        audit(conn, user["email"], "intel.misp_import", None,
+              f"imported={imported} duplicates={duplicates} skipped={skipped}")
+        conn.commit()
+    return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
+            "total": len(parsed), "tlp": tlp}
+
+
 @router.get("/enrichers")
 def list_enrichers():
     """Available enrichers and whether each external provider is configured."""

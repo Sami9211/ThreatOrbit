@@ -857,6 +857,31 @@ export interface EnrichmentResult {
 }
 export const enrichIoc = (id: string, refresh = false) =>
   api<EnrichmentResult>(`/cti/iocs/${id}/enrich${refresh ? '?refresh=true' : ''}`, { method: 'POST' })
+
+// Analyst intel reports + MISP interop (campaign & report management).
+export interface IntelReport {
+  id: string; title: string; tlp: string; status: 'draft' | 'published'
+  summary: string | null; body: string | null
+  actors: string[]; iocs: string[]; tags: string[]
+  author: string | null; createdAt: string; updatedAt: string
+}
+export const fetchIntelReports = (status?: string) =>
+  api<IntelReport[]>(`/cti/reports${status ? `?status=${status}` : ''}`)
+export const createIntelReport = (body: {
+  title: string; summary?: string; body?: string; tlp?: string
+  actors?: string[]; iocs?: string[]; tags?: string[]
+}) => api<IntelReport>('/cti/reports', { method: 'POST', body: JSON.stringify(body) })
+export const updateIntelReport = (id: string, body: Partial<{
+  title: string; summary: string; body: string; tlp: string
+  status: string; actors: string[]; iocs: string[]; tags: string[]
+}>) => api<IntelReport>(`/cti/reports/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteIntelReport = (id: string) =>
+  api<void>(`/cti/reports/${id}`, { method: 'DELETE' })
+export const exportMispEvent = (severity?: string) =>
+  api<{ Event: Record<string, unknown> }>(`/cti/misp/export${severity ? `?severity=${severity}` : ''}`)
+export const importMispEvent = (event: Record<string, unknown>) =>
+  api<{ imported: number; duplicates: number; skipped: number; total: number; tlp: string }>(
+    '/cti/misp/import', { method: 'POST', body: JSON.stringify({ event }) })
 export const fetchStixBundle = (type?: string) =>
   api<{ type: string; id: string; objects: Array<Record<string, unknown>> }>(
     `/cti/stix/bundle${type ? `?type=${type}` : ''}`)

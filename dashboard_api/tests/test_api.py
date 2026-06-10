@@ -1440,6 +1440,80 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_misp_serialization_units():
+    """MISP Event mapping both ways, with correct types and TLP."""
+    from dashboard_api import misp
+    ev = misp.to_misp_event([
+        {"type": "ip", "value": "8.8.4.4", "severity": "high", "threat_type": "c2"},
+        {"type": "hash", "value": "a" * 64, "severity": "low"},
+        {"type": "cve", "value": "CVE-2024-1", "severity": "high"},
+    ], info="Test event", tlp="red", tags=["apt"])
+    e = ev["Event"]
+    attrs = {a["value"]: a for a in e["Attribute"]}
+    assert attrs["8.8.4.4"]["type"] == "ip-dst" and attrs["8.8.4.4"]["to_ids"] is True
+    assert attrs["a" * 64]["type"] == "sha256" and attrs["a" * 64]["to_ids"] is False
+    assert attrs["CVE-2024-1"]["type"] == "vulnerability"
+    assert {"name": "tlp:red"} in e["Tag"] and {"name": "apt"} in e["Tag"]
+
+    parsed = misp.parse_misp_event({"Event": {"Attribute": [
+        {"type": "ip-dst", "value": "1.2.3.4"},
+        {"type": "sha256", "value": "b" * 64, "to_ids": True},
+        {"type": "btc", "value": "1abc"},  # unmapped → skipped
+    ], "Tag": [{"name": "tlp:green"}]}})
+    bytype = {p["value"]: p for p in parsed}
+    assert bytype["1.2.3.4"]["type"] == "ip" and bytype["b" * 64]["type"] == "hash"
+    assert bytype["1abc"].get("skipped") is True
+    assert misp.misp_tlp({"Event": {"Tag": [{"name": "tlp:green"}]}}) == "green"
+
+
+def test_intel_reports_and_misp(client, auth):
+    """Analyst intel reports CRUD + MISP import/export round-trip."""
+    ioc_val = "45.77.88.99"
+    client.post("/cti/iocs/import", json={"indicators": [{"type": "ip", "value": ioc_val}],
+                                          "severity": "high", "source": "test"}, headers=auth)
+    r = client.post("/cti/reports", json={
+        "title": "Operation Test Storm", "tlp": "amber",
+        "summary": "Campaign overview", "actors": ["APT-Test"], "iocs": [ioc_val],
+        "tags": ["campaign"]}, headers=auth)
+    assert r.status_code == 201, r.text
+    rid = r.json()["id"]
+    assert r.json()["status"] == "draft" and r.json()["actors"] == ["APT-Test"]
+    assert client.post("/cti/reports", json={"title": "x", "tlp": "purple"}, headers=auth).status_code == 400
+
+    assert client.patch(f"/cti/reports/{rid}", json={"status": "published"}, headers=auth).json()["status"] == "published"
+    assert any(x["id"] == rid for x in client.get("/cti/reports?status=published", headers=auth).json())
+    assert client.get(f"/cti/reports/{rid}", headers=auth).json()["title"] == "Operation Test Storm"
+
+    ev = client.get(f"/cti/reports/{rid}/misp", headers=auth).json()
+    assert ev["Event"]["info"] == "Operation Test Storm"
+    assert any(a["value"] == ioc_val and a["type"] == "ip-dst" for a in ev["Event"]["Attribute"])
+    assert {"name": "tlp:amber"} in ev["Event"]["Tag"]
+
+    store = client.get("/cti/misp/export?limit=50", headers=auth).json()
+    assert store["Event"]["Attribute"]
+
+    imp = client.post("/cti/misp/import", json={"event": {"Event": {
+        "info": "Imported feed", "Tag": [{"name": "tlp:green"}], "Attribute": [
+            {"type": "ip-dst", "value": "203.0.113.222", "to_ids": True},
+            {"type": "domain", "value": "imported-evil.test"},
+            {"type": "btc", "value": "1xyz"},  # unmapped → skipped
+        ]}}}, headers=auth)
+    assert imp.status_code == 201, imp.text
+    body = imp.json()
+    assert body["imported"] == 2 and body["skipped"] == 1 and body["tlp"] == "green"
+    hit = client.get("/cti/lookup?value=203.0.113.222", headers=auth).json()
+    assert hit["found"] is True and hit["severity"] == "high"  # to_ids → high
+
+    assert client.post("/cti/misp/import", json={"event": {"Event": {"Attribute": []}}},
+                       headers=auth).status_code == 400
+
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post("/cti/reports", json={"title": "v"}, headers=viewer).status_code == 403
+    assert client.post("/cti/misp/import", json={"event": {}}, headers=viewer).status_code == 403
+    assert client.delete(f"/cti/reports/{rid}", headers=auth).status_code == 204
+    assert client.get(f"/cti/reports/{rid}", headers=auth).status_code == 404
+
+
 def test_ioc_enrichment_units():
     """Offline indicator analysis is real + deterministic."""
     from dashboard_api.enrichment import _enrich_indicator, _entropy, _combined_verdict

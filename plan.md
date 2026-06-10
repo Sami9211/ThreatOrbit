@@ -132,8 +132,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       sighting tracking (events/connectors/manual), known-good whitelisting,
       and expiry — wired into TI matching, with an IOC database + lifecycle
       drawer on the CTI hub.
-- [ ] **Campaign & report management** — analyst-authored intel reports, MISP
-      events import/export.
+- [~] **Campaign & report management** — DONE (see CHANGELOG): analyst-authored
+      intel reports (CRUD, TLP, draft/publish, actor/IOC refs) + MISP Event
+      import/export (store, per-report, and ingest). Remaining: a dedicated
+      report-authoring UI panel (API + clients shipped).
 - [ ] **Attribution scoring** — evidence-weighted actor attribution.
 
 ## Phase 4 — Asset, Vuln & Dark Web depth
@@ -164,6 +166,20 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Campaign & report management + MISP interop (Phase 3)** —
+  analyst-authored CTI reports and community sharing. New `intel_reports` store
+  + `/cti/reports` CRUD (title, TLP, draft→published, actor/IOC references,
+  tags; cti.write-gated). `misp.py` does real MISP **Event** interop: export
+  the IOC store, a single report's indicators, or import an Event —
+  `to_misp_event` maps each indicator to the correct MISP attribute type +
+  category (ip-dst, domain, md5/sha1/sha256, vulnerability…) with a TLP tag and
+  `to_ids` from severity; `parse_misp_event` maps attributes back to indicators
+  (composite types handled, unknown types skipped not guessed) and imports them
+  with a per-attribute tally. Endpoints: `/cti/reports/{id}/misp`,
+  `/cti/misp/export`, `/cti/misp/import`. Frontend clients shipped (report CRUD
+  + MISP import/export). Tested: MISP round-trip units + report CRUD + export +
+  import tally + viewer-blocked.
 
 - **2026-06-10 · IOC enrichment pipeline (Phase 3)** — pluggable enrichers with
   caching + per-IOC history. `enrichment.py` runs real **offline** built-ins:

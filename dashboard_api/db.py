@@ -20,7 +20,7 @@ JSON_COLUMNS = {
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
     "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
-    "context", "trigger_match", "data",
+    "context", "trigger_match", "data", "actors",
 }
 
 
@@ -319,6 +319,22 @@ CREATE TABLE IF NOT EXISTS ioc_sightings (
     ts      TEXT NOT NULL,
     source  TEXT,
     context TEXT
+);
+
+-- Analyst-authored CTI intel reports (campaign & report management).
+CREATE TABLE IF NOT EXISTS intel_reports (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    tlp         TEXT NOT NULL DEFAULT 'amber',   -- white|green|amber|red
+    status      TEXT NOT NULL DEFAULT 'draft',   -- draft|published
+    summary     TEXT,
+    body        TEXT,
+    actors      TEXT NOT NULL DEFAULT '[]',      -- referenced actor names
+    iocs        TEXT NOT NULL DEFAULT '[]',      -- referenced indicator values
+    tags        TEXT NOT NULL DEFAULT '[]',
+    author      TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
 );
 
 -- Cached per-IOC enrichment results + history (enrichment pipeline).
