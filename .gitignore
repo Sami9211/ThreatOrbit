@@ -17,4 +17,5 @@ venv/
 *.sqlite3
 *.log
 stix_bundle.json
-anomaly_report.html.env
+anomaly_report.html
+.env
