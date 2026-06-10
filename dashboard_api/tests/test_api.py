@@ -1440,6 +1440,24 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_hot_path_indexes_in_use():
+    """The hot-path indexes exist and SQLite actually uses them."""
+    from dashboard_api.db import get_conn
+    with get_conn() as conn:
+        names = {r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'").fetchall()}
+        for idx in ("idx_alerts_ts", "idx_alerts_host", "idx_iocs_value",
+                    "idx_pbruns_alert", "idx_vulns_asset", "idx_dw_url"):
+            assert idx in names, f"missing index {idx}"
+        # the TI value-match (run per event) is index-backed, not a table scan
+        plan = " ".join(r["detail"] for r in conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM iocs WHERE value='1.2.3.4'").fetchall())
+        assert "idx_iocs_value" in plan
+        plan2 = " ".join(r["detail"] for r in conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM alerts WHERE hostname='X'").fetchall())
+        assert "idx_alerts_host" in plan2
+
+
 def test_license_key_units():
     """License keys are HMAC-signed: tamper/forgery/expiry are rejected."""
     import pytest as _pytest

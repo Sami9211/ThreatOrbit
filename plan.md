@@ -177,16 +177,35 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       usage bars. Remaining: payment-processor integration (Stripe) for
       self-serve purchase.
 - [ ] **Postgres option** for scale beyond single-file SQLite; migrations.
-- [ ] **Performance** — pagination/virtualisation on big tables, server-side
-      filtering everywhere, caching.
-- [ ] **Mobile-responsive** review of every dashboard page.
-- [ ] **E2E test suite** (Playwright) across the critical workflows.
+      *(STAGED — like multi-tenancy data isolation, this is a breaking
+      migration across ~50 raw-SQL call sites; do as its own effort with a
+      driver seam, not rushed onto main.)*
+- [~] **Performance** — DONE for the data layer (see CHANGELOG): hot-path
+      indexes on every dashboard-refresh query (verified with EXPLAIN QUERY
+      PLAN) with a safe upgrade path for migrated columns; server-side
+      pagination/filtering already exists on alerts/IOCs/assets/findings.
+      Remaining: frontend virtualisation for very large tables.
+- [ ] **Mobile-responsive** review of every dashboard page. *(Needs a browser
+      environment to verify honestly — not checked off blind.)*
+- [ ] **E2E test suite** (Playwright) across the critical workflows. *(Needs a
+      browser download; the 113-test API suite covers the workflows
+      server-side today.)*
 
 ---
 
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Data-layer performance (Phase 5)** — hot-path indexes for the
+  queries every dashboard refresh runs: alerts (ts, severity+status, hostname,
+  src_ip, username), iocs (value — the per-event TI match, status, actor),
+  playbook_runs (alert_id, playbook+ts), vuln_findings (asset_id), dark-web
+  (url dedupe, category), sightings/enrichments, audit action, events
+  hostname. Verified with EXPLAIN QUERY PLAN that SQLite actually uses them
+  (tests assert the plan). `init_db` gained a safe upgrade path: schema →
+  migrations → schema again, so indexes on migrated columns apply cleanly to
+  old databases (covered by an upgrade-path smoke test on a pre-migration DB).
 
 - **2026-06-10 · Licensing & plan limits (Phase 5)** — the pricing tiers become
   real. `licensing.py`: license keys are base64url JSON payloads (plan, seats,

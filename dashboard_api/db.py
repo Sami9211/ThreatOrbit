@@ -492,6 +492,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_events_proc ON events(processed);
+CREATE INDEX IF NOT EXISTS idx_events_host ON events(hostname);
 
 CREATE TABLE IF NOT EXISTS dark_web_findings (
     id        TEXT PRIMARY KEY,
@@ -543,6 +544,25 @@ CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_assets_crit ON assets(criticality);
 CREATE INDEX IF NOT EXISTS idx_iocs_type ON iocs(type);
+
+-- Hot-path indexes: these columns are filtered/joined on every dashboard
+-- refresh (queue sorts, entity lookups, TI value matching, run history).
+CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_sev_status ON alerts(severity, status);
+CREATE INDEX IF NOT EXISTS idx_alerts_host ON alerts(hostname);
+CREATE INDEX IF NOT EXISTS idx_alerts_src ON alerts(src_ip);
+CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(username);
+CREATE INDEX IF NOT EXISTS idx_iocs_value ON iocs(value);
+CREATE INDEX IF NOT EXISTS idx_iocs_status ON iocs(status);
+CREATE INDEX IF NOT EXISTS idx_iocs_actor ON iocs(actor);
+CREATE INDEX IF NOT EXISTS idx_pbruns_alert ON playbook_runs(alert_id);
+CREATE INDEX IF NOT EXISTS idx_pbruns_pb ON playbook_runs(playbook_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_vulns_asset ON vuln_findings(asset_id);
+CREATE INDEX IF NOT EXISTS idx_dw_url ON dark_web_findings(url);
+CREATE INDEX IF NOT EXISTS idx_dw_cat ON dark_web_findings(category);
+CREATE INDEX IF NOT EXISTS idx_sightings_ioc ON ioc_sightings(ioc_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_enrich_value ON ioc_enrichments(ioc_value, provider, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 """
 
 
@@ -600,10 +620,30 @@ def _apply_migrations(conn: sqlite3.Connection):
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
+def _safe_schema(conn: sqlite3.Connection):
+    """Apply the schema, tolerating index statements that reference columns a
+    migration hasn't added yet (re-applied after migrations below)."""
+    try:
+        conn.executescript(SCHEMA)
+    except sqlite3.OperationalError:
+        # An index on a migrated column against a pre-migration table — run the
+        # statements individually so everything else still applies.
+        for stmt in SCHEMA.split(";"):
+            s = stmt.strip()
+            if not s:
+                continue
+            try:
+                conn.execute(s)
+            except sqlite3.OperationalError:
+                pass
+
+
 def init_db():
     with get_conn() as conn:
-        conn.executescript(SCHEMA)
+        _safe_schema(conn)
         _apply_migrations(conn)
+        # second pass: indexes that needed migrated columns now succeed
+        _safe_schema(conn)
         # Multi-tenancy foundation: ensure the default workspace exists and every
         # user belongs to one (non-breaking; single-tenant installs are unchanged).
         from dashboard_api.tenancy import ensure_default_org
