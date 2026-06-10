@@ -177,14 +177,26 @@ https://docs.opencti.io/latest/deployment/
 2. Install **Node.js (LTS)** from https://nodejs.org/ — accept the defaults.
 3. Open the `ThreatOrbit-V2` folder and **double-click `windows-start.bat`**.
 
-The script installs everything, opens four service windows, and launches your
-browser at http://localhost:3000/dashboard. First run takes a few minutes
-(npm download); after that it starts in seconds.
+The script installs everything, **builds the website for fast loading**, opens
+four service windows, and launches your browser at http://localhost:3000.
+First run takes a few minutes (npm download + build); after that pages open
+**instantly** (it serves a production build, not the slow dev server).
 
+* **Open the dashboard:** click **Sign in** on the site, or go to
+  http://localhost:3000/dashboard
 * **Sign in:** `admin@threatorbit.space` / `ChangeMe123!` (or create an account at `/signup`)
+* **Real data:** the launcher runs in **live mode** — the dashboard starts
+  empty and fills itself from real OSINT feeds within a couple of minutes
+  (needs internet). See [§4a Real data vs demo](#4a-real-data-vs-demo-mode).
 * **Stop:** close the four windows the script opened.
-* **Test:** double-click **`windows-test.bat`** — it runs all 50 backend tests
+* **Test:** double-click **`windows-test.bat`** — it runs all backend tests
   and prints `ALL TESTS PASSED` at the end.
+
+> **Were pages slow before (5–10s each)?** That was the Next.js *dev server*
+> compiling each page on first visit. The launcher now serves a pre-built
+> production site, so every page is instant. (If you run `npm run dev`
+> manually you'll still see the dev-server delay — that's expected; use the
+> launcher or `npm run build` for the fast version.)
 
 <details>
 <summary>Prefer typing the commands yourself? (PowerShell — run one line at a time)</summary>
@@ -280,6 +292,12 @@ uvicorn log_api.main:app --port 8001               # Log API on :8001
 can bridge to them.) Shortcuts if you have `make`: `make dev-api`,
 `make dev-frontend`, `make up`, `make test` — see `make help`.
 
+For **real data** instead of demo data, start the dashboard API with
+`DASHBOARD_DATA_MODE=live` and the Threat API running (see
+[§4a](#4a-real-data-vs-demo-mode)). For **fast page loads** use
+`npm run build` then `python scripts/serve_frontend.py 3000` instead of
+`npm run dev` (the dev server compiles each page on first visit).
+
 ### Path D — deploy to the internet
 
 The simplest production split:
@@ -309,6 +327,59 @@ The simplest production split:
 
 Tests need **no `.env`, no Docker, and no running services** — each suite
 creates its own isolated, seeded database.
+
+---
+
+## 4a. Real data vs demo mode
+
+The dashboard runs in one of two modes, set by `DASHBOARD_DATA_MODE`:
+
+| Mode             | What you get                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `demo` (default) | Seeded, realistic showcase data on first boot — great for evaluation/sales. |
+| `live`           | **Starts empty**, then ingests **real** threat intelligence from connectors. |
+
+* The **Windows launcher uses `live`** so you see real data.
+* **Docker** defaults to `demo`; switch with `DASHBOARD_DATA_MODE=live docker compose up --build -d` (or set it in `.env`).
+* In live mode the dashboard bootstraps only the admin account + settings (no
+  fake alerts/actors/assets) and a background scheduler keeps pulling real
+  indicators on each connector's interval.
+
+### Connectors — where real data comes from
+
+Open **Dashboard → Feeds → Sources**. The **Threat Intel Connectors** panel is
+the control surface (the same model OpenCTI uses): every connector pulls real
+indicators, normalises them, and writes into the one CTI store the whole
+dashboard reads from. Two come built in:
+
+| Connector                | Real data | Needs a key?                          |
+| ------------------------ | --------- | ------------------------------------- |
+| **ThreatOrbit OSINT Engine** | abuse.ch, RSS, dark-web & social OSINT (and OTX if you add a key) | No — works immediately with internet |
+| **NVD CVE Feed**         | Live CVEs with CVSS severity from nvd.nist.gov | No (an NVD key only raises rate limits) |
+
+Press **Sync now** on either, or just wait — the scheduler runs them
+automatically. New indicators appear across CTI, the scanner, and feeds.
+
+### Add your own connector (build a source, connect it like AlienVault)
+
+Click **Add Connector**. Besides the presets you can register **any** source:
+
+* **AlienVault OTX** — pick *AlienVault OTX*, paste your free key from
+  otx.alienvault.com (Settings → API). Your subscribed pulses flow in.
+* **Custom JSON** — point it at any URL that returns a JSON array of
+  indicators, then map which fields hold the value / type / threat-type /
+  confidence / severity / tags. (Leave *type* blank to auto-detect
+  ip/domain/url/hash/cve.) Optional API key sent in a header you choose.
+* **Custom CSV** — same idea for a CSV endpoint; map columns instead of fields.
+* **Custom STIX 2.x** — point it at a STIX bundle URL; indicator objects are imported.
+
+So if you build your own intel system (your own “AlienVault”), expose a
+JSON/CSV/STIX endpoint and connect it here by URL + key — no code changes.
+API keys you enter are stored server-side and **never sent back to the browser**.
+
+> **Why might a connector show an error?** Usually no internet, a wrong URL, or
+> a missing/expired API key — the connector row shows the exact message and the
+> dashboard keeps running. Fix it and press **Sync now**.
 
 ---
 

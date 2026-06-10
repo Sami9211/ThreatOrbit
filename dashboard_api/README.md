@@ -44,6 +44,7 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Assets    | `/assets` (GET/POST), `/assets/{id}` (incl. per-axis `riskBreakdown`), `/assets/summary`, `/assets/vulns`, `/assets/risk-distribution`, `POST /assets/recompute-risk` |
 | Feeds     | `/feeds` (GET/POST), `/feeds/summary`, `PATCH /feeds/{id}` |
 | Config    | `/config/settings` (GET/PUT), `/config/api-keys` (GET/POST/DELETE), `/config/webhooks` (GET/POST/PATCH/DELETE), `POST /config/webhooks/{id}/test`, `/config/jobs`, `/config/audit-log` |
+| Connectors| `/connectors` (GET/POST), `/connectors/kinds`, `/connectors/{id}` (PATCH/DELETE), `POST /connectors/{id}/run` — real threat-intel ingestion (threatorbit / nvd / otx / json / csv / stix) into the IOC store |
 | Services  | `/services/status`, `/services/threat/source-health`, `/services/threat/iocs`, `POST /services/threat/fetch`, `/services/threat/jobs/{id}`, `/services/threat/opencti-status`, `POST /services/threat/sync-iocs`, `POST /services/logs/analyse` (multipart), `/services/logs/results/{id}`, `/services/logs/trends` |
 | Meta      | `/health`, `/ready` |
 
@@ -120,6 +121,8 @@ python -m dashboard_api.seed   # force-rebuilds every table
 | `DASHBOARD_ADMIN_EMAIL` / `_PASSWORD` | admin@… / ChangeMe123! | Bootstrap admin |
 | `DASHBOARD_CORS_ORIGINS` | localhost:3000,… | Allowed browser origins |
 | `DASHBOARD_ALLOW_REGISTRATION` | `true` | Enable `POST /auth/register` self-service signup |
+| `DASHBOARD_DATA_MODE` | `demo` | `demo` seeds showcase data; `live` starts empty + ingests real intel via connectors |
+| `DASHBOARD_CONNECTOR_TICK_SECONDS` | `60` | How often the live-mode scheduler runs due connectors |
 | `DASHBOARD_AUTH_MAX_FAILURES` | `10` | Failed logins per client+email before 429 |
 | `DASHBOARD_AUTH_FAILURE_WINDOW_SEC` | `300` | Sliding window for the throttle |
 | `THREAT_API_URL` | `http://127.0.0.1:8000` | Ingestion engine for `/services/threat/*` |
