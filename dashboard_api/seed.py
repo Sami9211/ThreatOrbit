@@ -503,6 +503,9 @@ def seed(force: bool = False):
         # Now that alerts exist, align each asset's risk/status/alert-count with
         # real alert pressure so the stored scores match the live model.
         recompute_asset_risk(conn)
+        # Place all seeded users in the default workspace (multi-tenancy foundation).
+        from dashboard_api.tenancy import ensure_default_org
+        ensure_default_org(conn)
         conn.commit()
     return True
 
@@ -523,6 +526,8 @@ def bootstrap_live():
              ph, salt, "#FF2E97", 1, None, _iso(_now())),
         )
         _seed_settings(conn)
+        from dashboard_api.tenancy import ensure_default_org
+        ensure_default_org(conn)
         conn.commit()
     return True
 

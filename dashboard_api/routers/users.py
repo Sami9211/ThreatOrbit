@@ -11,7 +11,7 @@ from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 router = APIRouter(prefix="/users", tags=["users"])
 
 ROLES = {"admin", "manager", "analyst", "viewer"}
-_PUBLIC = "id,email,name,role,status,avatar_color,mfa_enabled,last_login,created_at"
+_PUBLIC = "id,email,name,role,status,avatar_color,mfa_enabled,last_login,created_at,org_id"
 
 
 class UserCreate(BaseModel):
@@ -52,11 +52,13 @@ def create_user(body: UserCreate, actor: dict = Depends(require_role("admin", "m
     with get_conn() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email=?", (body.email.lower(),)).fetchone():
             raise HTTPException(status_code=409, detail="A user with that email already exists")
+        # New users join the creator's workspace (multi-tenancy foundation).
+        from dashboard_api.tenancy import org_of
         conn.execute(
             "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
-            "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "avatar_color,mfa_enabled,last_login,created_at,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (uid, body.email.lower(), body.name, body.role, "active", ph, salt,
-             body.avatar_color, 0, None, _now()),
+             body.avatar_color, 0, None, _now(), org_of(actor)),
         )
         audit(conn, actor["email"], "user.create", uid, f"email={body.email.lower()} role={body.role}")
         conn.commit()

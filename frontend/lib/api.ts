@@ -476,6 +476,16 @@ export const authRegister = (body: { name: string; email: string; password: stri
 export const authMe = () => api<User>('/auth/me')
 export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 
+// Workspaces (multi-tenancy foundation).
+export interface Org {
+  id: string; name: string; slug: string; plan: string; status: string
+  users?: number; isolationEnforced?: boolean
+}
+export const fetchCurrentOrg = () => api<Org>('/orgs/current')
+export const fetchOrgs = () => api<Org[]>('/orgs')
+export const createOrg = (body: { name: string; plan?: string; slug?: string }) =>
+  api<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) })
+
 export const authChangePassword = (currentPassword: string, newPassword: string) =>
   api<{ ok: boolean }>('/auth/change-password', {
     method: 'POST',

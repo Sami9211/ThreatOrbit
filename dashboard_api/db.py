@@ -79,7 +79,19 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_color  TEXT NOT NULL DEFAULT '#7A3CFF',
     mfa_enabled   INTEGER NOT NULL DEFAULT 0,
     last_login    TEXT,
-    created_at    TEXT NOT NULL
+    created_at    TEXT NOT NULL,
+    org_id        TEXT                                -- workspace membership (multi-tenancy foundation)
+);
+
+-- Workspaces / organizations (multi-tenancy foundation). Data tables are not
+-- yet org-scoped — see dashboard_api/tenancy.py for the staged isolation seam.
+CREATE TABLE IF NOT EXISTS orgs (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    slug       TEXT NOT NULL,
+    plan       TEXT NOT NULL DEFAULT 'enterprise',
+    status     TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -532,6 +544,7 @@ _MIGRATIONS = [
     ("playbooks", "trigger_match", "TEXT NOT NULL DEFAULT '{}'"),
     ("iocs", "status", "TEXT NOT NULL DEFAULT 'active'"),
     ("iocs", "sightings", "INTEGER NOT NULL DEFAULT 1"),
+    ("users", "org_id", "TEXT"),
 ]
 
 
@@ -546,4 +559,8 @@ def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
         _apply_migrations(conn)
+        # Multi-tenancy foundation: ensure the default workspace exists and every
+        # user belongs to one (non-breaking; single-tenant installs are unchanged).
+        from dashboard_api.tenancy import ensure_default_org
+        ensure_default_org(conn)
         conn.commit()

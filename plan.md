@@ -36,8 +36,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       SOC write but not platform admin; `/auth/permissions` + `/config/roles`
       drive UI gating. Remaining: extend `require_perm` to the last
       config/connectors endpoints (still on the equivalent `require_role`).
-- [ ] **Multi-tenancy / workspaces** — org isolation for an MSSP selling this.
-      *(DEFERRED — large architectural unit: org_id scoping on every table/query.)*
+- [~] **Multi-tenancy / workspaces** — FOUNDATION DONE (see CHANGELOG): `orgs`
+      table + user→workspace membership (default workspace, non-breaking),
+      `/orgs` CRUD + `/orgs/current`, and a tested isolation seam
+      (`tenancy.scope_sql`) gated behind `DASHBOARD_MULTI_TENANT` (off).
+      Remaining (staged, not yet wired so `main` stays green): add `org_id` to
+      the data tables in `tenancy.TENANT_TABLES` and drop `scope_sql` into each
+      query, then flip the flag on.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
       Security. Remaining: signed/immutable evidence bundles.
@@ -153,6 +158,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Multi-tenancy foundation (Phase 0)** — the org/workspace model,
+  shipped non-breaking. New `orgs` table + `users.org_id` (migrated); a
+  bootstrapped default workspace that every existing/seeded user joins, so
+  single-tenant installs are unchanged. The authenticated principal carries
+  `org_id` (defaulted when unset); `/orgs/current` shows the caller's workspace
+  (+ member count + isolation status), `/orgs` CRUD lets an admin stand up
+  tenants (config.manage). The *breaking* half — isolating every data table by
+  org_id — is **staged, not enforced**: `dashboard_api/tenancy.py` holds the
+  pure, unit-tested seam (`scope_sql`, `org_of`, `TENANT_TABLES` checklist)
+  gated behind `DASHBOARD_MULTI_TENANT` (default off), so it can be wired into
+  queries table-by-table later without touching this foundation — `main` stays
+  green. Frontend: a Workspace card on Config → General. Tested: workspace
+  lifecycle, membership inheritance, viewer can't manage the directory, and the
+  scope helper no-ops off / scopes on.
 
 - **2026-06-10 · RBAC depth (Phase 0)** — authorization is now a capability
   matrix, not scattered role lists. `permissions.py` maps the four roles to

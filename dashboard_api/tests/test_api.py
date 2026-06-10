@@ -1440,6 +1440,61 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_workspace_foundation(client, auth):
+    """Multi-tenancy foundation: every user is in a workspace, admins manage the
+    org directory, and new users inherit the creator's workspace. Data is not
+    yet org-isolated (enforcement off), which keeps this non-breaking."""
+    from dashboard_api.tenancy import DEFAULT_ORG_ID
+    cur = client.get("/orgs/current", headers=auth).json()
+    assert cur["id"] == DEFAULT_ORG_ID and cur["users"] >= 1
+    assert cur["isolationEnforced"] is False  # staged, not enforced
+    # the authenticated principal carries workspace membership
+    assert client.get("/auth/me", headers=auth).json()["org_id"] == DEFAULT_ORG_ID
+
+    # admin can create + list + rename workspaces
+    created = client.post("/orgs", json={"name": "Globex MSSP Tenant", "plan": "mssp"}, headers=auth)
+    assert created.status_code == 201, created.text
+    oid = created.json()["id"]
+    assert any(o["id"] == oid for o in client.get("/orgs", headers=auth).json())
+    assert client.patch(f"/orgs/{oid}", json={"status": "suspended"}, headers=auth).json()["status"] == "suspended"
+    assert client.patch("/orgs/missing", json={"name": "x"}, headers=auth).status_code == 404
+
+    # a newly-created user inherits the creator's (default) workspace
+    u = client.post("/users", json={"email": "ws.user@threatorbit.space", "name": "WS User",
+                                    "role": "analyst", "password": "Password123!"}, headers=auth)
+    assert u.json()["org_id"] == DEFAULT_ORG_ID
+    client.delete(f"/users/{u.json()['id']}", headers=auth)
+
+    # viewers can see their workspace but not the directory / management
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.get("/orgs/current", headers=viewer).status_code == 200
+    assert client.get("/orgs", headers=viewer).status_code == 403
+    assert client.post("/orgs", json={"name": "x"}, headers=viewer).status_code == 403
+
+
+def test_tenancy_scope_helper_units():
+    """The staged isolation seam is a no-op while enforcement is off, and emits
+    a real org filter when on — so wiring it into queries later is safe."""
+    import importlib
+    from dashboard_api import tenancy
+    # default (enforcement off) → no-op clause
+    clause, params = tenancy.scope_sql("org-x")
+    assert clause == "" and params == []
+    assert tenancy.enforced() is False
+    assert tenancy.org_of({"org_id": "org-7"}) == "org-7"
+    assert tenancy.org_of({}) == tenancy.DEFAULT_ORG_ID
+    # with enforcement toggled on, it produces a scoped filter (+ alias support)
+    import os
+    os.environ["DASHBOARD_MULTI_TENANT"] = "true"
+    try:
+        t2 = importlib.reload(tenancy)
+        c, p = t2.scope_sql("org-7", alias="a")
+        assert c == "AND a.org_id = ?" and p == ["org-7"] and t2.enforced() is True
+    finally:
+        os.environ["DASHBOARD_MULTI_TENANT"] = "false"
+        importlib.reload(tenancy)
+
+
 def test_rbac_permissions_matrix(client, auth):
     """Effective-permission introspection + the full role matrix."""
     me = client.get("/auth/permissions", headers=auth).json()

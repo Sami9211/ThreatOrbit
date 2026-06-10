@@ -14,6 +14,7 @@ import {
   fetchApiKeys, createApiKey, revokeApiKey,
   fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
   fetchEngineStatus, controlEngine, enforceRetention,
+  fetchCurrentOrg, type Org,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
@@ -739,6 +740,36 @@ function AuditTrail() {
 }
 
 /* ── Live engine control ─────────────────────────────────────────── */
+function WorkspaceCard() {
+  const [org, setOrg] = useState<Org | null>(null)
+  useEffect(() => { fetchCurrentOrg().then(setOrg).catch(() => {}) }, [])
+  return (
+    <Section title="Workspace" icon={Globe} color="#34F5C5">
+      {!org ? (
+        <p className="text-xs text-ink-600">Loading workspace…</p>
+      ) : (
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex-1 min-w-[180px]">
+            <p className="text-sm font-semibold text-white">{org.name}</p>
+            <p className="text-[11px] text-ink-500 mt-0.5 font-mono">
+              {org.slug} · {org.plan} plan · {org.users ?? 0} member{org.users === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className={cn('text-[10px] px-2 py-1 rounded-full border font-medium',
+              org.isolationEnforced
+                ? 'text-safe border-safe/30 bg-safe/10'
+                : 'text-ink-400 border-white/10 bg-white/5')}>
+              {org.isolationEnforced ? 'Tenant isolation: enforced' : 'Single-tenant'}
+            </span>
+            <p className="text-[10px] text-ink-700 mt-1">Per-tenant data isolation rolls out next</p>
+          </div>
+        </div>
+      )}
+    </Section>
+  )
+}
+
 function LiveEngineCard() {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -927,6 +958,9 @@ export default function ConfigPage() {
         <div className="flex-1 min-w-0 space-y-5">
           {tab === 'general' && (
             <>
+              {/* ── Workspace (multi-tenancy) ───────────────────────── */}
+              <WorkspaceCard />
+
               {/* ── Live Processing Engine ──────────────────────────── */}
               <LiveEngineCard />
 
