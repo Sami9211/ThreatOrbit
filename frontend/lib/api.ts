@@ -214,14 +214,19 @@ export interface Case {
 export interface Playbook {
   id: string
   name: string
+  category: string
   trigger: string
+  triggerType: 'auto' | 'manual'
+  triggerMatch: Record<string, unknown>
   description: string
   runs: number
   successRate: number
   avgTime: number
   lastRun: string | null
+  lastRunStatus: string
   status: string
-  steps: Array<{ name: string; type: string; status: string; duration: number }>
+  enabled: number
+  steps: Array<{ kind?: string; name: string; type: string; status: string; duration: number; params?: Record<string, unknown> }>
 }
 
 export interface Integration {
@@ -711,8 +716,52 @@ export const addCaseNote = (id: string, content: string, type = 'manual') =>
 export const patchCaseTask = (caseId: string, taskId: string, body: { status?: string; assignee?: string; notes?: string }) =>
   api<Case>(`/soar/cases/${caseId}/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const fetchPlaybooks = () => api<Playbook[]>('/soar/playbooks')
-export const runPlaybook = (id: string) =>
-  api<Playbook>(`/soar/playbooks/${id}/run`, { method: 'POST' })
+
+// ── Playbook execution engine ────────────────────────────────────────
+export interface PlaybookRunStep {
+  idx: number; kind: string | null; name: string
+  status: 'success' | 'skipped' | 'failed' | 'pending-approval'
+  detail: string; ts: string
+}
+export interface PlaybookRun {
+  id: string; playbookId: string; playbookName: string | null
+  ts: string; finished: string | null
+  status: 'success' | 'failed' | 'awaiting-approval' | 'rejected'
+  trigger: 'manual' | 'auto'; actor: string | null; alertId: string | null
+  currentStep: number
+  context: { alert?: Record<string, unknown> | null; entity?: { type: string; value: string } | null; caseId?: string | null }
+  steps: PlaybookRunStep[]
+}
+export const runPlaybook = (id: string, opts?: { alertId?: string }) =>
+  api<Playbook & { run: PlaybookRun }>(`/soar/playbooks/${id}/run`, {
+    method: 'POST',
+    ...(opts?.alertId ? { body: JSON.stringify({ alert_id: opts.alertId }) } : {}),
+  })
+export const dryRunPlaybook = (id: string, alertId?: string) =>
+  api<{ dryRun: boolean; run: PlaybookRun }>(`/soar/playbooks/${id}/run`, {
+    method: 'POST',
+    body: JSON.stringify({ dry_run: true, ...(alertId ? { alert_id: alertId } : {}) }),
+  })
+export const fetchPlaybookRuns = (playbookId: string, limit = 20) =>
+  api<PlaybookRun[]>(`/soar/playbooks/${playbookId}/runs?limit=${limit}`)
+export const fetchSoarRuns = (status?: string, limit = 30) =>
+  api<{ items: PlaybookRun[]; awaitingApproval: number }>(
+    `/soar/runs?limit=${limit}${status ? `&status=${status}` : ''}`)
+export const approvePlaybookRun = (runId: string) =>
+  api<PlaybookRun>(`/soar/runs/${runId}/approve`, { method: 'POST' })
+export const rejectPlaybookRun = (runId: string) =>
+  api<PlaybookRun>(`/soar/runs/${runId}/reject`, { method: 'POST' })
+export const updatePlaybook = (id: string, body: {
+  enabled?: boolean; steps?: Array<{ kind: string; name: string; params?: Record<string, unknown> }>
+  triggerMatch?: Record<string, unknown>; triggerType?: string; description?: string
+}) =>
+  api<Playbook>(`/soar/playbooks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      enabled: body.enabled, steps: body.steps, trigger_match: body.triggerMatch,
+      trigger_type: body.triggerType, description: body.description,
+    }),
+  })
 export const fetchSoarIntegrations = () => api<Integration[]>('/soar/integrations')
 export const createIntegration = (body: {
   name: string; vendor?: string; category?: string; description?: string; actions?: string[]

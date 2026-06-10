@@ -1033,6 +1033,203 @@ def test_audit_export_and_retention(client, auth):
     assert "retentionDays" in ret and "purged" in ret
 
 
+def test_playbook_real_execution(client, auth):
+    """A playbook's steps act on the real stores: block IP → IOC blocklist,
+    case opened, triggering alert resolved, notification raised, run recorded."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "198.51.100.201"
+    line = f"Jan 10 08:00:00 web01 sshd[3]: Failed password for admin from {ip} port 4022"
+    client.post("/siem/ingest", json={"lines": [line]}, headers=auth)
+    alert = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]
+    assert alert["severity"] == "high"
+
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest Containment", "category": "Network",
+        "steps": [
+            {"kind": "enrich", "name": "Enrich"},
+            {"kind": "condition", "name": "High?",
+             "params": {"field": "severity", "op": "in", "value": "critical,high"}},
+            {"kind": "block_ip", "name": "Block"},
+            {"kind": "create_case", "name": "Case"},
+            {"kind": "close_alerts", "name": "Close"},
+            {"kind": "notify", "name": "Notify"},
+        ]}, headers=auth)
+    assert pb.status_code == 201, pb.text
+    pid = pb.json()["id"]
+
+    r = client.post(f"/soar/playbooks/{pid}/run", json={"alert_id": alert["id"]}, headers=auth)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["runs"] == 1 and out["last_run_status"] == "success"
+    run = out["run"]
+    assert run["status"] == "success" and run["trigger"] == "manual"
+    assert all(s["status"] == "success" for s in run["steps"]), run["steps"]
+
+    # the IP is now on the blocklist (critical IOC)
+    hit = client.get(f"/cti/lookup?value={ip}", headers=auth).json()
+    assert hit["found"] is True
+    blocked = client.get(f"/cti/iocs?q={ip}", headers=auth).json()["items"][0]
+    assert blocked["severity"] == "critical"
+    # a case was opened by the playbook (drives the real automation rate)
+    cases = client.get("/soar/cases", headers=auth).json()
+    assert any(c["playbook"] == "PyTest Containment" for c in cases)
+    # the triggering alert is resolved
+    after = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]
+    assert after["status"] == "resolved" and after["disposition"] == "true-positive"
+    # the run is in the history feeds
+    assert any(x["id"] == run["id"] for x in client.get(f"/soar/playbooks/{pid}/runs", headers=auth).json())
+    assert any(x["id"] == run["id"] for x in client.get("/soar/runs", headers=auth).json()["items"])
+    # a playbook notification was raised
+    notes = client.get("/notifications", headers=auth).json()["items"]
+    assert any(n["type"] == "playbook" for n in notes)
+
+
+def test_playbook_dry_run_no_side_effects(client, auth):
+    """Dry-run previews every step without writing anything."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "198.51.100.202"
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 08:10:00 web01 sshd[4]: Failed password for root from {ip} port 4023"]},
+        headers=auth)
+    alert = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest DryRun", "steps": [
+            {"kind": "block_ip", "name": "Block"},
+            {"kind": "create_case", "name": "Case"},
+        ]}, headers=auth).json()
+
+    cases_before = len(client.get("/soar/cases", headers=auth).json())
+    dr = client.post(f"/soar/playbooks/{pb['id']}/run",
+                     json={"dry_run": True, "alert_id": alert["id"]}, headers=auth).json()
+    assert dr["dryRun"] is True
+    assert all(s["status"] == "success" for s in dr["run"]["steps"])
+    assert "Would push" in dr["run"]["steps"][0]["detail"]
+    # nothing was written: no IOC, no case, no run counter, alert untouched
+    assert client.get(f"/cti/lookup?value={ip}", headers=auth).json()["found"] is False
+    assert len(client.get("/soar/cases", headers=auth).json()) == cases_before
+    assert client.get(f"/soar/playbooks/{pb['id']}", headers=auth).json()["runs"] == 0
+    assert client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]["status"] == "new"
+    assert client.get(f"/soar/playbooks/{pb['id']}/runs", headers=auth).json() == []
+
+
+def test_playbook_approval_flow(client, auth):
+    """An approval step pauses the run; approve resumes it, reject cancels it."""
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest Approval", "steps": [
+            {"kind": "approval", "name": "Gate", "params": {"message": "Sign-off required"}},
+            {"kind": "notify", "name": "After"},
+        ]}, headers=auth).json()
+
+    r1 = client.post(f"/soar/playbooks/{pb['id']}/run", headers=auth).json()
+    run1 = r1["run"]
+    assert run1["status"] == "awaiting-approval"
+    assert run1["steps"][0]["status"] == "pending-approval"
+    listed = client.get("/soar/runs?status=awaiting-approval", headers=auth).json()
+    assert listed["awaitingApproval"] >= 1 and any(x["id"] == run1["id"] for x in listed["items"])
+    # an approval notification was raised
+    notes = client.get("/notifications", headers=auth).json()["items"]
+    assert any(n["type"] == "approval" for n in notes)
+
+    approved = client.post(f"/soar/runs/{run1['id']}/approve", headers=auth).json()
+    assert approved["status"] == "success"
+    by_name = {s["name"]: s for s in approved["steps"]}
+    assert "Approved by" in by_name["Gate"]["detail"] and by_name["After"]["status"] == "success"
+    # approving a finished run is a conflict; unknown run 404
+    assert client.post(f"/soar/runs/{run1['id']}/approve", headers=auth).status_code == 409
+    assert client.post("/soar/runs/nope/approve", headers=auth).status_code == 404
+
+    # reject path
+    run2 = client.post(f"/soar/playbooks/{pb['id']}/run", headers=auth).json()["run"]
+    rejected = client.post(f"/soar/runs/{run2['id']}/reject", headers=auth).json()
+    assert rejected["status"] == "rejected"
+    steps = {s["name"]: s["status"] for s in rejected["steps"]}
+    assert steps["Gate"] == "failed" and steps["After"] == "skipped"
+
+
+def test_playbook_condition_gates_run(client, auth):
+    """A failed condition gates the run: later steps skip, run still succeeds."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "198.51.100.203"
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 08:20:00 web01 sshd[5]: Failed password for root from {ip} port 4024"]},
+        headers=auth)
+    alert = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]  # high
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest Gate", "steps": [
+            {"kind": "condition", "name": "Critical only",
+             "params": {"field": "severity", "op": "in", "value": "critical"}},
+            {"kind": "block_ip", "name": "Block"},
+        ]}, headers=auth).json()
+    run = client.post(f"/soar/playbooks/{pb['id']}/run",
+                      json={"alert_id": alert["id"]}, headers=auth).json()["run"]
+    assert run["status"] == "success"
+    assert "not met" in run["steps"][0]["detail"]
+    assert run["steps"][1]["status"] == "skipped"
+    # the gated block never happened
+    assert client.get(f"/cti/lookup?value={ip}", headers=auth).json()["found"] is False
+
+
+def test_playbook_auto_trigger(client, auth):
+    """The automation engine runs matching auto playbooks on fresh alerts, once per alert."""
+    from dashboard_api.engine import seed_builtin_rules
+    from dashboard_api.playbook_engine import auto_trigger_playbooks
+    from dashboard_api.db import get_conn
+    seed_builtin_rules()
+    ip = "198.51.100.204"
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 08:30:00 web01 sshd[6]: Failed password for root from {ip} port 4025"]},
+        headers=auth)
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest AutoResponder", "trigger_type": "auto",
+        "trigger_match": {"techniques": ["T1110"], "severities": ["high"]},
+        "steps": [{"kind": "notify", "name": "Ping"}]}, headers=auth).json()
+
+    with get_conn() as conn:
+        started, _ = auto_trigger_playbooks(conn, max_runs=10)
+        conn.commit()
+    assert started >= 1
+    runs = client.get(f"/soar/playbooks/{pb['id']}/runs", headers=auth).json()
+    assert runs and runs[0]["trigger"] == "auto" and runs[0]["alert_id"]
+    assert runs[0]["actor"] == "automation-engine"
+    # per-alert idempotency: across many passes (the engine throttles to one
+    # matching alert per playbook per pass), no alert ever gets two runs from
+    # the same playbook
+    for _ in range(8):
+        with get_conn() as conn:
+            auto_trigger_playbooks(conn, max_runs=10)
+            conn.commit()
+    runs = client.get(f"/soar/playbooks/{pb['id']}/runs?limit=100", headers=auth).json()
+    pairs = [(r["playbook_id"], r["alert_id"]) for r in runs]
+    assert len(pairs) == len(set(pairs))
+
+
+def test_playbook_crud_validation(client, auth):
+    """Step kinds are validated; steps are editable via PATCH."""
+    bad = client.post("/soar/playbooks", json={
+        "name": "Bad", "steps": [{"kind": "format_disk", "name": "x"}]}, headers=auth)
+    assert bad.status_code == 400
+    assert client.post("/soar/playbooks", json={
+        "name": "Bad2", "trigger_type": "sometimes", "steps": []}, headers=auth).status_code == 400
+    assert client.post("/soar/playbooks", json={
+        "name": "Bad3", "steps": [{"kind": "notify"}]}, headers=auth).status_code == 400
+
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest Editable", "steps": [{"kind": "notify", "name": "A"}]}, headers=auth).json()
+    upd = client.patch(f"/soar/playbooks/{pb['id']}", json={
+        "steps": [{"kind": "enrich", "name": "B"}, {"kind": "notify", "name": "C"}],
+        "trigger_type": "auto", "trigger_match": {"severities": ["critical"]}}, headers=auth)
+    assert upd.status_code == 200
+    body = upd.json()
+    assert [s["kind"] for s in body["steps"]] == ["enrich", "notify"]
+    assert body["trigger_match"] == {"severities": ["critical"]}
+    assert client.patch(f"/soar/playbooks/{pb['id']}", json={
+        "steps": [{"kind": "bogus", "name": "x"}]}, headers=auth).status_code == 400
+    assert client.patch("/soar/playbooks/missing", json={"enabled": False}, headers=auth).status_code == 404
+
+
 def test_ueba_entity_risk(client, auth):
     """UEBA: entities ranked by alert-derived risk, with drill-down timeline."""
     from dashboard_api.engine import seed_builtin_rules

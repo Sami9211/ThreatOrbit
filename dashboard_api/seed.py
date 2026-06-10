@@ -253,37 +253,26 @@ def _seed_log_sources(conn, rng):
 
 
 def _seed_playbooks(conn, rng):
-    defs = [
-        ("Phishing Email Triage", "Email", "Suspicious email reported", "auto"),
-        ("Ransomware Containment", "Endpoint", "Mass file encryption detected", "auto"),
-        ("Compromised Account Response", "Identity", "Impossible travel alert", "auto"),
-        ("Malware Detonation & Block", "Endpoint", "New malware hash observed", "auto"),
-        ("DDoS Mitigation", "Network", "Traffic anomaly threshold", "auto"),
-        ("Insider Threat Investigation", "Identity", "Manual escalation", "manual"),
-        ("C2 Beacon Isolation", "Network", "Known C2 IP beacon", "auto"),
-        ("Data Exfil Investigation", "Network", "Anomalous egress volume", "manual"),
-    ]
-    step_types = ["check", "action", "decision", "notify", "human", "sub-playbook"]
+    """Insert the canonical executable playbooks with showcase run counters.
+    Step definitions come from the playbook engine, so demo and live mode run
+    the exact same real automation content."""
+    from dashboard_api.playbook_engine import PLAYBOOK_DEFS, display_steps
     pb_names = []
-    for name, cat, trig, ttype in defs:
-        nsteps = rng.randint(4, 8)
-        steps = []
-        for i in range(nsteps):
-            st = rng.choice(step_types) if i not in (0, nsteps - 1) else ("check" if i == 0 else "notify")
-            steps.append({"name": f"{st.title()} step {i+1}", "type": st,
-                          "status": "completed", "duration": rng.randint(1, 45),
-                          "note": ""})
+    for d in PLAYBOOK_DEFS:
+        steps = display_steps(d["steps"])
         runs = rng.randint(20, 900)
         sr = round(rng.uniform(0.82, 0.99), 3)
-        avg = int(sum(s["duration"] for s in steps) * rng.uniform(0.9, 1.4))
+        avg = int(len(steps) * rng.uniform(8, 25))
         conn.execute(
             "INSERT INTO playbooks (id,name,category,trigger,trigger_type,description,runs,success_rate,"
-            "avg_time,last_run,last_run_status,status,enabled,steps) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), name, cat, trig, ttype, f"Automated {name.lower()} workflow.",
-             runs, sr, avg, _ago(rng, 72), rng.choice(["success", "success", "success", "failure"]),
-             "idle", 1 if rng.random() > 0.1 else 0, dumps(steps)),
+            "avg_time,last_run,last_run_status,status,enabled,steps,trigger_match) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), d["name"], d["category"], d["trigger"], d["trigger_type"],
+             d["description"], runs, sr, avg, _ago(rng, 72),
+             rng.choice(["success", "success", "success", "failure"]),
+             "idle", 1, dumps(steps), dumps(d["trigger_match"])),
         )
-        pb_names.append(name)
+        pb_names.append(d["name"])
     return pb_names
 
 

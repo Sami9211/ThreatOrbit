@@ -184,7 +184,8 @@ def revoke_api_key(key_id: str, actor: dict = Depends(require_role("admin", "man
 
 # ── Webhooks ──────────────────────────────────────────────────────────────────
 
-_WEBHOOK_EVENTS = {"alert.created", "incident.resolved", "ioc.confirmed", "case.created", "playbook.failed"}
+_WEBHOOK_EVENTS = {"alert.created", "incident.resolved", "ioc.confirmed", "case.created",
+                   "playbook.failed", "playbook.completed", "playbook.action"}
 
 
 @router.get("/webhooks")

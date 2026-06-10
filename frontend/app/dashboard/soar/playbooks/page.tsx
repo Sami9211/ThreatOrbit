@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchPlaybooks, runPlaybook, type Playbook as ApiPlaybook } from '@/lib/api'
+import { fetchPlaybooks, runPlaybook, updatePlaybook, type Playbook as ApiPlaybook } from '@/lib/api'
+import PlaybookRunsPanel from '@/components/dashboard/PlaybookRunsPanel'
 import {
   Zap, CheckCircle, RefreshCw, AlertTriangle, X, Shield, User,
   GitBranch, MessageSquare, Activity, Play, Edit2, Clock,
@@ -602,20 +603,26 @@ export default function PlaybooksPage() {
       if (data.length > 0) {
         const mapped = data.map((p) => {
           const seed = PLAYBOOKS.find((s) => s.id === p.id || s.name === p.name)
+          const apiSteps = (p.steps ?? []).map((s) => ({
+            name: s.name, type: (s.type ?? 'action') as StepType,
+            status: (s.status ?? 'idle') as StepStatus, duration: `${s.duration ?? 5}s`,
+          }))
           return {
             id: p.id,
             name: p.name,
-            category: (seed?.category ?? 'Network') as FilterCat,
+            category: p.category || seed?.category || 'Network',
             trigger: p.trigger,
-            triggerType: 'auto' as const,
+            triggerType: (p.triggerType === 'manual' ? 'manual' : 'auto') as 'auto' | 'manual',
             stepsCount: p.steps?.length ?? seed?.stepsCount ?? 0,
             estimatedRuntime: `${p.avgTime}s`,
             successRate: p.successRate,
             lastRun: p.lastRun ?? 'Never',
-            lastRunStatus: (p.status === 'active' ? 'success' : 'idle') as RunStatus,
+            lastRunStatus: (p.lastRunStatus === 'failure' ? 'failure'
+              : p.lastRunStatus === 'running' ? 'running'
+              : p.lastRunStatus === 'success' ? 'success' : 'idle') as RunStatus,
             runCount: p.runs,
-            enabled: p.status === 'active',
-            steps: seed?.steps ?? p.steps?.map((s) => ({ name: s.name, type: s.type as StepType, status: s.status as StepStatus, duration: `${s.duration}s` })) ?? [],
+            enabled: p.enabled === 1,
+            steps: apiSteps.length > 0 ? apiSteps : (seed?.steps ?? []),
           }
         })
         setPlaybooks(mapped)
@@ -629,7 +636,12 @@ export default function PlaybooksPage() {
 
   function toggleEnabled(id: string, e: React.MouseEvent) {
     e.stopPropagation()
-    setPlaybooks((prev) => prev.map((p) => p.id === id ? { ...p, enabled: !p.enabled } : p))
+    const prev = playbooks.find((p) => p.id === id)?.enabled ?? true
+    // Optimistic flip, persisted to the backend; revert on failure.
+    setPlaybooks((ps) => ps.map((p) => p.id === id ? { ...p, enabled: !prev } : p))
+    updatePlaybook(id, { enabled: !prev }).catch(() => {
+      setPlaybooks((ps) => ps.map((p) => p.id === id ? { ...p, enabled: prev } : p))
+    })
   }
 
   async function runPlaybookById(id: string, e: React.MouseEvent) {
@@ -637,12 +649,16 @@ export default function PlaybooksPage() {
     if (runningId) return
     setRunningId(id)
     try {
+      // Real execution: the engine runs every step and records the run —
+      // results land in the Run history panel below.
       const updated = await runPlaybook(id)
+      const runStatus = updated.run?.status
       setPlaybooks((prev) => prev.map((p) => p.id === id ? {
         ...p,
         runCount: updated.runs,
         lastRun: 'Just now',
-        lastRunStatus: 'success' as RunStatus,
+        lastRunStatus: (runStatus === 'failed' ? 'failure'
+          : runStatus === 'awaiting-approval' ? 'running' : 'success') as RunStatus,
       } : p))
     } catch {
       setPlaybooks((prev) => prev.map((p) => p.id === id ? { ...p, lastRunStatus: 'failure' as RunStatus } : p))
@@ -751,6 +767,11 @@ export default function PlaybooksPage() {
               ))}
             </div>
           )}
+
+          {/* ── Run history + approvals (live, per-step audit trail) ── */}
+          <div className="mt-6">
+            <PlaybookRunsPanel />
+          </div>
         </div>
       </div>
 

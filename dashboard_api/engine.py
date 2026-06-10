@@ -468,9 +468,17 @@ def process_tick(max_events: int = 6) -> dict:
             )
             dark += 1
         cases = _maybe_escalate_case(conn)
+        # SOAR automation: auto-trigger playbooks whose criteria match new alerts.
+        from dashboard_api.playbook_engine import auto_trigger_playbooks
+        pb_runs, pb_dispatches = auto_trigger_playbooks(conn)
         _emit_notifications(conn)
         conn.commit()
-    return {"events": n, "alerts": alerts, "iocs": iocs, "darkWeb": dark, "casesEscalated": cases}
+    if pb_dispatches:
+        from dashboard_api.webhooks import dispatch
+        for event, payload in pb_dispatches:
+            dispatch(event, payload)
+    return {"events": n, "alerts": alerts, "iocs": iocs, "darkWeb": dark,
+            "casesEscalated": cases, "playbookRuns": pb_runs}
 
 
 def _emit_notifications(conn):

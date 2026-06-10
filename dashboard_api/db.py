@@ -20,6 +20,7 @@ JSON_COLUMNS = {
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
     "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
+    "context", "trigger_match",
 }
 
 
@@ -227,7 +228,23 @@ CREATE TABLE IF NOT EXISTS playbooks (
     last_run_status   TEXT NOT NULL DEFAULT 'idle',
     status            TEXT NOT NULL DEFAULT 'idle',
     enabled           INTEGER NOT NULL DEFAULT 1,
-    steps             TEXT NOT NULL DEFAULT '[]'
+    steps             TEXT NOT NULL DEFAULT '[]',
+    trigger_match     TEXT NOT NULL DEFAULT '{}'   -- auto-run criteria {severities,techniques,rule}
+);
+
+CREATE TABLE IF NOT EXISTS playbook_runs (
+    id            TEXT PRIMARY KEY,
+    playbook_id   TEXT NOT NULL,
+    playbook_name TEXT,
+    ts            TEXT NOT NULL,
+    finished      TEXT,
+    status        TEXT NOT NULL DEFAULT 'running',  -- success|failed|awaiting-approval|rejected
+    trigger       TEXT NOT NULL DEFAULT 'manual',   -- manual|auto
+    actor         TEXT,
+    alert_id      TEXT,
+    current_step  INTEGER NOT NULL DEFAULT 0,
+    context       TEXT NOT NULL DEFAULT '{}',
+    steps         TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS integrations (
@@ -502,6 +519,7 @@ _MIGRATIONS = [
     ("alerts", "respond_latency_sec", "INTEGER"),
     ("detection_rules", "definition", "TEXT NOT NULL DEFAULT '{}'"),
     ("detection_rules", "mitre_tactic_id", "TEXT"),
+    ("playbooks", "trigger_match", "TEXT NOT NULL DEFAULT '{}'"),
 ]
 
 

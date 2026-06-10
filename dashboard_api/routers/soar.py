@@ -194,11 +194,71 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(current_use
     return updated_case
 
 
+class PlaybookCreate(BaseModel):
+    name: str
+    category: str = "Network"
+    trigger: str | None = None
+    trigger_type: str = "manual"
+    description: str | None = None
+    steps: list[dict] = []
+    trigger_match: dict = {}
+
+
+class PlaybookUpdate(BaseModel):
+    enabled: bool | None = None
+    steps: list[dict] | None = None
+    trigger_match: dict | None = None
+    trigger_type: str | None = None
+    description: str | None = None
+
+
+class PlaybookRunBody(BaseModel):
+    dry_run: bool = False
+    alert_id: str | None = None
+
+
+def _validate_steps(steps: list[dict]):
+    from dashboard_api.playbook_engine import STEP_KINDS
+    for i, s in enumerate(steps):
+        if not isinstance(s, dict) or s.get("kind") not in STEP_KINDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Step {i+1}: kind must be one of {sorted(STEP_KINDS)}")
+        if not (s.get("name") or "").strip():
+            raise HTTPException(status_code=400, detail=f"Step {i+1}: name is required")
+
+
 @router.get("/playbooks")
 def list_playbooks():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM playbooks ORDER BY runs DESC").fetchall()
     return rows_to_dicts(rows)
+
+
+@router.post("/playbooks", status_code=201)
+def create_playbook(body: PlaybookCreate, user: dict = Depends(current_user)):
+    import uuid
+    from dashboard_api.playbook_engine import display_steps
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Playbook name is required")
+    if body.trigger_type not in ("auto", "manual"):
+        raise HTTPException(status_code=400, detail="trigger_type must be auto|manual")
+    _validate_steps(body.steps)
+    pid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO playbooks (id,name,category,trigger,trigger_type,description,runs,"
+            "success_rate,avg_time,last_run,last_run_status,status,enabled,steps,trigger_match) "
+            "VALUES (?,?,?,?,?,?,0,0,30,NULL,'idle','idle',1,?,?)",
+            (pid, name, body.category, body.trigger or "Manual", body.trigger_type,
+             body.description or f"{name} workflow.",
+             dumps(display_steps(body.steps)), dumps(body.trigger_match)),
+        )
+        audit(conn, user["email"], "playbook.create", pid, f"name={name} steps={len(body.steps)}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM playbooks WHERE id=?", (pid,)).fetchone()
+    return row_to_dict(row)
 
 
 @router.get("/playbooks/{playbook_id}")
@@ -210,11 +270,42 @@ def get_playbook(playbook_id: str):
     return row_to_dict(row)
 
 
+@router.patch("/playbooks/{playbook_id}")
+def update_playbook(playbook_id: str, body: PlaybookUpdate, user: dict = Depends(current_user)):
+    from dashboard_api.playbook_engine import display_steps
+    fields, values = [], []
+    if body.enabled is not None:
+        fields.append("enabled=?"); values.append(1 if body.enabled else 0)
+    if body.steps is not None:
+        _validate_steps(body.steps)
+        fields.append("steps=?"); values.append(dumps(display_steps(body.steps)))
+    if body.trigger_match is not None:
+        fields.append("trigger_match=?"); values.append(dumps(body.trigger_match))
+    if body.trigger_type is not None:
+        if body.trigger_type not in ("auto", "manual"):
+            raise HTTPException(status_code=400, detail="trigger_type must be auto|manual")
+        fields.append("trigger_type=?"); values.append(body.trigger_type)
+    if body.description is not None:
+        fields.append("description=?"); values.append(body.description)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    values.append(playbook_id)
+    with get_conn() as conn:
+        cur = conn.execute(f"UPDATE playbooks SET {','.join(fields)} WHERE id=?", values)
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Playbook not found")
+        audit(conn, user["email"], "playbook.update", playbook_id)
+        conn.commit()
+        row = conn.execute("SELECT * FROM playbooks WHERE id=?", (playbook_id,)).fetchone()
+    return row_to_dict(row)
+
+
 @router.post("/playbooks/{playbook_id}/run")
-def run_playbook(playbook_id: str, user: dict = Depends(current_user)):
-    """Simulate a playbook execution: bump run count, stamp last_run, record audit."""
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+def run_playbook(playbook_id: str, body: PlaybookRunBody | None = None,
+                 user: dict = Depends(current_user)):
+    """Execute the playbook's steps for real (or preview them with dry_run)."""
+    from dashboard_api.playbook_engine import execute_playbook
+    body = body or PlaybookRunBody()
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM playbooks WHERE id=?", (playbook_id,)).fetchone()
         if not row:
@@ -223,14 +314,73 @@ def run_playbook(playbook_id: str, user: dict = Depends(current_user)):
             dispatch("playbook.failed", {"id": playbook_id, "name": row["name"],
                                          "reason": "disabled", "actor": user["email"]})
             raise HTTPException(status_code=409, detail="Playbook is disabled")
-        conn.execute(
-            "UPDATE playbooks SET runs=runs+1, last_run=?, last_run_status='success', status='idle' WHERE id=?",
-            (now, playbook_id),
-        )
-        audit(conn, user["email"], "playbook.run", playbook_id, f"name={row['name']}")
+        run = execute_playbook(conn, dict(row), actor=user["email"], trigger="manual",
+                               alert_id=body.alert_id, dry_run=body.dry_run)
         conn.commit()
         updated = conn.execute("SELECT * FROM playbooks WHERE id=?", (playbook_id,)).fetchone()
-    return row_to_dict(updated)
+    for event, payload in run.pop("dispatches", []):
+        dispatch(event, payload)
+    if run["status"] in ("success", "failed") and not run.get("dryRun"):
+        dispatch("playbook.completed", {"id": playbook_id, "name": updated["name"],
+                                        "status": run["status"], "actor": user["email"]})
+    if body.dry_run:
+        return {"dryRun": True, "run": run}
+    return {**row_to_dict(updated), "run": run}
+
+
+@router.get("/playbooks/{playbook_id}/runs")
+def list_playbook_runs(playbook_id: str, limit: int = 20):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM playbook_runs WHERE playbook_id=? ORDER BY ts DESC LIMIT ?",
+            (playbook_id, min(limit, 100))).fetchall()
+    return rows_to_dicts(rows)
+
+
+@router.get("/runs")
+def list_runs(status: str | None = None, limit: int = 30):
+    clauses, params = [], []
+    if status:
+        clauses.append("status=?"); params.append(status)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM playbook_runs {where} ORDER BY ts DESC LIMIT ?",
+            params + [min(limit, 100)]).fetchall()
+        pending = conn.execute(
+            "SELECT COUNT(*) AS n FROM playbook_runs WHERE status='awaiting-approval'").fetchone()["n"]
+    return {"items": rows_to_dicts(rows), "awaitingApproval": pending}
+
+
+@router.post("/runs/{run_id}/approve")
+def approve_run(run_id: str, user: dict = Depends(current_user)):
+    from dashboard_api.playbook_engine import resolve_approval
+    with get_conn() as conn:
+        try:
+            run = resolve_approval(conn, run_id, approve=True, actor=user["email"])
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        conn.commit()
+    for event, payload in run.pop("dispatches", []):
+        dispatch(event, payload)
+    return run
+
+
+@router.post("/runs/{run_id}/reject")
+def reject_run(run_id: str, user: dict = Depends(current_user)):
+    from dashboard_api.playbook_engine import resolve_approval
+    with get_conn() as conn:
+        try:
+            run = resolve_approval(conn, run_id, approve=False, actor=user["email"])
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        conn.commit()
+    run.pop("dispatches", None)
+    return run
 
 
 class IntegrationCreate(BaseModel):

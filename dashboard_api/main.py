@@ -112,7 +112,15 @@ def startup():
     if DATA_MODE == "live":
         from dashboard_api.seed import bootstrap_live
         from dashboard_api.connectors import seed_builtin_connectors
-        if bootstrap_live():
+        first_boot = bootstrap_live()
+        # Built-in content first (idempotent), so the engine's detection rules
+        # and the SOAR automation playbooks exist before any tick runs.
+        seed_builtin_connectors()
+        from dashboard_api.engine import seed_builtin_rules
+        seed_builtin_rules()
+        from dashboard_api.playbook_engine import seed_builtin_playbooks
+        seed_builtin_playbooks()
+        if first_boot:
             logger.info("Live mode: bootstrapped admin + settings (no demo data)")
             # Prime the stores so the first login isn't an empty screen — these
             # are live engine ticks (real pipeline), not static seed data.
@@ -127,9 +135,6 @@ def startup():
                 logger.info("Live mode: primed initial telemetry via the engine")
             except Exception:
                 logger.exception("Initial engine prime failed")
-        seed_builtin_connectors()
-        from dashboard_api.engine import seed_builtin_rules
-        seed_builtin_rules()
         threading.Thread(target=_connector_scheduler, daemon=True).start()
         threading.Thread(target=_engine_loop, daemon=True).start()
         logger.info("Live mode: connector scheduler + live engine started")

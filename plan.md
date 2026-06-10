@@ -77,17 +77,24 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 2 — SOAR depth (orchestration & response)
 
-- [ ] **Visual playbook builder** — drag-and-drop nodes (trigger, condition,
-      action, human-approval, loop, sub-playbook), versioning, dry-run.
-- [ ] **Real action integrations** — actually call EDR/firewall/ticketing APIs
-      (CrowdStrike isolate host, Palo block IP, Jira create issue, etc.) with
-      credentialled connectors and an action audit trail.
-- [ ] **Automation triggers** — run a playbook automatically on alert/case
-      criteria; SLA-driven escalation.
+- [~] **Visual playbook builder** — the execution side is DONE (see CHANGELOG):
+      playbooks are authorable step definitions (11 executable kinds incl.
+      condition + human-approval gates), validated CRUD, and dry-run preview.
+      Remaining: the drag-and-drop canvas UI (node editor) + versioning.
+- [~] **Real action integrations** — playbook actions are recorded on connected
+      integrations (block_ip → firewall, isolate_host → EDR, disable_user →
+      IdP) with a full per-step audit trail. Remaining: real outbound API
+      calls with credentialled connectors (CrowdStrike/Palo/Jira adapters).
+- [x] **Automation triggers** — DONE (see CHANGELOG): enabled auto playbooks
+      with `trigger_match` criteria (severities/techniques/rule) run
+      automatically on matching fresh alerts, once per alert, throttled per
+      engine tick.
 - [ ] **Case management depth** — linked cases, merge/split, MITRE-mapped
       timelines, evidence chain-of-custody, collaboration/assignment, SLA
       breach tracking.
-- [ ] **Response approvals** — human-in-the-loop gates with notifications.
+- [x] **Response approvals** — DONE (see CHANGELOG): `approval` steps pause the
+      run, raise a notification, and resume/cancel via approve/reject — in the
+      Run history panel.
 - [ ] **Post-incident** — auto-generated incident report + lessons-learned
       template (ties into the reporting engine).
 
@@ -133,6 +140,25 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · SOAR playbook execution engine (Phase 2)** — playbooks now
+  actually run. `playbook_engine.py`: 11 executable step kinds that act on the
+  real stores — enrich (IOC + alert history), condition gate, block_ip (IOC
+  blocklist + firewall-integration action), isolate_host (asset tag + EDR
+  action), disable_user (IdP action), create_case (real SOAR case, feeds the
+  automation rate), add_note, close_alerts (resolve triggering/same-entity
+  alerts), notify, webhook, and approval (human-in-the-loop pause →
+  approve/reject resumes/cancels, with notification). Every execution persists
+  to `playbook_runs` with a per-step status/detail audit trail; dry-run
+  previews all steps with zero writes. Playbook CRUD validates step kinds;
+  **automation triggers**: auto playbooks with `trigger_match`
+  (severities/techniques/rule) run on matching fresh alerts — once per alert,
+  throttled per tick — wired into the live engine. The 8 canonical playbooks
+  (shared demo/live) carry real step definitions. Frontend: Run history panel
+  on SOAR → Playbooks (live, expandable per-step results, approve/reject
+  inline), enable-toggle persisted, run button reports real outcomes. New
+  webhook events `playbook.completed`/`playbook.action`. Verified: live boot →
+  20 ticks → 40 auto-runs, 41 alerts auto-contained, 33 playbook-opened cases.
 
 - **2026-06-10 · ECS field normalization (Phase 1)** — detection rules and event
   searches are now vendor-neutral. `rule_engine.ECS_ALIASES` + `canonical_field`
