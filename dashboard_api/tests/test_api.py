@@ -865,3 +865,22 @@ def test_engine_pause_resume(client, auth):
     st = client.get("/config/engine", headers=auth).json()
     assert st["enabled"] is False
     client.post("/config/engine", json={"enabled": True}, headers=auth)
+
+
+def test_reports_all_kinds(client, auth):
+    kinds = [k["kind"] for k in client.get("/reports/kinds", headers=auth).json()]
+    assert {"executive", "siem", "soar", "cti", "assets", "darkweb"} <= set(kinds)
+    for kind in kinds:
+        r = client.get(f"/reports/{kind}?period=weekly", headers=auth)
+        assert r.status_code == 200, f"{kind}: {r.text}"
+        rep = r.json()
+        assert rep["meta"]["kind"] == kind
+        assert "headline" in rep["summary"] and "narrative" in rep["summary"]
+        assert isinstance(rep["findings"], list) and isinstance(rep["recommendations"], list)
+        assert rep["meta"]["period"] and rep["meta"]["generatedAt"]
+    # custom range requires a from date
+    assert client.get("/reports/siem?period=custom", headers=auth).status_code == 400
+    ok = client.get("/reports/siem?period=custom&from=2020-01-01T00:00:00", headers=auth)
+    assert ok.status_code == 200
+    # daily window works on a fresh demo DB
+    assert client.get("/reports/executive?period=daily", headers=auth).status_code == 200

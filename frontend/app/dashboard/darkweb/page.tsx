@@ -11,6 +11,7 @@ import {
   fetchDarkWebFindings, fetchDarkWebSummary, updateDarkWebFinding,
   type DarkWebFinding, type DarkWebSummary,
 } from '@/lib/api'
+import ReportButton from '@/components/dashboard/ReportButton'
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   'credential-leak': { label: 'Credential Leak',  icon: KeyRound,      color: '#FF2E97' },
@@ -92,10 +93,13 @@ export default function DarkWebPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">External exposure — leaked credentials, data sales, brand mentions & threat-actor chatter</p>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-600" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search entity or title…"
-            className="w-56 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40" />
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-600" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search entity or title…"
+              className="w-56 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40" />
+          </div>
+          <ReportButton kind="darkweb" label="Dark Web Exposure" />
         </div>
       </div>
 

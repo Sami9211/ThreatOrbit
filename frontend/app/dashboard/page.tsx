@@ -9,6 +9,8 @@ import {
   Bug, CheckCircle2, XCircle, Flame, BookOpen, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { openDetail } from '@/components/dashboard/DetailDrawer'
+import ReportButton from '@/components/dashboard/ReportButton'
 import WorldMap from '@/components/dashboard/WorldMap'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import {
@@ -229,7 +231,16 @@ function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
 
       <div className="divide-y divide-white/4">
         {incidents.map((inc) => (
-          <div key={inc.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/2 transition-colors cursor-pointer group">
+          <div key={inc.id}
+            onClick={() => openDetail({
+              title: inc.title, subtitle: `${inc.id} · ${inc.category}`, severity: inc.severity,
+              rows: [
+                { label: 'Status', value: inc.status }, { label: 'Category', value: inc.category },
+                { label: 'Assigned', value: inc.assigned }, { label: 'Age', value: timeAgo(inc.age) },
+              ],
+              actions: [{ label: 'Open in SOAR cases', href: '/dashboard/soar' }],
+            })}
+            className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/2 transition-colors cursor-pointer group">
             <span className="w-1.5 h-1.5 rounded-full shrink-0 ring-2 ring-current/10"
               style={{ background: SEVERITY_COLOR[inc.severity as keyof typeof SEVERITY_COLOR] }}
             />
@@ -262,7 +273,16 @@ function RecentAlerts({ alerts }: { alerts: OverviewAlert[] }) {
       </div>
       <div className="divide-y divide-white/4">
         {alerts.map((a) => (
-          <div key={a.id} className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
+          <div key={a.id}
+            onClick={() => openDetail({
+              title: a.title, subtitle: `Alert ${a.id}`, severity: a.severity,
+              rows: [
+                { label: 'Source', value: a.src, mono: true }, { label: 'Severity', value: a.severity },
+                { label: 'Time', value: a.time },
+              ],
+              actions: [{ label: 'Open in SIEM alert queue', href: '/dashboard/siem' }],
+            })}
+            className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
             <span
               className="mt-1 w-2 h-2 rounded-full shrink-0 ring-2 ring-current/20"
               style={{ color: SEVERITY_COLOR[a.severity as keyof typeof SEVERITY_COLOR], background: SEVERITY_COLOR[a.severity as keyof typeof SEVERITY_COLOR] }}
@@ -594,7 +614,18 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              className="flex items-center gap-3 px-4 py-2.5 border-b border-white/4 hover:bg-white/2"
+              onClick={() => openDetail({
+                title: `${f.type} · ${f.ip}`, subtitle: f.detail, severity: f.severity,
+                rows: [
+                  { label: 'Type', value: f.type }, { label: 'Indicator', value: f.ip, mono: true },
+                  { label: 'Region', value: f.region }, { label: 'Detail', value: f.detail },
+                ],
+                actions: [
+                  { label: 'Look up in CTI scanner', href: '/dashboard/scanner' },
+                  { label: 'Open threat feeds', href: '/dashboard/feeds' },
+                ],
+              })}
+              className="flex items-center gap-3 px-4 py-2.5 border-b border-white/4 hover:bg-white/2 cursor-pointer"
             >
               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: SEVERITY_COLOR[f.severity] }} />
               <span className="text-[11px] font-medium text-ink-200 w-24 shrink-0 truncate">{f.type}</span>
@@ -633,9 +664,12 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
           <h1 className="font-display text-2xl font-bold text-white">Security Status</h1>
           <p className="text-sm text-ink-400 mt-1">Your organization's security at a glance</p>
         </div>
-        <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
-          <Eye className="w-3 h-3" /> Normal mode
-        </span>
+        <div className="flex items-center gap-2">
+          <ReportButton kind="executive" label="Executive Summary" />
+          <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
+            <Eye className="w-3 h-3" /> Normal mode
+          </span>
+        </div>
       </div>
 
       {/* Health Score */}
@@ -817,11 +851,14 @@ export default function DashboardOverview() {
           <h1 className="font-display text-xl font-bold text-white">Security Overview</h1>
           <p className="text-xs text-ink-500 mt-0.5">Real-time threat posture across all monitored assets and feeds</p>
         </div>
-        <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border shrink-0',
-          isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
-          {isPower ? <Zap className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-          {isPower ? 'Power User' : 'Normal mode'}
-        </span>
+        <div className="flex items-center gap-2">
+          <ReportButton kind="executive" label="Executive Summary" />
+          <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border shrink-0',
+            isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
+            {isPower ? <Zap className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            {isPower ? 'Power User' : 'Normal mode'}
+          </span>
+        </div>
       </div>
 
       {/* KPI Row */}

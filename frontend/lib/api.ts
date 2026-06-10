@@ -706,6 +706,35 @@ export const fetchAuditLog   = (limit = 100, action?: string) => {
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)
 }
 
+// ── Reports (structured, Nessus-style) ───────────────────────────────
+export interface ReportFinding {
+  title: string
+  severity: string
+  score?: number
+  ts?: string | null
+  entity?: string
+  technique?: string | null
+  tactic?: string | null
+  rule?: string | null
+  status?: string
+  detail?: string
+}
+export interface ReportData {
+  meta: { kind: string; title: string; period: string; from: string; to: string; generatedAt: string }
+  summary: { headline: Array<{ label: string; value: number | string; color?: string }>; narrative: string }
+  breakdowns: Array<{ heading: string; type: 'severity' | 'bars'; data: Array<{ label?: string; severity?: string; count: number; color?: string }> }>
+  findings: ReportFinding[]
+  recommendations: string[]
+  sections?: string[]
+}
+export const fetchReportKinds = () => api<Array<{ kind: string; label: string }>>('/reports/kinds')
+export const fetchReport = (kind: string, period: string, from?: string, to?: string) => {
+  const q = new URLSearchParams({ period })
+  if (from) q.set('from', from)
+  if (to) q.set('to', to)
+  return api<ReportData>(`/reports/${kind}?${q.toString()}`)
+}
+
 // ── Dark Web monitoring ──────────────────────────────────────────────
 export interface DarkWebFinding {
   id: string

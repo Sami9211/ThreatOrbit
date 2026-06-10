@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Activity, Search, Filter, ChevronDown, ChevronRight, X, Shield,
@@ -11,6 +11,7 @@ import {
   RefreshCw, Lock, Unlock, MessageSquare, Flag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
@@ -1152,23 +1153,24 @@ export default function SIEMPage() {
   const [mitreDist, setMitreDist] = useState(MITRE_DIST)
 
   // Load alerts from API
-  useEffect(() => {
-    // Live refresh: the engine produces new alerts continuously, so poll the
-    // queue and KPIs. Re-fetch keeps the SIEM genuinely live.
-    const load = () => {
-      fetchSiemAlerts({ limit: '140', sort: 'ts', order: 'desc' })
-        .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
-        .catch(() => {})
-      fetchSiemKpis().then(setApiKpis).catch(() => {})
-      fetchCorrelations(2).then(setCorrelations).catch(() => {})
-      fetchMitreDistribution()
-        .then((rows) => { if (rows.length > 0) setMitreDist(rows) })
-        .catch(() => {})
-    }
-    load()
-    const t = setInterval(load, 15000)
-    return () => clearInterval(t)
+  // Live refresh: the engine produces new alerts continuously, so poll the
+  // queue and KPIs. Lifted to a callback so the Refresh button reuses it.
+  const loadSiem = useCallback(() => {
+    fetchSiemAlerts({ limit: '140', sort: 'ts', order: 'desc' })
+      .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
+      .catch(() => {})
+    fetchSiemKpis().then(setApiKpis).catch(() => {})
+    fetchCorrelations(2).then(setCorrelations).catch(() => {})
+    fetchMitreDistribution()
+      .then((rows) => { if (rows.length > 0) setMitreDist(rows) })
+      .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    loadSiem()
+    const t = setInterval(loadSiem, 15000)
+    return () => clearInterval(t)
+  }, [loadSiem])
 
   // Prefer live KPIs from the API; fall back to the static demo values.
   const metrics = useMemo(() => {
@@ -1269,7 +1271,9 @@ export default function SIEMPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-white/20 bg-surface-2 transition-colors">
+            <ReportButton kind="siem" label="SIEM Detection" />
+            <button onClick={loadSiem}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-white/20 bg-surface-2 transition-colors">
               <RefreshCw className="w-3 h-3" /> Refresh
             </button>
           </div>

@@ -10,6 +10,7 @@ import {
   ChevronRight, MoreHorizontal, Circle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, type SoarMetrics } from '@/lib/api'
 
@@ -939,11 +940,14 @@ export default function SOARPage() {
               <span className="text-safe">{metrics.timeSavedMonth}h saved this month</span>
             </p>
           </div>
-          <button
-            onClick={() => setShowNewCase(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/15 transition-colors">
-            <Zap className="w-3.5 h-3.5" /> New Case
-          </button>
+          <div className="flex items-center gap-2">
+            <ReportButton kind="soar" label="SOAR Incident Response" />
+            <button
+              onClick={() => setShowNewCase(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/15 transition-colors">
+              <Zap className="w-3.5 h-3.5" /> New Case
+            </button>
+          </div>
         </div>
 
         {/* KPI strip */}

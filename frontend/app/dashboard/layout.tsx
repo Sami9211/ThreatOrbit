@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Sidebar from '@/components/dashboard/Sidebar'
 import TopBar from '@/components/dashboard/TopBar'
 import CommandPalette from '@/components/dashboard/CommandPalette'
+import DetailDrawer from '@/components/dashboard/DetailDrawer'
 import ThemeScope from '@/components/dashboard/ThemeScope'
 import PageScale from '@/components/dashboard/PageScale'
 import CursorParticles from '@/components/effects/CursorParticles'
@@ -26,6 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
         <CommandPalette />
+        <DetailDrawer />
         <CursorParticles />
       </ThemeScope>
     </AuthGuard>

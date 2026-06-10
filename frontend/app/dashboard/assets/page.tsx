@@ -10,6 +10,7 @@ import {
   ExternalLink, Eye, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ReportButton from '@/components/dashboard/ReportButton'
 import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, type RiskBreakdown } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
@@ -309,6 +310,7 @@ export default function AssetsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ReportButton kind="assets" label="Asset Risk & Exposure" />
             <button onClick={scanAll}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-violet/40 transition-colors">
               <RefreshCw className="w-3.5 h-3.5" /> Scan All

@@ -8,6 +8,7 @@ import {
   Search, Play, Pause, CheckCircle, Crosshair, Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
 import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, type SavedHunt as ApiSavedHunt, type Actor as ApiActor } from '@/lib/api'
@@ -717,11 +718,14 @@ export default function CTIPage() {
             {' '}{actors.reduce((s, a) => s + a.campaigns, 0)} campaigns
           </p>
         </div>
-        <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',
-          isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
-          {isPower ? <Brain className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-          {isPower ? 'Power User' : 'Normal mode'}
-        </span>
+        <div className="flex items-center gap-2">
+          <ReportButton kind="cti" label="Threat Intelligence" />
+          <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border',
+            isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
+            {isPower ? <Brain className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            {isPower ? 'Power User' : 'Normal mode'}
+          </span>
+        </div>
       </div>
 
       {/* IOC counts */}
