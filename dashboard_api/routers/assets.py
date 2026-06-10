@@ -227,6 +227,50 @@ def asset_vuln_findings(asset_id: str):
     return rows_to_dicts(rows)
 
 
+@router.get("/{asset_id}/activity")
+def asset_activity(asset_id: str):
+    """Everything tied to this asset, one click away: its alerts, the cases
+    whose entities reference it, recent raw events, open CVE findings, and the
+    playbook runs that responded — the asset↔alert↔case linkage."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT id, name, value FROM assets WHERE id=?", (asset_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        keys = [k for k in {row["name"], row["value"]} if k]
+        ph = ",".join("?" * len(keys))
+        alerts = rows_to_dicts(conn.execute(
+            f"SELECT id, ts, title, severity, status, rule_name, mitre_tech_id, src_ip "
+            f"FROM alerts WHERE hostname IN ({ph}) OR src_ip IN ({ph}) OR dest_ip IN ({ph}) "
+            f"ORDER BY ts DESC LIMIT 50", keys * 3).fetchall())
+        like_clauses = " OR ".join(["entities LIKE ?"] * len(keys))
+        cases = rows_to_dicts(conn.execute(
+            f"SELECT id, title, severity, status, created, playbook FROM cases "
+            f"WHERE {like_clauses} ORDER BY created DESC LIMIT 20",
+            [f'%"{k}"%' for k in keys]).fetchall())
+        events = rows_to_dicts(conn.execute(
+            f"SELECT id, ts, event_type, src_ip, dest_ip, raw FROM events "
+            f"WHERE hostname IN ({ph}) OR src_ip IN ({ph}) OR dest_ip IN ({ph}) "
+            f"ORDER BY ts DESC LIMIT 30", keys * 3).fetchall())
+        vulns = rows_to_dicts(conn.execute(
+            "SELECT cve, severity, cvss, product, version, status FROM vuln_findings "
+            "WHERE asset_id=? AND status='open' ORDER BY cvss DESC LIMIT 30",
+            (asset_id,)).fetchall())
+        alert_ids = [a["id"] for a in alerts]
+        runs = []
+        if alert_ids:
+            ph2 = ",".join("?" * len(alert_ids))
+            runs = rows_to_dicts(conn.execute(
+                f"SELECT id, playbook_name, ts, status, trigger FROM playbook_runs "
+                f"WHERE alert_id IN ({ph2}) ORDER BY ts DESC LIMIT 10", alert_ids).fetchall())
+    open_alerts = sum(1 for a in alerts if a["status"] not in ("resolved", "closed"))
+    return {"assetId": asset_id, "name": row["name"],
+            "alerts": alerts, "cases": cases, "events": events,
+            "vulnFindings": vulns, "playbookRuns": runs,
+            "summary": {"alerts": len(alerts), "openAlerts": open_alerts,
+                        "cases": len(cases), "events": len(events),
+                        "openVulns": len(vulns), "responses": len(runs)}}
+
+
 @router.get("/{asset_id}")
 def get_asset(asset_id: str):
     with get_conn() as conn:

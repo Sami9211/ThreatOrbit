@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
-import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, type RiskBreakdown } from '@/lib/api'
+import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
@@ -190,23 +190,19 @@ export default function AssetsPage() {
   const [formType, setFormType] = useState<AssetType>('domain')
   const [formCrit, setFormCrit] = useState<Criticality>('medium')
 
+  // Real vulnerability scan: matches the asset's software inventory against
+  // the CVE catalogue server-side, then reloads the refreshed risk/findings.
   function scanAsset(id: string) {
     setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'scanning' } : a)))
-    setTimeout(() => {
-      setAssets((prev) => prev.map((a) => {
-        if (a.id !== id) return a
-        const risk = Math.floor(Math.random() * 100)
-        const alerts = risk > 70 ? Math.ceil(Math.random() * 5) : risk > 40 ? Math.ceil(Math.random() * 2) : 0
-        const status: ScanStatus = risk > 70 ? 'critical' : risk > 40 ? 'at-risk' : 'clean'
-        const cves = {
-          critical: risk > 80 ? Math.floor(Math.random() * 4) : 0,
-          high:     risk > 50 ? Math.floor(Math.random() * 6) : 0,
-          medium:   Math.floor(Math.random() * 10),
-          low:      Math.floor(Math.random() * 8),
-        }
-        return { ...a, status, riskScore: risk, alerts, cves, lastScan: 'just now', patchAge: Math.floor(Math.random() * 60) }
-      }))
-    }, 2200)
+    scanAssetVulns(id)
+      .then(async () => {
+        const { items } = await fetchAssets({ limit: '200' })
+        if (items.length > 0) setAssets(items as unknown as Asset[])
+      })
+      .catch(() => {
+        // API unreachable — restore status rather than fabricate results.
+        setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'unscanned' as ScanStatus } : a)))
+      })
   }
 
   function scanAll() { assets.forEach((a, i) => setTimeout(() => scanAsset(a.id), i * 250)) }
@@ -218,14 +214,18 @@ export default function AssetsPage() {
 
   const selectedAsset = assets.find((a) => a.id === selectedId) ?? null
 
-  // Fetch the per-axis risk explanation for the open asset.
+  // Fetch the per-axis risk explanation + linked activity for the open asset.
   const [breakdown, setBreakdown] = useState<RiskBreakdown | null>(null)
+  const [activity, setActivity] = useState<AssetActivity | null>(null)
   useEffect(() => {
-    if (!selectedId) { setBreakdown(null); return }
+    if (!selectedId) { setBreakdown(null); setActivity(null); return }
     let live = true
     fetchAsset(selectedId)
       .then((d) => { if (live) setBreakdown(d.riskBreakdown ?? null) })
       .catch(() => { if (live) setBreakdown(null) })
+    fetchAssetActivity(selectedId)
+      .then((d) => { if (live) setActivity(d) })
+      .catch(() => { if (live) setActivity(null) })
     return () => { live = false }
   }, [selectedId])
 
@@ -776,6 +776,48 @@ export default function AssetsPage() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Linked activity: asset ↔ alert ↔ case, one click away */}
+                  {activity && (activity.summary.alerts > 0 || activity.summary.cases > 0 || activity.summary.openVulns > 0) && (
+                    <div>
+                      <p className="text-[10px] text-ink-600 uppercase tracking-wide mb-1.5">
+                        Linked activity
+                        <span className="ml-2 normal-case tracking-normal text-ink-500">
+                          {activity.summary.openAlerts} open alerts · {activity.summary.cases} cases · {activity.summary.openVulns} CVEs
+                        </span>
+                      </p>
+                      <div className="space-y-1">
+                        {activity.vulnFindings.slice(0, 3).map((v) => (
+                          <div key={v.cve} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
+                              style={{ color: v.severity === 'critical' ? '#FF2E97' : '#FF4D6D',
+                                       background: v.severity === 'critical' ? '#FF2E9718' : '#FF4D6D18' }}>
+                              {v.cvss.toFixed(1)}
+                            </span>
+                            <span className="text-[10px] font-mono text-ink-200 truncate">{v.cve}</span>
+                            <span className="text-[9px] text-ink-600 truncate">{v.product} {v.version}</span>
+                          </div>
+                        ))}
+                        {activity.alerts.slice(0, 4).map((al) => (
+                          <a key={al.id} href={`/dashboard/siem?q=${encodeURIComponent(al.srcIp ?? a.name)}`}
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5 hover:border-white/15 transition-colors">
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ background: { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5' }[al.severity] ?? '#7A3CFF' }} />
+                            <span className="text-[10px] text-ink-300 truncate flex-1">{al.title}</span>
+                            <span className="text-[9px] text-ink-600 capitalize shrink-0">{al.status}</span>
+                          </a>
+                        ))}
+                        {activity.cases.slice(0, 2).map((c) => (
+                          <a key={c.id} href="/dashboard/soar"
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5 hover:border-white/15 transition-colors">
+                            <span className="text-[9px] font-mono text-violet shrink-0">{c.id}</span>
+                            <span className="text-[10px] text-ink-300 truncate flex-1">{c.title}</span>
+                            <span className="text-[9px] text-ink-600 capitalize shrink-0">{c.status}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2 pt-2">
                     <button onClick={() => scanAsset(a.id)} disabled={a.status === 'scanning'}

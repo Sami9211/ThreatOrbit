@@ -1440,6 +1440,35 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_asset_activity_linkage(client, auth):
+    """One click from an asset to all its activity: alerts, cases, events,
+    CVE findings, and the playbook runs that responded."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    # create an asset, then generate real activity against its name/value
+    asset = client.post("/assets", json={
+        "name": "LINK-TEST-01", "type": "server", "value": "10.77.0.5", "criticality": "high",
+        "software": [{"product": "log4j", "version": "2.14.1"}]}, headers=auth).json()
+    aid = asset["id"]
+    client.post("/siem/ingest", json={"lines": [
+        "Jan 10 12:00:00 web sshd[1]: Failed password for root from 10.77.0.5 port 9000 host=LINK-TEST-01",
+    ]}, headers=auth)
+    client.post(f"/assets/{aid}/scan", headers=auth)  # real CVE findings
+    case = client.post("/soar/cases", json={
+        "title": "Linkage case", "severity": "high",
+        "entities": [{"type": "host", "value": "LINK-TEST-01"}]}, headers=auth).json()
+
+    act = client.get(f"/assets/{aid}/activity", headers=auth)
+    assert act.status_code == 200, act.text
+    a = act.json()
+    assert a["summary"]["alerts"] >= 1 and a["summary"]["openVulns"] >= 1
+    assert any(al["src_ip"] == "10.77.0.5" for al in a["alerts"])
+    assert any(c["id"] == case["id"] for c in a["cases"])
+    assert any(e["src_ip"] == "10.77.0.5" for e in a["events"])
+    assert any(v["cve"] == "CVE-2021-44228" for v in a["vulnFindings"])
+    assert client.get("/assets/NOPE/activity", headers=auth).status_code == 404
+
+
 def test_attack_surface_units():
     """Exposure scoring is transparent and weighted by real risk factors."""
     from dashboard_api.attack_surface import exposure_of, _is_public_ip

@@ -155,8 +155,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       internet-facing inventory (`/assets/exposure`, `/assets/discovered`).
       Remaining: an attack-surface UI panel (API + clients shipped) + active
       probing.
-- [ ] **Asset ↔ alert ↔ case linkage** everywhere (one click from a host to all
-      its activity).
+- [x] **Asset ↔ alert ↔ case linkage** — DONE (see CHANGELOG):
+      `/assets/{id}/activity` ties an asset to its alerts, cases, events, CVE
+      findings and responding playbook runs; “Linked activity” section in the
+      asset drawer with SIEM/SOAR deep links. The page’s fake re-scan simulator
+      was replaced with the real vulnerability scanner.
 - [ ] **Dark-web depth** — real source connectors (paste sites, leak DBs,
       Telegram), credential-leak matching against your user list, takedown
       workflow.
@@ -177,6 +180,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Asset ↔ alert ↔ case linkage (Phase 4)** — one click from a
+  host to all its activity. `GET /assets/{id}/activity` joins everything tied
+  to the asset's name/value: its alerts (with MITRE + status), the cases whose
+  entities reference it, recent raw events, open CVE findings, and the playbook
+  runs that responded — with a summary rollup. The asset drawer gained a
+  “Linked activity” section (CVE findings with CVSS, alerts deep-linking into
+  the SIEM queue, cases linking to SOAR). Also replaced the assets page's fake
+  random “Re-scan” simulator with the real vulnerability scanner
+  (scan → reload real risk/findings; restores status honestly on API failure).
+  Tested: ingest + scan + case → all linked through one call, 404 guard.
 
 - **2026-06-10 · Attack-surface discovery (Phase 4)** — `attack_surface.py`.
   **Passive discovery**: hosts emitting telemetry that are NOT in the asset

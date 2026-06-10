@@ -988,6 +988,18 @@ export const promoteDiscoveredAsset = (hostname: string, criticality = 'medium',
     method: 'POST', body: JSON.stringify({ hostname, criticality, type }),
   })
 
+// Asset ↔ alert ↔ case linkage: everything tied to one asset.
+export interface AssetActivity {
+  assetId: string; name: string
+  alerts: Array<{ id: string; ts: string; title: string; severity: string; status: string; ruleName: string | null; mitreTechId: string | null; srcIp: string | null }>
+  cases: Array<{ id: string; title: string; severity: string; status: string; created: string; playbook: string | null }>
+  events: Array<{ id: string; ts: string; eventType: string | null; srcIp: string | null; destIp: string | null; raw: string | null }>
+  vulnFindings: Array<{ cve: string; severity: string; cvss: number; product: string; version: string; status: string }>
+  playbookRuns: Array<{ id: string; playbookName: string | null; ts: string; status: string; trigger: string }>
+  summary: { alerts: number; openAlerts: number; cases: number; events: number; openVulns: number; responses: number }
+}
+export const fetchAssetActivity = (id: string) => api<AssetActivity>(`/assets/${id}/activity`)
+
 // ── Feeds ─────────────────────────────────────────────────────────────
 export const fetchFeeds   = () => api<Feed[]>('/feeds')
 export const createFeed = (body: {
