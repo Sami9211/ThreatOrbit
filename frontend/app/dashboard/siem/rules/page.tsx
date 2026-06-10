@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchRules, patchRule, createRule } from '@/lib/api'
+import { fetchRules, patchRule, createRule, deleteRule } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
@@ -670,6 +670,14 @@ export default function RulesEnginePage() {
     })
   }
 
+  function removeRule(rule: DetectionRule) {
+    if (!window.confirm(`Delete rule "${rule.name}"? Alerts it already raised are kept.`)) return
+    const prev = rulesData
+    setRulesData((rs) => rs.filter((r) => r.id !== rule.id))
+    if (selectedId === rule.id) setSelectedId(null)
+    deleteRule(rule.id).catch(() => setRulesData(prev))
+  }
+
   /* Escape to close */
   useEffect(() => {
     if (!selectedId) return
@@ -942,6 +950,7 @@ export default function RulesEnginePage() {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
+                        onClick={() => removeRule(rule)}
                         className="p-1.5 rounded-lg text-ink-600 hover:text-threat hover:bg-threat/10 transition-colors"
                         title="Delete rule"
                       >

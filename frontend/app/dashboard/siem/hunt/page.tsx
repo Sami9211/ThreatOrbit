@@ -193,6 +193,23 @@ const TIME_RANGE_EVENTS: Record<TimeRange, string> = {
   '1h': '6.1M', '6h': '36.8M', '24h': '147.4M', '7d': '1.03B',
 }
 
+/* Download a hunt run as CSV. */
+function exportResults(run: HuntRun) {
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  const csv = [
+    'ts,src_ip,dest_ip,dest_port,protocol,bytes,interval_sec,host',
+    ...run.results.map((r) =>
+      [r.ts, r.srcIp, r.destIp, r.destPort, r.protocol, r.bytes, r.interval, r.host].map(esc).join(',')),
+  ].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `hunt-results-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 /* ─── Components ─────────────────────────────────────────────────────── */
 function MetricCard({
   label, value, icon: Icon, color, sub,
@@ -606,7 +623,9 @@ export default function ThreatHuntPage() {
                   <span>{runResult.elapsed}</span>
                   <span>·</span>
                   <span className="text-violet font-semibold">MITRE {savedHunts.find((h) => h.id === selectedHuntId)?.technique ?? 'T1071.001'}</span>
-                  <button className="ml-2 flex items-center gap-1 text-ink-600 hover:text-white transition-colors">
+                  <button
+                    onClick={() => exportResults(runResult)}
+                    className="ml-2 flex items-center gap-1 text-ink-600 hover:text-white transition-colors">
                     <ArrowUpRight className="w-3 h-3" /> Export
                   </button>
                 </div>

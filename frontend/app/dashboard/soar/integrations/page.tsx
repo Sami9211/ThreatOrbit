@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchSoarIntegrations } from '@/lib/api'
+import { fetchSoarIntegrations, createIntegration, testIntegration, runIntegrationAction, type Integration as ApiIntegration } from '@/lib/api'
+import CreateModal from '@/components/dashboard/CreateModal'
 import {
   Link, Plus, CheckCircle, AlertTriangle, XCircle, Settings,
   RefreshCw, Activity, Zap, Shield, Globe, Database, Clock,
@@ -60,6 +61,25 @@ const STATUS_CFG: Record<IntStatus, { label: string; cls: string; dot: string }>
   pending:      { label: 'Pending',      cls: 'text-ink-400 border-white/10 bg-white/5',  dot: 'bg-ink-500'            },
 }
 
+// Backend rows carry the full connector record; map it faithfully.
+const apiToIntegration = (d: ApiIntegration & {
+  vendor?: string; category?: string; actionsRun?: number
+  avgResponseMs?: number; actions?: string[]; enabled?: number
+}): Integration => ({
+  id: d.id,
+  name: d.name,
+  vendor: d.vendor ?? d.name,
+  category: (d.category ?? 'SIEM') as IntCategory,
+  status: (['connected', 'degraded', 'disconnected', 'pending'].includes(d.status)
+    ? d.status : 'disconnected') as IntStatus,
+  lastSync: d.lastSync ?? 'Never',
+  actionsRun: d.actionsRun ?? 0,
+  avgResponseMs: d.avgResponseMs ?? 0,
+  description: d.description ?? '',
+  actions: d.actions ?? [],
+  enabled: Boolean(d.enabled ?? (d.status === 'connected')),
+})
+
 export default function SoarIntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS)
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(
@@ -67,28 +87,59 @@ export default function SoarIntegrationsPage() {
   )
   const [selected, setSelected] = useState<string | null>(null)
   const [catFilter, setCatFilter] = useState<string>('All')
+  const [showConnect, setShowConnect] = useState(false)
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   useEffect(() => {
     fetchSoarIntegrations().then((data) => {
       if (data.length > 0) {
-        const mapped: Integration[] = data.map(d => ({
-          id: d.id,
-          name: d.name,
-          vendor: d.name,
-          category: 'SIEM' as IntCategory,
-          status: (d.status === 'active' ? 'connected' : d.status === 'error' ? 'degraded' : 'disconnected') as IntStatus,
-          lastSync: d.lastSync ?? 'Never',
-          actionsRun: 0,
-          avgResponseMs: 0,
-          description: d.description,
-          actions: [],
-          enabled: d.status === 'active',
-        }))
+        const mapped = data.map(apiToIntegration)
         setIntegrations(mapped)
         setEnabledMap(Object.fromEntries(mapped.map(i => [i.id, i.enabled])))
       }
     }).catch(() => {})
   }, [])
+
+  function note(msg: string) {
+    setActionMsg(msg)
+    setTimeout(() => setActionMsg(null), 4000)
+  }
+
+  async function handleConnect(values: Record<string, string>) {
+    const created = await createIntegration({
+      name: values.name,
+      vendor: values.vendor || undefined,
+      category: values.category || undefined,
+      description: values.description || undefined,
+      actions: [],
+    })
+    const mapped = apiToIntegration(created as Parameters<typeof apiToIntegration>[0])
+    setIntegrations((prev) => [mapped, ...prev])
+    setEnabledMap((prev) => ({ ...prev, [mapped.id]: mapped.enabled }))
+  }
+
+  function handleTest(id: string) {
+    testIntegration(id)
+      .then((updated) => {
+        const mapped = apiToIntegration(updated as Parameters<typeof apiToIntegration>[0])
+        setIntegrations((prev) => prev.map((i) => (i.id === id ? mapped : i)))
+        note(`Connection OK — ${mapped.name} synced just now`)
+      })
+      .catch(() => note('Connection test failed — is the dashboard API running?'))
+  }
+
+  function handleRunAction(id: string, action: string) {
+    runIntegrationAction(id, action)
+      .then((updated) => {
+        setIntegrations((prev) => prev.map((i) => (i.id === id
+          ? { ...i, actionsRun: updated.actionsRun ?? i.actionsRun + 1, lastSync: 'just now' }
+          : i)))
+        note(`"${action}" executed`)
+      })
+      .catch((e) => note(e instanceof Error && e.message.includes('not connected')
+        ? 'Tool is not connected — run Test Connection first.'
+        : 'Action failed — is the dashboard API running?'))
+  }
 
   const categories = ['All', ...Array.from(new Set(integrations.map(i => i.category)))]
   const filtered = catFilter === 'All' ? integrations : integrations.filter(i => i.category === catFilter)
@@ -108,7 +159,9 @@ export default function SoarIntegrationsPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">Connect security tools for automated response actions</p>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold">
+        <button
+          onClick={() => setShowConnect(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
           <Plus className="w-3.5 h-3.5" />
           Connect Tool
         </button>
@@ -233,36 +286,63 @@ export default function SoarIntegrationsPage() {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  {selectedInt.actions.map(action => (
-                    <div key={action} className="flex items-center justify-between p-3 rounded-xl bg-white/4 border border-white/8">
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-3.5 h-3.5 text-violet" />
-                        <span className="text-xs text-ink-200">{action}</span>
+                {selectedInt.actions.length === 0 ? (
+                  <p className="text-xs text-ink-600 py-3">No response actions registered for this tool yet.</p>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {selectedInt.actions.map(action => (
+                      <div key={action} className="flex items-center justify-between p-3 rounded-xl bg-white/4 border border-white/8">
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-3.5 h-3.5 text-violet" />
+                          <span className="text-xs text-ink-200">{action}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRunAction(selectedInt.id, action) }}
+                          className="text-[10px] text-magenta hover:underline">Run</button>
                       </div>
-                      <button className="text-[10px] text-magenta hover:underline">Run</button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2 mt-4">
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white">
-                    <Settings className="w-3.5 h-3.5" />
-                    Configure
-                  </button>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white">
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-4 flex-wrap">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleTest(selectedInt.id) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white">
                     <RefreshCw className="w-3.5 h-3.5" />
                     Test Connection
                   </button>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white">
+                  <a href="/docs/rest-api"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white">
                     <Code className="w-3.5 h-3.5" />
                     View API Docs
-                  </button>
+                  </a>
+                  {actionMsg && <span className="text-[10px] text-safe" role="status">{actionMsg}</span>}
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showConnect && (
+          <CreateModal
+            title="Connect Tool"
+            icon={Link}
+            accent="#34F5C5"
+            submitLabel="Connect"
+            onClose={() => setShowConnect(false)}
+            onSubmit={handleConnect}
+            fields={[
+              { key: 'name', label: 'Tool name', required: true, placeholder: 'e.g. TheHive' },
+              { key: 'vendor', label: 'Vendor', placeholder: 'e.g. StrangeBee' },
+              { key: 'category', label: 'Category', type: 'select', default: 'Ticketing', options: [
+                'EDR', 'Firewall', 'SIEM', 'Ticketing', 'Communication', 'Threat Intel', 'Identity', 'Cloud',
+              ].map((c) => ({ value: c, label: c })) },
+              { key: 'description', label: 'Description', type: 'textarea', placeholder: 'What this connector is used for' },
+            ]}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

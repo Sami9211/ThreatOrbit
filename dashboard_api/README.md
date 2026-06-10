@@ -38,12 +38,12 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Auth      | `POST /auth/login`, `POST /auth/register` (self-service signup, throttled), `GET /auth/me`, `POST /auth/change-password` |
 | Users     | `GET/POST /users`, `PATCH /users/{id}` (incl. `mfa_enabled`), `DELETE /users/{id}` |
 | Overview  | `/overview/kpis`, `/threat-vectors`, `/hourly-volume`, `/mitre-heatmap`, `/recent-alerts`, `/recent-incidents`, `/top-actors`, `/live-feed` |
-| SIEM      | `/siem/alerts` (sortable/filterable), `/siem/alerts/{id}` (GET/PATCH), `/siem/kpis`, `/siem/correlations`, `/siem/mitre-distribution`, `/siem/rules` (GET/POST), `PATCH /siem/rules/{id}`, `/siem/sources` (GET/POST), `/siem/hunts` (GET/POST), `POST /siem/hunts/{id}/run`, `POST /siem/hunt-query` (ad-hoc hunt engine) |
-| SOAR      | `/soar/cases` (GET/POST), `/soar/cases/{id}` (GET/PATCH), `POST /soar/cases/{id}/notes`, `PATCH /soar/cases/{id}/tasks/{task_id}`, `/soar/playbooks`, `/soar/playbooks/{id}`, `POST /soar/playbooks/{id}/run`, `/soar/integrations`, `/soar/metrics` |
+| SIEM      | `/siem/alerts` (GET/POST — sortable/filterable, manual/intel escalation), `/siem/alerts/{id}` (GET/PATCH), `/siem/kpis`, `/siem/correlations`, `/siem/mitre-distribution`, `/siem/rules` (GET/POST), `/siem/rules/{id}` (PATCH/DELETE), `/siem/sources` (GET/POST), `/siem/hunts` (GET/POST), `POST /siem/hunts/{id}/run`, `POST /siem/hunt-query` (ad-hoc hunt engine) |
+| SOAR      | `/soar/cases` (GET/POST), `/soar/cases/{id}` (GET/PATCH), `POST /soar/cases/{id}/notes`, `PATCH /soar/cases/{id}/tasks/{task_id}`, `/soar/playbooks`, `/soar/playbooks/{id}`, `POST /soar/playbooks/{id}/run`, `/soar/integrations` (GET/POST), `POST /soar/integrations/{id}/test`, `POST /soar/integrations/{id}/actions/run`, `/soar/metrics` |
 | CTI       | `/cti/actors`, `/cti/actors/{id}`, `/cti/iocs` (sortable/filterable), `POST /cti/iocs/import`, `/cti/lookup`, `/cti/ioc-types`, `/cti/summary`, `/cti/hunts` (GET/POST), `POST /cti/hunts/{id}/run`, `/cti/graph`, `/cti/scans` (GET/POST — IntelScope history) |
 | Assets    | `/assets` (GET/POST), `/assets/{id}` (incl. per-axis `riskBreakdown`), `/assets/summary`, `/assets/vulns`, `/assets/risk-distribution`, `POST /assets/recompute-risk` |
 | Feeds     | `/feeds` (GET/POST), `/feeds/summary`, `PATCH /feeds/{id}` |
-| Config    | `/config/settings` (GET/PUT), `/config/api-keys` (GET/POST/DELETE), `/config/webhooks` (GET/POST/PATCH/DELETE), `/config/audit-log` |
+| Config    | `/config/settings` (GET/PUT), `/config/api-keys` (GET/POST/DELETE), `/config/webhooks` (GET/POST/PATCH/DELETE), `POST /config/webhooks/{id}/test`, `/config/jobs`, `/config/audit-log` |
 | Services  | `/services/status`, `/services/threat/source-health`, `/services/threat/iocs`, `POST /services/threat/fetch`, `/services/threat/jobs/{id}`, `/services/threat/opencti-status`, `POST /services/threat/sync-iocs`, `POST /services/logs/analyse` (multipart), `/services/logs/results/{id}`, `/services/logs/trends` |
 | Meta      | `/health`, `/ready` |
 
@@ -90,8 +90,17 @@ runs persist `last_run`, `hit_count`, `status`, `progress`.
 ## Tests
 
 ```bash
-python -m pytest dashboard_api/tests -q   # 42 tests
+python -m pytest dashboard_api/tests -q   # 48 tests
 ```
+
+### Webhooks
+
+Registered webhooks (`/config/webhooks`) receive a JSON envelope
+`{event, ts, data}` on: `alert.created`, `case.created`, `incident.resolved`,
+`ioc.confirmed`, and `playbook.failed`. Delivery is fire-and-forget with a 5s
+timeout; failures mark the hook `failing` (it keeps receiving events until
+paused/deleted). `POST /config/webhooks/{id}/test` sends a synchronous test
+event and reports reachability.
 
 ## Re-seed
 

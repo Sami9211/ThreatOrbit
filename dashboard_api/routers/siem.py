@@ -310,6 +310,18 @@ def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(current_use
     return row_to_dict(row)
 
 
+@router.delete("/rules/{rule_id}", status_code=204)
+def delete_rule(rule_id: str, user: dict = Depends(current_user)):
+    with get_conn() as conn:
+        row = conn.execute("SELECT name FROM detection_rules WHERE id=?", (rule_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Rule not found")
+        conn.execute("DELETE FROM detection_rules WHERE id=?", (rule_id,))
+        audit(conn, user["email"], "rule.delete", rule_id, f"name={row['name']}")
+        conn.commit()
+    return None
+
+
 # ── Log sources ───────────────────────────────────────────────────────────────
 
 @router.get("/sources")

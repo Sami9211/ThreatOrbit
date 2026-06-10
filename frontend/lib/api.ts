@@ -488,6 +488,8 @@ export const patchRule     = (id: string, body: { status?: string; severityOverr
       suppression_window: body.suppressionWindow,
     }),
   })
+export const deleteRule = (id: string) =>
+  api<void>(`/siem/rules/${id}`, { method: 'DELETE' })
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const createLogSource = (body: { name: string; type?: string; host?: string; format?: string; tags?: string[] }) =>
   api<LogSource>('/siem/sources', { method: 'POST', body: JSON.stringify(body) })
@@ -574,6 +576,15 @@ export const fetchPlaybooks = () => api<Playbook[]>('/soar/playbooks')
 export const runPlaybook = (id: string) =>
   api<Playbook>(`/soar/playbooks/${id}/run`, { method: 'POST' })
 export const fetchSoarIntegrations = () => api<Integration[]>('/soar/integrations')
+export const createIntegration = (body: {
+  name: string; vendor?: string; category?: string; description?: string; actions?: string[]
+}) => api<Integration>('/soar/integrations', { method: 'POST', body: JSON.stringify(body) })
+export const testIntegration = (id: string) =>
+  api<Integration>(`/soar/integrations/${id}/test`, { method: 'POST' })
+export const runIntegrationAction = (id: string, action: string) =>
+  api<Integration & { actionsRun: number }>(`/soar/integrations/${id}/actions/run`, {
+    method: 'POST', body: JSON.stringify({ action }),
+  })
 export const fetchSoarMetrics = () => api<SoarMetrics>('/soar/metrics')
 
 // ── CTI ──────────────────────────────────────────────────────────────

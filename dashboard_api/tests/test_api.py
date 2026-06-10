@@ -656,3 +656,27 @@ def test_create_alert(client, auth, monkeypatch):
     assert client.post("/siem/alerts", json={"title": "x", "severity": "apocalyptic"},
                        headers=auth).status_code == 400
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
+
+
+def test_integration_lifecycle(client, auth):
+    created = client.post("/soar/integrations", json={
+        "name": "PagerDuty", "vendor": "PagerDuty", "category": "Notification",
+        "actions": ["Trigger incident", "Resolve incident"]}, headers=auth)
+    assert created.status_code == 201, created.text
+    iid = created.json()["id"]
+    assert created.json()["status"] == "pending"
+    # test-connection marks it live
+    tested = client.post(f"/soar/integrations/{iid}/test", headers=auth).json()
+    assert tested["status"] == "connected" and tested["last_sync"]
+    # running an action bumps the counter
+    run = client.post(f"/soar/integrations/{iid}/actions/run",
+                      json={"action": "Trigger incident"}, headers=auth).json()
+    assert run["actions_run"] == 1
+    assert client.post("/soar/integrations/missing/actions/run",
+                       json={"action": "x"}, headers=auth).status_code == 404
+
+
+def test_rule_delete(client, auth):
+    rule = client.post("/siem/rules", json={"name": "Temp rule", "severity": "low"}, headers=auth).json()
+    assert client.delete(f"/siem/rules/{rule['id']}", headers=auth).status_code == 204
+    assert client.delete(f"/siem/rules/{rule['id']}", headers=auth).status_code == 404

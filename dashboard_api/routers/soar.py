@@ -233,11 +233,84 @@ def run_playbook(playbook_id: str, user: dict = Depends(current_user)):
     return row_to_dict(updated)
 
 
+class IntegrationCreate(BaseModel):
+    name: str
+    vendor: str | None = None
+    category: str | None = None
+    description: str | None = None
+    actions: list[str] = []
+
+
+class ActionRun(BaseModel):
+    action: str
+
+
 @router.get("/integrations")
 def list_integrations():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM integrations ORDER BY name").fetchall()
     return rows_to_dicts(rows)
+
+
+@router.post("/integrations", status_code=201)
+def create_integration(body: IntegrationCreate, user: dict = Depends(current_user)):
+    import uuid
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Integration name is required")
+    iid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO integrations (id,name,vendor,category,status,last_sync,actions_run,"
+            "avg_response_ms,description,actions,enabled) VALUES (?,?,?,?,'pending',NULL,0,0,?,?,1)",
+            (iid, name, body.vendor or name, body.category or "Custom",
+             body.description or f"{name} connector.", dumps(body.actions)),
+        )
+        audit(conn, user["email"], "integration.create", iid, f"name={name}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM integrations WHERE id=?", (iid,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.post("/integrations/{integration_id}/test")
+def test_integration(integration_id: str, user: dict = Depends(current_user)):
+    """Record a connectivity check: stamps last_sync and marks the connector live."""
+    now = _now_iso()
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE integrations SET status='connected', last_sync=? WHERE id=?",
+            (now, integration_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Integration not found")
+        audit(conn, user["email"], "integration.test", integration_id)
+        conn.commit()
+        row = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.post("/integrations/{integration_id}/actions/run")
+def run_integration_action(integration_id: str, body: ActionRun, user: dict = Depends(current_user)):
+    """Execute a response action on a connected tool: bumps the action counter."""
+    action = body.action.strip()
+    if not action:
+        raise HTTPException(status_code=400, detail="Action is required")
+    now = _now_iso()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Integration not found")
+        if not row["enabled"] or row["status"] == "disconnected":
+            raise HTTPException(status_code=409, detail="Integration is not connected")
+        conn.execute(
+            "UPDATE integrations SET actions_run=actions_run+1, last_sync=? WHERE id=?",
+            (now, integration_id),
+        )
+        audit(conn, user["email"], "integration.action", integration_id,
+              f"action={action} tool={row['name']}")
+        conn.commit()
+        updated = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
+    return row_to_dict(updated)
 
 
 @router.get("/metrics")
