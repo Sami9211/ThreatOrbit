@@ -144,6 +144,10 @@ def sync_threat_iocs(limit: int = 500, user: dict = Depends(require_role("admin"
         audit(conn, user["email"], "services.sync_iocs", None,
               f"imported={imported} duplicates={duplicates} skipped={skipped}")
         conn.commit()
+    if imported:
+        from dashboard_api.webhooks import dispatch
+        dispatch("ioc.confirmed", {"imported": imported, "source": "threat-api-sync",
+                                   "importedBy": user["email"]})
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
             "total": len(upstream)}
 

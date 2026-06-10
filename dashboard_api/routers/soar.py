@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.webhooks import dispatch
 
 router = APIRouter(prefix="/soar", tags=["soar"], dependencies=[Depends(current_user)])
 
@@ -100,6 +101,8 @@ def create_case(body: CaseCreate, user: dict = Depends(current_user)):
         audit(conn, user["email"], "case.create", case_id, f"title={title} severity={body.severity}")
         conn.commit()
         row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    dispatch("case.created", {"id": case_id, "title": title, "severity": body.severity,
+                              "type": body.type or "Investigation", "owner": owner})
     return row_to_dict(row)
 
 
@@ -174,6 +177,7 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(current_use
     fields.append("updated=?"); values.append(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
     values.append(case_id)
     with get_conn() as conn:
+        prev = conn.execute("SELECT status FROM cases WHERE id=?", (case_id,)).fetchone()
         cur = conn.execute(f"UPDATE cases SET {','.join(fields)} WHERE id=?", values)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Case not found")
@@ -181,7 +185,13 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(current_use
         audit(conn, user["email"], "case.update", case_id, f"fields={changed}")
         conn.commit()
         row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
-    return row_to_dict(row)
+    updated_case = row_to_dict(row)
+    if (body.status in ("resolved", "closed")
+            and prev and prev["status"] not in ("resolved", "closed")):
+        dispatch("incident.resolved", {"id": case_id, "title": updated_case["title"],
+                                       "severity": updated_case["severity"],
+                                       "status": body.status, "resolvedBy": user["email"]})
+    return updated_case
 
 
 @router.get("/playbooks")
@@ -210,6 +220,8 @@ def run_playbook(playbook_id: str, user: dict = Depends(current_user)):
         if not row:
             raise HTTPException(status_code=404, detail="Playbook not found")
         if not row["enabled"]:
+            dispatch("playbook.failed", {"id": playbook_id, "name": row["name"],
+                                         "reason": "disabled", "actor": user["email"]})
             raise HTTPException(status_code=409, detail="Playbook is disabled")
         conn.execute(
             "UPDATE playbooks SET runs=runs+1, last_run=?, last_run_status='success', status='idle' WHERE id=?",

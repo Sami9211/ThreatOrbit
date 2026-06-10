@@ -555,3 +555,71 @@ def test_services_sync_iocs_imports_upstream(client, auth, monkeypatch):
     # hash type was normalised
     items = client.get("/cti/iocs?q=" + "f" * 64, headers=auth).json()["items"]
     assert items and items[0]["type"] == "hash" and items[0]["actor"] == "AgentTesla"
+
+
+def test_webhook_delivery_engine(client, auth, monkeypatch):
+    """Platform events POST a JSON envelope to subscribed endpoints."""
+    import http.server
+    import threading
+    import dashboard_api.webhooks as wh
+
+    received: list = []
+
+    class Receiver(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            import json as _json
+            length = int(self.headers.get("Content-Length", 0))
+            received.append(_json.loads(self.rfile.read(length)))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Receiver)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
+
+    try:
+        hook = client.post("/config/webhooks", json={
+            "url": f"http://127.0.0.1:{port}/sink",
+            "events": ["case.created", "incident.resolved"]}, headers=auth).json()
+
+        # case.created fires
+        case = client.post("/soar/cases", json={"title": "Webhook test case", "severity": "low"},
+                           headers=auth).json()
+        assert any(m["event"] == "case.created" and m["data"]["id"] == case["id"] for m in received)
+
+        # resolving the case fires incident.resolved (transition only)
+        client.patch(f"/soar/cases/{case['id']}", json={"status": "resolved"}, headers=auth)
+        assert any(m["event"] == "incident.resolved" and m["data"]["id"] == case["id"] for m in received)
+        n = len(received)
+        client.patch(f"/soar/cases/{case['id']}", json={"status": "closed"}, headers=auth)
+        assert len(received) == n  # already resolved — no duplicate event
+
+        # successful deliveries stamp last_delivery and stay active
+        listed = client.get("/config/webhooks", headers=auth).json()
+        mine = next(w for w in listed if w["id"] == hook["id"])
+        assert mine["status"] == "active" and mine["last_delivery"]
+
+        # the test endpoint reports reachability
+        ok = client.post(f"/config/webhooks/{hook['id']}/test", headers=auth).json()
+        assert ok["ok"] is True
+        assert any(m["event"] == "webhook.test" for m in received)
+
+        client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
+    finally:
+        server.shutdown()
+
+
+def test_webhook_failure_marks_failing(client, auth, monkeypatch):
+    import dashboard_api.webhooks as wh
+    monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
+    hook = client.post("/config/webhooks", json={
+        "url": "http://127.0.0.1:1/unreachable", "events": ["ioc.confirmed"]}, headers=auth).json()
+    client.post("/cti/iocs/import", json={
+        "indicators": [{"type": "ip", "value": "198.51.100.77"}]}, headers=auth)
+    listed = client.get("/config/webhooks", headers=auth).json()
+    assert next(w for w in listed if w["id"] == hook["id"])["status"] == "failing"
+    client.delete(f"/config/webhooks/{hook['id']}", headers=auth)

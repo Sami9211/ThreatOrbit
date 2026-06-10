@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   fetchApiKeys, createApiKey, revokeApiKey,
-  fetchWebhooks, createWebhook, patchWebhook, deleteWebhook,
+  fetchWebhooks, createWebhook, patchWebhook, deleteWebhook, testWebhook,
   type ApiKey as RemoteApiKey, type Webhook as RemoteWebhook,
 } from '@/lib/api'
 import {
@@ -276,6 +276,20 @@ export default function ApiKeysPage() {
     deleteWebhook(id).catch(() => setWebhooks(prev))
   }
 
+  const [testing, setTesting] = useState<string | null>(null)
+  function runTest(id: string) {
+    if (testing) return
+    setTesting(id)
+    testWebhook(id)
+      .then((out) => {
+        setWebhooks((prev) => prev.map((x) => x.id === id
+          ? { ...x, status: out.status as WebhookStatus, lastDelivery: out.lastDelivery ? new Date(out.lastDelivery).toLocaleString() : x.lastDelivery }
+          : x))
+      })
+      .catch(() => {})
+      .finally(() => setTesting(null))
+  }
+
   async function handleGenerate(name: string, scope: Scope): Promise<string> {
     const result = await createApiKey(name, scope)
     setKeys((prev) => [remoteToRow(result), ...prev])
@@ -469,6 +483,14 @@ export default function ApiKeysPage() {
                   </span>
                   {webhooksLive && (
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => runTest(w.id)}
+                        disabled={testing === w.id}
+                        title="Send a test event"
+                        className="text-[10px] px-2 py-1 rounded-lg border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50"
+                      >
+                        {testing === w.id ? 'Testing…' : 'Test'}
+                      </button>
                       <button
                         onClick={() => toggleWebhook(w)}
                         title={w.status === 'paused' ? 'Resume deliveries' : 'Pause deliveries'}

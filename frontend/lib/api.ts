@@ -657,6 +657,8 @@ export const patchWebhook = (id: string, body: { status?: string; events?: strin
   api<Webhook>(`/config/webhooks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const deleteWebhook = (id: string) =>
   api<void>(`/config/webhooks/${id}`, { method: 'DELETE' })
+export const testWebhook = (id: string) =>
+  api<{ ok: boolean; status: string; lastDelivery: string | null }>(`/config/webhooks/${id}/test`, { method: 'POST' })
 
 export const fetchAuditLog   = (limit = 100, action?: string) => {
   const q = new URLSearchParams({ limit: String(limit), ...(action ? { action } : {}) })

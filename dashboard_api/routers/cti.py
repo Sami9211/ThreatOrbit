@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.webhooks import dispatch
 
 router = APIRouter(prefix="/cti", tags=["cti"], dependencies=[Depends(current_user)])
 
@@ -130,6 +131,10 @@ def import_iocs(body: IocImport, user: dict = Depends(current_user)):
         audit(conn, user["email"], "ioc.import", None,
               f"imported={imported} duplicates={duplicates} skipped={skipped}")
         conn.commit()
+    if imported:
+        dispatch("ioc.confirmed", {"imported": imported, "source": body.source,
+                                   "severity": body.severity, "actor": body.actor or None,
+                                   "importedBy": user["email"]})
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
             "total": len(body.indicators)}
 

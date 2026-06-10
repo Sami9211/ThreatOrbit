@@ -182,6 +182,24 @@ def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(re
     return row_to_dict(row)
 
 
+@router.post("/webhooks/{webhook_id}/test")
+def test_webhook(webhook_id: str, actor: dict = Depends(require_role("admin", "manager"))):
+    """Deliver a synchronous test event so the operator can verify the endpoint."""
+    from dashboard_api.webhooks import _deliver
+    with get_conn() as conn:
+        row = conn.execute("SELECT id, url FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    _deliver("webhook.test", {"message": "ThreatOrbit test delivery", "requestedBy": actor["email"]},
+             [{"id": row["id"], "url": row["url"]}])
+    with get_conn() as conn:
+        updated = conn.execute("SELECT status, last_delivery FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
+        audit(conn, actor["email"], "webhook.test", webhook_id, f"result={updated['status']}")
+        conn.commit()
+    return {"ok": updated["status"] == "active", "status": updated["status"],
+            "last_delivery": updated["last_delivery"]}
+
+
 @router.delete("/webhooks/{webhook_id}", status_code=204)
 def delete_webhook(webhook_id: str, actor: dict = Depends(require_role("admin", "manager"))):
     with get_conn() as conn:
