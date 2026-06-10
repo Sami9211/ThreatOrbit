@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -605,7 +605,21 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             { label: 'Suppress', icon: Lock, color: 'text-ink-400',
               run: () => { onUpdate(alert.id, { status: 'closed', disposition: 'false-positive' }); flash(`Rule ${alert.ruleId} suppressed for this entity`) } },
             { label: 'Run Playbook', icon: Zap, color: 'text-safe',
-              run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Playbook triggered in SOAR') } },
+              run: () => {
+                onUpdate(alert.id, { status: 'in-progress' })
+                // Pick the most relevant enabled playbook for this alert and
+                // actually execute it in SOAR (bumps runs / last_run, audited).
+                fetchPlaybooks()
+                  .then((pbs) => {
+                    const needle = `${alert.mitreTactic} ${alert.title}`.toLowerCase()
+                    const match = pbs.find((p) =>
+                      (p.trigger ?? '').toLowerCase().split(/\s+/).some((w) => w.length > 4 && needle.includes(w)))
+                      ?? pbs[0]
+                    if (!match) throw new Error('no playbook')
+                    return runPlaybook(match.id).then((run) => flash(`Playbook "${run.name}" executed in SOAR`))
+                  })
+                  .catch(() => flash('Could not run a playbook — is the dashboard API running?'))
+              } },
           ].map(({ label, icon: Icon, color, run }) => (
             <button key={label} onClick={run}
               className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border border-white/8 hover:border-white/15 bg-surface-2 hover:bg-surface-3 transition-colors active:scale-95', color)}>

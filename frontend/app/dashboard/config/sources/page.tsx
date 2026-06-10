@@ -7,7 +7,8 @@ import {
   MonitorSmartphone, Network, AppWindow, Settings, Radio,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchSiemSources, type LogSource } from '@/lib/api'
+import { fetchSiemSources, createLogSource, fetchSettings, updateSettings, type LogSource } from '@/lib/api'
+import CreateModal from '@/components/dashboard/CreateModal'
 
 /* Keywords that link a connector to a live SIEM log source by name. A connector
  * shows "Connected" when a matching source is ingesting (not offline). */
@@ -81,11 +82,52 @@ const CATEGORIES: { id: ConnCategory; icon: React.ElementType; color: string }[]
 ]
 
 /* ── Config form panel ───────────────────────────────────────────── */
-function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: () => void }) {
+function ConfigPanel({ connector, onClose, onConnected }: {
+  connector: Connector; onClose: () => void; onConnected: () => void
+}) {
   const [saved, setSaved] = useState(false)
-  const save = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  const [saveError, setSaveError] = useState(false)
+  const [endpoint, setEndpoint] = useState(connector.endpoint)
+  const [authMethod, setAuthMethod] = useState('API Key')
+  const [interval, setIntervalSel] = useState('Every 5 minutes')
+
+  // Hydrate previously-saved connector config from the settings store.
+  useEffect(() => {
+    fetchSettings().then((s) => {
+      const raw = s[`connector_${connector.id}`]
+      if (!raw) return
+      try {
+        const cfg = JSON.parse(raw) as { endpoint?: string; auth?: string; interval?: string }
+        if (cfg.endpoint) setEndpoint(cfg.endpoint)
+        if (cfg.auth) setAuthMethod(cfg.auth)
+        if (cfg.interval) setIntervalSel(cfg.interval)
+      } catch { /* malformed stored value — keep defaults */ }
+    }).catch(() => {})
+  }, [connector.id])
+
+  // Persist the connector config; first-time connects also register a live
+  // log source so the connector genuinely shows up as ingesting.
+  const save = async () => {
+    setSaveError(false)
+    try {
+      await updateSettings({
+        [`connector_${connector.id}`]: JSON.stringify({ endpoint, auth: authMethod, interval }),
+      })
+      if (connector.status !== 'connected') {
+        await createLogSource({
+          name: connector.name,
+          type: 'API Pull',
+          host: endpoint || connector.vendor.toLowerCase() + '.api',
+          format: connector.dataTypes[0] ?? 'JSON',
+          tags: [connector.category, connector.vendor],
+        })
+        onConnected()
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      setSaveError(true)
+    }
   }
   return (
     <motion.div
@@ -122,7 +164,8 @@ function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: ()
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Endpoint URL</label>
             <input
-              defaultValue={connector.endpoint}
+              value={endpoint}
+              onChange={(e) => setEndpoint(e.target.value)}
               placeholder="https://api.vendor.com/v1/logs"
               className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600 font-mono text-xs"
             />
@@ -130,7 +173,10 @@ function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: ()
 
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Authentication Method</label>
-            <select className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+            <select
+              value={authMethod}
+              onChange={(e) => setAuthMethod(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
               <option>API Key</option>
               <option>OAuth 2.0 (Client Credentials)</option>
               <option>Bearer Token</option>
@@ -140,7 +186,10 @@ function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: ()
 
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Polling Interval</label>
-            <select className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+            <select
+              value={interval}
+              onChange={(e) => setIntervalSel(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
               <option>Every 1 minute</option>
               <option>Every 5 minutes</option>
               <option>Every 15 minutes</option>
@@ -172,6 +221,12 @@ function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: ()
             </div>
           </div>
 
+          {saveError && (
+            <p className="px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert">
+              Could not save — check the dashboard API is running and you have admin access.
+            </p>
+          )}
+
           <button
             onClick={save}
             className={cn(
@@ -179,7 +234,7 @@ function ConfigPanel({ connector, onClose }: { connector: Connector; onClose: ()
               saved ? 'bg-safe/15 text-safe border border-safe/25' : 'bg-plasma text-white hover:shadow-magenta-sm',
             )}
           >
-            {saved ? <><CheckCircle className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> Save Connector</>}
+            {saved ? <><CheckCircle className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> {connector.status === 'connected' ? 'Save Connector' : 'Connect'}</>}
           </button>
         </div>
       </motion.div>
@@ -241,7 +296,23 @@ function ConnectorCard({ connector, onConfigure }: { connector: Connector; onCon
 export default function DataSourcesPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [connectors, setConnectors] = useState<Connector[]>(CONNECTORS)
+  const [customSource, setCustomSource] = useState<CustomSourceType | null>(null)
   const selectedConnector = connectors.find((c) => c.id === selected) ?? null
+
+  function markConnected(id: string) {
+    setConnectors((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'connected' } : c)))
+  }
+
+  async function addCustomSource(values: Record<string, string>) {
+    if (!customSource) return
+    await createLogSource({
+      name: values.name,
+      type: customSource.name,
+      host: values.host || undefined,
+      format: values.format || customSource.name,
+      tags: ['custom'],
+    })
+  }
 
   // Derive each connector's status from live log sources: connected when a
   // matching source is actively ingesting (anything but offline).
@@ -308,28 +379,54 @@ export default function DataSourcesPage() {
             <h2 className="text-sm font-semibold text-white">Add Custom Source</h2>
           </div>
           <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {CUSTOM_SOURCES.map(({ id, name, description, icon: Icon }) => (
-              <button
-                key={id}
-                className="flex flex-col items-start gap-2 p-4 rounded-xl border border-dashed border-white/12 bg-surface hover:border-magenta/30 hover:bg-magenta/5 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <Icon className="w-4 h-4 text-violet" />
-                  <span className="text-sm font-semibold text-white">{name}</span>
-                </div>
-                <p className="text-[10px] text-ink-500 leading-snug">{description}</p>
-                <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-magenta">
-                  <Plus className="w-3 h-3" /> Add source
-                </span>
-              </button>
-            ))}
+            {CUSTOM_SOURCES.map((src) => {
+              const { id, name, description, icon: Icon } = src
+              return (
+                <button
+                  key={id}
+                  onClick={() => setCustomSource(src)}
+                  className="flex flex-col items-start gap-2 p-4 rounded-xl border border-dashed border-white/12 bg-surface hover:border-magenta/30 hover:bg-magenta/5 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className="w-4 h-4 text-violet" />
+                    <span className="text-sm font-semibold text-white">{name}</span>
+                  </div>
+                  <p className="text-[10px] text-ink-500 leading-snug">{description}</p>
+                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-magenta">
+                    <Plus className="w-3 h-3" /> Add source
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </section>
       </div>
 
       <AnimatePresence>
         {selectedConnector && (
-          <ConfigPanel connector={selectedConnector} onClose={() => setSelected(null)} />
+          <ConfigPanel
+            connector={selectedConnector}
+            onClose={() => setSelected(null)}
+            onConnected={() => markConnected(selectedConnector.id)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {customSource && (
+          <CreateModal
+            title={`Add ${customSource.name} Source`}
+            icon={customSource.icon}
+            accent="#7A3CFF"
+            submitLabel="Add Source"
+            onClose={() => setCustomSource(null)}
+            onSubmit={addCustomSource}
+            fields={[
+              { key: 'name', label: 'Source name', required: true, placeholder: `e.g. Prod ${customSource.name}` },
+              { key: 'host', label: 'Host / endpoint', placeholder: customSource.id === 's3' ? 's3://bucket/prefix' : customSource.id === 'kafka' ? 'kafka:9092 / topic' : '10.0.0.1:514' },
+              { key: 'format', label: 'Format', placeholder: 'e.g. RFC 5424, JSON' },
+            ]}
+          />
         )}
       </AnimatePresence>
     </div>

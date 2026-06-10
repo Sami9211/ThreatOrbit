@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, type LucideIcon } from 'lucide-react'
+import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface CreateField {
@@ -23,7 +23,7 @@ export interface CreateField {
  */
 export default function CreateModal({ title, icon: Icon, accent = '#FF2E97', fields, submitLabel, onSubmit, onClose }: {
   title: string
-  icon: LucideIcon
+  icon: React.ElementType
   accent?: string
   fields: CreateField[]
   submitLabel: string
