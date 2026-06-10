@@ -11,11 +11,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - threat_data:/app
-      - ./threat_api:/app
+      - threat_data:/data
     environment:
       - APP_API_KEY=${APP_API_KEY:?APP_API_KEY is required, copy .env.example to .env}
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - DB_PATH=/data/threat_api.db
       - OTX_API_KEY=${OTX_API_KEY:-}
       - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY:-}
       - OPENCTI_URL=${OPENCTI_URL:-http://localhost:8080}
@@ -24,7 +24,6 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-120}
       - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
-    command: python main.py
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -40,12 +39,14 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - log_data:/app
-      - ./log_api:/app
+      - log_data:/data
     environment:
+      # log_api refuses to start without APP_API_KEY (same key scheme as threat_api).
+      - APP_API_KEY=${APP_API_KEY:?APP_API_KEY is required, copy .env.example to .env}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - LOG_DB_PATH=${LOG_DB_PATH:-log_api.db}
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+      - LOG_DB_PATH=/data/log_api.db
+      - REPORT_OUTPUT_PATH=/data/report.html
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -62,14 +63,21 @@ services:
       - "8002:8002"
     volumes:
       - dashboard_data:/data
-      - ./dashboard_api:/app/dashboard_api
     environment:
       - DASHBOARD_DB_PATH=/data/dashboard.db
       - DASHBOARD_JWT_SECRET=${DASHBOARD_JWT_SECRET:-dev-insecure-secret-change-me}
       - DASHBOARD_ADMIN_EMAIL=${DASHBOARD_ADMIN_EMAIL:-admin@threatorbit.space}
       - DASHBOARD_ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD:-ChangeMe123!}
       - DASHBOARD_CORS_ORIGINS=${DASHBOARD_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-    command: uvicorn dashboard_api.main:app --host 0.0.0.0 --port 8002
+      - DASHBOARD_ALLOW_REGISTRATION=${DASHBOARD_ALLOW_REGISTRATION:-true}
+      # Service bridge: lets the dashboard proxy the ingestion + log engines.
+      - THREAT_API_URL=http://threat_api:8000
+      - LOG_API_URL=http://log_api:8000
+      - SERVICES_API_KEY=${APP_API_KEY:-}
+      - SERVICES_ADMIN_KEY=${ADMIN_API_KEY:-${APP_API_KEY:-}}
+    depends_on:
+      - threat_api
+      - log_api
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
       interval: 30s

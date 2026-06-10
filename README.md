@@ -9,7 +9,7 @@ ThreatOrbit is a cybersecurity platform made of three backend services and a Nex
 * **Log API** (`log_api`, FastAPI, port 8001)
   Parses logs (Apache, Syslog, Windows Event, Generic), detects anomalies via four engines (Pattern, Statistical, ML, Temporal), generates HTML reports, and exports STIX 2.1 from findings.
 * **Dashboard API** (`dashboard_api`, FastAPI, port 8002)
-  The unified backend powering the operator dashboard: JWT auth + role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR) and a correlation engine, SOAR cases/playbooks/integrations, CTI actors/IOCs with lookup + bulk import, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, and a full audit trail. See [`dashboard_api/README.md`](dashboard_api/README.md).
+  The unified backend powering the operator dashboard: JWT auth (login + self-service registration with brute-force throttling) and role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR), a correlation engine and a live hunt-query engine, SOAR case lifecycle (create, war-room notes, task workflow), CTI actors/IOCs with lookup + bulk import + scanner history, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, webhooks, a full audit trail — and a **service bridge** that proxies the Threat API and Log API server-side so the browser never handles their API keys. See [`dashboard_api/README.md`](dashboard_api/README.md).
 * **Frontend** (`frontend`, Next.js 14 + TypeScript)
   Marketing site **and** the operator dashboard (`/dashboard/**`, 23 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Deployable on Vercel.
 
@@ -162,37 +162,37 @@ https://docs.opencti.io/latest/deployment/
 cp .env.example .env
 # edit .env and set APP_API_KEY (required) and ADMIN_API_KEY (recommended)
 
-# 2. Start both APIs
+# 2. Start all three APIs
 docker compose up --build
 ```
 
 Services:
 
-* Threat API: http://127.0.0.1:8000
-* Log API:    http://127.0.0.1:8001
+* Threat API:    http://127.0.0.1:8000
+* Log API:       http://127.0.0.1:8001
+* Dashboard API: http://127.0.0.1:8002  (auto-seeded; service bridge pre-wired to the other two)
 
 Stop with `docker compose down`.
 
 ### Run locally without Docker
 
-Two terminals:
+Both services use absolute package imports, so run them **from the repo root**:
 
 ```bash
-# Terminal 1: Threat API
-cd threat_api
+# One-time setup (from the repo root)
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r threat_api/requirements.txt -r log_api/requirements.txt
 export APP_API_KEY=your-secret-key                   # Windows: set APP_API_KEY=...
-python main.py
 ```
 
 ```bash
-# Terminal 2: Log API
-cd log_api
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export APP_API_KEY=your-secret-key
-uvicorn main:app --reload --host 127.0.0.1 --port 8001
+# Terminal 1: Threat API (from the repo root)
+python -m threat_api.main
+```
+
+```bash
+# Terminal 2: Log API (from the repo root)
+uvicorn log_api.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
 ### Run the frontend
@@ -218,10 +218,17 @@ cd frontend && npm run dev
 
 Open `http://localhost:3000/dashboard` and log in with the seeded admin
 (`admin@threatorbit.space` / `ChangeMe123!` — override via
-`DASHBOARD_ADMIN_EMAIL` / `DASHBOARD_ADMIN_PASSWORD`). Every dashboard page
-loads live data from `:8002` and degrades to built-in demo data when the API
-is unreachable. Point the frontend at a non-default API URL with
-`NEXT_PUBLIC_API_URL`.
+`DASHBOARD_ADMIN_EMAIL` / `DASHBOARD_ADMIN_PASSWORD`), or create your own
+account at `http://localhost:3000/signup` (backed by `POST /auth/register`).
+Every dashboard page loads live data from `:8002` and degrades to built-in
+demo data when the API is unreachable. Point the frontend at a non-default
+API URL with `NEXT_PUBLIC_API_URL`.
+
+When all three APIs run together (e.g. via docker compose), the dashboard
+bridges them live: **Feeds → Sources** can trigger ingestion runs on the
+Threat API and sync its indicators into the CTI store, and **SIEM → Sources**
+can upload log files to the Log API's four anomaly detectors and render the
+findings — no API keys ever reach the browser.
 
 ---
 
@@ -363,10 +370,12 @@ You can also export STIX bundles from both services and import them through the 
 
 ### Dashboard API (`:8002`)
 
-JWT bearer auth (login at `POST /auth/login`). 59 routes across auth, users,
-overview, SIEM, SOAR, CTI, assets, feeds, and config — including computed SOC
-metrics, an alert-correlation engine, a transparent asset risk model with
-per-axis breakdowns, IOC lookup/bulk-import, and a full audit trail. The
+JWT bearer auth (`POST /auth/login`, self-service `POST /auth/register`).
+80+ routes across auth, users, overview, SIEM, SOAR, CTI, assets, feeds,
+config, and the `/services/*` bridge — including computed SOC metrics, an
+alert-correlation engine, a live hunt-query engine, SOAR case lifecycle
+(notes/tasks), a transparent asset risk model with per-axis breakdowns, IOC
+lookup/bulk-import/scanner history, webhooks, and a full audit trail. The
 complete endpoint map and algorithm notes live in
 [`dashboard_api/README.md`](dashboard_api/README.md).
 
@@ -377,7 +386,7 @@ complete endpoint map and algorithm notes live in
 ```bash
 cd threat_api && pytest -q
 cd ../log_api && pytest -q
-python -m pytest dashboard_api/tests -q   # from the repo root (29 tests)
+python -m pytest dashboard_api/tests -q   # from the repo root (42 tests)
 ```
 
 Tests set their own API keys via `conftest.py`, so no `.env` is required to run them.

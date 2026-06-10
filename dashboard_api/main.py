@@ -51,6 +51,12 @@ async def global_exc(request: Request, exc: Exception):
 
 @app.on_event("startup")
 def startup():
+    from dashboard_api.config import JWT_SECRET
+    if JWT_SECRET == "dev-insecure-secret-change-me":
+        logger.warning(
+            "DASHBOARD_JWT_SECRET is the development default — set a long random "
+            "value before exposing this service (e.g. `openssl rand -hex 32`)."
+        )
     init_db()
     if AUTO_SEED:
         from dashboard_api.seed import seed
