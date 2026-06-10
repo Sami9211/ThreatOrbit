@@ -115,8 +115,19 @@ def _seed_assets(conn, rng):
     ]
     owners = ["sarah.chen", "marcus.webb", "priya.nair", "diego.ramos", "lena.fischer"]
     port_pool = [22, 80, 443, 3306, 5432, 3389, 8080, 8443, 53, 25, 6379, 9200]
+    # Installed software per asset — some deliberately vulnerable versions so the
+    # vuln scanner produces genuine CVE findings; others patched (no findings).
+    software_map = {
+        "web-prod-01": [{"product": "nginx", "version": "1.17.6"}, {"product": "openssl", "version": "3.0.5"}],
+        "legacy-app-01": [{"product": "log4j", "version": "2.14.1"}, {"product": "openssl", "version": "1.0.1f"}],
+        "jump-host": [{"product": "openssh", "version": "9.6"}, {"product": "sudo", "version": "1.9.4"}],
+        "mail-relay": [{"product": "exim", "version": "4.90"}, {"product": "openssl", "version": "3.0.7"}],
+        "web-prod-02": [{"product": "apache httpd", "version": "2.4.49"}],
+    }
+    safe_default = [{"product": "openssl", "version": "3.0.13"}, {"product": "openssh", "version": "9.8"}]
     asset_names = []
     for name, typ, value, crit, os_ in base:
+        software = software_map.get(name, safe_default if typ in ("server", "database", "cloud") else [])
         cves = {
             "critical": rng.randint(0, 2 if crit in ("critical", "high") else 1),
             "high": rng.randint(0, 4), "medium": rng.randint(0, 8), "low": rng.randint(0, 12),
@@ -132,12 +143,13 @@ def _seed_assets(conn, rng):
         status = "scanning" if rng.random() < 0.08 else risk_band(risk)
         conn.execute(
             "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
-            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), name, typ, value, crit, status, risk, _ago(rng, 72),
              alerts, dumps(cves), dumps(ports), os_, rng.choice(owners), patch_age,
              dumps(tags),
-             round(rng.uniform(97.5, 100.0), 2), _iso(_now() - timedelta(days=rng.randint(1, 300)))),
+             round(rng.uniform(97.5, 100.0), 2), _iso(_now() - timedelta(days=rng.randint(1, 300))),
+             dumps(software)),
         )
         asset_names.append((name, value, crit))
     return asset_names

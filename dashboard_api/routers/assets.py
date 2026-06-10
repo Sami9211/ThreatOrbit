@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, dumps, get_conn, record_job, row_to_dict, rows_to_dicts
 from dashboard_api.scoring import fleet_risk_distribution, recompute_asset_risk, risk_breakdown
 
@@ -23,6 +23,7 @@ class AssetCreate(BaseModel):
     os: str | None = None
     owner: str | None = None
     tags: list[str] = []
+    software: list[dict] = []
 
 
 @router.get("")
@@ -60,11 +61,12 @@ def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
-            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at) "
-            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,?,?,0,?,100.0,?)",
+            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software) "
+            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,?,?,0,?,100.0,?,?)",
             (aid, name, body.type, value, body.criticality,
              dumps({"critical": 0, "high": 0, "medium": 0, "low": 0}), dumps([]),
-             body.os, body.owner or user["email"], dumps(body.tags or ["new"]), now),
+             body.os, body.owner or user["email"], dumps(body.tags or ["new"]), now,
+             dumps(body.software or [])),
         )
         audit(conn, user["email"], "asset.create", aid, f"name={name} type={body.type}")
         conn.commit()
@@ -128,6 +130,47 @@ def recompute_risk(user: dict = Depends(current_user)):
                    {"updated": count, "actor": user["email"]})
         conn.commit()
     return {"updated": count}
+
+
+@router.post("/{asset_id}/scan")
+def scan_asset_vulns(asset_id: str, user: dict = Depends(require_perm("assets.write"))):
+    """Run a real vulnerability scan: match the asset's installed software
+    against the CVE catalogue → concrete findings + refreshed risk."""
+    from dashboard_api.vuln_scanner import scan_asset
+    with get_conn() as conn:
+        result = scan_asset(conn, asset_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        recompute_asset_risk(conn)
+        audit(conn, user["email"], "asset.vuln_scan", asset_id,
+              f"findings={len(result['findings'])}")
+        conn.commit()
+    return result
+
+
+@router.post("/scan-all")
+def scan_all_vulns(user: dict = Depends(require_perm("assets.write"))):
+    """Scan every asset's software for known CVEs."""
+    from dashboard_api.vuln_scanner import scan_all
+    with get_conn() as conn:
+        result = scan_all(conn)
+        recompute_asset_risk(conn)
+        record_job(conn, "assets.vuln_scan", "completed", {**result, "actor": user["email"]})
+        audit(conn, user["email"], "asset.vuln_scan_all", None, f"findings={result['findings']}")
+        conn.commit()
+    return result
+
+
+@router.get("/{asset_id}/vulns")
+def asset_vuln_findings(asset_id: str):
+    """The concrete CVE findings for one asset (highest CVSS first)."""
+    with get_conn() as conn:
+        if not conn.execute("SELECT 1 FROM assets WHERE id=?", (asset_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Asset not found")
+        rows = conn.execute(
+            "SELECT * FROM vuln_findings WHERE asset_id=? ORDER BY cvss DESC, found_at DESC",
+            (asset_id,)).fetchall()
+    return rows_to_dicts(rows)
 
 
 @router.get("/{asset_id}")

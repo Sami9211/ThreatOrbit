@@ -951,6 +951,23 @@ export const fetchVulns = () => api<Asset[]>('/assets/vulns')
 export const recomputeAssetRisk = () =>
   api<{ updated: number }>('/assets/recompute-risk', { method: 'POST' })
 
+// Vulnerability scanning (real CVE findings from installed software).
+export interface VulnFinding {
+  id: string; assetId: string; cve: string; product: string; version: string
+  severity: string; cvss: number; fixedIn: string | null; summary: string
+  status: string; foundAt: string
+}
+export interface ScanResult {
+  assetId: string; scanned: number
+  findings: Array<{ cve: string; product: string; version: string; severity: string; cvss: number; fixedIn: string | null; summary: string }>
+  counts: Record<string, number>
+}
+export const scanAssetVulns = (id: string) =>
+  api<ScanResult>(`/assets/${id}/scan`, { method: 'POST' })
+export const scanAllVulns = () =>
+  api<{ assets: number; findings: number }>('/assets/scan-all', { method: 'POST' })
+export const fetchAssetVulns = (id: string) => api<VulnFinding[]>(`/assets/${id}/vulns`)
+
 // ── Feeds ─────────────────────────────────────────────────────────────
 export const fetchFeeds   = () => api<Feed[]>('/feeds')
 export const createFeed = (body: {

@@ -143,8 +143,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 4 — Asset, Vuln & Dark Web depth
 
-- [ ] **Real vulnerability scanning** — integrate an actual scanner (or NVD +
-      installed-software matching) for genuine CVE findings per asset.
+- [~] **Real vulnerability scanning** — DONE (see CHANGELOG): per-asset software
+      inventory matched against a real CVE catalogue (Log4Shell, Heartbleed,
+      regreSSHion, …) with version-range logic → genuine CVE findings (CVSS,
+      fixed-in) that drive asset risk. `/assets/{id}/scan`, `/assets/scan-all`,
+      `/assets/{id}/vulns`. Remaining: live NVD feed sync into the catalogue +
+      a findings UI panel (API + clients shipped).
 - [ ] **Attack-surface discovery** — passive/active asset discovery, exposure
       scoring, internet-facing inventory.
 - [ ] **Asset ↔ alert ↔ case linkage** everywhere (one click from a host to all
@@ -169,6 +173,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Real vulnerability scanning (Phase 4)** — assets carry CVE
+  *findings*, not fabricated counts. `vuln_scanner.py` matches each asset's
+  software inventory (`[{product,version}]`) against a catalogue of real CVEs
+  (Log4Shell CVE-2021-44228, Heartbleed, regreSSHion, Baron Samedit, Apache
+  2.4.49 traversal, …) with version-range / less-than logic, producing concrete
+  findings (CVE id, CVSS, severity, fixed-in) stored in `vuln_findings`; re-scan
+  is idempotent and the asset's aggregate CVE counts (which drive the risk
+  model) are kept in sync. `POST /assets/{id}/scan` + `/assets/scan-all`
+  (assets.write) and `GET /assets/{id}/vulns`. Seed gives several assets
+  deliberately vulnerable versions so scans surface real CVEs. Frontend clients
+  shipped. Tested: version-match units + scan→findings→risk, idempotent
+  re-scan, scan-all, 404s, viewer-blocked.
 
 - **2026-06-10 · Actor attribution scoring (Phase 3, closes Phase 3)** —
   `attribution.py` scores which tracked actor observed activity maps to, with

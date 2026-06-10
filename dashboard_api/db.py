@@ -20,7 +20,7 @@ JSON_COLUMNS = {
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
     "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
-    "context", "trigger_match", "data", "actors",
+    "context", "trigger_match", "data", "actors", "software",
 }
 
 
@@ -111,7 +111,23 @@ CREATE TABLE IF NOT EXISTS assets (
     patch_age    INTEGER NOT NULL DEFAULT 0,
     tags         TEXT NOT NULL DEFAULT '[]',
     uptime       REAL NOT NULL DEFAULT 100.0,
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    software     TEXT NOT NULL DEFAULT '[]'        -- installed [{product,version}] for vuln scanning
+);
+
+-- Genuine per-asset CVE findings from the vulnerability scanner.
+CREATE TABLE IF NOT EXISTS vuln_findings (
+    id         TEXT PRIMARY KEY,
+    asset_id   TEXT NOT NULL,
+    cve        TEXT NOT NULL,
+    product    TEXT,
+    version    TEXT,
+    severity   TEXT NOT NULL,
+    cvss       REAL NOT NULL DEFAULT 0,
+    fixed_in   TEXT,
+    summary    TEXT,
+    status     TEXT NOT NULL DEFAULT 'open',     -- open|fixed|accepted
+    found_at   TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS alerts (
@@ -572,6 +588,7 @@ _MIGRATIONS = [
     ("iocs", "status", "TEXT NOT NULL DEFAULT 'active'"),
     ("iocs", "sightings", "INTEGER NOT NULL DEFAULT 1"),
     ("users", "org_id", "TEXT"),
+    ("assets", "software", "TEXT NOT NULL DEFAULT '[]'"),
 ]
 
 

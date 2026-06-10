@@ -1440,6 +1440,62 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_vuln_scanner_units():
+    """Real CVE matching from software versions (version ranges + lt)."""
+    from dashboard_api.vuln_scanner import scan_software, _lt
+    assert _lt("2.14.1", "2.15.0") and not _lt("2.15.0", "2.15.0")
+    f = scan_software([{"product": "log4j", "version": "2.14.1"},
+                       {"product": "nginx", "version": "1.99"},          # patched → no finding
+                       {"product": "openssh", "version": "9.6"}])        # in regreSSHion range
+    cves = {x["cve"] for x in f}
+    assert "CVE-2021-44228" in cves and "CVE-2024-6387" in cves
+    assert all(x["cvss"] > 0 and x["severity"] for x in f)
+    log4shell = next(x for x in f if x["cve"] == "CVE-2021-44228")
+    assert log4shell["severity"] == "critical" and log4shell["fixed_in"] == "2.15.0"
+
+
+def test_asset_vulnerability_scanning(client, auth):
+    """Scanning an asset's software produces genuine CVE findings + risk."""
+    # create an asset with known-vulnerable software
+    a = client.post("/assets", json={
+        "name": "vuln-scan-test", "type": "server", "value": "10.9.9.9", "criticality": "high",
+        "software": [{"product": "log4j", "version": "2.14.1"},
+                     {"product": "openssl", "version": "1.0.1f"}]}, headers=auth)
+    assert a.status_code == 201, a.text
+    aid = a.json()["id"]
+    assert a.json()["cves"] == {"critical": 0, "high": 0, "medium": 0, "low": 0}  # not scanned yet
+
+    scan = client.post(f"/assets/{aid}/scan", headers=auth)
+    assert scan.status_code == 200, scan.text
+    res = scan.json()
+    cves = {f["cve"] for f in res["findings"]}
+    assert "CVE-2021-44228" in cves and "CVE-2014-0160" in cves  # Log4Shell + Heartbleed
+    assert res["counts"]["critical"] >= 1
+
+    # findings are persisted + sorted by CVSS
+    findings = client.get(f"/assets/{aid}/vulns", headers=auth).json()
+    assert findings and findings[0]["cvss"] >= findings[-1]["cvss"]
+    assert all(f["status"] == "open" for f in findings)
+    # the asset's aggregate CVE counts now reflect real findings
+    asset = client.get(f"/assets/{aid}", headers=auth).json()
+    assert asset["cves"]["critical"] >= 1 and asset["last_scan"]
+
+    # re-scan is idempotent (replaces open findings, no duplication)
+    n1 = len(client.get(f"/assets/{aid}/vulns", headers=auth).json())
+    client.post(f"/assets/{aid}/scan", headers=auth)
+    assert len(client.get(f"/assets/{aid}/vulns", headers=auth).json()) == n1
+
+    # scan-all works; seeded vulnerable assets are found
+    allres = client.post("/assets/scan-all", headers=auth).json()
+    assert allres["assets"] > 0 and allres["findings"] >= res["counts"]["critical"]
+
+    # guard rails
+    assert client.post("/assets/NOPE/scan", headers=auth).status_code == 404
+    assert client.get("/assets/NOPE/vulns", headers=auth).status_code == 404
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post(f"/assets/{aid}/scan", headers=viewer).status_code == 403
+
+
 def test_actor_attribution(client, auth):
     """Evidence-weighted attribution ranks actors by shared IOCs/TTPs/malware
     with transparent evidence; case attribution pulls from linked activity."""
