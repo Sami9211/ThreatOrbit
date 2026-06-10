@@ -113,3 +113,26 @@ def require_role(*roles: str):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
     return dep
+
+
+def require_perm(*perms: str):
+    """Dependency factory enforcing a named capability (RBAC depth). The caller
+    must hold at least one of `perms` for their role. Denials are audited
+    (who-tried-what), so unauthorized attempts are visible."""
+    from dashboard_api.permissions import has_perm
+
+    def dep(user: dict = Depends(current_user)) -> dict:
+        role = user.get("role", "")
+        if not any(has_perm(role, p) for p in perms):
+            try:
+                from dashboard_api.db import audit, get_conn
+                with get_conn() as conn:
+                    audit(conn, user.get("email", "?"), "rbac.denied", ",".join(perms),
+                          f"role={role}")
+                    conn.commit()
+            except Exception:
+                pass
+            raise HTTPException(status_code=403,
+                                detail=f"Requires permission: {' or '.join(perms)}")
+        return user
+    return dep

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { usePermissions } from '@/lib/usePermissions'
 import { fetchRules, patchRule, deleteRule, exportSigmaRule } from '@/lib/api'
 import RuleEditor from '@/components/dashboard/RuleEditor'
 import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
@@ -631,6 +632,8 @@ function DataRow({ label, value, mono }: { label: string; value: string; mono?: 
 /* ─── Main Page ─────────────────────────────────────────────────────── */
 export default function RulesEnginePage() {
   useExperienceMode()
+  const { can } = usePermissions()
+  const canWrite = can('siem.write')
 
   const [rulesData, setRulesData] = useState(RULES_DATA)
   const [showNewRule, setShowNewRule] = useState(false)
@@ -733,16 +736,18 @@ export default function RulesEnginePage() {
           </div>
           <p className="text-sm text-ink-500">Detection rules powering your alert pipeline</p>
         </div>
-        <div className="flex items-center gap-2">
-          <SigmaImportButton onImported={() =>
-            fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
-          <button
-            onClick={() => setShowNewRule(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
-            <Plus className="w-4 h-4" />
-            New Rule
-          </button>
-        </div>
+        {canWrite && (
+          <div className="flex items-center gap-2">
+            <SigmaImportButton onImported={() =>
+              fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
+            <button
+              onClick={() => setShowNewRule(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
+              <Plus className="w-4 h-4" />
+              New Rule
+            </button>
+          </div>
+        )}
       </motion.div>
 
       {/* ── KPI strip ── */}

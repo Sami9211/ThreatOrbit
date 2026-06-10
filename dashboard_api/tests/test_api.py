@@ -1434,6 +1434,72 @@ def test_ioc_lifecycle_api(client, auth):
     assert client.get("/cti/iocs?status=bogus", headers=auth).status_code == 400
 
 
+def _token(client, email, password="Password123!"):
+    r = client.post("/auth/login", json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+def test_rbac_permissions_matrix(client, auth):
+    """Effective-permission introspection + the full role matrix."""
+    me = client.get("/auth/permissions", headers=auth).json()
+    assert me["role"] == "admin"
+    assert {"siem.write", "users.delete", "config.manage"} <= set(me["permissions"])
+    assert me["capabilities"]["users.delete"] is True
+    roles = client.get("/config/roles", headers=auth).json()
+    assert "siem.write" in roles["capabilities"]
+    assert "users.delete" in roles["roles"]["admin"]
+    assert "users.delete" not in roles["roles"]["manager"]
+    assert roles["roles"]["viewer"] == []
+    assert "siem.write" in roles["roles"]["analyst"]
+    assert "config.manage" not in roles["roles"]["analyst"]
+
+
+def test_rbac_viewer_is_read_only(client, auth):
+    """A viewer can read SOC data but cannot mutate; an analyst can. Denials
+    are audited (who-tried-what)."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    perms = client.get("/auth/permissions", headers=viewer).json()
+    assert perms["role"] == "viewer" and perms["permissions"] == []
+
+    # viewer reads are fine
+    assert client.get("/siem/alerts", headers=viewer).status_code == 200
+    assert client.get("/soar/cases", headers=viewer).status_code == 200
+    assert client.get("/cti/iocs", headers=viewer).status_code == 200
+
+    # viewer writes are forbidden across SIEM / SOAR / CTI
+    assert client.post("/siem/rules", json={"name": "x", "severity": "low"}, headers=viewer).status_code == 403
+    assert client.post("/siem/suppressions", json={"value": "1.2.3.4"}, headers=viewer).status_code == 403
+    assert client.post("/soar/cases", json={"title": "x", "severity": "low"}, headers=viewer).status_code == 403
+    assert client.post("/soar/playbooks", json={"name": "x", "steps": []}, headers=viewer).status_code == 403
+    assert client.post("/cti/iocs/import", json={"indicators": [{"type": "ip", "value": "9.9.9.9"}]},
+                       headers=viewer).status_code == 403
+    # alert triage too
+    alert = client.get("/siem/alerts?limit=1", headers=auth).json()["items"][0]
+    assert client.patch(f"/siem/alerts/{alert['id']}", json={"status": "closed"}, headers=viewer).status_code == 403
+
+    # the denial was audited
+    log = client.get("/config/audit-log?action=rbac.denied", headers=auth).json()
+    assert any(e["actor"] == "tom.okafor@threatorbit.space" for e in log)
+
+    # an analyst CAN perform SOC writes
+    analyst = client.post("/users", json={
+        "email": "rbac.analyst@threatorbit.space", "name": "RBAC Analyst",
+        "role": "analyst", "password": "Password123!"}, headers=auth)
+    assert analyst.status_code == 201, analyst.text
+    at = _token(client, "rbac.analyst@threatorbit.space")
+    assert client.get("/auth/permissions", headers=at).json()["permissions"]  # non-empty
+    assert client.post("/siem/rules", json={"name": "Analyst rule", "severity": "medium"},
+                       headers=at).status_code == 201
+    # but an analyst cannot do platform admin (manage users / api keys)
+    assert client.post("/users", json={"email": "z@z.com", "name": "Z", "role": "viewer",
+                                       "password": "Password123!"}, headers=at).status_code == 403
+    assert client.get("/config/api-keys", headers=at).status_code == 403
+    client.delete(f"/users/{analyst.json()['id']}", headers=auth)
+
+
 def test_event_stream_broker_units():
     """The pub/sub broker fans messages to every subscriber and drops dead ones."""
     import queue

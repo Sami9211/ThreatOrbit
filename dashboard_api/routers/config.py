@@ -55,13 +55,26 @@ def update_settings(body: SettingsUpdate, actor: dict = Depends(require_role("ad
 
 
 @router.get("/api-keys")
-def list_api_keys(_: dict = Depends(require_role("admin", "manager"))):
+def list_api_keys(user: dict = Depends(require_role("admin", "manager"))):
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id,name,prefix,scope,last_used,created_at,created_by,revoked "
             "FROM api_keys ORDER BY created_at DESC"
         ).fetchall()
+        # who-saw-what: viewing secrets metadata is sensitive, so it's audited.
+        audit(conn, user["email"], "access.api_keys", None, f"count={len(rows)}")
+        conn.commit()
     return rows_to_dicts(rows)
+
+
+@router.get("/roles")
+def list_roles(_: dict = Depends(require_role("admin", "manager"))):
+    """The full RBAC matrix: every capability and which roles hold it."""
+    from dashboard_api.permissions import CAPABILITIES, ROLE_PERMISSIONS
+    return {
+        "capabilities": CAPABILITIES,
+        "roles": {role: sorted(perms) for role, perms in ROLE_PERMISSIONS.items()},
+    }
 
 
 @router.post("/api-keys", status_code=201)

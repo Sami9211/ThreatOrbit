@@ -18,6 +18,13 @@ export function liveStreamUrl(): string | null {
   return tok ? `${BASE}/stream?token=${encodeURIComponent(tok)}` : null
 }
 
+// RBAC: the caller's effective capabilities (UI gates controls on these).
+export interface MyPermissions {
+  role: string
+  permissions: string[]
+  capabilities: Record<string, boolean>
+}
+
 // ── Utility: snake_case → camelCase (recursive) ─────────────────────
 function sc2cc(s: string) {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
@@ -467,6 +474,7 @@ export const authRegister = (body: { name: string; email: string; password: stri
   })
 
 export const authMe = () => api<User>('/auth/me')
+export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 
 export const authChangePassword = (currentPassword: string, newPassword: string) =>
   api<{ ok: boolean }>('/auth/change-password', {

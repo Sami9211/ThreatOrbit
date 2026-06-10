@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user, require_role
+from dashboard_api.auth import current_user, require_perm, require_role
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
 from dashboard_api.ioc_lifecycle import (
@@ -112,7 +112,7 @@ def list_iocs(type: str | None = None, severity: str | None = None,
 
 
 @router.post("/iocs/import", status_code=201)
-def import_iocs(body: IocImport, user: dict = Depends(current_user)):
+def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))):
     """Bulk-insert indicators into the IOC store. Duplicates (by value) are
     skipped, invalid types rejected; returns a per-batch tally for the UI."""
     if not body.indicators:
@@ -247,7 +247,7 @@ def get_ioc(ioc_id: str):
 
 
 @router.post("/iocs/{ioc_id}/sighting")
-def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(current_user)):
+def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(require_perm("cti.write"))):
     """Record a manual sighting — refreshes the indicator and reactivates it."""
     with get_conn() as conn:
         updated = record_sighting(conn, ioc_id=ioc_id, source=body.source.strip() or "manual",
@@ -260,7 +260,7 @@ def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(current_u
 
 
 @router.post("/iocs/{ioc_id}/known-good")
-def whitelist_ioc(ioc_id: str, user: dict = Depends(current_user)):
+def whitelist_ioc(ioc_id: str, user: dict = Depends(require_perm("cti.write"))):
     """Mark an indicator known-good: it stops matching and reads back benign."""
     with get_conn() as conn:
         if not set_known_good(conn, ioc_id, True):
@@ -272,7 +272,7 @@ def whitelist_ioc(ioc_id: str, user: dict = Depends(current_user)):
 
 
 @router.delete("/iocs/{ioc_id}/known-good")
-def unwhitelist_ioc(ioc_id: str, user: dict = Depends(current_user)):
+def unwhitelist_ioc(ioc_id: str, user: dict = Depends(require_perm("cti.write"))):
     """Remove the known-good flag and reactivate the indicator."""
     with get_conn() as conn:
         if not set_known_good(conn, ioc_id, False):
@@ -375,7 +375,7 @@ _VERDICTS = {"malicious", "suspicious", "clean"}
 
 
 @router.post("/scans", status_code=201)
-def record_scan(body: ScanRecord, user: dict = Depends(current_user)):
+def record_scan(body: ScanRecord, user: dict = Depends(require_perm("cti.write"))):
     """Persist an IntelScope scan so history and stats survive reloads."""
     if body.type not in _SCAN_TYPES:
         raise HTTPException(status_code=400, detail=f"type must be one of {sorted(_SCAN_TYPES)}")

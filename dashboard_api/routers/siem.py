@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.hunting import run_alert_hunt
 from dashboard_api.webhooks import dispatch
@@ -146,7 +146,7 @@ def list_alerts(
 
 
 @router.post("/alerts", status_code=201)
-def create_alert(body: AlertCreate, user: dict = Depends(current_user)):
+def create_alert(body: AlertCreate, user: dict = Depends(require_perm("siem.write"))):
     """Raise a SIEM alert manually or from escalated threat intelligence."""
     title = body.title.strip()
     if not title:
@@ -188,7 +188,7 @@ def get_alert(alert_id: str):
 
 
 @router.patch("/alerts/{alert_id}")
-def update_alert(alert_id: str, body: AlertUpdate, user: dict = Depends(current_user)):
+def update_alert(alert_id: str, body: AlertUpdate, user: dict = Depends(require_perm("siem.write"))):
     fields, values = [], []
     for col in ("status", "disposition", "owner"):
         v = getattr(body, col)
@@ -232,7 +232,7 @@ def list_suppressions():
 
 
 @router.post("/suppressions", status_code=201)
-def create_suppression(body: SuppressionCreate, user: dict = Depends(current_user)):
+def create_suppression(body: SuppressionCreate, user: dict = Depends(require_perm("siem.write"))):
     if body.field not in ("src_ip", "username", "hostname"):
         raise HTTPException(status_code=400, detail="field must be src_ip|username|hostname")
     if body.mode not in ("suppress", "allow"):
@@ -263,7 +263,7 @@ def create_suppression(body: SuppressionCreate, user: dict = Depends(current_use
 
 
 @router.delete("/suppressions/{suppression_id}", status_code=204)
-def delete_suppression(suppression_id: str, user: dict = Depends(current_user)):
+def delete_suppression(suppression_id: str, user: dict = Depends(require_perm("siem.write"))):
     with get_conn() as conn:
         cur = conn.execute("DELETE FROM suppressions WHERE id=?", (suppression_id,))
         if cur.rowcount == 0:
@@ -420,7 +420,7 @@ def list_rules(category: str | None = None, status: str | None = None):
 
 
 @router.post("/rules", status_code=201)
-def create_rule(body: RuleCreate, user: dict = Depends(current_user)):
+def create_rule(body: RuleCreate, user: dict = Depends(require_perm("siem.write"))):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required")
@@ -451,7 +451,7 @@ class SigmaImport(BaseModel):
 
 
 @router.post("/rules/import-sigma", status_code=201)
-def import_sigma_rule(body: SigmaImport, user: dict = Depends(current_user)):
+def import_sigma_rule(body: SigmaImport, user: dict = Depends(require_perm("siem.write"))):
     """Import a Sigma YAML rule as a live, evaluable detection rule."""
     from dashboard_api.sigma import sigma_to_rule
     if not body.yaml.strip():
@@ -624,7 +624,7 @@ def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(current_use
 
 
 @router.delete("/rules/{rule_id}", status_code=204)
-def delete_rule(rule_id: str, user: dict = Depends(current_user)):
+def delete_rule(rule_id: str, user: dict = Depends(require_perm("siem.write"))):
     with get_conn() as conn:
         row = conn.execute("SELECT name FROM detection_rules WHERE id=?", (rule_id,)).fetchone()
         if not row:

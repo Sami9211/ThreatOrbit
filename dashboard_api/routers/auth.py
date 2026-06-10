@@ -149,6 +149,16 @@ def me(user: dict = Depends(current_user)):
     return user
 
 
+@router.get("/permissions")
+def my_permissions(user: dict = Depends(current_user)):
+    """The caller's effective capabilities — the UI uses this to hide controls
+    the role can't use (RBAC depth)."""
+    from dashboard_api.permissions import CAPABILITIES, perms_for
+    granted = sorted(perms_for(user["role"]))
+    return {"role": user["role"], "permissions": granted,
+            "capabilities": {p: p in granted for p in CAPABILITIES}}
+
+
 @router.post("/change-password")
 def change_password(body: PasswordChange, user: dict = Depends(current_user)):
     with get_conn() as conn:

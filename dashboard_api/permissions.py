@@ -1,0 +1,47 @@
+"""Role → capability permission model (RBAC depth).
+
+The four roles map to named, per-section/per-action capabilities. Endpoints
+enforce a *capability* (e.g. `siem.write`) rather than hard-coding role names,
+so authorisation is one matrix instead of scattered role lists — and the UI can
+ask `/auth/permissions` for the caller's effective set to hide controls it
+can't use.
+
+Roles (most → least privileged): admin ⊃ manager ⊃ analyst ⊃ viewer.
+  admin   — everything, incl. user deletion + API-key/secret administration.
+  manager — platform + SOC operations; cannot delete users.
+  analyst — SOC operations (triage, detections, response, intel) read+write.
+  viewer  — read-only across the board.
+"""
+
+# Catalogue of capabilities (kept here so /config/roles can advertise them).
+CAPABILITIES = {
+    "siem.write": "Create/triage alerts, author detections, ingest logs, tune suppressions",
+    "soar.write": "Run playbooks, manage cases, approve responses",
+    "cti.write": "Manage indicators (import, sightings, known-good, decay), hunts",
+    "darkweb.write": "Triage dark-web findings",
+    "assets.write": "Create assets, recompute risk",
+    "connectors.manage": "Add/run/remove ingestion connectors",
+    "services.run": "Trigger companion-service fetch/sync actions",
+    "reports.manage": "Create/schedule/deliver reports",
+    "config.manage": "Settings, API keys, webhooks, engine, jobs, retention",
+    "users.manage": "Create and update users",
+    "users.delete": "Delete users",
+}
+
+_ALL = set(CAPABILITIES)
+
+ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "admin": set(_ALL),
+    "manager": _ALL - {"users.delete"},
+    "analyst": {"siem.write", "soar.write", "cti.write", "darkweb.write",
+                "assets.write", "reports.manage"},
+    "viewer": set(),
+}
+
+
+def perms_for(role: str) -> set[str]:
+    return ROLE_PERMISSIONS.get(role, set())
+
+
+def has_perm(role: str, perm: str) -> bool:
+    return perm in ROLE_PERMISSIONS.get(role, set())

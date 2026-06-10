@@ -30,8 +30,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       `/notifications` feed from critical alerts, escalated cases, credential
       leaks, scheduled reports), mark-read, deep-link on click. Remaining:
       per-user routing rules (email/Slack) on top of the webhook engine.
-- [ ] **RBAC depth** — per-section, per-action permissions beyond the 4 roles;
-      audit who-saw-what. *(DEFERRED — own unit; touches every endpoint.)*
+- [~] **RBAC depth** — DONE (see CHANGELOG): a capability matrix (roles →
+      named per-section/per-action permissions), a `require_perm` dependency
+      that audits denials, applied so viewers are read-only and analysts hold
+      SOC write but not platform admin; `/auth/permissions` + `/config/roles`
+      drive UI gating. Remaining: extend `require_perm` to the last
+      config/connectors endpoints (still on the equivalent `require_role`).
 - [ ] **Multi-tenancy / workspaces** — org isolation for an MSSP selling this.
       *(DEFERRED — large architectural unit: org_id scoping on every table/query.)*
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
@@ -149,6 +153,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · RBAC depth (Phase 0)** — authorization is now a capability
+  matrix, not scattered role lists. `permissions.py` maps the four roles to
+  named per-section/per-action capabilities (siem.write, soar.write, cti.write,
+  config.manage, users.manage/delete, …); `require_perm(*caps)` enforces them
+  and **audits denials** (who-tried-what, `rbac.denied`). Applied to the SOC
+  mutations that were previously open to any logged-in user, so a **viewer is
+  now genuinely read-only** (can read alerts/cases/IOCs, 403 on every write)
+  while an **analyst** holds SOC write but not platform admin (can author a
+  rule, 403 on user/api-key management). `GET /auth/permissions` returns the
+  caller's effective set and `GET /config/roles` the full matrix; sensitive
+  reads (API-key list) are access-audited. Frontend `usePermissions` hook
+  (`can('siem.write')`) gates write controls — e.g. the Rules page hides New
+  Rule / Import Sigma for viewers. Tested: matrix introspection + viewer-blocked
+  / analyst-allowed across SIEM/SOAR/CTI with audited denials.
 
 - **2026-06-10 · Real-time push / SSE (Phase 0)** — the dashboard updates
   live instead of polling. `events_stream.py` is a dependency-free, thread-safe

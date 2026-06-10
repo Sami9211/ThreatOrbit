@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
 
@@ -103,7 +103,7 @@ def list_cases(status: str | None = None, severity: str | None = None):
 
 
 @router.post("/cases", status_code=201)
-def create_case(body: CaseCreate, user: dict = Depends(current_user)):
+def create_case(body: CaseCreate, user: dict = Depends(require_perm("soar.write"))):
     title = body.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
@@ -201,7 +201,7 @@ def case_related(case_id: str):
 
 
 @router.post("/cases/{case_id}/notes", status_code=201)
-def add_case_note(case_id: str, body: NoteCreate, user: dict = Depends(current_user)):
+def add_case_note(case_id: str, body: NoteCreate, user: dict = Depends(require_perm("soar.write"))):
     content = body.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="Note content is required")
@@ -221,7 +221,7 @@ def add_case_note(case_id: str, body: NoteCreate, user: dict = Depends(current_u
 
 
 @router.patch("/cases/{case_id}/tasks/{task_id}")
-def update_case_task(case_id: str, task_id: str, body: TaskUpdate, user: dict = Depends(current_user)):
+def update_case_task(case_id: str, task_id: str, body: TaskUpdate, user: dict = Depends(require_perm("soar.write"))):
     if body.status is not None and body.status not in TASK_STATUSES:
         raise HTTPException(status_code=400, detail=f"Status must be one of {sorted(TASK_STATUSES)}")
     if body.status is None and body.assignee is None and body.notes is None:
@@ -250,7 +250,7 @@ def update_case_task(case_id: str, task_id: str, body: TaskUpdate, user: dict = 
 
 
 @router.patch("/cases/{case_id}")
-def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(current_user)):
+def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(require_perm("soar.write"))):
     fields, values = [], []
     for col in ("status", "owner", "severity"):
         v = getattr(body, col)
@@ -321,7 +321,7 @@ def list_playbooks():
 
 
 @router.post("/playbooks", status_code=201)
-def create_playbook(body: PlaybookCreate, user: dict = Depends(current_user)):
+def create_playbook(body: PlaybookCreate, user: dict = Depends(require_perm("soar.write"))):
     import uuid
     from dashboard_api.playbook_engine import display_steps
     name = body.name.strip()
@@ -356,7 +356,7 @@ def get_playbook(playbook_id: str):
 
 
 @router.patch("/playbooks/{playbook_id}")
-def update_playbook(playbook_id: str, body: PlaybookUpdate, user: dict = Depends(current_user)):
+def update_playbook(playbook_id: str, body: PlaybookUpdate, user: dict = Depends(require_perm("soar.write"))):
     from dashboard_api.playbook_engine import display_steps
     fields, values = [], []
     if body.enabled is not None:
@@ -387,7 +387,7 @@ def update_playbook(playbook_id: str, body: PlaybookUpdate, user: dict = Depends
 
 @router.post("/playbooks/{playbook_id}/run")
 def run_playbook(playbook_id: str, body: PlaybookRunBody | None = None,
-                 user: dict = Depends(current_user)):
+                 user: dict = Depends(require_perm("soar.write"))):
     """Execute the playbook's steps for real (or preview them with dry_run)."""
     from dashboard_api.playbook_engine import execute_playbook
     body = body or PlaybookRunBody()
@@ -438,7 +438,7 @@ def list_runs(status: str | None = None, limit: int = 30):
 
 
 @router.post("/runs/{run_id}/approve")
-def approve_run(run_id: str, user: dict = Depends(current_user)):
+def approve_run(run_id: str, user: dict = Depends(require_perm("soar.write"))):
     from dashboard_api.playbook_engine import resolve_approval
     with get_conn() as conn:
         try:
@@ -454,7 +454,7 @@ def approve_run(run_id: str, user: dict = Depends(current_user)):
 
 
 @router.post("/runs/{run_id}/reject")
-def reject_run(run_id: str, user: dict = Depends(current_user)):
+def reject_run(run_id: str, user: dict = Depends(require_perm("soar.write"))):
     from dashboard_api.playbook_engine import resolve_approval
     with get_conn() as conn:
         try:
@@ -488,7 +488,7 @@ def list_integrations():
 
 
 @router.post("/integrations", status_code=201)
-def create_integration(body: IntegrationCreate, user: dict = Depends(current_user)):
+def create_integration(body: IntegrationCreate, user: dict = Depends(require_perm("soar.write"))):
     import uuid
     name = body.name.strip()
     if not name:
@@ -525,7 +525,7 @@ def test_integration(integration_id: str, user: dict = Depends(current_user)):
 
 
 @router.post("/integrations/{integration_id}/actions/run")
-def run_integration_action(integration_id: str, body: ActionRun, user: dict = Depends(current_user)):
+def run_integration_action(integration_id: str, body: ActionRun, user: dict = Depends(require_perm("soar.write"))):
     """Execute a response action on a connected tool: bumps the action counter."""
     action = body.action.strip()
     if not action:
