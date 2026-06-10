@@ -52,6 +52,11 @@ DATA_MODE = os.environ.get("DASHBOARD_DATA_MODE", "demo").lower()
 # How often the connector scheduler wakes to run due connectors (live mode).
 CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "60"))
 
+# Live processing engine (live mode): how often it generates a telemetry batch
+# and how many events per batch. Lower the interval for a more active demo.
+ENGINE_TICK_SECONDS = int(os.environ.get("DASHBOARD_ENGINE_TICK_SECONDS", "20"))
+ENGINE_EVENTS_PER_TICK = int(os.environ.get("DASHBOARD_ENGINE_EVENTS_PER_TICK", "6"))
+
 # --- Seed -------------------------------------------------------------------
 # Deterministic seed so generated demo data is stable across restarts.
 SEED_RANDOM = int(os.environ.get("DASHBOARD_SEED", "1337"))

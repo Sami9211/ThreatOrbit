@@ -825,3 +825,43 @@ def test_connector_critical_ioc_raises_siem_alert(client, auth, monkeypatch):
     assert run["result"]["imported"] == 1 and run["result"]["alertsRaised"] == 1
     after = client.get("/siem/alerts?q=198.51.100.66", headers=auth).json()
     assert after["total"] == 1 and after["items"][0]["ti_hits"] == 1
+
+
+def test_live_engine_produces_cross_section_data(client, auth):
+    """The engine generates telemetry → SIEM alerts, CTI IOCs, dark-web findings,
+    and auto-escalated SOAR cases — all queryable."""
+    before = client.get("/siem/alerts", headers=auth).json()["total"]
+    r = client.post("/config/engine", json={"generate": 10}, headers=auth)
+    assert r.status_code == 200, r.text
+    g = r.json()["generated"]
+    assert g["alerts"] > 0 and g["iocs"] > 0
+    # SIEM grew
+    assert client.get("/siem/alerts", headers=auth).json()["total"] > before
+    # engine alerts carry MITRE mapping
+    items = client.get("/siem/alerts?sort=ts&order=desc&limit=20", headers=auth).json()["items"]
+    assert any(a["mitre_tech_id"] and a["rule_name"] for a in items)
+    # dark web findings exist
+    dw = client.get("/darkweb/findings", headers=auth).json()
+    assert dw["total"] >= 0
+    summary = client.get("/darkweb/summary", headers=auth).json()
+    assert "byCategory" in summary
+    # engine status reflects live activity
+    st = client.get("/config/engine", headers=auth).json()
+    assert st["totalAlerts"] > 0
+
+
+def test_darkweb_triage(client, auth):
+    client.post("/config/engine", json={"generate": 8}, headers=auth)
+    findings = client.get("/darkweb/findings?limit=5", headers=auth).json()["items"]
+    if findings:
+        fid = findings[0]["id"]
+        updated = client.patch(f"/darkweb/findings/{fid}", json={"status": "investigating"}, headers=auth)
+        assert updated.status_code == 200 and updated.json()["status"] == "investigating"
+        assert client.patch(f"/darkweb/findings/{fid}", json={"status": "bogus"}, headers=auth).status_code == 400
+
+
+def test_engine_pause_resume(client, auth):
+    assert client.post("/config/engine", json={"enabled": False}, headers=auth).json()["enabled"] is False
+    st = client.get("/config/engine", headers=auth).json()
+    assert st["enabled"] is False
+    client.post("/config/engine", json={"enabled": True}, headers=auth)

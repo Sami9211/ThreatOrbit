@@ -92,6 +92,55 @@ def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_role("admin"
             "revoked": 0, "secret": secret}
 
 
+class EngineControl(BaseModel):
+    enabled: bool | None = None
+    generate: int | None = None   # run N immediate ticks (seed a fresh install)
+
+
+@router.get("/engine")
+def engine_status(_: dict = Depends(current_user)):
+    """Live processing engine state + how much live data it has produced."""
+    from dashboard_api.config import DATA_MODE, ENGINE_TICK_SECONDS
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
+        alerts = conn.execute("SELECT COUNT(*) AS n FROM alerts WHERE rule_id IN ('R-ENGINE','R-MANUAL')").fetchone()["n"]
+        total_alerts = conn.execute("SELECT COUNT(*) AS n FROM alerts").fetchone()["n"]
+        dark = conn.execute("SELECT COUNT(*) AS n FROM dark_web_findings").fetchone()["n"]
+    return {
+        "mode": DATA_MODE,
+        "running": DATA_MODE == "live" and (row is None or row["value"] != "false"),
+        "enabled": (row is None or row["value"] != "false"),
+        "tickSeconds": ENGINE_TICK_SECONDS,
+        "alertsProduced": alerts, "totalAlerts": total_alerts, "darkWebFindings": dark,
+    }
+
+
+@router.post("/engine")
+def engine_control(body: EngineControl, user: dict = Depends(require_role("admin", "manager"))):
+    """Pause/resume the engine, or generate a burst of live data immediately."""
+    result = {}
+    if body.enabled is not None:
+        with get_conn() as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('engine_enabled',?)",
+                         ("true" if body.enabled else "false",))
+            audit(conn, user["email"], "engine.toggle", None, f"enabled={body.enabled}")
+            conn.commit()
+        result["enabled"] = body.enabled
+    if body.generate:
+        from dashboard_api.engine import process_tick
+        ticks = max(1, min(body.generate, 30))
+        agg = {"events": 0, "alerts": 0, "iocs": 0, "darkWeb": 0, "casesEscalated": 0}
+        for _ in range(ticks):
+            s = process_tick()
+            for k in agg:
+                agg[k] += s[k]
+        with get_conn() as conn:
+            audit(conn, user["email"], "engine.generate", None, f"ticks={ticks} alerts={agg['alerts']}")
+            conn.commit()
+        result["generated"] = agg
+    return result
+
+
 @router.get("/jobs")
 def list_jobs(limit: int = 50, _: dict = Depends(require_role("admin", "manager"))):
     """Recent background jobs (IOC syncs, risk recomputes, log analyses)."""

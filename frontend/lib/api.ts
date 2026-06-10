@@ -706,6 +706,52 @@ export const fetchAuditLog   = (limit = 100, action?: string) => {
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)
 }
 
+// ── Dark Web monitoring ──────────────────────────────────────────────
+export interface DarkWebFinding {
+  id: string
+  ts: string
+  category: 'credential-leak' | 'data-for-sale' | 'brand-mention' | 'actor-chatter' | 'infrastructure'
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  source: string
+  title: string
+  entity: string
+  actor: string
+  detail: string
+  url: string
+  status: 'new' | 'investigating' | 'mitigated' | 'dismissed'
+}
+export interface DarkWebSummary {
+  total: number
+  critical: number
+  credentialLeaks: number
+  open: number
+  byCategory: Record<string, number>
+  last24h: number
+}
+export const fetchDarkWebFindings = (params?: Record<string, string>) => {
+  const q = params ? '?' + new URLSearchParams(params).toString() : ''
+  return api<{ total: number; items: DarkWebFinding[] }>(`/darkweb/findings${q}`)
+}
+export const fetchDarkWebSummary = () => api<DarkWebSummary>('/darkweb/summary')
+export const updateDarkWebFinding = (id: string, status: string) =>
+  api<DarkWebFinding>(`/darkweb/findings/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+
+// ── Live engine control ──────────────────────────────────────────────
+export interface EngineStatus {
+  mode: string
+  running: boolean
+  enabled: boolean
+  tickSeconds: number
+  alertsProduced: number
+  totalAlerts: number
+  darkWebFindings: number
+}
+export const fetchEngineStatus = () => api<EngineStatus>('/config/engine')
+export const controlEngine = (body: { enabled?: boolean; generate?: number }) =>
+  api<{ enabled?: boolean; generated?: Record<string, number> }>('/config/engine', {
+    method: 'POST', body: JSON.stringify(body),
+  })
+
 // ── Connectors (real threat-intel ingestion) ────────────────────────
 export interface Connector {
   id: string

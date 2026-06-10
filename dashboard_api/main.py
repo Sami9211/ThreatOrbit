@@ -17,7 +17,7 @@ from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ORIGINS
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
     assets, auth, connectors as connectors_router, cti, config as config_router,
-    feeds, overview, services, siem, soar, users,
+    darkweb, feeds, overview, services, siem, soar, users,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -70,6 +70,29 @@ def _connector_scheduler():
         time.sleep(CONNECTOR_TICK_SECONDS)
 
 
+def _engine_loop():
+    """Background loop (live mode): the live processing engine. Generates
+    environment telemetry and runs it through detect → correlate → escalate,
+    so SIEM/SOAR/CTI/Dark-Web fill with live data continuously. Honours the
+    engine_enabled setting so it can be paused from the UI."""
+    import time
+    from dashboard_api.engine import process_tick
+    from dashboard_api.config import ENGINE_TICK_SECONDS, ENGINE_EVENTS_PER_TICK
+    time.sleep(5)
+    while True:
+        try:
+            with get_conn() as conn:
+                row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
+            enabled = (row is None) or (row["value"] != "false")
+            if enabled:
+                s = process_tick(max_events=ENGINE_EVENTS_PER_TICK)
+                logger.info("Engine tick: %d events → %d alerts, %d IOCs, %d dark-web, %d cases",
+                            s["events"], s["alerts"], s["iocs"], s["darkWeb"], s["casesEscalated"])
+        except Exception:
+            logger.exception("Engine tick failed")
+        time.sleep(ENGINE_TICK_SECONDS)
+
+
 @app.on_event("startup")
 def startup():
     import threading
@@ -85,9 +108,23 @@ def startup():
         from dashboard_api.connectors import seed_builtin_connectors
         if bootstrap_live():
             logger.info("Live mode: bootstrapped admin + settings (no demo data)")
+            # Prime the stores so the first login isn't an empty screen — these
+            # are live engine ticks (real pipeline), not static seed data.
+            try:
+                from dashboard_api.engine import process_tick
+                from dashboard_api.scoring import recompute_asset_risk
+                for _ in range(25):
+                    process_tick()
+                with get_conn() as conn:
+                    recompute_asset_risk(conn)
+                    conn.commit()
+                logger.info("Live mode: primed initial telemetry via the engine")
+            except Exception:
+                logger.exception("Initial engine prime failed")
         seed_builtin_connectors()
         threading.Thread(target=_connector_scheduler, daemon=True).start()
-        logger.info("Live mode: connector scheduler started (tick=%ss)", CONNECTOR_TICK_SECONDS)
+        threading.Thread(target=_engine_loop, daemon=True).start()
+        logger.info("Live mode: connector scheduler + live engine started")
     elif AUTO_SEED:
         from dashboard_api.seed import seed
         if seed():
@@ -111,7 +148,7 @@ def ready():
 
 for r in (auth.router, users.router, overview.router, siem.router, soar.router,
           cti.router, assets.router, feeds.router, config_router.router, services.router,
-          connectors_router.router):
+          connectors_router.router, darkweb.router):
     app.include_router(r)
 
 

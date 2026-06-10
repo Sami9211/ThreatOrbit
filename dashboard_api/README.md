@@ -45,6 +45,8 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Feeds     | `/feeds` (GET/POST), `/feeds/summary`, `PATCH /feeds/{id}` |
 | Config    | `/config/settings` (GET/PUT), `/config/api-keys` (GET/POST/DELETE), `/config/webhooks` (GET/POST/PATCH/DELETE), `POST /config/webhooks/{id}/test`, `/config/jobs`, `/config/audit-log` |
 | Connectors| `/connectors` (GET/POST), `/connectors/kinds`, `/connectors/{id}` (PATCH/DELETE), `POST /connectors/{id}/run` — real threat-intel ingestion (threatorbit / nvd / otx / json / csv / stix) into the IOC store |
+| Dark Web  | `/darkweb/findings` (GET, filterable), `/darkweb/summary`, `PATCH /darkweb/findings/{id}` (triage status) |
+| Engine    | `GET /config/engine` (live engine status), `POST /config/engine` (pause/resume, or `generate` N bursts of live data) |
 | Services  | `/services/status`, `/services/threat/source-health`, `/services/threat/iocs`, `POST /services/threat/fetch`, `/services/threat/jobs/{id}`, `/services/threat/opencti-status`, `POST /services/threat/sync-iocs`, `POST /services/logs/analyse` (multipart), `/services/logs/results/{id}`, `/services/logs/trends` |
 | Meta      | `/health`, `/ready` |
 
@@ -91,8 +93,18 @@ runs persist `last_run`, `hit_count`, `status`, `progress`.
 ## Tests
 
 ```bash
-python -m pytest dashboard_api/tests -q   # 48 tests
+python -m pytest dashboard_api/tests -q   # 57 tests
 ```
+
+### Live processing engine
+
+In live mode (`DASHBOARD_DATA_MODE=live`) `engine.py` runs on a background tick:
+it generates fresh environment telemetry and runs it through real
+detect → correlate → escalate stages, producing SIEM alerts, CTI indicators,
+auto-escalated SOAR cases, and dark-web findings continuously. It's the
+self-contained live data source (no external dependency); pause/seed it via
+`POST /config/engine`. Real log uploads and connectors write into the same
+stores, so the source is fully swappable.
 
 ### Webhooks
 

@@ -343,6 +343,20 @@ CREATE TABLE IF NOT EXISTS scans (
     actor      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS dark_web_findings (
+    id        TEXT PRIMARY KEY,
+    ts        TEXT NOT NULL,
+    category  TEXT NOT NULL,   -- credential-leak|data-for-sale|brand-mention|actor-chatter|infrastructure
+    severity  TEXT NOT NULL,   -- critical|high|medium|low
+    source    TEXT,            -- forum/market/paste/telegram name
+    title     TEXT NOT NULL,
+    entity    TEXT,            -- affected email/domain/org
+    actor     TEXT,
+    detail    TEXT,
+    url       TEXT,
+    status    TEXT NOT NULL DEFAULT 'new'   -- new|investigating|mitigated|dismissed
+);
+
 CREATE TABLE IF NOT EXISTS connectors (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,

@@ -13,7 +13,9 @@ import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
   fetchApiKeys, createApiKey, revokeApiKey,
   fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
+  fetchEngineStatus, controlEngine,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
+  type EngineStatus,
 } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
@@ -723,6 +725,83 @@ function AuditTrail() {
   )
 }
 
+/* ── Live engine control ─────────────────────────────────────────── */
+function LiveEngineCard() {
+  const [status, setStatus] = useState<EngineStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = () => fetchEngineStatus().then(setStatus).catch(() => setStatus(null))
+  useEffect(() => {
+    load()
+    const t = setInterval(load, 8000)
+    return () => clearInterval(t)
+  }, [])
+
+  function toggle() {
+    if (!status) return
+    setBusy(true)
+    controlEngine({ enabled: !status.enabled })
+      .then(() => load())
+      .finally(() => setBusy(false))
+  }
+
+  function generate() {
+    setBusy(true)
+    setMsg(null)
+    controlEngine({ generate: 8 })
+      .then((r) => {
+        const g = r.generated
+        setMsg(g ? `Generated ${g.alerts} alerts, ${g.iocs} IOCs, ${g.darkWeb} dark-web findings, ${g.casesEscalated} cases.` : 'Done.')
+        load()
+      })
+      .catch(() => setMsg('Could not generate — is the dashboard API running in live mode?'))
+      .finally(() => { setBusy(false); setTimeout(() => setMsg(null), 8000) })
+  }
+
+  if (status && status.mode !== 'live') {
+    return (
+      <Section title="Live Processing Engine" icon={Zap} color="#FF2E97">
+        <p className="text-xs text-ink-400">
+          Running in <b className="text-ink-200">demo mode</b> — showing seeded sample data. To run the
+          live engine (continuous telemetry → real SIEM alerts, CTI indicators, SOAR cases & dark-web
+          findings), start the API with <code className="font-mono text-ink-300">DASHBOARD_DATA_MODE=live</code>.
+        </p>
+      </Section>
+    )
+  }
+
+  return (
+    <Section title="Live Processing Engine" icon={Zap} color="#FF2E97">
+      <div className="flex items-center gap-3 mb-4">
+        <span className={cn('flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border font-semibold',
+          status?.running ? 'border-safe/25 bg-safe/10 text-safe' : 'border-amber/25 bg-amber/10 text-amber')}>
+          <span className={cn('w-1.5 h-1.5 rounded-full', status?.running ? 'bg-safe animate-pulse' : 'bg-amber')} />
+          {status?.running ? 'Running' : 'Paused'}
+        </span>
+        {status && <span className="text-[11px] text-ink-500">telemetry every {status.tickSeconds}s</span>}
+      </div>
+      <p className="text-[11px] text-ink-500 mb-4 leading-relaxed">
+        The engine continuously generates environment telemetry and runs it through the real
+        detect → correlate → escalate pipeline. It has produced{' '}
+        <b className="text-ink-200">{status?.totalAlerts ?? 0}</b> SIEM alerts and{' '}
+        <b className="text-ink-200">{status?.darkWebFindings ?? 0}</b> dark-web findings so far.
+      </p>
+      {msg && <p className="text-[11px] text-safe mb-3">{msg}</p>}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={toggle} disabled={busy || !status}
+          className="px-3 py-2 rounded-xl text-xs font-semibold bg-surface-2 border border-white/10 text-ink-200 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50">
+          {status?.enabled ? 'Pause engine' : 'Resume engine'}
+        </button>
+        <button onClick={generate} disabled={busy}
+          className="px-3 py-2 rounded-xl text-xs font-semibold bg-plasma text-white hover:shadow-magenta-sm transition-all disabled:opacity-50">
+          {busy ? 'Generating…' : 'Generate burst now'}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
 /* ── Background jobs ─────────────────────────────────────────────── */
 const JOB_LABEL: Record<string, string> = {
   'threat.sync_iocs': 'IOC sync from Threat API',
@@ -835,6 +914,9 @@ export default function ConfigPage() {
         <div className="flex-1 min-w-0 space-y-5">
           {tab === 'general' && (
             <>
+              {/* ── Live Processing Engine ──────────────────────────── */}
+              <LiveEngineCard />
+
               {/* ── Experience Mode ─────────────────────────────────── */}
               <ExperienceModeCard />
 

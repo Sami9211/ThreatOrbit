@@ -1153,14 +1153,21 @@ export default function SIEMPage() {
 
   // Load alerts from API
   useEffect(() => {
-    fetchSiemAlerts({ limit: '140' })
-      .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
-      .catch(() => {})
-    fetchSiemKpis().then(setApiKpis).catch(() => {})
-    fetchCorrelations(2).then(setCorrelations).catch(() => {})
-    fetchMitreDistribution()
-      .then((rows) => { if (rows.length > 0) setMitreDist(rows) })
-      .catch(() => {})
+    // Live refresh: the engine produces new alerts continuously, so poll the
+    // queue and KPIs. Re-fetch keeps the SIEM genuinely live.
+    const load = () => {
+      fetchSiemAlerts({ limit: '140', sort: 'ts', order: 'desc' })
+        .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
+        .catch(() => {})
+      fetchSiemKpis().then(setApiKpis).catch(() => {})
+      fetchCorrelations(2).then(setCorrelations).catch(() => {})
+      fetchMitreDistribution()
+        .then((rows) => { if (rows.length > 0) setMitreDist(rows) })
+        .catch(() => {})
+    }
+    load()
+    const t = setInterval(load, 15000)
+    return () => clearInterval(t)
   }, [])
 
   // Prefer live KPIs from the API; fall back to the static demo values.
