@@ -51,9 +51,10 @@ All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion API
 ```text
 ThreatOrbit-V2/
 ├── README.md
+├── Makefile                     # make up / down / test / dev-* shortcuts
 ├── .gitignore
 ├── .env.example                 # copy to .env, fill in keys
-├── docker-compose.yml           # runs both APIs with healthchecks
+├── docker-compose.yml           # full stack: 3 APIs + frontend, healthchecked
 │
 ├── docs/
 │   ├── architecture.md
@@ -155,24 +156,60 @@ https://docs.opencti.io/latest/deployment/
 
 ---
 
-## 4. Quick start (Docker)
+## 4. Quick start
+
+### Easiest deployment — one command, full stack (Docker)
 
 ```bash
-# 1. Configure secrets
-cp .env.example .env
-# edit .env and set APP_API_KEY (required) and ADMIN_API_KEY (recommended)
-
-# 2. Start all three APIs
-docker compose up --build
+cp .env.example .env        # the defaults work for a local evaluation
+docker compose up --build -d   # or simply: make up
 ```
 
-Services:
+That single command builds and starts all four pieces:
 
-* Threat API:    http://127.0.0.1:8000
-* Log API:       http://127.0.0.1:8001
-* Dashboard API: http://127.0.0.1:8002  (auto-seeded; service bridge pre-wired to the other two)
+| Service       | URL                          | Notes                                              |
+| ------------- | ---------------------------- | -------------------------------------------------- |
+| Frontend      | http://localhost:3000        | Marketing site + operator dashboard (`/dashboard`) |
+| Dashboard API | http://localhost:8002        | Auto-seeded with demo data on first boot           |
+| Threat API    | http://localhost:8000        | OSINT ingestion engine                             |
+| Log API       | http://localhost:8001        | Log anomaly analysis                               |
 
-Stop with `docker compose down`.
+Sign in at http://localhost:3000/dashboard with the seeded admin
+(`admin@threatorbit.space` / `ChangeMe123!`) or create your own account at
+`/signup`. The service bridge is pre-wired container-to-container, so
+**Feeds → Sources** can trigger live OSINT ingestion and **SIEM → Sources**
+can analyse uploaded log files out of the box.
+
+Stop with `docker compose down` (or `make down`); follow logs with `make logs`.
+
+> Deploying the frontend on a different host? Rebuild it with the URL the
+> browser should use for the API:
+> `NEXT_PUBLIC_API_URL=https://api.yourdomain.com docker compose up --build -d`
+> And in production set real secrets in `.env`: `APP_API_KEY`,
+> `ADMIN_API_KEY`, and `DASHBOARD_JWT_SECRET` (e.g. `openssl rand -hex 32`).
+
+### Easiest testing — one command
+
+```bash
+make test     # all 50 backend tests across the three APIs + frontend type-check
+```
+
+Individually:
+
+```bash
+python -m pytest dashboard_api/tests -q   # 48 behaviour tests
+cd threat_api && pytest -q
+cd log_api    && pytest -q
+cd frontend   && npx tsc --noEmit && npm run build   # type-check + production build
+```
+
+Tests need no `.env`, no Docker, and no running services — each suite sets up
+its own isolated, seeded database. Python deps:
+`pip install -r dashboard_api/requirements.txt -r threat_api/requirements.txt -r log_api/requirements.txt`;
+frontend deps: `cd frontend && npm install`.
+
+`make help` lists every shortcut (`up`, `down`, `logs`, `test`, `build`,
+`dev-api`, `dev-frontend`, `seed`).
 
 ### Run locally without Docker
 
@@ -384,12 +421,20 @@ complete endpoint map and algorithm notes live in
 ## 11. Testing
 
 ```bash
-cd threat_api && pytest -q
-cd ../log_api && pytest -q
-python -m pytest dashboard_api/tests -q   # from the repo root (42 tests)
+make test                                  # everything: all 3 API suites + frontend type-check
 ```
 
-Tests set their own API keys via `conftest.py`, so no `.env` is required to run them.
+Or individually:
+
+```bash
+python -m pytest dashboard_api/tests -q   # from the repo root (48 tests)
+cd threat_api && pytest -q
+cd ../log_api && pytest -q
+cd ../frontend && npx tsc --noEmit && npm run build
+```
+
+Tests set their own API keys and use an isolated temp database via
+`conftest.py`, so no `.env`, Docker, or running services are required.
 
 ---
 

@@ -17,8 +17,7 @@ export default function QuickStartPage() {
       <h2>Prerequisites</h2>
       <ul>
         <li>Docker and Docker Compose installed</li>
-        <li>An OTX AlienVault API key (free at otx.alienvault.com)</li>
-        <li>Optional: VirusTotal API key for enrichment</li>
+        <li>Optional: an OTX AlienVault API key (free at otx.alienvault.com) and a VirusTotal key for enrichment</li>
       </ul>
 
       <h2>1. Clone the repository</h2>
@@ -26,27 +25,42 @@ export default function QuickStartPage() {
 cd ThreatOrbit-V2`}</CodeBlock>
 
       <h2>2. Configure environment variables</h2>
-      <p>Copy the example file and fill in your keys:</p>
+      <p>Copy the example file — the defaults work for a local evaluation:</p>
       <CodeBlock>{`cp .env.example .env`}</CodeBlock>
-      <p>Open <code>.env</code> and set at minimum:</p>
+      <p>For anything beyond a local trial, open <code>.env</code> and set:</p>
       <CodeBlock>{`APP_API_KEY=your_read_key_here
 ADMIN_API_KEY=your_admin_key_here
-OTX_API_KEY=your_otx_api_key`}</CodeBlock>
+DASHBOARD_JWT_SECRET=a_long_random_value
+OTX_API_KEY=your_otx_api_key   # optional, enables the OTX feed`}</CodeBlock>
 
       <h2>3. Start the platform</h2>
-      <CodeBlock>{`docker compose up -d`}</CodeBlock>
-      <p>This brings up two services:</p>
+      <CodeBlock>{`docker compose up --build -d    # or: make up`}</CodeBlock>
+      <p>This brings up the full stack:</p>
       <ul>
-        <li><strong>Threat API</strong> on port <code>8000</code> (OSINT ingestion and CTI)</li>
-        <li><strong>Log API</strong> on port <code>8001</code> (anomaly detection and SOAR)</li>
+        <li><strong>Frontend</strong> on port <code>3000</code> (marketing site + operator dashboard)</li>
+        <li><strong>Dashboard API</strong> on port <code>8002</code> (auth, SIEM, SOAR, CTI, assets, feeds)</li>
+        <li><strong>Threat API</strong> on port <code>8000</code> (OSINT ingestion engine)</li>
+        <li><strong>Log API</strong> on port <code>8001</code> (log anomaly detection)</li>
       </ul>
 
-      <h2>4. Verify both services are healthy</h2>
-      <CodeBlock>{`curl http://localhost:8000/health
-curl http://localhost:8001/health`}</CodeBlock>
-      <p>Both should return <code>{"{ \"status\": \"healthy\" }"}</code>.</p>
+      <h2>4. Open the dashboard</h2>
+      <p>
+        Go to <code>http://localhost:3000/dashboard</code> and sign in with the
+        seeded admin (<code>admin@threatorbit.space</code> /{' '}
+        <code>ChangeMe123!</code>), or create your own account at{' '}
+        <code>/signup</code>. Every page loads live data from the Dashboard API.
+      </p>
 
-      <h2>5. Trigger your first threat intelligence fetch</h2>
+      <h2>5. Verify the services are healthy</h2>
+      <CodeBlock>{`curl http://localhost:8000/health   # {"service":"threat_api","status":"ok"}
+curl http://localhost:8001/health   # {"service":"log_api","status":"ok"}
+curl http://localhost:8002/health   # {"service":"dashboard_api","status":"ok"}`}</CodeBlock>
+
+      <h2>6. Trigger your first threat intelligence fetch</h2>
+      <p>
+        In the dashboard: <strong>Feeds → Sources → Trigger Fetch</strong>, then{' '}
+        <strong>Sync IOCs to CTI</strong>. Or via the API:
+      </p>
       <CodeBlock>{`curl -X POST http://localhost:8000/fetch \\
   -H "X-API-Key: your_admin_key_here"`}</CodeBlock>
       <p>
@@ -54,12 +68,11 @@ curl http://localhost:8001/health`}</CodeBlock>
         asynchronously in the background.
       </p>
 
-      <h2>6. Check job status</h2>
+      <h2>7. Check job status and list indicators</h2>
       <CodeBlock>{`curl http://localhost:8000/jobs/{job_id} \\
-  -H "X-API-Key: your_read_key_here"`}</CodeBlock>
+  -H "X-API-Key: your_read_key_here"
 
-      <h2>7. List ingested indicators</h2>
-      <CodeBlock>{`curl "http://localhost:8000/indicators?limit=20" \\
+curl "http://localhost:8000/iocs?limit=20" \\
   -H "X-API-Key: your_read_key_here"`}</CodeBlock>
 
       <div className="callout">
