@@ -89,14 +89,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       with `trigger_match` criteria (severities/techniques/rule) run
       automatically on matching fresh alerts, once per alert, throttled per
       engine tick.
-- [ ] **Case management depth** — linked cases, merge/split, MITRE-mapped
-      timelines, evidence chain-of-custody, collaboration/assignment, SLA
-      breach tracking.
+- [~] **Case management depth** — DONE (see CHANGELOG): SLA tracking computed
+      on every case (within / at-risk / breached / met, deadline + % elapsed,
+      `slaBreached` metric) and linked evidence (`/soar/cases/{id}/related`):
+      alerts/IOCs/playbook-runs matched through case entities + a MITRE-mapped
+      merged timeline, surfaced in the case drawer. Remaining: case
+      merge/split + linked-case relations, evidence chain-of-custody.
 - [x] **Response approvals** — DONE (see CHANGELOG): `approval` steps pause the
       run, raise a notification, and resume/cancel via approve/reject — in the
       Run history panel.
-- [ ] **Post-incident** — auto-generated incident report + lessons-learned
-      template (ties into the reporting engine).
+- [x] **Post-incident** — DONE (see CHANGELOG): `GET /reports/incident?case_id`
+      builds a per-case post-incident report (MITRE timeline, response
+      actions, SLA verdict, lessons-learned scaffold) in the standard report
+      viewer, from the case drawer.
 
 ## Phase 3 — CTI depth (intelligence & library)
 
@@ -140,6 +145,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Case depth: SLA tracking, linked evidence, post-incident
+  reports (Phase 2)** — every case read now carries computed SLA state
+  (deadline, % elapsed, within / at-risk / breached for open, met / breached
+  for closed; `slaBreached` in SOAR metrics). `/soar/cases/{id}/related` links
+  the case to its real evidence through its entities: matching alerts, IOC
+  records, and the playbook runs that responded, plus a MITRE-mapped merged
+  timeline (war room + alert + response activity) and a technique frequency
+  list — shown as a “Linked evidence” section in the case drawer with deep
+  links into the SIEM. Post-incident reporting: `GET /reports/incident?case_id`
+  assembles the full report (severity/alerts/actions/SLA-verdict headline,
+  narrative, severity + technique breakdowns, chronological findings,
+  conditional lessons-learned recommendations) rendered in the standard
+  print/PDF report viewer via a “Report” button on the case (period selector
+  hidden for case-scoped reports).
 
 - **2026-06-10 · SOAR playbook execution engine (Phase 2)** — playbooks now
   actually run. `playbook_engine.py`: 11 executable step kinds that act on the

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FileText, X, Printer, Download, Loader2, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchReport, createReportSchedule, type ReportData, type ReportFinding } from '@/lib/api'
+import { fetchReport, fetchIncidentReport, createReportSchedule, type ReportData, type ReportFinding } from '@/lib/api'
 
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
@@ -22,7 +22,7 @@ const PERIODS = [
  * any section header. Produces a structured, paginated, print-to-PDF report
  * (Nessus/Acunetix-style) with a period selector — not a CSV dump.
  */
-export default function ReportButton({ kind, label }: { kind: string; label?: string }) {
+export default function ReportButton({ kind, label, caseId }: { kind: string; label?: string; caseId?: string }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -33,13 +33,13 @@ export default function ReportButton({ kind, label }: { kind: string; label?: st
         Report
       </button>
       <AnimatePresence>
-        {open && <ReportViewer kind={kind} label={label} onClose={() => setOpen(false)} />}
+        {open && <ReportViewer kind={kind} label={label} caseId={caseId} onClose={() => setOpen(false)} />}
       </AnimatePresence>
     </>
   )
 }
 
-function ReportViewer({ kind, label, onClose }: { kind: string; label?: string; onClose: () => void }) {
+function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: string; caseId?: string; onClose: () => void }) {
   const [period, setPeriod] = useState('weekly')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -50,12 +50,15 @@ function ReportViewer({ kind, label, onClose }: { kind: string; label?: string; 
   const generate = useCallback(() => {
     setLoading(true)
     setError(null)
-    fetchReport(kind, period, period === 'custom' ? `${from}T00:00:00` : undefined,
-      period === 'custom' ? `${to}T23:59:59` : undefined)
+    // Incident reports are case-scoped — no period window.
+    ;(caseId
+      ? fetchIncidentReport(caseId)
+      : fetchReport(kind, period, period === 'custom' ? `${from}T00:00:00` : undefined,
+          period === 'custom' ? `${to}T23:59:59` : undefined))
       .then(setReport)
       .catch(() => setError('Could not generate the report. Is the dashboard API running?'))
       .finally(() => setLoading(false))
-  }, [kind, period, from, to])
+  }, [kind, caseId, period, from, to])
 
   // Generate once on open (and whenever a non-custom period is picked).
   useEffect(() => {
@@ -105,7 +108,7 @@ function ReportViewer({ kind, label, onClose }: { kind: string; label?: string; 
           <FileText className="w-4 h-4 text-magenta" />
           <h2 className="text-sm font-semibold text-white">{label ?? kind} Report</h2>
           <div className="flex items-center gap-1 ml-auto flex-wrap">
-            {PERIODS.map((p) => (
+            {!caseId && PERIODS.map((p) => (
               <button key={p.id} onClick={() => setPeriod(p.id)}
                 className={cn('px-2 py-1 rounded-md text-[11px] font-medium transition-colors',
                   period === p.id ? 'bg-magenta/15 text-magenta border border-magenta/30' : 'text-ink-500 hover:text-ink-200 border border-transparent')}>
@@ -126,8 +129,10 @@ function ReportViewer({ kind, label, onClose }: { kind: string; label?: string; 
             </button>
           </div>
           <div className="flex items-center gap-1">
+            {!caseId && (
             <button onClick={scheduleReport} title="Schedule this report (daily/weekly)"
               className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors"><Calendar className="w-4 h-4" /></button>
+            )}
             <button onClick={printReport} disabled={!report} title="Print / Save as PDF"
               className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40"><Printer className="w-4 h-4" /></button>
             <button onClick={downloadHtml} disabled={!report} title="Download HTML"

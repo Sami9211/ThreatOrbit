@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, type SoarMetrics } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, type SoarMetrics, type CaseRelated } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -402,6 +402,10 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   const [tasks, setTasks] = useState(c.tasks)
   const [warRoom, setWarRoom] = useState(c.warRoom)
   const [note, setNote] = useState('')
+  const [related, setRelated] = useState<CaseRelated | null>(null)
+  useEffect(() => {
+    fetchCaseRelated(c.id).then(setRelated).catch(() => {})
+  }, [c.id])
   const st = STATUS_STYLE[c.status]
   const detailTabs = simplified
     ? (['overview', 'tasks'] as const)
@@ -458,9 +462,12 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
               <span>{c.alertCount} alert{c.alertCount !== 1 ? 's' : ''}</span>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors shrink-0">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ReportButton kind="incident" label={`Post-Incident · ${c.id}`} caseId={c.id} />
+            <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* SLA bar */}
@@ -521,6 +528,46 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                 ))}
               </div>
             </div>
+
+            {/* Linked evidence — real cross-store linkage via the case entities */}
+            {related && (related.alerts.length > 0 || related.runs.length > 0) && (
+              <div>
+                <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-2">
+                  Linked evidence
+                  <span className="ml-2 normal-case tracking-normal text-ink-500">
+                    {related.alerts.length} alerts · {related.iocs.length} IOCs · {related.runs.length} playbook runs
+                  </span>
+                </p>
+                {related.techniques.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {related.techniques.slice(0, 6).map((t) => (
+                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded bg-violet/10 text-violet border border-violet/20 font-mono">
+                        {t.technique} ×{t.count}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  {related.alerts.slice(0, 5).map((a) => (
+                    <a key={a.id} href={`/dashboard/siem?q=${encodeURIComponent(a.srcIp ?? a.hostname ?? a.title)}`}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/5 hover:border-white/15 transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ background: { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5' }[a.severity] ?? '#7A3CFF' }} />
+                      <span className="text-[11px] text-ink-200 truncate flex-1">{a.title}</span>
+                      {a.mitreTechId && <span className="text-[9px] font-mono text-violet shrink-0">{a.mitreTechId}</span>}
+                      <span className="text-[9px] text-ink-600 shrink-0 capitalize">{a.status}</span>
+                    </a>
+                  ))}
+                  {related.runs.slice(0, 3).map((r) => (
+                    <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-surface-2/40 border border-white/5">
+                      <Zap className="w-3 h-3 text-safe shrink-0" />
+                      <span className="text-[11px] text-ink-300 truncate flex-1">{r.playbookName}</span>
+                      <span className="text-[9px] text-ink-600 shrink-0">{r.trigger} · {r.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 

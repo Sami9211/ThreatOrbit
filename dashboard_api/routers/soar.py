@@ -27,6 +27,40 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _sla(case: dict) -> dict:
+    """Compute SLA tracking for a case: deadline, % elapsed, and status
+    (within | at-risk | breached for open; met | breached for closed)."""
+    from datetime import timedelta
+    try:
+        created = datetime.fromisoformat(str(case["created"]).replace("Z", "+00:00"))
+    except (ValueError, TypeError, KeyError):
+        return {"slaDeadline": None, "slaStatus": "unknown", "slaElapsedPct": 0}
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    hours = case.get("sla_hours") or 24
+    deadline = created + timedelta(hours=hours)
+    closed = case.get("status") in ("resolved", "closed")
+    ref_raw = case.get("updated") if closed else None
+    try:
+        ref = datetime.fromisoformat(str(ref_raw).replace("Z", "+00:00")) if ref_raw \
+            else datetime.now(timezone.utc)
+    except (ValueError, TypeError):
+        ref = datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    elapsed_pct = min(999, round((ref - created).total_seconds() / (hours * 3600) * 100))
+    if closed:
+        status = "met" if ref <= deadline else "breached"
+    else:
+        status = "breached" if ref > deadline else ("at-risk" if elapsed_pct >= 75 else "within")
+    return {"slaDeadline": deadline.replace(microsecond=0).isoformat(),
+            "slaStatus": status, "slaElapsedPct": max(0, elapsed_pct)}
+
+
+def _with_sla(case_dict: dict) -> dict:
+    return {**case_dict, **_sla(case_dict)}
+
+
 class CaseUpdate(BaseModel):
     status: str | None = None
     owner: str | None = None
@@ -65,7 +99,7 @@ def list_cases(status: str | None = None, severity: str | None = None):
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_conn() as conn:
         rows = conn.execute(f"SELECT * FROM cases {where} ORDER BY updated DESC", params).fetchall()
-    return rows_to_dicts(rows)
+    return [_with_sla(c) for c in rows_to_dicts(rows)]
 
 
 @router.post("/cases", status_code=201)
@@ -112,7 +146,58 @@ def get_case(case_id: str):
         row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Case not found")
-    return row_to_dict(row)
+    return _with_sla(row_to_dict(row))
+
+
+@router.get("/cases/{case_id}/related")
+def case_related(case_id: str):
+    """Linked evidence for a case: alerts/IOCs/playbook-runs matching its
+    entities, plus a MITRE-mapped merged timeline (war room + alert activity)."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case = row_to_dict(row)
+        values = [e.get("value") for e in (case.get("entities") or [])
+                  if isinstance(e, dict) and e.get("value")]
+        alerts, iocs, runs = [], [], []
+        if values:
+            ph = ",".join("?" * len(values))
+            alerts = rows_to_dicts(conn.execute(
+                f"SELECT id, ts, title, severity, status, src_ip, hostname, username, "
+                f"mitre_tech_id, mitre_tactic, rule_name, risk_score FROM alerts "
+                f"WHERE src_ip IN ({ph}) OR hostname IN ({ph}) OR username IN ({ph}) "
+                f"ORDER BY ts DESC LIMIT 50", values * 3).fetchall())
+            iocs = rows_to_dicts(conn.execute(
+                f"SELECT id, type, value, severity, confidence, threat_type, source "
+                f"FROM iocs WHERE value IN ({ph}) LIMIT 20", values).fetchall())
+        alert_ids = [a["id"] for a in alerts]
+        if alert_ids:
+            ph = ",".join("?" * len(alert_ids))
+            runs = rows_to_dicts(conn.execute(
+                f"SELECT id, playbook_name, ts, status, trigger, actor, alert_id "
+                f"FROM playbook_runs WHERE alert_id IN ({ph}) ORDER BY ts DESC LIMIT 20",
+                alert_ids).fetchall())
+    # MITRE-mapped merged timeline: war-room entries + linked alert activity
+    timeline = [{"ts": w.get("ts"), "type": w.get("type", "note"), "actor": w.get("actor"),
+                 "title": w.get("content"), "severity": None, "technique": None}
+                for w in (case.get("war_room") or [])]
+    timeline += [{"ts": a["ts"], "type": "alert", "actor": a.get("rule_name"),
+                  "title": a["title"], "severity": a["severity"],
+                  "technique": a.get("mitre_tech_id")} for a in alerts]
+    timeline += [{"ts": r["ts"], "type": "playbook", "actor": r.get("actor"),
+                  "title": f"Playbook run: {r.get('playbook_name')} ({r.get('status')})",
+                  "severity": None, "technique": None} for r in runs]
+    timeline.sort(key=lambda x: x.get("ts") or "")
+    techniques: dict[str, int] = {}
+    for a in alerts:
+        t = a.get("mitre_tech_id")
+        if t:
+            techniques[t] = techniques.get(t, 0) + 1
+    return {"caseId": case_id, "alerts": alerts, "iocs": iocs, "runs": runs,
+            "timeline": timeline[-80:],
+            "techniques": [{"technique": k, "count": v}
+                           for k, v in sorted(techniques.items(), key=lambda x: -x[1])]}
 
 
 @router.post("/cases/{case_id}/notes", status_code=201)
@@ -466,7 +551,8 @@ def run_integration_action(integration_id: str, body: ActionRun, user: dict = De
 @router.get("/metrics")
 def soar_metrics():
     with get_conn() as conn:
-        cases = conn.execute("SELECT status, severity, playbook FROM cases").fetchall()
+        cases = conn.execute(
+            "SELECT status, severity, playbook, created, updated, sla_hours FROM cases").fetchall()
         pbs = conn.execute("SELECT runs, success_rate, avg_time, last_run FROM playbooks").fetchall()
         # MTTR in minutes from per-alert response latency (consistent with SIEM KPIs).
         mttr_row = conn.execute(
@@ -474,6 +560,8 @@ def soar_metrics():
         ).fetchone()
     open_cases = sum(1 for c in cases if c["status"] not in ("resolved", "closed"))
     crit_open = sum(1 for c in cases if c["status"] not in ("resolved", "closed") and c["severity"] == "critical")
+    sla_breached = sum(1 for c in cases if c["status"] not in ("resolved", "closed")
+                       and _sla(dict(c))["slaStatus"] == "breached")
     closed = [c for c in cases if c["status"] in ("resolved", "closed")]
     closed_week = len(closed)
     total_runs = sum(p["runs"] for p in pbs)
@@ -485,6 +573,7 @@ def soar_metrics():
     return {
         "openCases": open_cases,
         "criticalOpen": crit_open,
+        "slaBreached": sla_breached,
         "mttr": mttr, "mttrTrend": "↓ 12%",
         "automationRate": automation_rate, "automationTrend": "↑ 8%",
         "timeSavedMonth": round(total_runs * avg_pb / 3600, 1),

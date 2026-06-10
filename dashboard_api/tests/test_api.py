@@ -1230,6 +1230,71 @@ def test_playbook_crud_validation(client, auth):
     assert client.patch("/soar/playbooks/missing", json={"enabled": False}, headers=auth).status_code == 404
 
 
+def test_case_sla_and_related_evidence(client, auth):
+    """Cases carry computed SLA tracking; /related links alerts, IOCs, playbook
+    runs and a MITRE-mapped timeline through the case's entities."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "198.51.100.210"
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 09:00:00 web01 sshd[7]: Failed password for root from {ip} port 4030"]},
+        headers=auth)
+    case = client.post("/soar/cases", json={
+        "title": "SLA + evidence test case", "severity": "high", "sla_hours": 8,
+        "entities": [{"type": "ip", "value": ip}]}, headers=auth).json()
+    # SLA fields computed on every case read
+    got = client.get(f"/soar/cases/{case['id']}", headers=auth).json()
+    assert got["slaStatus"] == "within" and got["slaDeadline"] and got["slaElapsedPct"] >= 0
+    assert all("slaStatus" in c for c in client.get("/soar/cases", headers=auth).json())
+    assert "slaBreached" in client.get("/soar/metrics", headers=auth).json()
+
+    rel = client.get(f"/soar/cases/{case['id']}/related", headers=auth).json()
+    assert any(a["src_ip"] == ip for a in rel["alerts"])  # linked through the entity
+    assert any(t["type"] == "alert" and t["technique"] == "T1110" for t in rel["timeline"])
+    assert any(t["type"] == "system" for t in rel["timeline"])  # war-room entries merged
+    assert {"technique": "T1110", "count": 1} in rel["techniques"] or \
+        any(t["technique"] == "T1110" for t in rel["techniques"])
+    assert client.get("/soar/cases/NOPE/related", headers=auth).status_code == 404
+    # resolved fast → SLA met
+    client.patch(f"/soar/cases/{case['id']}", json={"status": "resolved"}, headers=auth)
+    assert client.get(f"/soar/cases/{case['id']}", headers=auth).json()["slaStatus"] == "met"
+
+
+def test_post_incident_report(client, auth):
+    """The incident report assembles timeline, response actions, SLA verdict
+    and a lessons-learned scaffold for one case."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "198.51.100.211"
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 09:10:00 web01 sshd[8]: Failed password for root from {ip} port 4031"]},
+        headers=auth)
+    alert = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]
+    # respond via a playbook so the report has real response actions
+    pb = client.post("/soar/playbooks", json={
+        "name": "PyTest IR", "steps": [
+            {"kind": "create_case", "name": "Case"},
+            {"kind": "close_alerts", "name": "Close"},
+        ]}, headers=auth).json()
+    client.post(f"/soar/playbooks/{pb['id']}/run", json={"alert_id": alert["id"]}, headers=auth)
+    case = next(c for c in client.get("/soar/cases", headers=auth).json()
+                if c["playbook"] == "PyTest IR")
+
+    r = client.get(f"/reports/incident?case_id={case['id']}", headers=auth)
+    assert r.status_code == 200, r.text
+    rep = r.json()
+    assert rep["meta"]["kind"] == "incident" and case["id"] in rep["meta"]["title"]
+    labels = {h["label"]: h["value"] for h in rep["summary"]["headline"]}
+    assert labels["Linked alerts"] >= 1 and labels["Response actions"] >= 1
+    assert "SLA" in labels
+    assert any("playbook" in t["title"].lower() or t["status"] == "playbook"
+               for t in rep["findings"])
+    assert any("post-incident review" in x.lower() for x in rep["recommendations"])
+    assert client.get("/reports/incident?case_id=NOPE", headers=auth).status_code == 404
+    # the generic kinds endpoint still works (route ordering)
+    assert client.get("/reports/siem?period=daily", headers=auth).status_code == 200
+
+
 def test_ueba_entity_risk(client, auth):
     """UEBA: entities ranked by alert-derived risk, with drill-down timeline."""
     from dashboard_api.engine import seed_builtin_rules

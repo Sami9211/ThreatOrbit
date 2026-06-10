@@ -918,6 +918,25 @@ export const fetchReport = (kind: string, period: string, from?: string, to?: st
   if (to) q.set('to', to)
   return api<ReportData>(`/reports/${kind}?${q.toString()}`)
 }
+export const fetchIncidentReport = (caseId: string) =>
+  api<ReportData>(`/reports/incident?case_id=${encodeURIComponent(caseId)}`)
+
+// ── Case linked evidence (SLA + related alerts/IOCs/runs/timeline) ───
+export interface CaseRelated {
+  caseId: string
+  alerts: Array<{ id: string; ts: string; title: string; severity: string; status: string
+    srcIp: string | null; hostname: string | null; username: string | null
+    mitreTechId: string | null; mitreTactic: string | null; ruleName: string | null; riskScore: number }>
+  iocs: Array<{ id: string; type: string; value: string; severity: string; confidence: number
+    threatType: string | null; source: string | null }>
+  runs: Array<{ id: string; playbookName: string | null; ts: string; status: string
+    trigger: string; actor: string | null; alertId: string | null }>
+  timeline: Array<{ ts: string | null; type: string; actor: string | null
+    title: string | null; severity: string | null; technique: string | null }>
+  techniques: Array<{ technique: string; count: number }>
+}
+export const fetchCaseRelated = (caseId: string) =>
+  api<CaseRelated>(`/soar/cases/${caseId}/related`)
 
 // ── Dark Web monitoring ──────────────────────────────────────────────
 export interface DarkWebFinding {

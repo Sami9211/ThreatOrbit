@@ -346,3 +346,79 @@ def build_report(kind: str, period: str = "weekly",
     since, until, label = _window(period, frm, to)
     with get_conn() as conn:
         return _BUILDERS[kind](conn, since, until, label)
+
+
+def build_incident_report(case_id: str) -> dict:
+    """Post-incident report for one case: what happened (MITRE-mapped
+    timeline), how the response went (actions, SLA verdict), and a
+    lessons-learned scaffold. Raises ValueError when the case is unknown."""
+    from dashboard_api.routers.soar import _sla, case_related
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise ValueError(f"unknown case: {case_id}")
+        from dashboard_api.db import row_to_dict
+        case = row_to_dict(row)
+    related = case_related(case_id)
+    sla = _sla(case)
+    alerts = related["alerts"]
+    runs = related["runs"]
+    closed = case["status"] in ("resolved", "closed")
+    sla_verdict = {"met": "SLA met", "breached": "SLA BREACHED",
+                   "within": "within SLA", "at-risk": "SLA at risk"}.get(sla["slaStatus"], "—")
+
+    findings = []
+    for t in related["timeline"]:
+        findings.append({
+            "title": t["title"] or "—",
+            "severity": t["severity"] or ("info" if t["type"] in ("system", "note", "manual") else "low"),
+            "score": 0, "ts": t["ts"],
+            "entity": None, "technique": t.get("technique"), "tactic": None,
+            "rule": t.get("actor"), "status": t["type"], "detail": "",
+        })
+
+    auto_runs = sum(1 for r in runs if r.get("trigger") == "auto")
+    recs = [
+        "Hold a post-incident review with all responders within 5 business days.",
+        "Verify containment actions held: blocked indicators stayed blocked, isolated hosts were rebuilt before reconnecting.",
+    ]
+    if related["techniques"]:
+        top = related["techniques"][0]["technique"]
+        recs.append(f"Review detection coverage for {top} — the dominant technique in this incident — and backtest tuned rules.")
+    if not case.get("playbook"):
+        recs.append("No playbook drove this case: author an automation trigger so the next occurrence is contained automatically.")
+    if sla["slaStatus"] == "breached":
+        recs.append("The response breached its SLA — review escalation routing and on-call staffing for this alert class.")
+    recs.append("Capture lessons learned in the runbook: what detected it, what slowed response, what to automate next.")
+
+    return {
+        "meta": _meta("incident", f"Post-Incident Report — {case['id']}",
+                      f"{case['title']}", case["created"], case.get("updated") or case["created"]),
+        "summary": {
+            "headline": [
+                {"label": "Severity", "value": case["severity"],
+                 "color": _SEV_COLOR.get(case["severity"], "#fff")},
+                {"label": "Linked alerts", "value": len(alerts)},
+                {"label": "Response actions", "value": len(runs)},
+                {"label": "SLA", "value": sla_verdict,
+                 "color": "#FF4D6D" if sla["slaStatus"] == "breached" else "#34F5C5"},
+            ],
+            "narrative": (
+                f"Case {case['id']} (“{case['title']}”, {case['severity']}) was opened "
+                f"{case['created'][:16].replace('T', ' ')} and is "
+                f"{'closed' if closed else 'still open'} ({case['status']}). "
+                f"{len(alerts)} alerts and {len(related['iocs'])} indicators are linked to its entities; "
+                f"{len(runs)} playbook run(s) responded ({auto_runs} automatic). "
+                + (f"Driven by the “{case['playbook']}” playbook. " if case.get("playbook") else "")
+                + f"The response is currently {sla_verdict} "
+                  f"({sla['slaElapsedPct']}% of the {case.get('sla_hours', 24)}h SLA elapsed)."
+            ),
+        },
+        "breakdowns": [
+            {"heading": "Linked alerts by severity", "type": "severity", "data": _sev_breakdown(alerts)},
+            {"heading": "MITRE ATT&CK techniques observed", "type": "bars",
+             "data": [{"label": t["technique"], "count": t["count"]} for t in related["techniques"][:8]]},
+        ],
+        "findings": findings,
+        "recommendations": recs,
+    }

@@ -18,6 +18,22 @@ def list_kinds():
     return [{"kind": k, "label": labels.get(k, k)} for k in REPORT_KINDS]
 
 
+@router.get("/incident")
+def incident_report(case_id: str = Query(..., description="SOAR case id"),
+                    user: dict = Depends(current_user)):
+    """Post-incident report for one case: MITRE-mapped timeline, response
+    actions, SLA verdict, lessons-learned scaffold."""
+    from dashboard_api.reports import build_incident_report
+    try:
+        report = build_incident_report(case_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    with get_conn() as conn:
+        audit(conn, user["email"], "report.generate", "incident", f"case={case_id}")
+        conn.commit()
+    return report
+
+
 @router.get("/{kind}")
 def generate(kind: str,
              period: str = Query("weekly", pattern="^(daily|weekly|monthly|custom)$"),
