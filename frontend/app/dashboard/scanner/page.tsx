@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { lookupIoc } from '@/lib/api'
+import { useState, useEffect, useCallback } from 'react'
+import { lookupIoc, recordScan, fetchScans, importIocs, type ScanEntry } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
@@ -155,6 +155,18 @@ const SCAN_TYPES = [
   { key: 'file', label: 'File',     icon: File,   placeholder: 'Drop a file or browse...' },
 ]
 
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return iso
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000))
+  if (secs < 60) return `${secs}s ago`
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 /* ── Verdict gauge ────────────────────────────────────────────────── */
 function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
   const color = verdict === 'malicious' ? '#FF2E97' : verdict === 'suspicious' ? '#FFB23E' : '#34F5C5'
@@ -249,6 +261,28 @@ export default function ScannerPage() {
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [history, setHistory] = useState<typeof SCAN_HISTORY>(SCAN_HISTORY)
+  const [stats, setStats] = useState<{ scansToday: number; malicious: number } | null>(null)
+
+  // Live scan history + header stats; bundled demo rows remain the offline fallback.
+  const refreshHistory = useCallback(() => {
+    fetchScans(8).then((data) => {
+      setStats({ scansToday: data.scansToday, malicious: data.malicious })
+      if (data.items.length > 0) {
+        setHistory(data.items.map((s: ScanEntry) => ({
+          target: s.target,
+          type: s.type,
+          verdict: s.verdict,
+          score: Math.round(s.score * 100),
+          engines: s.engines ?? '—',
+          time: relativeTime(s.ts),
+        })))
+      }
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => { refreshHistory() }, [refreshHistory])
 
   const handleScan = () => {
     if (!query.trim() && scanType !== 'file') return
@@ -264,9 +298,18 @@ export default function ScannerPage() {
     if (scanType === 'hash') demo = DEMO_RESULTS.hash
     if (q.includes('8.8.8.8') || q.includes('google')) demo = DEMO_RESULTS.clean
 
-    const finish = (r: ScanResult) => setTimeout(() => { setResult(r); setScanning(false) }, 900)
+    const finish = (r: ScanResult, persist = true) => setTimeout(() => {
+      setResult(r)
+      setScanning(false)
+      if (persist) {
+        recordScan({
+          target: r.target, type: r.type, verdict: r.verdict,
+          score: r.score, engines: r.detectionRatio,
+        }).then(refreshHistory).catch(() => {})
+      }
+    }, 900)
 
-    if (scanType === 'file' || !query.trim()) { finish(demo); return }
+    if (scanType === 'file' || !query.trim()) { finish(demo, false); return }
 
     lookupIoc(query.trim())
       .then((hit) => {
@@ -290,7 +333,25 @@ export default function ScannerPage() {
             .filter(Boolean) as string[],
         })
       })
-      .catch(() => finish(demo))  // API unreachable → keep the demo result
+      .catch(() => finish(demo, false))  // API unreachable → demo result, nothing persisted
+  }
+
+  // Save the scanned indicator into the CTI IOC store.
+  function handleSaveIoc() {
+    if (!result || saved || saving) return
+    setSaving(true)
+    const iocType = result.type === 'file' ? 'hash' : result.type
+    importIocs({
+      indicators: [{ type: iocType, value: result.target }],
+      severity: result.verdict === 'malicious' ? 'high' : result.verdict === 'suspicious' ? 'medium' : 'low',
+      confidence: Math.round(result.score * 100),
+      source: 'intelscope-scanner',
+      threat_type: result.categories[0] ?? 'Scanned indicator',
+      tags: ['intelscope'],
+    })
+      .then(() => setSaved(true))
+      .catch(() => {})
+      .finally(() => setSaving(false))
   }
 
   return (
@@ -308,8 +369,8 @@ export default function ScannerPage() {
         {/* Stats row */}
         <div className="flex items-center gap-3 flex-wrap">
           {[
-            { label: 'Scans today', value: '1,247', icon: Zap,          color: '#7A3CFF' },
-            { label: 'Malicious',   value: '324',   icon: AlertTriangle, color: '#FF2E97' },
+            { label: 'Scans today', value: stats ? stats.scansToday.toLocaleString() : '—', icon: Zap,          color: '#7A3CFF' },
+            { label: 'Malicious',   value: stats ? stats.malicious.toLocaleString() : '—',  icon: AlertTriangle, color: '#FF2E97' },
             { label: 'Engines',     value: '90+',   icon: Database,      color: '#2DD4BF' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="glass border border-white/5 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
@@ -450,14 +511,14 @@ export default function ScannerPage() {
                 <Clock className="w-4 h-4 text-ink-500" />
                 <h3 className="text-sm font-semibold text-white">Recent Scans</h3>
               </div>
-              <span className="text-[10px] text-ink-500">Session history</span>
+              <span className="text-[10px] text-ink-500">{stats ? 'Live history' : 'Session history'}</span>
             </div>
             <div className="divide-y divide-white/4">
-              {SCAN_HISTORY.map((s) => (
-                <div key={s.target} className="flex items-center gap-4 px-5 py-3 hover:bg-white/2 transition-colors">
+              {history.map((s, i) => (
+                <div key={`${s.target}-${i}`} className="flex items-center gap-4 px-5 py-3 hover:bg-white/2 transition-colors">
                   <div className={cn(
                     'w-2 h-2 rounded-full shrink-0',
-                    s.verdict === 'malicious' ? 'bg-threat' : 'bg-safe',
+                    s.verdict === 'malicious' ? 'bg-threat' : s.verdict === 'suspicious' ? 'bg-amber' : 'bg-safe',
                   )} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-ink-200 truncate">{s.target}</p>
@@ -466,7 +527,7 @@ export default function ScannerPage() {
                   <span className="text-[10px] text-ink-500 font-mono w-14 text-right">{s.engines}</span>
                   <span className={cn(
                     'text-[10px] font-semibold w-16 text-right uppercase',
-                    s.verdict === 'malicious' ? 'text-threat' : 'text-safe',
+                    s.verdict === 'malicious' ? 'text-threat' : s.verdict === 'suspicious' ? 'text-amber' : 'text-safe',
                   )}>
                     {s.verdict}
                   </span>
@@ -545,7 +606,9 @@ export default function ScannerPage() {
                   <div className="text-sm text-safe mt-1">{result.community.clean} clean</div>
                 </div>
                 <button
-                  onClick={() => setSaved((s) => !s)}
+                  onClick={handleSaveIoc}
+                  disabled={saved || saving}
+                  title="Add this indicator to the CTI IOC store"
                   className={cn(
                     'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all',
                     saved
@@ -554,7 +617,7 @@ export default function ScannerPage() {
                   )}
                 >
                   {saved ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                  {saved ? 'Saved' : 'Save IOC'}
+                  {saved ? 'Saved to CTI' : saving ? 'Saving…' : 'Save IOC'}
                 </button>
               </div>
             </div>

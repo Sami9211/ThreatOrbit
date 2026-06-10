@@ -10,7 +10,7 @@ import {
   ExternalLink, Eye, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchAssets, fetchAsset, recomputeAssetRisk, type RiskBreakdown } from '@/lib/api'
+import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, type RiskBreakdown } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
@@ -254,14 +254,22 @@ export default function AssetsPage() {
 
   function addAsset() {
     if (!name.trim() || !formValue.trim()) return
-    const a: Asset = {
+    const local: Asset = {
       id: `a${++nextId}`, name: name.trim(), type: formType, value: formValue.trim(),
       criticality: formCrit, status: 'unscanned', riskScore: 0, lastScan: 'never',
       alerts: 0, cves: { critical: 0, high: 0, medium: 0, low: 0 }, openPorts: [], tags: ['new'],
     }
-    setAssets((p) => [a, ...p])
+    // Persist to the inventory; keep the local row as offline fallback.
+    createAsset({ name: local.name, type: local.type, value: local.value, criticality: local.criticality })
+      .then((created) => {
+        setAssets((p) => [created as unknown as Asset, ...p])
+        setTimeout(() => scanAsset((created as unknown as Asset).id), 400)
+      })
+      .catch(() => {
+        setAssets((p) => [local, ...p])
+        setTimeout(() => scanAsset(local.id), 400)
+      })
     setName(''); setFormValue(''); setFormType('domain'); setFormCrit('medium'); setShowAdd(false)
-    setTimeout(() => scanAsset(a.id), 400)
   }
 
   const filtered = useMemo(() => {

@@ -36,6 +36,14 @@ class HuntCreate(BaseModel):
     technique: str | None = None
 
 
+class ScanRecord(BaseModel):
+    target: str
+    type: str
+    verdict: str
+    score: float = 0
+    engines: str | None = None
+
+
 @router.get("/actors")
 def list_actors(active: bool | None = None):
     where = "WHERE active=1" if active else ""
@@ -244,3 +252,46 @@ def relationship_graph(limit: int = Query(40, le=200)):
         if anid in seen:
             links.append({"source": anid, "target": nid, "kind": "attributed"})
     return {"nodes": nodes, "links": links}
+
+
+# ── Scanner history ────────────────────────────────────────────────────────────
+
+_SCAN_TYPES = {"url", "ip", "hash", "domain", "file"}
+_VERDICTS = {"malicious", "suspicious", "clean"}
+
+
+@router.post("/scans", status_code=201)
+def record_scan(body: ScanRecord, user: dict = Depends(current_user)):
+    """Persist an IntelScope scan so history and stats survive reloads."""
+    if body.type not in _SCAN_TYPES:
+        raise HTTPException(status_code=400, detail=f"type must be one of {sorted(_SCAN_TYPES)}")
+    if body.verdict not in _VERDICTS:
+        raise HTTPException(status_code=400, detail=f"verdict must be one of {sorted(_VERDICTS)}")
+    target = body.target.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="target is required")
+    sid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO scans (id,ts,target,type,verdict,score,engines,actor) VALUES (?,?,?,?,?,?,?,?)",
+            (sid, now, target, body.type, body.verdict, body.score, body.engines, user["email"]),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM scans WHERE id=?", (sid,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.get("/scans")
+def list_scans(limit: int = Query(20, le=100)):
+    """Recent scans plus aggregate stats for the scanner header."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM scans ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        today_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM scans WHERE ts >= ?", (today,)
+        ).fetchone()["n"]
+        malicious = conn.execute(
+            "SELECT COUNT(*) AS n FROM scans WHERE verdict='malicious'"
+        ).fetchone()["n"]
+    return {"items": rows_to_dicts(rows), "scansToday": today_count, "malicious": malicious}

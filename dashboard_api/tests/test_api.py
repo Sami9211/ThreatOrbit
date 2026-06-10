@@ -470,3 +470,50 @@ def test_create_rule_feed_source(client, auth):
                                        "url": "https://urlhaus.abuse.ch/downloads/csv/"}, headers=auth)
     assert feed.status_code == 201 and feed.json()["enabled"] == 1
     assert client.post("/feeds", json={"name": "x", "type": "imaginary"}, headers=auth).status_code == 400
+
+
+def test_scan_history(client, auth):
+    r = client.post("/cti/scans", json={
+        "target": "45.95.147.236", "type": "ip", "verdict": "malicious",
+        "score": 0.81, "engines": "41/90"}, headers=auth)
+    assert r.status_code == 201, r.text
+    assert r.json()["verdict"] == "malicious"
+    listed = client.get("/cti/scans", headers=auth).json()
+    assert listed["scansToday"] >= 1 and listed["malicious"] >= 1
+    assert any(s["target"] == "45.95.147.236" for s in listed["items"])
+    assert client.post("/cti/scans", json={"target": "x", "type": "carrier-pigeon",
+                                           "verdict": "clean"}, headers=auth).status_code == 400
+
+
+def test_webhook_lifecycle(client, auth):
+    r = client.post("/config/webhooks", json={
+        "url": "https://hooks.example.com/threatorbit",
+        "events": ["alert.created", "incident.resolved"]}, headers=auth)
+    assert r.status_code == 201, r.text
+    wid = r.json()["id"]
+    assert r.json()["status"] == "active" and "alert.created" in r.json()["events"]
+    # invalid inputs rejected
+    assert client.post("/config/webhooks", json={"url": "ftp://nope", "events": ["alert.created"]},
+                       headers=auth).status_code == 400
+    assert client.post("/config/webhooks", json={"url": "https://x.com", "events": ["bogus.event"]},
+                       headers=auth).status_code == 400
+    # pause it
+    assert client.patch(f"/config/webhooks/{wid}", json={"status": "paused"},
+                        headers=auth).json()["status"] == "paused"
+    # delete it
+    assert client.delete(f"/config/webhooks/{wid}", headers=auth).status_code == 204
+    assert all(w["id"] != wid for w in client.get("/config/webhooks", headers=auth).json())
+
+
+def test_create_asset(client, auth):
+    r = client.post("/assets", json={
+        "name": "staging-api-01", "type": "server", "value": "10.9.0.41",
+        "criticality": "high"}, headers=auth)
+    assert r.status_code == 201, r.text
+    aid = r.json()["id"]
+    assert r.json()["status"] == "unscanned" and r.json()["risk_score"] == 0
+    # detail returns the transparent risk breakdown
+    detail = client.get(f"/assets/{aid}", headers=auth).json()
+    assert "riskBreakdown" in detail and "components" in detail["riskBreakdown"]
+    assert client.post("/assets", json={"name": "x", "type": "spaceship", "value": "v"},
+                       headers=auth).status_code == 400

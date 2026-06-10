@@ -1,11 +1,28 @@
-"""Asset surface routes: inventory, detail, vulnerability rollup, summary KPIs."""
+"""Asset surface routes: inventory, create, detail, vulnerability rollup, summary KPIs."""
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
-from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.scoring import fleet_risk_distribution, recompute_asset_risk, risk_breakdown
 
 router = APIRouter(prefix="/assets", tags=["assets"], dependencies=[Depends(current_user)])
+
+_ASSET_TYPES = {"domain", "ip", "server", "cloud", "database", "endpoint"}
+_CRITICALITIES = {"critical", "high", "medium", "low"}
+
+
+class AssetCreate(BaseModel):
+    name: str
+    type: str = "server"
+    value: str
+    criticality: str = "medium"
+    os: str | None = None
+    owner: str | None = None
+    tags: list[str] = []
 
 
 @router.get("")
@@ -26,6 +43,33 @@ def list_assets(type: str | None = None, criticality: str | None = None,
             params + [limit, offset],
         ).fetchall()
     return {"total": total, "items": rows_to_dicts(rows)}
+
+
+@router.post("", status_code=201)
+def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
+    name = body.name.strip()
+    value = body.value.strip()
+    if not name or not value:
+        raise HTTPException(status_code=400, detail="name and value are required")
+    if body.type not in _ASSET_TYPES:
+        raise HTTPException(status_code=400, detail=f"type must be one of {sorted(_ASSET_TYPES)}")
+    if body.criticality not in _CRITICALITIES:
+        raise HTTPException(status_code=400, detail=f"criticality must be one of {sorted(_CRITICALITIES)}")
+    aid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
+            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at) "
+            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,?,?,0,?,100.0,?)",
+            (aid, name, body.type, value, body.criticality,
+             dumps({"critical": 0, "high": 0, "medium": 0, "low": 0}), dumps([]),
+             body.os, body.owner or user["email"], dumps(body.tags or ["new"]), now),
+        )
+        audit(conn, user["email"], "asset.create", aid, f"name={name} type={body.type}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM assets WHERE id=?", (aid,)).fetchone()
+    return row_to_dict(row)
 
 
 @router.get("/summary")

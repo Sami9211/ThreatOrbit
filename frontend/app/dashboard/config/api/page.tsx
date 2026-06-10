@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchApiKeys, createApiKey, revokeApiKey, type ApiKey as RemoteApiKey } from '@/lib/api'
+import {
+  fetchApiKeys, createApiKey, revokeApiKey,
+  fetchWebhooks, createWebhook, patchWebhook, deleteWebhook,
+  type ApiKey as RemoteApiKey, type Webhook as RemoteWebhook,
+} from '@/lib/api'
 import {
   Key, Plus, Copy, CheckCircle, Trash2, X, AlertTriangle, Webhook,
-  Activity, Clock, Terminal,
+  Activity, Clock, Terminal, Pause, Play,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -218,14 +222,59 @@ const remoteToRow = (k: RemoteApiKey): ApiKey => ({
   status: k.revoked ? 'revoked' : 'active',
 })
 
+const remoteWebhookToRow = (w: RemoteWebhook): WebhookEndpoint => ({
+  id: w.id,
+  url: w.url,
+  events: w.events,
+  status: w.status,
+  lastDelivery: w.lastDelivery ? new Date(w.lastDelivery).toLocaleString() : 'never',
+})
+
 export default function ApiKeysPage() {
   const [showModal, setShowModal] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>(API_KEYS)
+  const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>(WEBHOOKS)
+  const [webhooksLive, setWebhooksLive] = useState(false)
+  const [newHookUrl, setNewHookUrl] = useState('')
+  const [newHookEvent, setNewHookEvent] = useState('alert.created')
+  const [hookError, setHookError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => {})
+    fetchWebhooks().then((data) => {
+      setWebhooks(data.map(remoteWebhookToRow))
+      setWebhooksLive(true)
+    }).catch(() => {})
   }, [])
+
+  function addWebhook() {
+    const url = newHookUrl.trim()
+    if (!url) return
+    setHookError(null)
+    createWebhook(url, [newHookEvent])
+      .then((created) => {
+        setWebhooks((prev) => [remoteWebhookToRow(created), ...prev])
+        setNewHookUrl('')
+      })
+      .catch((err) => setHookError(err instanceof Error && err.message.includes('http')
+        ? 'URL must start with http:// or https://'
+        : 'Could not add webhook — check the API is running and you have admin access.'))
+  }
+
+  function toggleWebhook(w: WebhookEndpoint) {
+    const next = w.status === 'paused' ? 'active' : 'paused'
+    setWebhooks((prev) => prev.map((x) => (x.id === w.id ? { ...x, status: next as WebhookStatus } : x)))
+    patchWebhook(w.id, { status: next }).catch(() => {
+      setWebhooks((prev) => prev.map((x) => (x.id === w.id ? { ...x, status: w.status } : x)))
+    })
+  }
+
+  function removeWebhook(id: string) {
+    const prev = webhooks
+    setWebhooks((w) => w.filter((x) => x.id !== id))
+    deleteWebhook(id).catch(() => setWebhooks(prev))
+  }
 
   async function handleGenerate(name: string, scope: Scope): Promise<string> {
     const result = await createApiKey(name, scope)
@@ -361,9 +410,45 @@ export default function ApiKeysPage() {
           <div className="flex items-center gap-2 mb-3">
             <Webhook className="w-4 h-4 text-violet" />
             <h2 className="text-sm font-semibold text-white">Webhooks</h2>
+            {webhooksLive && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 text-safe border border-safe/20">live</span>}
           </div>
+
+          {/* Add webhook */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <input
+              value={newHookUrl}
+              onChange={(e) => setNewHookUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addWebhook()}
+              placeholder="https://hooks.yourcompany.com/threatorbit"
+              className="flex-1 min-w-[240px] px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs font-mono text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40"
+            />
+            <select
+              value={newHookEvent}
+              onChange={(e) => setNewHookEvent(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-magenta/40"
+            >
+              {['alert.created', 'incident.resolved', 'ioc.confirmed', 'case.created', 'playbook.failed'].map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </select>
+            <button
+              onClick={addWebhook}
+              disabled={!newHookUrl.trim()}
+              className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all',
+                newHookUrl.trim() ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}
+            >
+              <Plus className="w-3.5 h-3.5" /> Add
+            </button>
+          </div>
+          {hookError && <p className="text-[11px] text-threat mb-3" role="alert">{hookError}</p>}
+
           <div className="space-y-2">
-            {WEBHOOKS.map((w) => {
+            {webhooks.length === 0 && (
+              <p className="text-xs text-ink-600 py-4 text-center rounded-xl border border-white/8 bg-surface">
+                No webhooks configured — add one above to push events to your stack.
+              </p>
+            )}
+            {webhooks.map((w) => {
               const st = WH_STATUS_CFG[w.status]
               return (
                 <div key={w.id} className="flex items-center gap-4 p-4 rounded-xl border border-white/8 bg-surface">
@@ -382,6 +467,24 @@ export default function ApiKeysPage() {
                     <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />
                     {st.label}
                   </span>
+                  {webhooksLive && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => toggleWebhook(w)}
+                        title={w.status === 'paused' ? 'Resume deliveries' : 'Pause deliveries'}
+                        className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors"
+                      >
+                        {w.status === 'paused' ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => removeWebhook(w.id)}
+                        title="Delete webhook"
+                        className="p-1.5 rounded-lg text-ink-500 hover:text-threat hover:bg-threat/5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}

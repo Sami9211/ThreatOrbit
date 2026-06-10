@@ -576,6 +576,21 @@ export const importIocs = (body: {
   confidence?: number; severity?: string; source?: string
   actor?: string; threat_type?: string; tags?: string[]
 }) => api<ImportResult>('/cti/iocs/import', { method: 'POST', body: JSON.stringify(body) })
+export interface ScanEntry {
+  id: string
+  ts: string
+  target: string
+  type: string
+  verdict: 'malicious' | 'suspicious' | 'clean'
+  score: number
+  engines: string | null
+  actor: string | null
+}
+export const recordScan = (body: { target: string; type: string; verdict: string; score?: number; engines?: string }) =>
+  api<ScanEntry>('/cti/scans', { method: 'POST', body: JSON.stringify(body) })
+export const fetchScans = (limit = 20) =>
+  api<{ items: ScanEntry[]; scansToday: number; malicious: number }>(`/cti/scans?limit=${limit}`)
+
 export const fetchCtiHunts  = () => api<SavedHunt[]>('/cti/hunts')
 export const createCtiHunt = (body: { name: string; description?: string; query?: string; technique?: string }) =>
   api<SavedHunt>('/cti/hunts', { method: 'POST', body: JSON.stringify(body) })
@@ -589,6 +604,10 @@ export const fetchAssets = (params?: Record<string, string>) => {
   return api<{ total: number; items: Asset[] }>(`/assets${q}`)
 }
 export const fetchAsset = (id: string) => api<AssetDetail>(`/assets/${id}`)
+export const createAsset = (body: {
+  name: string; type: string; value: string; criticality: string
+  os?: string; owner?: string; tags?: string[]
+}) => api<Asset>('/assets', { method: 'POST', body: JSON.stringify(body) })
 export const fetchRiskDistribution = () => api<RiskDistribution>('/assets/risk-distribution')
 export const fetchAssetsSummary = () => api<AssetSummary>('/assets/summary')
 export const fetchVulns = () => api<Asset[]>('/assets/vulns')
@@ -622,6 +641,23 @@ export const createApiKey    = (name: string, scope = 'read') =>
   api<ApiKey & { secret: string }>('/config/api-keys', { method: 'POST', body: JSON.stringify({ name, scope }) })
 export const revokeApiKey    = (id: string) =>
   api<void>(`/config/api-keys/${id}`, { method: 'DELETE' })
+export interface Webhook {
+  id: string
+  url: string
+  events: string[]
+  status: 'active' | 'paused' | 'failing'
+  lastDelivery: string | null
+  createdAt: string
+  createdBy: string | null
+}
+export const fetchWebhooks = () => api<Webhook[]>('/config/webhooks')
+export const createWebhook = (url: string, events: string[]) =>
+  api<Webhook>('/config/webhooks', { method: 'POST', body: JSON.stringify({ url, events }) })
+export const patchWebhook = (id: string, body: { status?: string; events?: string[] }) =>
+  api<Webhook>(`/config/webhooks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteWebhook = (id: string) =>
+  api<void>(`/config/webhooks/${id}`, { method: 'DELETE' })
+
 export const fetchAuditLog   = (limit = 100, action?: string) => {
   const q = new URLSearchParams({ limit: String(limit), ...(action ? { action } : {}) })
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)

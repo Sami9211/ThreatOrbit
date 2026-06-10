@@ -22,6 +22,16 @@ class ApiKeyCreate(BaseModel):
     scope: str = "read"
 
 
+class WebhookCreate(BaseModel):
+    url: str
+    events: list[str] = ["alert.created"]
+
+
+class WebhookUpdate(BaseModel):
+    status: str | None = None
+    events: list[str] | None = None
+
+
 def _now():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -108,5 +118,76 @@ def revoke_api_key(key_id: str, actor: dict = Depends(require_role("admin", "man
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="API key not found")
         audit(conn, actor["email"], "apikey.revoke", key_id)
+        conn.commit()
+    return None
+
+
+# ── Webhooks ──────────────────────────────────────────────────────────────────
+
+_WEBHOOK_EVENTS = {"alert.created", "incident.resolved", "ioc.confirmed", "case.created", "playbook.failed"}
+
+
+@router.get("/webhooks")
+def list_webhooks(_: dict = Depends(require_role("admin", "manager"))):
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM webhooks ORDER BY created_at DESC").fetchall()
+    return rows_to_dicts(rows)
+
+
+@router.post("/webhooks", status_code=201)
+def create_webhook(body: WebhookCreate, user: dict = Depends(require_role("admin", "manager"))):
+    url = body.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="url must start with http:// or https://")
+    bad = [e for e in body.events if e not in _WEBHOOK_EVENTS]
+    if bad or not body.events:
+        raise HTTPException(status_code=400, detail=f"events must be a non-empty subset of {sorted(_WEBHOOK_EVENTS)}")
+    wid = str(uuid.uuid4())
+    from dashboard_api.db import dumps
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO webhooks (id,url,events,status,last_delivery,created_at,created_by) "
+            "VALUES (?,?,?,'active',NULL,?,?)",
+            (wid, url, dumps(body.events), _now(), user["email"]),
+        )
+        audit(conn, user["email"], "webhook.create", wid, f"url={url}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM webhooks WHERE id=?", (wid,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.patch("/webhooks/{webhook_id}")
+def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(require_role("admin", "manager"))):
+    if body.status is not None and body.status not in ("active", "paused"):
+        raise HTTPException(status_code=400, detail="status must be active or paused")
+    fields, values = [], []
+    if body.status is not None:
+        fields.append("status=?"); values.append(body.status)
+    if body.events is not None:
+        bad = [e for e in body.events if e not in _WEBHOOK_EVENTS]
+        if bad or not body.events:
+            raise HTTPException(status_code=400, detail=f"events must be a non-empty subset of {sorted(_WEBHOOK_EVENTS)}")
+        from dashboard_api.db import dumps
+        fields.append("events=?"); values.append(dumps(body.events))
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    values.append(webhook_id)
+    with get_conn() as conn:
+        cur = conn.execute(f"UPDATE webhooks SET {','.join(fields)} WHERE id=?", values)
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+        audit(conn, user["email"], "webhook.update", webhook_id)
+        conn.commit()
+        row = conn.execute("SELECT * FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.delete("/webhooks/{webhook_id}", status_code=204)
+def delete_webhook(webhook_id: str, actor: dict = Depends(require_role("admin", "manager"))):
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM webhooks WHERE id=?", (webhook_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+        audit(conn, actor["email"], "webhook.delete", webhook_id)
         conn.commit()
     return None

@@ -19,7 +19,7 @@ JSON_COLUMNS = {
     "tags", "open_ports", "cves", "steps", "actions", "aliases", "motivations",
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
-    "hypotheses", "meta", "config", "scopes",
+    "hypotheses", "meta", "config", "scopes", "events",
 }
 
 
@@ -332,6 +332,28 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail     TEXT
 );
 
+CREATE TABLE IF NOT EXISTS scans (
+    id         TEXT PRIMARY KEY,
+    ts         TEXT NOT NULL,
+    target     TEXT NOT NULL,
+    type       TEXT NOT NULL,       -- url|ip|hash|domain|file
+    verdict    TEXT NOT NULL,       -- malicious|suspicious|clean
+    score      REAL NOT NULL DEFAULT 0,
+    engines    TEXT,                -- display ratio e.g. "41/90"
+    actor      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+    id            TEXT PRIMARY KEY,
+    url           TEXT NOT NULL,
+    events        TEXT NOT NULL DEFAULT '[]',
+    status        TEXT NOT NULL DEFAULT 'active',  -- active|paused|failing
+    last_delivery TEXT,
+    created_at    TEXT NOT NULL,
+    created_by    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_scans_ts ON scans(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_sev ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
