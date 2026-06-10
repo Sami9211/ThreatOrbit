@@ -327,3 +327,51 @@ def test_viewer_cannot_create_user(client):
     h = {"Authorization": f"Bearer {tok}"}
     r = client.post("/users", json={"email": "x@y.com", "name": "X", "role": "analyst", "password": "Password123!"}, headers=h)
     assert r.status_code == 403
+
+
+def test_register_creates_account_and_logs_in(client):
+    r = client.post("/auth/register", json={
+        "name": "Signup Smith", "email": "signup.smith@example.com",
+        "password": "Sup3rSecret!", "company": "Example Corp"})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["token"]
+    assert body["user"]["email"] == "signup.smith@example.com"
+    assert body["user"]["role"] == "analyst"  # seeded admin already exists
+    assert "password_hash" not in body["user"]
+    # the returned token works immediately
+    me = client.get("/auth/me", headers={"Authorization": f"Bearer {body['token']}"})
+    assert me.status_code == 200 and me.json()["email"] == "signup.smith@example.com"
+    # signup is audited
+    tok = client.post("/auth/login", json={"email": "admin@threatorbit.space", "password": "ChangeMe123!"}).json()["token"]
+    log = client.get("/config/audit-log?action=auth.register", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert any(e["actor"] == "signup.smith@example.com" for e in log)
+
+
+def test_register_validation(client):
+    dup = client.post("/auth/register", json={
+        "name": "Dup", "email": "signup.smith@example.com", "password": "Sup3rSecret!"})
+    assert dup.status_code == 409
+    assert client.post("/auth/register", json={
+        "name": "Short", "email": "short.pw@example.com", "password": "tiny"}).status_code == 400
+    assert client.post("/auth/register", json={
+        "name": "Bad", "email": "not-an-email", "password": "Sup3rSecret!"}).status_code == 400
+
+
+def test_login_throttled_after_repeated_failures(client):
+    from dashboard_api.config import AUTH_MAX_FAILURES
+    email = "bruteforce.target@example.com"
+    for _ in range(AUTH_MAX_FAILURES):
+        assert client.post("/auth/login", json={"email": email, "password": "wrong"}).status_code == 401
+    assert client.post("/auth/login", json={"email": email, "password": "wrong"}).status_code == 429
+
+
+def test_patch_user_mfa(client, auth):
+    r = client.post("/users", json={
+        "email": "mfa.user@threatorbit.space", "name": "MFA User",
+        "role": "viewer", "password": "Password123!"}, headers=auth)
+    uid = r.json()["id"]
+    assert r.json()["mfa_enabled"] == 0
+    updated = client.patch(f"/users/{uid}", json={"mfa_enabled": True}, headers=auth).json()
+    assert updated["mfa_enabled"] == 1
+    client.delete(f"/users/{uid}", headers=auth)

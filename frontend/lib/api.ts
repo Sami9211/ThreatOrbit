@@ -56,6 +56,7 @@ export interface User {
   name: string
   role: UserRole
   status: string
+  mfaEnabled?: number
   lastLogin: string | null
   createdAt: string
 }
@@ -429,6 +430,12 @@ export const authLogin = (email: string, password: string) =>
     body: JSON.stringify({ email, password }),
   })
 
+export const authRegister = (body: { name: string; email: string; password: string; company?: string }) =>
+  api<{ token: string; user: User }>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
 export const authMe = () => api<User>('/auth/me')
 
 export const authChangePassword = (currentPassword: string, newPassword: string) =>
@@ -540,6 +547,12 @@ export const fetchAuditLog   = (limit = 100, action?: string) => {
 export const fetchUsers = () => api<User[]>('/users')
 export const createUser = (body: { email: string; password: string; name: string; role: UserRole }) =>
   api<User>('/users', { method: 'POST', body: JSON.stringify(body) })
-export const patchUser  = (id: string, body: Partial<Pick<User, 'name' | 'role' | 'status'>>) =>
-  api<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const patchUser  = (id: string, body: Partial<Pick<User, 'name' | 'role' | 'status'>> & { mfaEnabled?: boolean }) =>
+  api<User>(`/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      name: body.name, role: body.role, status: body.status,
+      ...(body.mfaEnabled !== undefined ? { mfa_enabled: body.mfaEnabled } : {}),
+    }),
+  })
 export const deleteUser = (id: string) => api<void>(`/users/${id}`, { method: 'DELETE' })

@@ -9,7 +9,7 @@ import {
   PanelLeftOpen, PanelLeftClose, X, ScrollText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchAuditLog, fetchSettings, updateSettings, type AuditEntry } from '@/lib/api'
+import { fetchAuditLog, fetchSettings, updateSettings, authChangePassword, type AuditEntry } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 import { useCursorEffect } from '@/lib/useCursorEffect'
@@ -501,6 +501,53 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
+/* ── Change password ─────────────────────────────────────────────── */
+function ChangePassword() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [state, setState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  const canSubmit = current && next.length >= 8 && next === confirm
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!canSubmit || state === 'saving') return
+    setState('saving')
+    try {
+      await authChangePassword(current, next)
+      setState('done')
+      setMessage('Password updated.')
+      setCurrent(''); setNext(''); setConfirm('')
+    } catch (err) {
+      setState('error')
+      setMessage(err instanceof Error && err.message.includes('incorrect')
+        ? 'Current password is incorrect.'
+        : 'Could not update the password. Is the dashboard API running?')
+    }
+  }
+
+  return (
+    <Section title="Change Password" icon={Key} color="#FFB23E">
+      <form onSubmit={submit} className="space-y-4 max-w-sm">
+        <Field label="Current password" type="password" value={current} onChange={setCurrent} />
+        <Field label="New password" type="password" value={next} onChange={setNext}
+          hint="At least 8 characters" />
+        <Field label="Confirm new password" type="password" value={confirm} onChange={setConfirm}
+          hint={confirm && next !== confirm ? 'Passwords do not match' : undefined} />
+        {state === 'done' && <p className="text-[11px] text-safe">{message}</p>}
+        {state === 'error' && <p className="text-[11px] text-threat" role="alert">{message}</p>}
+        <button type="submit" disabled={!canSubmit || state === 'saving'}
+          className={cn('px-4 py-2 rounded-xl text-xs font-semibold transition-all',
+            canSubmit && state !== 'saving' ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
+          {state === 'saving' ? 'Updating…' : 'Update Password'}
+        </button>
+      </form>
+    </Section>
+  )
+}
+
 function AuditTrail() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null)
   const [error, setError] = useState(false)
@@ -713,6 +760,8 @@ export default function ConfigPage() {
               <Toggle label="Automated Threat Blocking"    description="Auto-block IPs with confidence score > 90%"     checked={true}  />
             </Section>
           )}
+
+          {tab === 'security' && <ChangePassword />}
 
           {tab === 'security' && <AuditTrail />}
 

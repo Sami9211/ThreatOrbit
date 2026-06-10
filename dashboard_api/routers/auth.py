@@ -1,13 +1,53 @@
-"""Authentication routes: login, current user, password change."""
+"""Authentication routes: login, registration, current user, password change.
+
+Login and registration share a small in-memory failure throttle: repeated
+failures from the same client for the same identity inside a sliding window
+return 429. Success clears the counter. State is per-process, which is the
+right scope for a single-instance SQLite-backed service.
+"""
+import re
+import threading
+import time
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from dashboard_api.auth import create_token, current_user, hash_password, verify_password
-from dashboard_api.db import get_conn, row_to_dict
+from dashboard_api.config import ALLOW_REGISTRATION, AUTH_FAILURE_WINDOW_SEC, AUTH_MAX_FAILURES
+from dashboard_api.db import audit, get_conn, row_to_dict
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+_failures: dict[str, list[float]] = {}
+_failures_lock = threading.Lock()
+
+
+def _throttle_key(request: Request, email: str) -> str:
+    host = request.client.host if request.client else "unknown"
+    return f"{host}:{email.lower()}"
+
+
+def _check_throttle(key: str):
+    now = time.monotonic()
+    with _failures_lock:
+        attempts = [t for t in _failures.get(key, []) if now - t < AUTH_FAILURE_WINDOW_SEC]
+        _failures[key] = attempts
+        if len(attempts) >= AUTH_MAX_FAILURES:
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
+
+
+def _record_failure(key: str):
+    with _failures_lock:
+        _failures.setdefault(key, []).append(time.monotonic())
+
+
+def _clear_failures(key: str):
+    with _failures_lock:
+        _failures.pop(key, None)
 
 
 class LoginRequest(BaseModel):
@@ -15,30 +55,93 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    company: str | None = None
+
+
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _public(user: dict) -> dict:
+    for k in ("password_hash", "password_salt"):
+        user.pop(k, None)
+    return user
+
+
 @router.post("/login")
-def login(body: LoginRequest):
+def login(body: LoginRequest, request: Request):
+    key = _throttle_key(request, body.email)
+    _check_throttle(key)
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM users WHERE email=?", (body.email.lower(),)).fetchone()
         if not row:
+            _record_failure(key)
             raise HTTPException(status_code=401, detail="Invalid email or password")
         user = row_to_dict(row)
         if not verify_password(body.password, user["password_hash"], user["password_salt"]):
+            _record_failure(key)
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if user["status"] == "disabled":
             raise HTTPException(status_code=403, detail="Account disabled")
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        now = _now()
         conn.execute("UPDATE users SET last_login=? WHERE id=?", (now, user["id"]))
         conn.commit()
+    _clear_failures(key)
     token = create_token(user)
-    for k in ("password_hash", "password_salt"):
-        user.pop(k, None)
+    user = _public(user)
     user["last_login"] = now
     return {"token": token, "user": user}
+
+
+@router.post("/register", status_code=201)
+def register(body: RegisterRequest, request: Request):
+    """Self-service signup. The first account ever created becomes admin;
+    later signups get the analyst role and can be promoted by an admin."""
+    if not ALLOW_REGISTRATION:
+        raise HTTPException(status_code=403, detail="Self-service registration is disabled")
+    key = _throttle_key(request, body.email)
+    _check_throttle(key)
+
+    name = body.name.strip()
+    email = body.email.strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not _EMAIL_RE.match(email):
+        _record_failure(key)
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    if len(body.password) < 8:
+        _record_failure(key)
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    ph, salt = hash_password(body.password)
+    uid = str(uuid.uuid4())
+    now = _now()
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
+            _record_failure(key)
+            raise HTTPException(status_code=409, detail="An account with that email already exists")
+        first_user = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0
+        role = "admin" if first_user else "analyst"
+        conn.execute(
+            "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
+            "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (uid, email, name, role, "active", ph, salt, "#FF2E97", 0, now, now),
+        )
+        detail = f"role={role}" + (f" company={body.company.strip()}" if body.company and body.company.strip() else "")
+        audit(conn, email, "auth.register", uid, detail)
+        conn.commit()
+        user = row_to_dict(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    _clear_failures(key)
+    return {"token": create_token(user), "user": _public(user)}
 
 
 @router.get("/me")
@@ -56,5 +159,6 @@ def change_password(body: PasswordChange, user: dict = Depends(current_user)):
             raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
         ph, salt = hash_password(body.new_password)
         conn.execute("UPDATE users SET password_hash=?, password_salt=? WHERE id=?", (ph, salt, user["id"]))
+        audit(conn, user["email"], "auth.change_password", user["id"])
         conn.commit()
     return {"ok": True}

@@ -24,6 +24,16 @@ CORS_ORIGINS = os.environ.get(
     "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3111",
 )
 
+# --- Auth throttling ----------------------------------------------------------
+# Failed login/register attempts allowed per client+identity inside the window
+# before the API answers 429. Successful auth clears the counter.
+AUTH_MAX_FAILURES = int(os.environ.get("DASHBOARD_AUTH_MAX_FAILURES", "10"))
+AUTH_FAILURE_WINDOW_SEC = int(os.environ.get("DASHBOARD_AUTH_FAILURE_WINDOW_SEC", "300"))
+
+# --- Registration --------------------------------------------------------------
+# Public self-service signup can be disabled for closed deployments.
+ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lower() != "false"
+
 # --- Seed -------------------------------------------------------------------
 # Deterministic seed so generated demo data is stable across restarts.
 SEED_RANDOM = int(os.environ.get("DASHBOARD_SEED", "1337"))

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchUsers, patchUser, type User as ApiUser, type UserRole } from '@/lib/api'
+import { fetchUsers, patchUser, createUser, deleteUser, type User as ApiUser, type UserRole } from '@/lib/api'
 
 /* Display role ↔ backend role mapping. The UI exposes richer display names
  * (Senior Analyst, Auditor) that collapse onto the backend's four roles. */
@@ -12,7 +12,7 @@ const ROLE_TO_API: Record<string, UserRole> = {
 }
 import {
   Users, Plus, X, ShieldCheck, ShieldOff, Check, Minus, Mail,
-  Clock, Activity, KeyRound, Ban, Monitor, ChevronDown,
+  Clock, Activity, KeyRound, Ban, Monitor, ChevronDown, Trash2, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -147,12 +147,109 @@ function Avatar({ name, color, size = 'md' }: { name: string; color: string; siz
   )
 }
 
+/* ── Invite user modal ───────────────────────────────────────────── */
+function InviteModal({ onClose, onInvite }: {
+  onClose: () => void
+  onInvite: (body: { name: string; email: string; role: RoleName; password: string }) => Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<RoleName>('Analyst')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+  const canSubmit = name.trim() && emailValid && password.length >= 8
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!canSubmit || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onInvite({ name: name.trim(), email: email.trim(), role, password })
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error && err.message.includes('already exists')
+        ? 'A user with that email already exists.'
+        : 'Could not create the user. Check the API is running and you have admin access.')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-surface p-6"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-violet/15"><Plus className="w-4 h-4 text-violet" /></div>
+            <h2 className="text-sm font-semibold text-white">Invite User</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Full name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Analyst"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Work email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Role</label>
+            <div className="relative">
+              <select value={role} onChange={(e) => setRole(e.target.value as RoleName)}
+                className="w-full appearance-none px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 pr-9">
+                {ROLES.map((r) => <option key={r.name}>{r.name}</option>)}
+              </select>
+              <ChevronDown className="w-4 h-4 text-ink-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Temporary password</label>
+            <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 font-mono focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+            <p className="text-[10px] text-ink-600 mt-1">Share this with the user — they can change it after first sign-in.</p>
+          </div>
+
+          {error && (
+            <p className="px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert">{error}</p>
+          )}
+
+          <button type="submit" disabled={!canSubmit || submitting}
+            className={cn('w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
+              canSubmit && !submitting ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
+            {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : 'Send Invite'}
+          </button>
+        </form>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 /* ── User detail panel ───────────────────────────────────────────── */
-function UserPanel({ user, onClose, onRoleChange, onToggleSuspend }: {
+function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, onDelete }: {
   user: TeamUser
   onClose: () => void
   onRoleChange: (role: RoleName) => void
   onToggleSuspend: () => void
+  onToggleMfa: () => void
+  onDelete: () => void
 }) {
   const color = ROLE_COLORS[user.role]
   return (
@@ -253,13 +350,20 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend }: {
 
           {/* Actions */}
           <div className="flex flex-col gap-2 pt-2">
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber/25 text-amber text-sm font-medium hover:bg-amber/5 transition-colors">
-              <KeyRound className="w-4 h-4" /> Reset MFA
+            <button
+              onClick={onToggleMfa}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber/25 text-amber text-sm font-medium hover:bg-amber/5 transition-colors">
+              <KeyRound className="w-4 h-4" /> {user.mfa ? 'Reset MFA' : 'Enable MFA'}
             </button>
             <button
               onClick={onToggleSuspend}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-threat/25 text-threat text-sm font-medium hover:bg-threat/5 transition-colors">
               <Ban className="w-4 h-4" /> {user.status === 'suspended' ? 'Reactivate User' : 'Suspend User'}
+            </button>
+            <button
+              onClick={() => { if (window.confirm(`Remove ${user.name}? This permanently deletes their account.`)) onDelete() }}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-threat/40 bg-threat/10 text-threat text-sm font-medium hover:bg-threat/20 transition-colors">
+              <Trash2 className="w-4 h-4" /> Remove User
             </button>
           </div>
         </div>
@@ -269,24 +373,25 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend }: {
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+const apiToTeamUser = (u: ApiUser): TeamUser => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: (u.role === 'admin' ? 'Admin' : u.role === 'manager' ? 'SOC Manager' : u.role === 'analyst' ? 'Analyst' : 'Read-Only') as RoleName,
+  lastActive: u.lastLogin ?? 'Never',
+  mfa: Boolean(u.mfaEnabled),
+  status: (u.status === 'active' ? 'active' : u.status === 'invited' ? 'invited' : 'suspended') as UserStatus,
+})
+
 export default function UsersRolesPage() {
   const [tab, setTab] = useState<'users' | 'roles'>('users')
   const [selected, setSelected] = useState<string | null>(null)
   const [users, setUsers] = useState<TeamUser[]>(USERS)
+  const [showInvite, setShowInvite] = useState(false)
 
   useEffect(() => {
     fetchUsers().then((data) => {
-      if (data.length > 0) {
-        setUsers(data.map((u: ApiUser) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: (u.role === 'admin' ? 'Admin' : u.role === 'manager' ? 'SOC Manager' : u.role === 'analyst' ? 'Analyst' : 'Read-Only') as RoleName,
-          lastActive: u.lastLogin ?? 'Never',
-          mfa: true,
-          status: (u.status === 'active' ? 'active' : u.status === 'invited' ? 'invited' : 'suspended') as UserStatus,
-        })))
-      }
+      if (data.length > 0) setUsers(data.map(apiToTeamUser))
     }).catch(() => {})
   }, [])
 
@@ -313,6 +418,30 @@ export default function UsersRolesPage() {
     })
   }
 
+  function toggleMfa(id: string) {
+    const u = users.find((x) => x.id === id)
+    if (!u) return
+    setUsers((us) => us.map((x) => x.id === id ? { ...x, mfa: !u.mfa } : x))
+    patchUser(id, { mfaEnabled: !u.mfa }).catch(() => {
+      setUsers((us) => us.map((x) => x.id === id ? { ...x, mfa: u.mfa } : x))
+    })
+  }
+
+  function removeUser(id: string) {
+    const prev = users
+    setUsers((us) => us.filter((x) => x.id !== id))
+    setSelected(null)
+    deleteUser(id).catch(() => setUsers(prev))
+  }
+
+  async function inviteUser(body: { name: string; email: string; role: RoleName; password: string }) {
+    const created = await createUser({
+      name: body.name, email: body.email,
+      role: ROLE_TO_API[body.role] ?? 'analyst', password: body.password,
+    })
+    setUsers((us) => [...us, apiToTeamUser(created)])
+  }
+
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
       {/* Header */}
@@ -324,7 +453,9 @@ export default function UsersRolesPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">Manage team access and permissions</p>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
+        <button
+          onClick={() => setShowInvite(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
           <Plus className="w-3.5 h-3.5" />
           Invite User
         </button>
@@ -442,7 +573,15 @@ export default function UsersRolesPage() {
             onClose={() => setSelected(null)}
             onRoleChange={(role) => changeRole(selectedUser.id, role)}
             onToggleSuspend={() => toggleSuspend(selectedUser.id)}
+            onToggleMfa={() => toggleMfa(selectedUser.id)}
+            onDelete={() => removeUser(selectedUser.id)}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showInvite && (
+          <InviteModal onClose={() => setShowInvite(false)} onInvite={inviteUser} />
         )}
       </AnimatePresence>
     </div>

@@ -27,6 +27,7 @@ class UserUpdate(BaseModel):
     role: str | None = None
     status: str | None = None
     avatar_color: str | None = None
+    mfa_enabled: bool | None = None
 
 
 def _now():
@@ -66,11 +67,13 @@ def create_user(body: UserCreate, actor: dict = Depends(require_role("admin", "m
 @router.patch("/{user_id}")
 def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_role("admin", "manager"))):
     fields, values = [], []
-    for col in ("name", "role", "status", "avatar_color"):
+    for col in ("name", "role", "status", "avatar_color", "mfa_enabled"):
         val = getattr(body, col)
         if val is not None:
             if col == "role" and val not in ROLES:
                 raise HTTPException(status_code=400, detail="Invalid role")
+            if col == "mfa_enabled":
+                val = int(val)
             fields.append(f"{col}=?")
             values.append(val)
     if not fields:

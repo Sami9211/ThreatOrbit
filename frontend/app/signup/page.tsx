@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 import { PLANS, planById, type PlanId } from '@/lib/plans'
+import { useAuth } from '@/lib/auth-context'
 
 function strength(pw: string): { score: number; label: string; color: string } {
   let s = 0
@@ -30,6 +31,7 @@ function strength(pw: string): { score: number; label: string; color: string } {
 
 export default function SignUpPage() {
   const router = useRouter()
+  const { register } = useAuth()
   const [step, setStep] = useState<1 | 2>(1)
   const [plan, setPlan] = useState<PlanId>('professional')
   const [annual, setAnnual] = useState(false)
@@ -37,6 +39,7 @@ export default function SignUpPage() {
   const [showPw, setShowPw] = useState(false)
   const [agree, setAgree] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const selected = planById[plan]
   const pw = strength(form.password)
@@ -51,12 +54,28 @@ export default function SignUpPage() {
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)
   const canSubmit = form.name.trim() && emailValid && form.password.length >= 8 && agree
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!canSubmit) return
+    if (!canSubmit || submitting) return
     setSubmitting(true)
-    // Frontend-only demo: simulate account creation then enter the dashboard.
-    setTimeout(() => router.push('/dashboard'), 1100)
+    setError(null)
+    try {
+      await register({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        company: form.company.trim() || undefined,
+      })
+      router.push('/dashboard')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      setError(
+        msg.includes('already exists') ? 'An account with that email already exists. Try signing in instead.'
+        : msg.startsWith('HTTP') || msg.includes('fetch') ? 'Could not reach the ThreatOrbit API. Make sure the dashboard service is running, then try again.'
+        : msg || 'Something went wrong creating your account. Please try again.',
+      )
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -241,6 +260,12 @@ export default function SignUpPage() {
                     </span>
                   </label>
                 </div>
+
+                {error && (
+                  <div className="mt-4 px-3.5 py-2.5 rounded-xl bg-threat/10 border border-threat/25 text-xs text-threat leading-relaxed" role="alert">
+                    {error}
+                  </div>
+                )}
 
                 <button type="submit" disabled={!canSubmit || submitting}
                   className={cn('w-full mt-6 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all',
