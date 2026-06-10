@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -586,7 +586,22 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             { label: 'Escalate', icon: ArrowUpRight, color: 'text-threat',
               run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Escalated — status set to In Progress') } },
             { label: 'Create Case', icon: FileText, color: 'text-violet',
-              run: () => flash('SOAR case created from this alert') },
+              run: () => {
+                createCase({
+                  title: alert.title,
+                  severity: ['critical', 'high', 'medium', 'low'].includes(alert.severity) ? alert.severity : 'medium',
+                  type: 'Investigation',
+                  description: `Escalated from SIEM alert ${alert.id} (${alert.ruleName}). ${alert.description}`,
+                  alertCount: 1,
+                  entities: [
+                    ...(alert.srcIp ? [{ type: 'ip', value: alert.srcIp }] : []),
+                    ...(alert.hostname ? [{ type: 'host', value: alert.hostname }] : []),
+                    ...(alert.username ? [{ type: 'user', value: alert.username }] : []),
+                  ],
+                })
+                  .then((c) => flash(`SOAR case ${c.id} created from this alert`))
+                  .catch(() => flash('Could not create case — is the dashboard API running?'))
+              } },
             { label: 'Suppress', icon: Lock, color: 'text-ink-400',
               run: () => { onUpdate(alert.id, { status: 'closed', disposition: 'false-positive' }); flash(`Rule ${alert.ruleId} suppressed for this entity`) } },
             { label: 'Run Playbook', icon: Zap, color: 'text-safe',

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics, type SoarMetrics } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, type SoarMetrics } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -368,6 +368,14 @@ const STEP_COLOR: Record<StepType, string> = {
   'sub-playbook': '#FF2E97',
 }
 
+// War-room timestamps arrive as ISO strings from the API (or HH:MM:SS from
+// optimistic local entries). Render both as a compact clock time.
+function fmtWarRoomTs(ts: string): string {
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ts
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
+
 function slaPercent(created: string, slaHours: number): number {
   const now = Date.parse('2024-11-12T16:00:00Z')
   const start = new Date(created).getTime()
@@ -398,22 +406,27 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
     ? (['overview', 'tasks'] as const)
     : (['overview', 'warroom', 'tasks', 'evidence'] as const)
 
-  // Advance a task through pending → in-progress → done on click
+  // Advance a task through pending → in-progress → done on click.
+  // Optimistic local update, persisted to the API, rolled back on failure.
   function cycleTask(id: string) {
-    setTasks((prev) => prev.map((t) => {
-      if (t.id !== id) return t
-      const next = t.status === 'done' ? 'pending' : t.status === 'in-progress' ? 'done' : 'in-progress'
-      return { ...t, status: next as typeof t.status }
-    }))
+    const task = tasks.find((t) => t.id === id)
+    if (!task) return
+    const next = task.status === 'done' ? 'pending' : task.status === 'in-progress' ? 'done' : 'in-progress'
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: next as typeof t.status } : t)))
+    patchCaseTask(c.id, id, { status: next }).catch(() => {
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: task.status } : t)))
+    })
   }
 
   function addNote() {
     const text = note.trim()
     if (!text) return
-    const now = new Date()
-    const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+    const ts = new Date().toISOString()
     setWarRoom((prev) => [...prev, { ts, actor: 'you', type: 'manual', content: text }])
     setNote('')
+    addCaseNote(c.id, text).then((updated) => {
+      if (updated?.warRoom) setWarRoom(updated.warRoom as typeof warRoom)
+    }).catch(() => {})  // keep the optimistic entry when the API is unreachable
   }
 
   const doneCount = tasks.filter((t) => t.status === 'done').length
@@ -515,7 +528,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
             {warRoom.map((entry, i) => (
               <div key={i} className={cn('flex gap-3 text-xs',
                 entry.type === 'auto' ? 'opacity-80' : '')}>
-                <div className="shrink-0 w-12 text-[10px] text-ink-600 font-mono pt-0.5">{entry.ts}</div>
+                <div className="shrink-0 w-12 text-[10px] text-ink-600 font-mono pt-0.5">{fmtWarRoomTs(entry.ts)}</div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={cn('text-[10px] font-semibold',
@@ -722,6 +735,101 @@ function NormalSOAR({ cases: casesData }: { cases: CaseRecord[] }) {
   )
 }
 
+/* ── New case modal ───────────────────────────────────────────────── */
+function NewCaseModal({ onClose, onCreate }: {
+  onClose: () => void
+  onCreate: (body: { title: string; severity: string; type: string; description: string }) => Promise<void>
+}) {
+  const [title, setTitle] = useState('')
+  const [severity, setSeverity] = useState('medium')
+  const [caseType, setCaseType] = useState('Investigation')
+  const [description, setDescription] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!title.trim() || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onCreate({ title: title.trim(), severity, type: caseType, description: description.trim() })
+      onClose()
+    } catch {
+      setError('Could not create the case. Is the dashboard API running?')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-surface p-6"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-magenta/15"><Zap className="w-4 h-4 text-magenta" /></div>
+            <h2 className="text-sm font-semibold text-white">New Case</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Title</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Suspicious lateral movement from jump host"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-ink-300 mb-1.5">Severity</label>
+              <select value={severity} onChange={(e) => setSeverity(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-300 mb-1.5">Type</label>
+              <select value={caseType} onChange={(e) => setCaseType(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                {['Investigation', 'Phishing', 'Malware', 'Ransomware', 'Account Compromise',
+                  'Data Exfiltration', 'Insider Threat', 'Web Attack', 'Misconfiguration'].map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Description (optional)</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
+              placeholder="What happened, which assets are affected…"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600 resize-none" />
+          </div>
+
+          {error && <p className="px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert">{error}</p>}
+
+          <button type="submit" disabled={!title.trim() || submitting}
+            className={cn('w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
+              title.trim() && !submitting ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
+            {submitting ? 'Creating…' : 'Create Case'}
+          </button>
+        </form>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SOARPage() {
   const [mode] = useExperienceMode()
@@ -732,7 +840,13 @@ export default function SOARPage() {
   const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
   const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOKS)
   const [soarApi, setSoarApi] = useState<SoarMetrics | null>(null)
+  const [showNewCase, setShowNewCase] = useState(false)
   const selectedPB = playbooks.find((p) => p.id === selectedPBId) ?? null
+
+  async function handleCreateCase(body: { title: string; severity: string; type: string; description: string }) {
+    const created = await createCase(body)
+    setCases((prev) => [created as unknown as CaseRecord, ...prev])
+  }
 
   // Load from API
   useEffect(() => {
@@ -816,7 +930,9 @@ export default function SOARPage() {
               <span className="text-safe">{metrics.timeSavedMonth}h saved this month</span>
             </p>
           </div>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/15 transition-colors">
+          <button
+            onClick={() => setShowNewCase(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/15 transition-colors">
             <Zap className="w-3.5 h-3.5" /> New Case
           </button>
         </div>
@@ -1065,6 +1181,12 @@ export default function SOARPage() {
             />
             <CaseDetail key={selectedCase.id} c={selectedCase} onClose={() => setSelectedCase(null)} simplified={isNormal} />
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showNewCase && (
+          <NewCaseModal onClose={() => setShowNewCase(false)} onCreate={handleCreateCase} />
         )}
       </AnimatePresence>
     </div>

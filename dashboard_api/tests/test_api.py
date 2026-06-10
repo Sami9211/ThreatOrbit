@@ -375,3 +375,35 @@ def test_patch_user_mfa(client, auth):
     updated = client.patch(f"/users/{uid}", json={"mfa_enabled": True}, headers=auth).json()
     assert updated["mfa_enabled"] == 1
     client.delete(f"/users/{uid}", headers=auth)
+
+
+def test_case_lifecycle(client, auth):
+    r = client.post("/soar/cases", json={
+        "title": "Suspicious lateral movement from jump host",
+        "severity": "high", "type": "Intrusion",
+        "description": "Created from correlated SMB alerts",
+        "entities": [{"type": "host", "value": "JH-01"}]}, headers=auth)
+    assert r.status_code == 201, r.text
+    case = r.json()
+    cid = case["id"]
+    assert case["status"] == "new" and case["severity"] == "high"
+    assert case["tasks"] and all(t["status"] == "pending" for t in case["tasks"])
+    assert case["war_room"][0]["type"] == "system"
+
+    # invalid severity rejected
+    assert client.post("/soar/cases", json={"title": "x", "severity": "apocalyptic"},
+                       headers=auth).status_code == 400
+
+    # add a war-room note
+    n = client.post(f"/soar/cases/{cid}/notes", json={"content": "Host isolated via EDR"}, headers=auth)
+    assert n.status_code == 201
+    assert any(e["content"] == "Host isolated via EDR" for e in n.json()["war_room"])
+
+    # advance a task
+    tid = case["tasks"][0]["id"]
+    t = client.patch(f"/soar/cases/{cid}/tasks/{tid}", json={"status": "done"}, headers=auth)
+    assert t.status_code == 200
+    assert next(x for x in t.json()["tasks"] if x["id"] == tid)["status"] == "done"
+    # unknown task 404, bad status 400
+    assert client.patch(f"/soar/cases/{cid}/tasks/NOPE", json={"status": "done"}, headers=auth).status_code == 404
+    assert client.patch(f"/soar/cases/{cid}/tasks/{tid}", json={"status": "skipped"}, headers=auth).status_code == 400

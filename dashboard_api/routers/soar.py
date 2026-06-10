@@ -1,17 +1,57 @@
-"""SOAR routes: cases, playbooks, integrations, and aggregated metrics."""
+"""SOAR routes: cases (create/update/notes/tasks), playbooks, integrations, metrics."""
+import json
+import random
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
-from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/soar", tags=["soar"], dependencies=[Depends(current_user)])
+
+SEVERITIES = {"critical", "high", "medium", "low"}
+TASK_STATUSES = {"pending", "in-progress", "done"}
+
+DEFAULT_TASKS = [
+    ("Triage", "Validate alert"),
+    ("Containment", "Isolate affected assets"),
+    ("Eradication", "Remove persistence"),
+    ("Recovery", "Restore service"),
+]
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 class CaseUpdate(BaseModel):
     status: str | None = None
     owner: str | None = None
     severity: str | None = None
+
+
+class CaseCreate(BaseModel):
+    title: str
+    severity: str = "medium"
+    type: str | None = None
+    description: str | None = None
+    owner: str | None = None
+    sla_hours: int = 24
+    alert_count: int = 0
+    entities: list[dict] = []
+
+
+class NoteCreate(BaseModel):
+    content: str
+    type: str = "manual"
+
+
+class TaskUpdate(BaseModel):
+    status: str | None = None
+    assignee: str | None = None
+    notes: str | None = None
 
 
 @router.get("/cases")
@@ -27,6 +67,42 @@ def list_cases(status: str | None = None, severity: str | None = None):
     return rows_to_dicts(rows)
 
 
+@router.post("/cases", status_code=201)
+def create_case(body: CaseCreate, user: dict = Depends(current_user)):
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    if body.severity not in SEVERITIES:
+        raise HTTPException(status_code=400, detail=f"Severity must be one of {sorted(SEVERITIES)}")
+    now = _now_iso()
+    owner = body.owner or user["email"]
+    war_room = [{"ts": now, "actor": user["email"], "type": "system",
+                 "content": "Case opened" + (f": {body.description}" if body.description else ".")}]
+    tasks = [{"id": f"T{i+1}", "phase": phase, "name": name, "status": "pending",
+              "assignee": owner, "notes": ""} for i, (phase, name) in enumerate(DEFAULT_TASKS)]
+    with get_conn() as conn:
+        case_id = None
+        for _ in range(50):
+            candidate = f"CASE-{random.randint(1000, 9999)}"
+            if not conn.execute("SELECT 1 FROM cases WHERE id=?", (candidate,)).fetchone():
+                case_id = candidate
+                break
+        if case_id is None:
+            raise HTTPException(status_code=500, detail="Could not allocate a case id")
+        conn.execute(
+            "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
+            "alert_count,description,entities,war_room,tasks,evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (case_id, title, body.type or "Investigation", body.severity, "new", owner, "",
+             body.sla_hours, now, now, body.alert_count,
+             body.description or f"Investigation into {title.lower()}.",
+             dumps(body.entities), dumps(war_room), dumps(tasks), dumps([])),
+        )
+        audit(conn, user["email"], "case.create", case_id, f"title={title} severity={body.severity}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return row_to_dict(row)
+
+
 @router.get("/cases/{case_id}")
 def get_case(case_id: str):
     with get_conn() as conn:
@@ -34,6 +110,55 @@ def get_case(case_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Case not found")
     return row_to_dict(row)
+
+
+@router.post("/cases/{case_id}/notes", status_code=201)
+def add_case_note(case_id: str, body: NoteCreate, user: dict = Depends(current_user)):
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Note content is required")
+    now = _now_iso()
+    with get_conn() as conn:
+        row = conn.execute("SELECT war_room FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Case not found")
+        war_room = json.loads(row["war_room"] or "[]")
+        war_room.append({"ts": now, "actor": user["email"], "type": body.type, "content": content})
+        conn.execute("UPDATE cases SET war_room=?, updated=? WHERE id=?",
+                     (dumps(war_room), now, case_id))
+        audit(conn, user["email"], "case.note", case_id)
+        conn.commit()
+        updated = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return row_to_dict(updated)
+
+
+@router.patch("/cases/{case_id}/tasks/{task_id}")
+def update_case_task(case_id: str, task_id: str, body: TaskUpdate, user: dict = Depends(current_user)):
+    if body.status is not None and body.status not in TASK_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Status must be one of {sorted(TASK_STATUSES)}")
+    if body.status is None and body.assignee is None and body.notes is None:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    now = _now_iso()
+    with get_conn() as conn:
+        row = conn.execute("SELECT tasks FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Case not found")
+        tasks = json.loads(row["tasks"] or "[]")
+        task = next((t for t in tasks if t.get("id") == task_id), None)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if body.status is not None:
+            task["status"] = body.status
+        if body.assignee is not None:
+            task["assignee"] = body.assignee
+        if body.notes is not None:
+            task["notes"] = body.notes
+        conn.execute("UPDATE cases SET tasks=?, updated=? WHERE id=?",
+                     (dumps(tasks), now, case_id))
+        audit(conn, user["email"], "case.task", case_id, f"task={task_id}")
+        conn.commit()
+        updated = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return row_to_dict(updated)
 
 
 @router.patch("/cases/{case_id}")

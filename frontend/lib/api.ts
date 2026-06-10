@@ -486,6 +486,25 @@ export const fetchCases = (params?: Record<string, string>) => {
 }
 export const patchCase = (id: string, body: Partial<Pick<Case, 'status' | 'owner' | 'severity'>>) =>
   api<Case>(`/soar/cases/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const createCase = (body: {
+  title: string; severity?: string; type?: string; description?: string
+  owner?: string; slaHours?: number; alertCount?: number
+  entities?: Array<{ type: string; value: string }>
+}) =>
+  api<Case>('/soar/cases', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: body.title, severity: body.severity, type: body.type,
+      description: body.description, owner: body.owner,
+      ...(body.slaHours !== undefined ? { sla_hours: body.slaHours } : {}),
+      ...(body.alertCount !== undefined ? { alert_count: body.alertCount } : {}),
+      entities: body.entities,
+    }),
+  })
+export const addCaseNote = (id: string, content: string, type = 'manual') =>
+  api<Case>(`/soar/cases/${id}/notes`, { method: 'POST', body: JSON.stringify({ content, type }) })
+export const patchCaseTask = (caseId: string, taskId: string, body: { status?: string; assignee?: string; notes?: string }) =>
+  api<Case>(`/soar/cases/${caseId}/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const fetchPlaybooks = () => api<Playbook[]>('/soar/playbooks')
 export const runPlaybook = (id: string) =>
   api<Playbook>(`/soar/playbooks/${id}/run`, { method: 'POST' })
