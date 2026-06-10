@@ -91,6 +91,11 @@ class HuntQuery(BaseModel):
     time_range: str = "24h"
 
 
+class EventSearch(BaseModel):
+    query: str = ""
+    time_range: str = "24h"
+
+
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
 # Whitelisted sort columns → SQL ORDER BY expressions. Severity sorts by
@@ -692,3 +697,16 @@ def hunt_query(body: HuntQuery):
     if not body.query.strip():
         raise HTTPException(status_code=400, detail="Query is required")
     return run_alert_hunt(body.query, body.time_range)
+
+
+@router.post("/search")
+def event_stream_search(body: EventSearch):
+    """Field-operator search over the raw event stream (Splunk/KQL-style).
+
+    Supports `field=value`, `!= > < >= <=`, `~regex`, `:contains`,
+    `field in a,b,c`, bare full-text tokens, and `| stats count by <field>`.
+    """
+    if body.time_range not in ("1h", "6h", "24h", "7d"):
+        raise HTTPException(status_code=400, detail="time_range must be 1h|6h|24h|7d")
+    from dashboard_api.hunting import event_search
+    return event_search(body.query, body.time_range)

@@ -652,6 +652,28 @@ export const runHuntQuery = (query: string, timeRange: string) =>
     body: JSON.stringify({ query, time_range: timeRange }),
   })
 
+// Event-stream search language (field operators + stats over raw events)
+export interface EventSearchRow {
+  id: string; ts: string | null; category: string | null; eventType: string | null
+  srcIp: string | null; destIp: string | null; destPort: number | null
+  username: string | null; hostname: string | null; processName: string | null
+  action: string | null; bytesOut: number | null; mitreTechId: string | null; raw: string | null
+}
+export interface EventSearchResult {
+  scanned: number; hits: number; elapsedMs: number; groupCount?: number
+  interpreted: {
+    conditions: Array<{ field: string; op: string; value: string }>
+    freetext: string[]; stats: { by: string } | null
+  }
+  stats: { by: string; groups: Array<{ value: string; count: number }> } | null
+  results: EventSearchRow[]
+}
+export const eventSearch = (query: string, timeRange = '24h') =>
+  api<EventSearchResult>('/siem/search', {
+    method: 'POST',
+    body: JSON.stringify({ query, time_range: timeRange }),
+  })
+
 export interface HuntRunOutcome { hunt: SavedHunt; run: { scanned: number; hits: number; elapsedMs: number } }
 export const createSiemHunt = (body: { name: string; description?: string; query?: string; technique?: string }) =>
   api<SavedHunt>('/siem/hunts', { method: 'POST', body: JSON.stringify(body) })

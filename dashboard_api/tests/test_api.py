@@ -1100,6 +1100,69 @@ def test_alert_suppression_lifecycle(client, auth):
     assert revived["total"] > base and any(a["status"] not in ("resolved", "closed") for a in revived["items"])
 
 
+def test_event_search_language(client, auth):
+    """Real field-operator search over the raw event stream + stats aggregation."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    lines = [
+        "Jan 10 06:00:00 web01 sshd[1]: Failed password for root from 203.0.113.41 port 5000",
+        "Jan 10 06:00:01 web01 sshd[2]: Failed password for admin from 203.0.113.41 port 5001",
+        '{"event_type":"beacon","src_ip":"10.0.0.7","dest_ip":"185.9.9.9","dest_port":443}',
+    ]
+    client.post("/siem/ingest", json={"lines": lines, "format": "auto"}, headers=auth)
+
+    # field equality
+    r = client.post("/siem/search", json={"query": "event_type=failed_login", "time_range": "24h"}, headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["hits"] >= 2 and all(x["event_type"] == "failed_login" for x in body["results"])
+    assert body["scanned"] >= body["hits"]
+
+    # a specific value isolates the two ingested rows for this src
+    bysrc = client.post("/siem/search", json={"query": "src_ip=203.0.113.41"}, headers=auth).json()
+    assert bysrc["hits"] >= 2 and all(x["src_ip"] == "203.0.113.41" for x in bysrc["results"])
+
+    # numeric operator + AND of conditions
+    num = client.post("/siem/search", json={"query": "event_type=beacon dest_port>=443"}, headers=auth).json()
+    assert num["hits"] >= 1 and all(x["event_type"] == "beacon" for x in num["results"])
+
+    # bare token → full-text over the raw line
+    ft = client.post("/siem/search", json={"query": "beacon"}, headers=auth).json()
+    assert ft["hits"] >= 1
+
+    # membership operator
+    mem = client.post("/siem/search", json={"query": "event_type in failed_login,beacon"}, headers=auth).json()
+    assert mem["hits"] >= 3
+
+    # stats aggregation groups by a field
+    agg = client.post("/siem/search",
+                      json={"query": "event_type=failed_login | stats count by src_ip"}, headers=auth).json()
+    assert agg["stats"]["by"] == "src_ip" and agg["results"] == []
+    grp = next((g for g in agg["stats"]["groups"] if g["value"] == "203.0.113.41"), None)
+    assert grp and grp["count"] >= 2
+    # the parser surfaces how it interpreted the query
+    assert any(c["field"] == "event_type" and c["op"] == "equals" for c in agg["interpreted"]["conditions"])
+
+    # bad time range rejected
+    assert client.post("/siem/search", json={"query": "x", "time_range": "1y"}, headers=auth).status_code == 400
+
+
+def test_event_search_parser_units():
+    """Pure parser: operators, membership, freetext, and the stats clause."""
+    from dashboard_api.hunting import parse_query
+    p = parse_query('src_ip=10.0.0.5 bytes_out>=100 raw~"OR 1=1" powershell | stats count by hostname')
+    ops = {(c["field"], c["op"], c["value"]) for c in p["conditions"]}
+    assert ("src_ip", "equals", "10.0.0.5") in ops
+    assert ("bytes_out", "gte", "100") in ops
+    assert ("raw", "regex", "OR 1=1") in ops           # quoted value with spaces survives
+    assert p["freetext"] == ["powershell"]
+    assert p["stats"] == {"by": "hostname"}
+    # membership + an unknown field stays as free text
+    p2 = parse_query("username in svc-backup,svc-deploy notafield=x")
+    assert ({"field": "username", "op": "in", "value": "svc-backup,svc-deploy"} in p2["conditions"])
+    assert "notafield=x" in p2["freetext"]
+
+
 def test_fp_feedback_bumps_rule_fp_rate(client, auth):
     """Marking an alert false-positive raises its rule's FP rate (a tuning signal)."""
     from dashboard_api.engine import seed_builtin_rules

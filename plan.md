@@ -60,8 +60,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       Remaining: time-boxed/recurring suppression windows.
 - [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
       tactic, per-technique drill-down to rules/alerts, gaps highlighted.
-- [ ] **Search/hunt language** — expand the hunt engine to real field operators,
-      aggregations, joins, and saved/scheduled hunts that raise alerts.
+- [~] **Search/hunt language** — DONE: a real field-operator query language over
+      the raw event stream (`POST /siem/search`) — `field=value`, `!= > < >= <=`,
+      `~regex`, `:contains`, `field in a,b,c`, bare full-text, and
+      `| stats count by <field>` aggregation; compiles to the same condition
+      shape the detection engine evaluates. Event-stream search panel on the Hunt
+      page. Remaining: joins across sources, and saved/scheduled event-searches
+      that raise alerts on threshold.
 - [x] **Threat-intel matching** — DONE: ingested/generated events whose IP
       matches a known malicious IOC raise an enriched intel alert (R-TIMATCH).
 
@@ -123,6 +128,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Event-stream search language (Phase 1)** — a real, compact
+  field-operator query language over the raw `events` stream (what hunting
+  actually searches, not just alerts). `POST /siem/search` parses
+  `field=value`, `!= > < >= <=`, `~regex`, `:contains`, `field in a,b,c`, bare
+  full-text tokens, and a `| stats count by <field>` aggregation; every term
+  compiles to the same condition shape `rule_engine.matches_event` evaluates, so
+  search and detection stay consistent. New Event-stream search panel on the
+  Hunt page (interpreted-as chips, raw-event rows, or grouped-count bars).
+  Tested: parser units + the live search/agg/validation path.
 
 - **2026-06-10 · Alert tuning workflow (Phase 1)** — the false-positive feedback
   loop. Marking an alert false-positive now bumps its detection rule's FP rate

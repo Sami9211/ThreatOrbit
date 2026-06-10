@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import EventSearchPanel from '@/components/dashboard/EventSearchPanel'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type TimeRange = '1h' | '6h' | '24h' | '7d'
@@ -415,6 +416,11 @@ export default function ThreatHuntPage() {
         <MetricCard label="IOCs Confirmed"    value={3}   icon={AlertTriangle}  color="#FF4D6D" sub="from 3 hunt sessions" />
         <MetricCard label="Hosts Investigated"value={12}  icon={Search}         color="#34F5C5" sub="across 4 hunts" />
         <MetricCard label="Open Hypotheses"   value={8}   icon={Zap}            color="#FF2E97" sub="2 critical priority" />
+      </motion.div>
+
+      {/* ── Event-stream search (real field-operator language over raw events) ── */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+        <EventSearchPanel />
       </motion.div>
 
       {/* ── Main workspace: [Saved sidebar] + [Editor + Results] ── */}
