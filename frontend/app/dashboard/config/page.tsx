@@ -15,6 +15,7 @@ import {
   fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
   fetchEngineStatus, controlEngine, enforceRetention,
   fetchCurrentOrg, type Org,
+  fetchLicense, activateLicense, type LicenseStatus,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
@@ -770,6 +771,69 @@ function WorkspaceCard() {
   )
 }
 
+function LicenseCard() {
+  const [lic, setLic] = useState<LicenseStatus | null>(null)
+  const [key, setKey] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const load = () => fetchLicense().then(setLic).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  function activate() {
+    const k = key.trim()
+    if (!k) return
+    activateLicense(k)
+      .then((r) => { setMsg(`Activated: ${r.plan} plan`); setKey(''); load() })
+      .catch((e) => setMsg(e?.message || 'Invalid license key'))
+  }
+
+  const bar = (used: number, limit: number | null) => limit === null ? 0 : Math.min(100, (used / limit) * 100)
+  return (
+    <Section title="License" icon={Key} color="#FFB23E">
+      {!lic ? <p className="text-xs text-ink-600">Loading license…</p> : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-[160px]">
+              <p className="text-sm font-semibold text-white">{lic.label} plan
+                {lic.builtin && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded-full bg-white/8 text-ink-400 uppercase">built-in</span>}
+              </p>
+              <p className="text-[10px] text-ink-500 mt-0.5">
+                {lic.org ? `Licensed to ${lic.org}` : 'No activated key'}
+                {lic.expires ? ` · expires ${lic.expires.slice(0, 10)}` : ''}
+              </p>
+              {lic.warning && <p className="text-[10px] text-threat mt-0.5">{lic.warning}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-3 min-w-[220px]">
+              {([['Seats', lic.usage.seats, lic.limits.seats],
+                 ['Connectors', lic.usage.connectors, lic.limits.connectors]] as const).map(([label, used, limit]) => (
+                <div key={label}>
+                  <div className="flex items-center justify-between text-[10px] mb-1">
+                    <span className="text-ink-600">{label}</span>
+                    <span className="font-mono text-ink-300">{used}{limit !== null ? ` / ${limit}` : ' · unlimited'}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                    <div className={cn('h-full rounded-full', limit !== null && used >= limit ? 'bg-threat' : 'bg-amber')}
+                      style={{ width: `${limit === null ? 100 : bar(used, limit)}%`, opacity: limit === null ? 0.25 : 1 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input value={key} onChange={(e) => setKey(e.target.value)}
+              placeholder="Paste a license key (TOL-…)"
+              className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-white/10 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-700" />
+            <button onClick={activate} disabled={!key.trim()}
+              className="px-4 py-2 rounded-lg text-xs font-semibold bg-amber/15 border border-amber/30 text-amber hover:bg-amber/25 transition-colors disabled:opacity-40">
+              Activate
+            </button>
+          </div>
+          {msg && <p className="text-[10px] text-ink-400">{msg}</p>}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 function LiveEngineCard() {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -960,6 +1024,9 @@ export default function ConfigPage() {
             <>
               {/* ── Workspace (multi-tenancy) ───────────────────────── */}
               <WorkspaceCard />
+
+              {/* ── License & plan limits ───────────────────────────── */}
+              <LicenseCard />
 
               {/* ── Live Processing Engine ──────────────────────────── */}
               <LiveEngineCard />

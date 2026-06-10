@@ -1147,6 +1147,19 @@ export const requestTakedown = (id: string) =>
 export const matchCredentialLeaks = () =>
   api<{ scanned: number; matched: number }>('/darkweb/match-credentials', { method: 'POST' })
 
+// Licensing: signed keys + plan limits enforced server-side.
+export interface LicenseStatus {
+  plan: string; label: string; org: string | null; expires: string | null
+  builtin: boolean; warning?: string | null
+  limits: { seats: number | null; connectors: number | null }
+  usage: { seats: number; connectors: number }
+}
+export const fetchLicense = () => api<LicenseStatus>('/config/license')
+export const activateLicense = (key: string) =>
+  api<{ activated: boolean; plan: string }>('/config/license/activate',
+    { method: 'POST', body: JSON.stringify({ key }) })
+export const clearLicense = () => api<void>('/config/license', { method: 'DELETE' })
+
 // First-run onboarding checklist (computed from real platform state).
 export interface OnboardingStatus {
   steps: Array<{ id: string; label: string; done: boolean; link: string }>

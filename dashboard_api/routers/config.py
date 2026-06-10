@@ -67,6 +67,75 @@ def list_api_keys(user: dict = Depends(require_role("admin", "manager"))):
     return rows_to_dicts(rows)
 
 
+class LicenseActivate(BaseModel):
+    key: str
+
+
+class LicenseIssue(BaseModel):
+    plan: str
+    org: str
+    seats: int | None = None
+    connectors: int | None = None
+    expires: str | None = None
+
+
+@router.get("/license")
+def license_status(_: dict = Depends(current_user)):
+    """The active license: plan, limits, current usage, validity."""
+    from dashboard_api.licensing import PLANS, current_license, usage
+    with get_conn() as conn:
+        lic = current_license(conn)
+        use = usage(conn)
+    return {"plan": lic["plan"], "label": PLANS[lic["plan"]]["label"],
+            "org": lic.get("org"), "expires": lic.get("expires"),
+            "builtin": lic.get("builtin", False), "warning": lic.get("warning"),
+            "limits": {"seats": lic.get("seats"), "connectors": lic.get("connectors")},
+            "usage": use}
+
+
+@router.post("/license/activate")
+def activate_license(body: LicenseActivate, user: dict = Depends(require_role("admin"))):
+    """Validate + store a signed license key (rejects forged/expired keys)."""
+    from dashboard_api.licensing import verify_key
+    try:
+        data = verify_key(body.key.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    with get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_key',?)",
+                     (body.key.strip(),))
+        audit(conn, user["email"], "license.activate", None,
+              f"plan={data['plan']} org={data.get('org')}")
+        conn.commit()
+    return {"activated": True, **data}
+
+
+@router.post("/license/issue")
+def issue_license(body: LicenseIssue, user: dict = Depends(require_role("admin"))):
+    """Mint a signed key (vendor side, for self-hosted operators issuing
+    licenses to their own tenants). The secret stays server-side."""
+    from dashboard_api.licensing import generate_key
+    try:
+        key = generate_key(plan=body.plan, org=body.org, seats=body.seats,
+                           connectors=body.connectors, expires=body.expires)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    with get_conn() as conn:
+        audit(conn, user["email"], "license.issue", None, f"plan={body.plan} org={body.org}")
+        conn.commit()
+    return {"key": key, "plan": body.plan, "org": body.org}
+
+
+@router.delete("/license", status_code=204)
+def clear_license(user: dict = Depends(require_role("admin"))):
+    """Remove the activated key (falls back to the built-in license)."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key='license_key'")
+        audit(conn, user["email"], "license.clear", None)
+        conn.commit()
+    return None
+
+
 @router.get("/onboarding")
 def onboarding_status(user: dict = Depends(current_user)):
     """First-run checklist, computed from REAL platform state (never stored):

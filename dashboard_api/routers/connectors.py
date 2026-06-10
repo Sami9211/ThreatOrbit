@@ -73,6 +73,11 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_role("a
         raise HTTPException(status_code=400, detail="Connector name is required")
     if KIND_PRESETS[body.kind]["needs_key"] and not (body.api_key or "").strip():
         raise HTTPException(status_code=400, detail=f"{KIND_PRESETS[body.kind]['label']} requires an API key")
+    from dashboard_api.licensing import check_limit
+    with get_conn() as conn:
+        limit_err = check_limit(conn, "connectors")
+    if limit_err:
+        raise HTTPException(status_code=402, detail=limit_err)
     cid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(

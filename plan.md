@@ -171,7 +171,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       computed from real platform state (org, admin password rotated, team,
       connector, log source + events, rules, webhook, first report) with deep
       links, progress, and a persisted dismiss — on the overview.
-- [ ] **Billing/licensing** for the plan tiers already designed.
+- [~] **Billing/licensing** — DONE (see CHANGELOG): HMAC-signed license keys,
+      plan tiers (starter/pro/enterprise) with seat + connector limits enforced
+      server-side (402), activate/issue/clear endpoints + a License card with
+      usage bars. Remaining: payment-processor integration (Stripe) for
+      self-serve purchase.
 - [ ] **Postgres option** for scale beyond single-file SQLite; migrations.
 - [ ] **Performance** — pagination/virtualisation on big tables, server-side
       filtering everywhere, caching.
@@ -183,6 +187,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Licensing & plan limits (Phase 5)** — the pricing tiers become
+  real. `licensing.py`: license keys are base64url JSON payloads (plan, seats,
+  connectors, expires, org) **HMAC-SHA256-signed** with
+  `DASHBOARD_LICENSE_SECRET`, so they can't be forged or tampered with;
+  expired/forged keys are rejected at activation AND at resolution (a stored
+  key that goes invalid falls back safely). Default is a built-in enterprise
+  license (unlimited) so existing installs lose nothing. Enforcement is
+  server-side: adding a user or connector beyond the active plan's limit fails
+  with **402** naming the limit. Endpoints: `GET /config/license` (plan,
+  limits, live usage), `POST /config/license/activate`,
+  `POST /config/license/issue` (vendor side — a self-hosted operator mints
+  keys for their tenants; admin-only), `DELETE /config/license`. Frontend:
+  License card on Config → General (plan, seat/connector usage bars, key
+  activation). Tested: sign/verify/tamper/expiry units + the full
+  activate→402-block→clear→restore flow + RBAC.
 
 - **2026-06-10 · Onboarding wizard (Phase 5)** — `GET /config/onboarding`
   computes the first-run checklist from REAL platform state (a step is done

@@ -52,6 +52,10 @@ def create_user(body: UserCreate, actor: dict = Depends(require_role("admin", "m
     with get_conn() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email=?", (body.email.lower(),)).fetchone():
             raise HTTPException(status_code=409, detail="A user with that email already exists")
+        from dashboard_api.licensing import check_limit
+        limit_err = check_limit(conn, "seats")
+        if limit_err:
+            raise HTTPException(status_code=402, detail=limit_err)
         # New users join the creator's workspace (multi-tenancy foundation).
         from dashboard_api.tenancy import org_of
         conn.execute(

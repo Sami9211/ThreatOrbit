@@ -1440,6 +1440,70 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_license_key_units():
+    """License keys are HMAC-signed: tamper/forgery/expiry are rejected."""
+    import pytest as _pytest
+    from dashboard_api.licensing import generate_key, verify_key
+    key = generate_key(plan="pro", org="Globex", expires="2030-01-01T00:00:00")
+    data = verify_key(key)
+    assert data["plan"] == "pro" and data["org"] == "Globex" and data["seats"] == 25
+    # tampering breaks the signature
+    with _pytest.raises(ValueError):
+        verify_key(key[:-2] + "xx")
+    with _pytest.raises(ValueError):
+        verify_key("TOL-bm90anNvbg.deadbeef")
+    with _pytest.raises(ValueError):
+        verify_key("not-a-key")
+    # an expired key is invalid
+    expired = generate_key(plan="starter", org="Old", expires="2020-01-01T00:00:00")
+    with _pytest.raises(ValueError, match="expired"):
+        verify_key(expired)
+
+
+def test_licensing_enforcement(client, auth):
+    """Plan limits are enforced server-side: a starter license with no free
+    seats blocks user creation (402) until upgraded/cleared."""
+    from dashboard_api.licensing import generate_key
+    # default: built-in enterprise, unlimited
+    lic = client.get("/config/license", headers=auth).json()
+    assert lic["plan"] == "enterprise" and lic["builtin"] is True
+    assert lic["limits"]["seats"] is None and lic["usage"]["seats"] >= 1
+
+    # issue + activate a starter key capped at the CURRENT seat count
+    seats_now = lic["usage"]["seats"]
+    issued = client.post("/config/license/issue", json={
+        "plan": "starter", "org": "Acme", "seats": seats_now}, headers=auth)
+    assert issued.status_code == 200 and issued.json()["key"].startswith("TOL-")
+    act = client.post("/config/license/activate", json={"key": issued.json()["key"]}, headers=auth)
+    assert act.status_code == 200 and act.json()["plan"] == "starter"
+
+    # the next seat exceeds the cap → 402 with the limit named
+    blocked = client.post("/users", json={
+        "email": "overcap@threatorbit.space", "name": "Over Cap",
+        "role": "viewer", "password": "Password123!"}, headers=auth)
+    assert blocked.status_code == 402
+    msg = blocked.json().get("detail") or blocked.json().get("error") or ""
+    assert "Starter plan allows" in msg
+
+    # forged keys are rejected
+    assert client.post("/config/license/activate", json={"key": "TOL-Zm9v.bar"},
+                       headers=auth).status_code == 400
+
+    # clearing the key falls back to built-in enterprise; creation works again
+    assert client.delete("/config/license", headers=auth).status_code == 204
+    assert client.get("/config/license", headers=auth).json()["builtin"] is True
+    ok = client.post("/users", json={
+        "email": "overcap@threatorbit.space", "name": "Over Cap",
+        "role": "viewer", "password": "Password123!"}, headers=auth)
+    assert ok.status_code == 201
+    client.delete(f"/users/{ok.json()['id']}", headers=auth)
+
+    # license admin is admin-only
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post("/config/license/issue", json={"plan": "pro", "org": "x"},
+                       headers=viewer).status_code == 403
+
+
 def test_onboarding_checklist(client, auth):
     """The first-run checklist is computed from real platform state."""
     ob = client.get("/config/onboarding", headers=auth).json()
