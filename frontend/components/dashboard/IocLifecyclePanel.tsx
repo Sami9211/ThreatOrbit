@@ -4,13 +4,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
-  TrendingDown, RefreshCw, Loader2, Share2,
+  TrendingDown, RefreshCw, Loader2, Share2, Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
-  fetchStixBundle, type Ioc, type IocDetail,
+  fetchStixBundle, enrichIoc, type Ioc, type IocDetail, type EnrichmentResult,
 } from '@/lib/api'
+
+const VERDICT_COLOR: Record<string, string> = {
+  malicious: '#FF2E97', suspicious: '#FFB23E', benign: '#34F5C5', clean: '#34F5C5', unknown: '#665B7D',
+}
 
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
@@ -43,6 +47,8 @@ export default function IocLifecyclePanel() {
   const [detail, setDetail] = useState<IocDetail | null>(null)
   const [busy, setBusy] = useState(false)
   const [decaying, setDecaying] = useState(false)
+  const [enrichment, setEnrichment] = useState<EnrichmentResult | null>(null)
+  const [enriching, setEnriching] = useState(false)
 
   const load = useCallback(() => {
     const params: Record<string, string> = { limit: '60', sort: 'last_seen', order: 'desc' }
@@ -52,7 +58,13 @@ export default function IocLifecyclePanel() {
   useEffect(() => { load() }, [load])
 
   function open(id: string) {
+    setEnrichment(null)
     fetchIoc(id).then(setDetail).catch(() => {})
+  }
+  function enrich() {
+    if (!detail || enriching) return
+    setEnriching(true)
+    enrichIoc(detail.id).then(setEnrichment).catch(() => {}).finally(() => setEnriching(false))
   }
   function refreshDetail(id: string) {
     fetchIoc(id).then(setDetail).catch(() => {})
@@ -222,7 +234,38 @@ export default function IocLifecyclePanel() {
                     ? <><ShieldOff className="w-3.5 h-3.5" /> Un-whitelist</>
                     : <><ShieldCheck className="w-3.5 h-3.5" /> Mark known-good</>}
                 </button>
+                <button onClick={enrich} disabled={enriching}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-amber/12 border border-amber/30 text-amber hover:bg-amber/20 transition-colors">
+                  {enriching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Enrich
+                </button>
               </div>
+
+              {/* Enrichment results */}
+              {enrichment && (
+                <div className="rounded-xl border border-white/8 bg-surface-2/50 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-ink-500 uppercase tracking-wider">Enrichment</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold"
+                      style={{ color: VERDICT_COLOR[enrichment.verdict] ?? '#665B7D', background: `${VERDICT_COLOR[enrichment.verdict] ?? '#665B7D'}18` }}>
+                      {enrichment.verdict}
+                    </span>
+                  </div>
+                  {enrichment.providers.map((p) => (
+                    <div key={p.provider} className="flex items-start gap-2.5">
+                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                        style={{ background: p.available ? (VERDICT_COLOR[p.verdict] ?? '#665B7D') : '#3a3450' }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-ink-200 capitalize">
+                          {p.provider}
+                          {!p.available && <span className="ml-1.5 text-[9px] text-ink-600">not configured</span>}
+                          {p.cached && <span className="ml-1.5 text-[9px] text-ink-700">cached</span>}
+                        </p>
+                        <p className="text-[10px] text-ink-500">{p.available ? p.summary : p.reason}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Metadata */}
               <div className="grid grid-cols-2 gap-2 text-[11px]">

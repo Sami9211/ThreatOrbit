@@ -123,8 +123,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       live stores, with pivot (`/cti/graph/expand`) and shortest-path
       (`/cti/graph/path`) over shared nodes; `?focus=&depth=` narrows to a
       neighbourhood.
-- [ ] **Enrichment pipeline** — pluggable enrichers (VirusTotal, GreyNoise,
-      Shodan, WHOIS, geo/ASN) with caching and per-IOC enrichment history.
+- [x] **Enrichment pipeline** — DONE (see CHANGELOG): pluggable enrichers with
+      per-IOC caching (TTL) + history. Real offline built-ins (internal
+      cross-reference + indicator analysis incl. geo/ASN hint); VirusTotal/
+      GreyNoise/Shodan/WHOIS adapter seam that reports honestly-unavailable
+      without an API key. Remaining: live external calls when keys are set.
 - [x] **IOC lifecycle** — DONE (see CHANGELOG): per-type confidence decay,
       sighting tracking (events/connectors/manual), known-good whitelisting,
       and expiry — wired into TI matching, with an IOC database + lifecycle
@@ -161,6 +164,23 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · IOC enrichment pipeline (Phase 3)** — pluggable enrichers with
+  caching + per-IOC history. `enrichment.py` runs real **offline** built-ins:
+  `internal` cross-references the live platform (prior sightings, related
+  alerts, attributed actor, dark-web mentions, lifecycle → verdict) and
+  `indicator` analyses the value itself (hash algorithm, domain entropy /
+  suspicious-TLD DGA flag, URL structure, IP class + coarse RIR/geo hint). A
+  real adapter seam for VirusTotal / GreyNoise / Shodan / WHOIS reports
+  `available:false` honestly when no API key is configured rather than
+  fabricating a verdict. Results cache per (indicator, provider) in
+  `ioc_enrichments` with a TTL and keep full history; a combined verdict rolls
+  the providers up (worst-of). Endpoints: `/cti/enrichers`,
+  `POST /cti/iocs/{id}/enrich` (cti.write), `GET /cti/iocs/{id}/enrichment`.
+  Frontend: an Enrich action + per-provider verdict/summary panel in the IOC
+  lifecycle drawer. Tested: offline-analysis units, the pipeline (internal
+  malicious verdict, cache hit on re-run, history, honest external
+  unavailability, viewer-blocked).
 
 - **2026-06-10 · CTI relationship graph at scale (Phase 3)** — the intelligence
   graph went from an actor→IOC star to a navigable multi-entity graph.

@@ -1440,6 +1440,68 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_ioc_enrichment_units():
+    """Offline indicator analysis is real + deterministic."""
+    from dashboard_api.enrichment import _enrich_indicator, _entropy, _combined_verdict
+    assert _entropy("aaaa") == 0.0 and _entropy("abcd") == 2.0
+    h = _enrich_indicator(None, "a" * 64, "hash")
+    assert h["data"]["algorithm"] == "SHA-256"
+    dga = _enrich_indicator(None, "x7k2q9zp4m.xyz", "domain")
+    assert dga["data"]["suspiciousTld"] is True and dga["verdict"] == "suspicious"
+    priv = _enrich_indicator(None, "10.0.0.5", "ip")
+    assert priv["data"]["ipClass"] == "private" and priv["verdict"] == "benign"
+    pub = _enrich_indicator(None, "8.8.8.8", "ip")
+    assert pub["data"]["ipClass"] == "public" and "rirHint" in pub["data"]
+    assert _combined_verdict([{"available": True, "verdict": "suspicious"},
+                              {"available": True, "verdict": "malicious"}]) == "malicious"
+
+
+def test_ioc_enrichment_pipeline(client, auth):
+    """Enrichment runs built-in enrichers, cross-references internal stores,
+    caches results, keeps history, and reports external providers honestly."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    # enricher catalogue: built-ins available, external providers unconfigured
+    enr = client.get("/cti/enrichers", headers=auth).json()
+    bykind = {e["provider"]: e for e in enr}
+    assert bykind["internal"]["available"] is True and bykind["indicator"]["available"] is True
+    assert bykind["virustotal"]["available"] is False  # no API key in this env
+
+    ip = "45.83.21.9"
+    client.post("/cti/iocs/import", json={"indicators": [{"type": "ip", "value": ip}],
+                                          "confidence": 92, "severity": "critical",
+                                          "actor": "APT-Enrich", "source": "test"}, headers=auth)
+    iid = client.get(f"/cti/iocs?q={ip}", headers=auth).json()["items"][0]["id"]
+
+    res = client.post(f"/cti/iocs/{iid}/enrich", headers=auth)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    provs = {p["provider"]: p for p in body["providers"]}
+    assert provs["internal"]["available"] and provs["indicator"]["available"]
+    # internal enricher sees the critical record + attribution → malicious
+    assert provs["internal"]["verdict"] == "malicious"
+    assert provs["internal"]["data"]["actor"] == "APT-Enrich"
+    assert provs["indicator"]["data"]["ipClass"] == "public"
+    assert provs["virustotal"]["available"] is False  # honest, not fabricated
+    assert body["verdict"] == "malicious"
+
+    # second run (no refresh) serves built-ins from cache
+    again = client.post(f"/cti/iocs/{iid}/enrich", headers=auth).json()
+    cached = {p["provider"]: p.get("cached") for p in again["providers"]}
+    assert cached["internal"] is True and cached["indicator"] is True
+
+    # enrichment view returns current + history
+    view = client.get(f"/cti/iocs/{iid}/enrichment", headers=auth).json()
+    assert "providers" in view and len(view["history"]) >= 2
+
+    # guard rails
+    assert client.post("/cti/iocs/NOPE/enrich", headers=auth).status_code == 404
+    assert client.get("/cti/iocs/NOPE/enrichment", headers=auth).status_code == 404
+    # viewers can't trigger enrichment (cti.write)
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post(f"/cti/iocs/{iid}/enrich", headers=viewer).status_code == 403
+
+
 def test_cti_relationship_graph(client, auth):
     """The graph spans actors↔malware↔techniques↔IOCs↔sectors and supports
     pivot (expand) + path-finding."""

@@ -847,6 +847,16 @@ export const removeIocKnownGood = (id: string) =>
   api<Ioc & { lifecycle: IocLifecycle }>(`/cti/iocs/${id}/known-good`, { method: 'DELETE' })
 export const runIocDecay = () =>
   api<{ scanned: number; expired: number; reactivated: number }>('/cti/iocs/decay', { method: 'POST' })
+
+export interface EnrichmentProvider {
+  provider: string; available: boolean; verdict: string; summary: string
+  data: Record<string, unknown>; cached?: boolean; reason?: string
+}
+export interface EnrichmentResult {
+  value: string; type: string; verdict: string; providers: EnrichmentProvider[]; ts: string
+}
+export const enrichIoc = (id: string, refresh = false) =>
+  api<EnrichmentResult>(`/cti/iocs/${id}/enrich${refresh ? '?refresh=true' : ''}`, { method: 'POST' })
 export const fetchStixBundle = (type?: string) =>
   api<{ type: string; id: string; objects: Array<Record<string, unknown>> }>(
     `/cti/stix/bundle${type ? `?type=${type}` : ''}`)

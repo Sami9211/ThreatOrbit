@@ -259,6 +259,41 @@ def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(require_p
     return {**updated, "lifecycle": lifecycle_of(updated)}
 
 
+@router.get("/enrichers")
+def list_enrichers():
+    """Available enrichers and whether each external provider is configured."""
+    from dashboard_api.enrichment import provider_status
+    return provider_status()
+
+
+@router.post("/iocs/{ioc_id}/enrich")
+def enrich_ioc(ioc_id: str, refresh: bool = False, user: dict = Depends(require_perm("cti.write"))):
+    """Run the enrichment pipeline over an indicator (cached, with history)."""
+    from dashboard_api.enrichment import enrich
+    with get_conn() as conn:
+        row = conn.execute("SELECT value, type FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="IOC not found")
+        result = enrich(conn, row["value"], row["type"], refresh=refresh)
+        audit(conn, user["email"], "ioc.enrich", ioc_id, f"verdict={result['verdict']}")
+        conn.commit()
+    return result
+
+
+@router.get("/iocs/{ioc_id}/enrichment")
+def ioc_enrichment(ioc_id: str):
+    """Latest enrichment (from cache, no re-run) + the enrichment history."""
+    from dashboard_api.enrichment import enrich, history
+    with get_conn() as conn:
+        row = conn.execute("SELECT value, type FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="IOC not found")
+        current = enrich(conn, row["value"], row["type"])  # served from cache when fresh
+        past = history(conn, row["value"])
+        conn.commit()
+    return {**current, "history": past}
+
+
 @router.post("/iocs/{ioc_id}/known-good")
 def whitelist_ioc(ioc_id: str, user: dict = Depends(require_perm("cti.write"))):
     """Mark an indicator known-good: it stops matching and reads back benign."""

@@ -20,7 +20,7 @@ JSON_COLUMNS = {
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
     "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
-    "context", "trigger_match",
+    "context", "trigger_match", "data",
 }
 
 
@@ -319,6 +319,17 @@ CREATE TABLE IF NOT EXISTS ioc_sightings (
     ts      TEXT NOT NULL,
     source  TEXT,
     context TEXT
+);
+
+-- Cached per-IOC enrichment results + history (enrichment pipeline).
+CREATE TABLE IF NOT EXISTS ioc_enrichments (
+    id        TEXT PRIMARY KEY,
+    ioc_value TEXT NOT NULL,
+    provider  TEXT NOT NULL,
+    verdict   TEXT,
+    summary   TEXT,
+    data      TEXT NOT NULL DEFAULT '{}',
+    ts        TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS feeds (
