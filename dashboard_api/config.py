@@ -43,7 +43,18 @@ SERVICES_API_KEY = os.environ.get("SERVICES_API_KEY", os.environ.get("APP_API_KE
 SERVICES_ADMIN_KEY = os.environ.get("SERVICES_ADMIN_KEY",
                                     os.environ.get("ADMIN_API_KEY", SERVICES_API_KEY))
 
+# --- Data mode --------------------------------------------------------------
+# "demo" → seed realistic demo data on first boot (great for evaluation/sales).
+# "live" → start empty, bootstrap the admin + built-in connectors, and ingest
+#          REAL threat intelligence from the OSINT engine on a schedule.
+DATA_MODE = os.environ.get("DASHBOARD_DATA_MODE", "demo").lower()
+
+# How often the connector scheduler wakes to run due connectors (live mode).
+CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "60"))
+
 # --- Seed -------------------------------------------------------------------
 # Deterministic seed so generated demo data is stable across restarts.
 SEED_RANDOM = int(os.environ.get("DASHBOARD_SEED", "1337"))
-AUTO_SEED = os.environ.get("DASHBOARD_AUTO_SEED", "true").lower() != "false"
+# In demo mode seed on first boot; live mode never seeds demo data.
+AUTO_SEED = (os.environ.get("DASHBOARD_AUTO_SEED", "true").lower() != "false"
+             and DATA_MODE != "live")

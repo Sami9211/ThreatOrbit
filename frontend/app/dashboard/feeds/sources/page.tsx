@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { fetchFeeds, toggleFeed as apiToggleFeed, createFeed, type Feed as ApiFeed } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import IngestionEnginePanel from '@/components/dashboard/IngestionEnginePanel'
+import ConnectorsPanel from '@/components/dashboard/ConnectorsPanel'
 import {
   Radio, Plus, RefreshCw, XCircle, Settings, Key, Link2,
   Clock, Tag, SlidersHorizontal, Activity, ShieldCheck,
@@ -167,8 +168,9 @@ export default function FeedSourcesPage() {
         ))}
       </div>
 
-      {/* Live ingestion engine bridge */}
-      <div className="px-6 pt-4 shrink-0">
+      {/* Real-data connectors + live ingestion engine bridge */}
+      <div className="px-6 pt-4 shrink-0 space-y-4">
+        <ConnectorsPanel />
         <IngestionEnginePanel />
       </div>
 

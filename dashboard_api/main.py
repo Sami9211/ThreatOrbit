@@ -13,10 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from dashboard_api.config import AUTO_SEED, CORS_ORIGINS
+from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ORIGINS, DATA_MODE
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
-    assets, auth, cti, config as config_router, feeds, overview, services, siem, soar, users,
+    assets, auth, connectors as connectors_router, cti, config as config_router,
+    feeds, overview, services, siem, soar, users,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -49,8 +50,29 @@ async def global_exc(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 
+def _connector_scheduler():
+    """Background loop (live mode): run due connectors so real threat intel
+    keeps flowing in without anyone pressing a button."""
+    import time
+    from dashboard_api.connectors import run_due_connectors
+    # Small initial delay so the companion services have time to come up.
+    time.sleep(8)
+    while True:
+        try:
+            ran = run_due_connectors()
+            for r in ran:
+                if "error" in r:
+                    logger.warning("Connector %s failed: %s", r.get("connector"), r["error"])
+                elif r.get("imported"):
+                    logger.info("Connector %s imported %d indicators", r.get("connector"), r["imported"])
+        except Exception:  # never let the scheduler thread die
+            logger.exception("Connector scheduler tick failed")
+        time.sleep(CONNECTOR_TICK_SECONDS)
+
+
 @app.on_event("startup")
 def startup():
+    import threading
     from dashboard_api.config import JWT_SECRET
     if JWT_SECRET == "dev-insecure-secret-change-me":
         logger.warning(
@@ -58,7 +80,15 @@ def startup():
             "value before exposing this service (e.g. `openssl rand -hex 32`)."
         )
     init_db()
-    if AUTO_SEED:
+    if DATA_MODE == "live":
+        from dashboard_api.seed import bootstrap_live
+        from dashboard_api.connectors import seed_builtin_connectors
+        if bootstrap_live():
+            logger.info("Live mode: bootstrapped admin + settings (no demo data)")
+        seed_builtin_connectors()
+        threading.Thread(target=_connector_scheduler, daemon=True).start()
+        logger.info("Live mode: connector scheduler started (tick=%ss)", CONNECTOR_TICK_SECONDS)
+    elif AUTO_SEED:
         from dashboard_api.seed import seed
         if seed():
             logger.info("Database seeded with demo data")
@@ -80,7 +110,8 @@ def ready():
 
 
 for r in (auth.router, users.router, overview.router, siem.router, soar.router,
-          cti.router, assets.router, feeds.router, config_router.router, services.router):
+          cti.router, assets.router, feeds.router, config_router.router, services.router,
+          connectors_router.router):
     app.include_router(r)
 
 

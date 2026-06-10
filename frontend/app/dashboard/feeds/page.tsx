@@ -9,7 +9,7 @@ import {
   TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary } from '@/lib/api'
+import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
 
 /* Classify a raw IOC string for the CTI store; returns null for values that
  * are not importable indicators (filenames, command lines, …). */
@@ -526,14 +526,49 @@ export default function FeedsPage() {
   const [liveCount, setLiveCount] = useState(0)
   const [pulse, setPulse] = useState(false)
 
-  // Load feed sources and summary from API
+  // When the IOC store has real indicators we show those and turn OFF the
+  // demo simulator. Empty store → keep the demo seed + simulator so an
+  // evaluator still sees a populated page.
+  const [liveMode, setLiveMode] = useState(false)
+
+  // Map a real IOC into the rich threat-feed card shape (faithfully, no fabrication).
+  const iocToEntry = useCallback((i: Ioc): ThreatEntry => ({
+    id: i.id,
+    ts: i.lastSeen || i.firstSeen || new Date().toISOString(),
+    cve: i.type === 'cve' ? i.value : null,
+    title: `${i.threatType || 'Indicator'} — ${i.value}`,
+    attackType: i.threatType || i.type.toUpperCase(),
+    source: i.value,
+    sourceCountry: i.actor || '—',
+    severity: (['critical', 'high', 'medium', 'low', 'info'].includes(i.severity) ? i.severity : 'medium') as Severity,
+    sectors: [],
+    summary: `${i.type.toUpperCase()} indicator ingested from ${i.source}. Confidence ${i.confidence}%.${i.actor ? ` Attributed to ${i.actor}.` : ''}`,
+    feedSources: [i.source],
+    aiConfidence: i.confidence,
+    iocs: [i.value],
+    mitre: [],
+    status: (i.confidence >= 70 ? 'confirmed' : 'unconfirmed') as ThreatStatus,
+    correlated: 0,
+    tags: Array.isArray(i.tags) ? i.tags : [],
+  }), [])
+
+  // Load feed sources, summary, and real indicators from the API.
   useEffect(() => {
     fetchFeeds().then(setApiFeeds).catch(() => {})
     fetchFeedsSummary().then(setFeedsSummary).catch(() => {})
-  }, [])
+    fetchIocs({ limit: '60', sort: 'last_seen', order: 'desc' }).then(({ items }) => {
+      if (items.length === 0) return   // empty store → demo mode
+      const entries = items.map(iocToEntry)
+      setConfirmed(entries.filter(e => e.status === 'confirmed'))
+      setUnconfirmed(entries.filter(e => e.status === 'unconfirmed'))
+      setLiveCount(items.length)
+      setLiveMode(true)
+    }).catch(() => {})
+  }, [iocToEntry])
 
-  // Simulate live incoming unconfirmed threats every 8–14 seconds
+  // Demo-only simulator: fabricate incoming threats. Disabled in live mode.
   useEffect(() => {
+    if (liveMode) return
     const jitter = () => 8000 + Math.random() * 6000
     let timer: ReturnType<typeof setTimeout>
     const schedule = () => {
@@ -552,7 +587,7 @@ export default function FeedsPage() {
     }
     schedule()
     return () => clearTimeout(timer)
-  }, [])
+  }, [liveMode])
 
   function handleConfirm(id: string) {
     const entry = unconfirmed.find(e => e.id === id)

@@ -706,6 +706,52 @@ export const fetchAuditLog   = (limit = 100, action?: string) => {
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)
 }
 
+// ── Connectors (real threat-intel ingestion) ────────────────────────
+export interface Connector {
+  id: string
+  name: string
+  kind: string
+  url: string | null
+  authHeader: string | null
+  enabled: number
+  intervalMinutes: number
+  fieldMap: Record<string, string>
+  status: string
+  lastRun: string | null
+  lastError: string | null
+  indicatorCount: number
+  builtin: number
+  hasKey?: number
+  createdAt: string
+  createdBy: string | null
+}
+export interface ConnectorKind {
+  kind: string
+  label: string
+  description: string
+  needs_key: boolean
+  default_url: string
+  default_interval: number
+}
+export const fetchConnectors = () => api<Connector[]>('/connectors')
+export const fetchConnectorKinds = () => api<ConnectorKind[]>('/connectors/kinds')
+export const createConnector = (body: {
+  name: string; kind: string; url?: string; api_key?: string
+  auth_header?: string; interval_minutes?: number; field_map?: Record<string, string>
+}) => api<Connector>('/connectors', { method: 'POST', body: JSON.stringify(body) })
+export const patchConnector = (id: string, body: Partial<{
+  name: string; url: string; api_key: string; auth_header: string
+  interval_minutes: number; field_map: Record<string, string>; enabled: boolean
+}>) => api<Connector>(`/connectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteConnector = (id: string) =>
+  api<void>(`/connectors/${id}`, { method: 'DELETE' })
+export interface ConnectorRunResult {
+  result: { imported?: number; duplicates?: number; skipped?: number; total?: number; error?: string }
+  connector: Connector
+}
+export const runConnector = (id: string) =>
+  api<ConnectorRunResult>(`/connectors/${id}/run`, { method: 'POST' })
+
 // ── Companion services (Threat API + Log API, proxied server-side) ───
 export interface ServiceState { url: string; available: boolean; health: unknown }
 export interface ServicesStatus { threatApi: ServiceState; logApi: ServiceState; keyConfigured: boolean }

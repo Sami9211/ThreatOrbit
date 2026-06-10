@@ -68,6 +68,8 @@ services:
       - DASHBOARD_ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD:-ChangeMe123!}
       - DASHBOARD_CORS_ORIGINS=${DASHBOARD_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       - DASHBOARD_ALLOW_REGISTRATION=${DASHBOARD_ALLOW_REGISTRATION:-true}
+      # demo = seeded showcase data; live = empty start + real OSINT ingestion.
+      - DASHBOARD_DATA_MODE=${DASHBOARD_DATA_MODE:-demo}
       # Service bridge: lets the dashboard proxy the ingestion + log engines.
       - THREAT_API_URL=http://threat_api:8000
       - LOG_API_URL=http://log_api:8000

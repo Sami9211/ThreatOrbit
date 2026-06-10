@@ -19,7 +19,7 @@ JSON_COLUMNS = {
     "tags", "open_ports", "cves", "steps", "actions", "aliases", "motivations",
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
-    "hypotheses", "meta", "config", "scopes", "events",
+    "hypotheses", "meta", "config", "scopes", "events", "field_map",
 }
 
 
@@ -341,6 +341,25 @@ CREATE TABLE IF NOT EXISTS scans (
     score      REAL NOT NULL DEFAULT 0,
     engines    TEXT,                -- display ratio e.g. "41/90"
     actor      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS connectors (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    kind             TEXT NOT NULL,                 -- threatorbit|otx|nvd|json|csv|stix
+    url              TEXT,
+    api_key          TEXT,
+    auth_header      TEXT,                          -- header carrying api_key (kind default)
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    interval_minutes INTEGER NOT NULL DEFAULT 60,
+    field_map        TEXT NOT NULL DEFAULT '{}',    -- json/csv field→column mapping
+    status           TEXT NOT NULL DEFAULT 'idle',  -- idle|running|ok|error
+    last_run         TEXT,
+    last_error       TEXT,
+    indicator_count  INTEGER NOT NULL DEFAULT 0,
+    builtin          INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL,
+    created_by       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS webhooks (

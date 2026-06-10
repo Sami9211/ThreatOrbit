@@ -680,3 +680,90 @@ def test_rule_delete(client, auth):
     rule = client.post("/siem/rules", json={"name": "Temp rule", "severity": "low"}, headers=auth).json()
     assert client.delete(f"/siem/rules/{rule['id']}", headers=auth).status_code == 204
     assert client.delete(f"/siem/rules/{rule['id']}", headers=auth).status_code == 404
+
+
+def test_connector_kinds_and_crud(client, auth):
+    kinds = client.get("/connectors/kinds", headers=auth).json()
+    assert any(k["kind"] == "threatorbit" for k in kinds)
+    assert any(k["kind"] == "nvd" for k in kinds)
+    # create a custom JSON connector
+    c = client.post("/connectors", json={
+        "name": "My Feed", "kind": "json", "url": "https://example.com/iocs.json",
+        "field_map": {"value": "indicator", "type": "kind"}}, headers=auth)
+    assert c.status_code == 201, c.text
+    cid = c.json()["id"]
+    assert "api_key" not in c.json()  # secret never returned
+    # OTX without a key is rejected
+    assert client.post("/connectors", json={"name": "OTX", "kind": "otx"}, headers=auth).status_code == 400
+    # update + toggle
+    assert client.patch(f"/connectors/{cid}", json={"enabled": False}, headers=auth).json()["enabled"] == 0
+    assert client.delete(f"/connectors/{cid}", headers=auth).status_code == 204
+
+
+def test_connector_json_csv_engine(client, auth, monkeypatch):
+    """The generic JSON and CSV fetchers normalise + import real records."""
+    import dashboard_api.connectors as conn_mod
+
+    class FakeResp:
+        def __init__(self, data=None, text=""):
+            self._data = data
+            self.text = text
+        def json(self):
+            return self._data
+
+    json_payload = {"data": [
+        {"indicator": "203.0.113.45", "kind": "ip", "threat": "c2"},
+        {"indicator": "evil-domain.test", "kind": "domain"},
+        {"indicator": "", "kind": "ip"},  # skipped
+    ]}
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp(data=json_payload))
+
+    c = client.post("/connectors", json={
+        "name": "JSON Feed", "kind": "json", "url": "https://x/iocs.json",
+        "field_map": {"value": "indicator", "type": "kind", "threat_type": "threat"}}, headers=auth)
+    cid = c.json()["id"]
+    run = client.post(f"/connectors/{cid}/run", headers=auth).json()
+    assert run["result"]["imported"] == 2 and run["result"]["skipped"] == 1
+    assert run["connector"]["status"] == "ok"
+    # the imported indicator is looked up live
+    hit = client.get("/cti/lookup?value=203.0.113.45", headers=auth).json()
+    assert hit["found"] and hit["source"] == "JSON Feed"
+
+    # CSV variant
+    csv_text = "url,type\nhttp://bad.test/x,url\nhttp://bad.test/y,url\n"
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp(text=csv_text))
+    cc = client.post("/connectors", json={
+        "name": "CSV Feed", "kind": "csv", "url": "https://x/iocs.csv",
+        "field_map": {"value": "url", "type": "type"}}, headers=auth)
+    rr = client.post(f"/connectors/{cc.json()['id']}/run", headers=auth).json()
+    assert rr["result"]["imported"] == 2
+
+
+def test_connector_nvd_engine(client, auth, monkeypatch):
+    import dashboard_api.connectors as conn_mod
+
+    class FakeResp:
+        def json(self):
+            return {"vulnerabilities": [
+                {"cve": {"id": "CVE-2024-99999",
+                         "descriptions": [{"lang": "en", "value": "Critical RCE"}],
+                         "metrics": {"cvssMetricV31": [{"cvssData": {"baseSeverity": "CRITICAL"}}]}}},
+            ]}
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp())
+    c = client.post("/connectors", json={"name": "NVD", "kind": "nvd"}, headers=auth)
+    run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert run["result"]["imported"] == 1
+    items = client.get("/cti/iocs?q=CVE-2024-99999", headers=auth).json()["items"]
+    assert items and items[0]["type"] == "cve" and items[0]["severity"] == "critical"
+
+
+def test_connector_run_records_failure(client, auth, monkeypatch):
+    """A network failure is recorded on the connector, never crashes the API."""
+    import dashboard_api.connectors as conn_mod
+    def boom(*a, **k):
+        raise RuntimeError("connection refused")
+    monkeypatch.setattr(conn_mod, "_http_get", boom)
+    c = client.post("/connectors", json={"name": "Broken", "kind": "json",
+                                         "url": "https://nope.test/x"}, headers=auth)
+    run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert "error" in run["result"] and run["connector"]["status"] == "error"

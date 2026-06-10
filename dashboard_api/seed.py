@@ -518,6 +518,30 @@ def seed(force: bool = False):
     return True
 
 
+def bootstrap_live():
+    """Live-mode bootstrap: create the admin user, default settings, and the
+    real feed catalogue — but NO demo alerts/actors/assets. Indicators arrive
+    from the connector engine. Idempotent (no-op once a user exists)."""
+    from dashboard_api.auth import hash_password
+    with get_conn() as conn:
+        if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+            return False
+        ph, salt = hash_password(SEED_ADMIN_PASSWORD)
+        conn.execute(
+            "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
+            "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), SEED_ADMIN_EMAIL, "Admin Operator", "admin", "active",
+             ph, salt, "#FF2E97", 1, None, _iso(_now())),
+        )
+        _seed_settings(conn)
+        conn.commit()
+    return True
+
+
 if __name__ == "__main__":
-    init_msg = seed(force=True)
-    print("Seeded" if init_msg else "Already seeded")
+    import sys
+    if "--live" in sys.argv:
+        print("Live bootstrap done" if bootstrap_live() else "Already bootstrapped")
+    else:
+        init_msg = seed(force=True)
+        print("Seeded" if init_msg else "Already seeded")
