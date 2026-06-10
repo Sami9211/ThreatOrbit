@@ -12,6 +12,12 @@ const BASE =
 export const TOKEN_KEY = 'to_token'
 export const USER_KEY  = 'to_user'
 
+// Server-Sent Events URL (token in query — EventSource can't set headers).
+export function liveStreamUrl(): string | null {
+  const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+  return tok ? `${BASE}/stream?token=${encodeURIComponent(tok)}` : null
+}
+
 // ── Utility: snake_case → camelCase (recursive) ─────────────────────
 function sc2cc(s: string) {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase())

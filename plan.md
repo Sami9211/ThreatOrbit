@@ -22,9 +22,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       IOCs, assets, cases, actors, dark-web; wired into ⌘K with deep links.
 - [x] **Saved views / filters** — DONE (backend `/saved-views` per user +
       section). Remaining: per-section "save this view" buttons in each page UI.
-- [ ] **Real-time push** — replace 15s polling with WebSocket/SSE so alerts,
-      cases, and findings stream in without refresh. *(DEFERRED — own unit:
-      SSE endpoint + client; polling works today.)*
+- [x] **Real-time push** — DONE (see CHANGELOG): an in-process pub/sub broker +
+      `GET /stream` SSE endpoint; the engine tick, `notify()`, and webhook
+      dispatch publish events; a `useLiveStream` hook updates the notification
+      bell and SIEM queue the instant data lands (polling kept as a safety net).
 - [x] **Notifications centre** — DONE: live notification bell (real
       `/notifications` feed from critical alerts, escalated cases, credential
       leaks, scheduled reports), mark-read, deep-link on click. Remaining:
@@ -148,6 +149,20 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Real-time push / SSE (Phase 0)** — the dashboard updates
+  live instead of polling. `events_stream.py` is a dependency-free, thread-safe
+  pub/sub broker (bounded per-client queues; a backed-up browser is dropped,
+  never back-pressures the engine). `routers/stream.py` serves `GET /stream`
+  as `text/event-stream` with JWT-via-query auth (EventSource can't set
+  headers) and heartbeats. Producers publish to the broker: the live engine
+  tick (`tick` with the delta), `notify()` (`notification`), and webhook
+  `dispatch()` (alert.created/case.created/…). Frontend `useLiveStream` hook
+  (auto-reconnecting EventSource) re-broadcasts each event on `window` as
+  `live:<type>`; the notification bell refreshes on `notification` and the SIEM
+  queue on `tick`/`alert.created`, with polling dropped to a 30s safety net.
+  Tested: broker fan-out/bounded-drop units + the SSE auth guard + live publish
+  on the engine path.
 
 - **2026-06-10 · STIX 2.1 / TAXII 2.1 server (Phase 3)** — ThreatOrbit is now a
   real CTI hub other tools can pull from. `stix.py` serializes the live stores

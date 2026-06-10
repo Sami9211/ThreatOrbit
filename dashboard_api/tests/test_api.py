@@ -1434,6 +1434,58 @@ def test_ioc_lifecycle_api(client, auth):
     assert client.get("/cti/iocs?status=bogus", headers=auth).status_code == 400
 
 
+def test_event_stream_broker_units():
+    """The pub/sub broker fans messages to every subscriber and drops dead ones."""
+    import queue
+    from dashboard_api import events_stream as es
+    a = es.subscribe()
+    b = es.subscribe()
+    try:
+        n = es.publish("alert", {"id": "x"})
+        assert n == 2 and es.subscriber_count() == 2
+        ma = a.get_nowait(); mb = b.get_nowait()
+        assert ma["type"] == "alert" and ma["data"] == {"id": "x"} and "ts" in ma
+        assert mb["type"] == "alert"
+    finally:
+        es.unsubscribe(a); es.unsubscribe(b)
+    # after unsubscribe nobody receives
+    assert es.publish("alert", {"id": "y"}) == 0
+    # a full queue is dropped, never raises
+    c = es.subscribe()
+    try:
+        for _ in range(es._MAX_QUEUED + 5):
+            es.publish("noise", {})
+        assert c.qsize() <= es._MAX_QUEUED  # bounded, no exception
+    finally:
+        es.unsubscribe(c)
+
+
+def test_stream_auth_and_live_publish(client, auth, admin_token):
+    """The SSE endpoint requires a valid token; notify()/dispatch() push to the
+    broker so live clients update without polling."""
+    from dashboard_api import events_stream as es
+    # auth guard: no token / bad token rejected (don't open the stream itself —
+    # it would block; the guard runs before streaming begins)
+    assert client.get("/stream").status_code == 401
+    assert client.get("/stream?token=not-a-jwt").status_code == 401
+    assert client.get("/stream/health", headers=auth).json()["subscribers"] >= 0
+
+    # a notification (engine path) publishes a 'notification' event to subscribers
+    sub = es.subscribe()
+    try:
+        client.post("/config/engine", json={"generate": 8}, headers=auth)
+        kinds = []
+        import queue as _q
+        try:
+            while True:
+                kinds.append(sub.get_nowait()["type"])
+        except _q.Empty:
+            pass
+        assert any(k in ("notification", "tick", "alert.created", "case.created") for k in kinds), kinds
+    finally:
+        es.unsubscribe(sub)
+
+
 def test_stix_serialization_units():
     """STIX 2.1: correct patterns per indicator type, SDOs, deterministic ids."""
     from dashboard_api import stix

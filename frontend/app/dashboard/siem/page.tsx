@@ -1182,8 +1182,17 @@ export default function SIEMPage() {
 
   useEffect(() => {
     loadSiem()
-    const t = setInterval(loadSiem, 15000)
-    return () => clearInterval(t)
+    // Real-time push: refresh the moment the engine emits a tick or a new
+    // alert; a slower poll remains as a safety net if the stream drops.
+    const onLive = () => loadSiem()
+    window.addEventListener('live:tick', onLive)
+    window.addEventListener('live:alert.created', onLive)
+    const t = setInterval(loadSiem, 30000)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('live:tick', onLive)
+      window.removeEventListener('live:alert.created', onLive)
+    }
   }, [loadSiem])
 
   // Prefer live KPIs from the API; fall back to the static demo values.

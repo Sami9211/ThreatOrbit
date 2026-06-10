@@ -67,6 +67,12 @@ def _deliver(event: str, payload: dict, subs: list[dict]):
 
 def dispatch(event: str, payload: dict):
     """Deliver `event` to every active subscriber. Never raises."""
+    # Mirror to live SSE clients (in-process, independent of external webhooks).
+    try:
+        from dashboard_api.events_stream import publish
+        publish(event, payload)
+    except Exception:
+        pass
     try:
         subs = _subscribers(event)
     except Exception:  # storage unavailable — never break the request path

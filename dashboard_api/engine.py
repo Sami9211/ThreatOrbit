@@ -483,8 +483,16 @@ def process_tick(max_events: int = 6) -> dict:
         from dashboard_api.webhooks import dispatch
         for event, payload in pb_dispatches:
             dispatch(event, payload)
-    return {"events": n, "alerts": alerts, "iocs": iocs, "darkWeb": dark,
-            "casesEscalated": cases, "playbookRuns": pb_runs}
+    summary = {"events": n, "alerts": alerts, "iocs": iocs, "darkWeb": dark,
+               "casesEscalated": cases, "playbookRuns": pb_runs}
+    # Real-time push: tell live clients new data landed so they refresh in place.
+    if alerts or dark or cases or pb_runs:
+        try:
+            from dashboard_api.events_stream import publish
+            publish("tick", summary)
+        except Exception:
+            pass
+    return summary
 
 
 def _emit_notifications(conn):

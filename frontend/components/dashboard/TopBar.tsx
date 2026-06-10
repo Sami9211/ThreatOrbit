@@ -7,6 +7,7 @@ import { fetchNotifications, markNotificationRead, type Notification } from '@/l
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { useLiveStream } from '@/lib/useLiveStream'
 
 /* Compact segmented Normal/Power toggle — surfaces the experience mode so the
    difference is one tap away (it was previously buried in Configuration). */
@@ -84,9 +85,12 @@ export default function TopBar() {
   const loadNotifs = useCallback(() => {
     fetchNotifications().then((d) => { setNotifs(d.items); setUnread(d.unread) }).catch(() => {})
   }, [])
+  // Real-time push: refresh the bell the instant the server emits a
+  // notification; keep a slow poll as a safety net if the stream drops.
+  useLiveStream((e) => { if (e.type === 'notification') loadNotifs() })
   useEffect(() => {
     loadNotifs()
-    const t = setInterval(loadNotifs, 12000)
+    const t = setInterval(loadNotifs, 30000)
     return () => clearInterval(t)
   }, [loadNotifs])
 

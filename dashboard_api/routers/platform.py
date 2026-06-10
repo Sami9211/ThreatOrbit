@@ -28,11 +28,17 @@ def _now() -> str:
 
 def notify(conn, *, type: str, title: str, severity: str = "info",
            detail: str | None = None, link: str | None = None):
-    """Insert a notification (caller commits). Used by the engine + detections."""
+    """Insert a notification (caller commits). Used by the engine + detections.
+    Also pushes it to any live SSE subscribers so the bell updates in realtime."""
     conn.execute(
         "INSERT INTO notifications (id,ts,type,severity,title,detail,link,read) VALUES (?,?,?,?,?,?,?,0)",
         (str(uuid.uuid4()), _now(), type, severity, title, detail, link),
     )
+    try:
+        from dashboard_api.events_stream import publish
+        publish("notification", {"type": type, "severity": severity, "title": title, "link": link})
+    except Exception:  # streaming must never break a write path
+        pass
 
 
 @router.get("/notifications")
