@@ -51,7 +51,9 @@ All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion API
 ```text
 ThreatOrbit-V2/
 ├── README.md
-├── Makefile                     # make up / down / test / dev-* shortcuts
+├── Makefile                     # make up / down / test / dev-* shortcuts (Mac/Linux)
+├── windows-start.bat            # double-click: full local start on Windows
+├── windows-test.bat             # double-click: run every test suite on Windows
 ├── .gitignore
 ├── .env.example                 # copy to .env, fill in keys
 ├── docker-compose.yml           # full stack: 3 APIs + frontend, healthchecked
@@ -140,11 +142,14 @@ ThreatOrbit-V2/
 
 ## 3. Requirements
 
-**Minimum**
+**Minimum (Path A — Windows, or Path C — Mac/Linux, no Docker)**
 
-* OS: Linux, macOS, or Windows (WSL2 recommended on Windows)
+* Python 3.11+ and Node.js 18+ (LTS recommended) — nothing else
 * CPU: 2 cores, RAM: 4 GB, Disk: 5 GB free
-* Docker + Docker Compose, Git
+
+**For the one-command Docker path (B/D)**
+
+* Docker Desktop (Windows/Mac) or Docker Engine + Compose (Linux)
 
 **Recommended**
 
@@ -156,116 +161,154 @@ https://docs.opencti.io/latest/deployment/
 
 ---
 
-## 4. Quick start
+## 4. Quick start — pick the path for your machine
 
-### Easiest deployment — one command, full stack (Docker)
+> **Get the code first** (any OS): install [Git](https://git-scm.com/downloads)
+> and run `git clone https://github.com/Sami9211/ThreatOrbit-V2.git` — or click
+> **Code → Download ZIP** on GitHub and unzip it. Every path below starts
+> inside that folder.
 
-```bash
-cp .env.example .env        # the defaults work for a local evaluation
-docker compose up --build -d   # or simply: make up
+### Path A — Windows, no Docker (easiest on Windows)
+
+**You need exactly two installers, then one double-click.**
+
+1. Install **Python** from https://www.python.org/downloads/ —
+   ⚠️ on the first screen of the installer, tick **“Add python.exe to PATH”**.
+2. Install **Node.js (LTS)** from https://nodejs.org/ — accept the defaults.
+3. Open the `ThreatOrbit-V2` folder and **double-click `windows-start.bat`**.
+
+The script installs everything, opens four service windows, and launches your
+browser at http://localhost:3000/dashboard. First run takes a few minutes
+(npm download); after that it starts in seconds.
+
+* **Sign in:** `admin@threatorbit.space` / `ChangeMe123!` (or create an account at `/signup`)
+* **Stop:** close the four windows the script opened.
+* **Test:** double-click **`windows-test.bat`** — it runs all 50 backend tests
+  and prints `ALL TESTS PASSED` at the end.
+
+<details>
+<summary>Prefer typing the commands yourself? (PowerShell — run one line at a time)</summary>
+
+```powershell
+cd ThreatOrbit-V2
+python -m pip install -r dashboard_api\requirements.txt
+python -m uvicorn dashboard_api.main:app --port 8002
 ```
 
-That single command builds and starts all four pieces:
+Leave that window open. In a **second** PowerShell window:
 
-| Service       | URL                          | Notes                                              |
-| ------------- | ---------------------------- | -------------------------------------------------- |
-| Frontend      | http://localhost:3000        | Marketing site + operator dashboard (`/dashboard`) |
-| Dashboard API | http://localhost:8002        | Auto-seeded with demo data on first boot           |
-| Threat API    | http://localhost:8000        | OSINT ingestion engine                             |
-| Log API       | http://localhost:8001        | Log anomaly analysis                               |
-
-Sign in at http://localhost:3000/dashboard with the seeded admin
-(`admin@threatorbit.space` / `ChangeMe123!`) or create your own account at
-`/signup`. The service bridge is pre-wired container-to-container, so
-**Feeds → Sources** can trigger live OSINT ingestion and **SIEM → Sources**
-can analyse uploaded log files out of the box.
-
-Stop with `docker compose down` (or `make down`); follow logs with `make logs`.
-
-> Deploying the frontend on a different host? Rebuild it with the URL the
-> browser should use for the API:
-> `NEXT_PUBLIC_API_URL=https://api.yourdomain.com docker compose up --build -d`
-> And in production set real secrets in `.env`: `APP_API_KEY`,
-> `ADMIN_API_KEY`, and `DASHBOARD_JWT_SECRET` (e.g. `openssl rand -hex 32`).
-
-### Easiest testing — one command
-
-```bash
-make test     # all 50 backend tests across the three APIs + frontend type-check
-```
-
-Individually:
-
-```bash
-python -m pytest dashboard_api/tests -q   # 48 behaviour tests
-cd threat_api && pytest -q
-cd log_api    && pytest -q
-cd frontend   && npx tsc --noEmit && npm run build   # type-check + production build
-```
-
-Tests need no `.env`, no Docker, and no running services — each suite sets up
-its own isolated, seeded database. Python deps:
-`pip install -r dashboard_api/requirements.txt -r threat_api/requirements.txt -r log_api/requirements.txt`;
-frontend deps: `cd frontend && npm install`.
-
-`make help` lists every shortcut (`up`, `down`, `logs`, `test`, `build`,
-`dev-api`, `dev-frontend`, `seed`).
-
-### Run locally without Docker
-
-Both services use absolute package imports, so run them **from the repo root**:
-
-```bash
-# One-time setup (from the repo root)
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r threat_api/requirements.txt -r log_api/requirements.txt
-export APP_API_KEY=your-secret-key                   # Windows: set APP_API_KEY=...
-```
-
-```bash
-# Terminal 1: Threat API (from the repo root)
-python -m threat_api.main
-```
-
-```bash
-# Terminal 2: Log API (from the repo root)
-uvicorn log_api.main:app --reload --host 127.0.0.1 --port 8001
-```
-
-### Run the frontend
-
-```bash
-cd frontend
+```powershell
+cd ThreatOrbit-V2\frontend
 npm install
-npm run dev          # http://localhost:3000
+npm run dev
 ```
 
-To deploy on Vercel, set the project **Root Directory** to `frontend` and deploy. Vercel auto-detects Next.js.
+Open http://localhost:3000/dashboard. To run the tests:
 
-### Run the operator dashboard (frontend + Dashboard API)
+```powershell
+cd ThreatOrbit-V2
+python -m pip install -r dashboard_api\requirements.txt -r threat_api\requirements.txt -r log_api\requirements.txt
+python -m pytest dashboard_api\tests -q
+cd threat_api
+python -m pytest -q
+cd ..\log_api
+python -m pytest -q
+```
+
+If `python` is not recognised, use `py -3` instead of `python` in every
+command. Don’t chain commands with `&&` — older PowerShell doesn’t support it;
+run each line separately.
+</details>
+
+### Path B — any OS with Docker Desktop (one command)
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+(Windows/Mac) or Docker Engine (Linux), then from the `ThreatOrbit-V2` folder:
 
 ```bash
-# Terminal 1: Dashboard API (auto-seeds demo data on first boot)
-pip install -r dashboard_api/requirements.txt
-uvicorn dashboard_api.main:app --port 8002
+# Windows (PowerShell or cmd):
+copy .env.example .env
+docker compose up --build -d
 
-# Terminal 2: frontend
-cd frontend && npm run dev
+# Mac / Linux:
+cp .env.example .env
+docker compose up --build -d
 ```
 
-Open `http://localhost:3000/dashboard` and log in with the seeded admin
-(`admin@threatorbit.space` / `ChangeMe123!` — override via
-`DASHBOARD_ADMIN_EMAIL` / `DASHBOARD_ADMIN_PASSWORD`), or create your own
-account at `http://localhost:3000/signup` (backed by `POST /auth/register`).
-Every dashboard page loads live data from `:8002` and degrades to built-in
-demo data when the API is unreachable. Point the frontend at a non-default
-API URL with `NEXT_PUBLIC_API_URL`.
+One command builds and starts the complete product:
 
-When all three APIs run together (e.g. via docker compose), the dashboard
-bridges them live: **Feeds → Sources** can trigger ingestion runs on the
-Threat API and sync its indicators into the CTI store, and **SIEM → Sources**
-can upload log files to the Log API's four anomaly detectors and render the
-findings — no API keys ever reach the browser.
+| Service       | URL                   | Notes                                              |
+| ------------- | --------------------- | -------------------------------------------------- |
+| Frontend      | http://localhost:3000 | Marketing site + operator dashboard (`/dashboard`) |
+| Dashboard API | http://localhost:8002 | Auto-seeded with demo data on first boot           |
+| Threat API    | http://localhost:8000 | OSINT ingestion engine                             |
+| Log API       | http://localhost:8001 | Log anomaly analysis                               |
+
+Sign in at http://localhost:3000/dashboard (`admin@threatorbit.space` /
+`ChangeMe123!`). The service bridge is pre-wired, so **Feeds → Sources** can
+trigger live OSINT ingestion and **SIEM → Sources** can analyse uploaded log
+files out of the box. Stop with `docker compose down`.
+
+### Path C — Mac / Linux, no Docker
+
+```bash
+cd ThreatOrbit-V2
+pip install -r dashboard_api/requirements.txt
+uvicorn dashboard_api.main:app --port 8002        # terminal 1 — leave running
+```
+
+```bash
+cd ThreatOrbit-V2/frontend
+npm install
+npm run dev                                        # terminal 2 — leave running
+```
+
+Open http://localhost:3000/dashboard. Optional — also start the two ingestion
+engines (each in its own terminal, from the repo root):
+
+```bash
+export APP_API_KEY=local-dev-key
+python -m threat_api.main                          # Threat API on :8000
+```
+
+```bash
+export APP_API_KEY=local-dev-key
+uvicorn log_api.main:app --port 8001               # Log API on :8001
+```
+
+(Set `SERVICES_API_KEY=local-dev-key` when starting the dashboard API so it
+can bridge to them.) Shortcuts if you have `make`: `make dev-api`,
+`make dev-frontend`, `make up`, `make test` — see `make help`.
+
+### Path D — deploy to the internet
+
+The simplest production split:
+
+1. **Frontend → [Vercel](https://vercel.com) (free tier works).** Import the
+   GitHub repo, set **Root Directory** to `frontend`, add the environment
+   variable `NEXT_PUBLIC_API_URL=https://your-api-domain` and click Deploy.
+   (Netlify works identically; `netlify.toml` is included.)
+2. **Backend → any Linux server with Docker** (a $5 VPS is fine):
+   ```bash
+   git clone https://github.com/Sami9211/ThreatOrbit-V2.git && cd ThreatOrbit-V2
+   cp .env.example .env
+   nano .env    # set APP_API_KEY, ADMIN_API_KEY, DASHBOARD_JWT_SECRET,
+                # and DASHBOARD_CORS_ORIGINS=https://your-frontend-domain
+   docker compose up --build -d
+   ```
+   Put nginx/Caddy with TLS in front, expose only the frontend and the
+   Dashboard API (8002) publicly, and keep 8000/8001 internal.
+
+### Testing (all platforms)
+
+| Platform   | Easiest way                                                  |
+| ---------- | ------------------------------------------------------------ |
+| Windows    | double-click **`windows-test.bat`**                          |
+| Mac/Linux  | `make test`                                                   |
+| Any        | `python -m pytest dashboard_api/tests -q` (and the same in `threat_api/`, `log_api/`) |
+
+Tests need **no `.env`, no Docker, and no running services** — each suite
+creates its own isolated, seeded database.
 
 ---
 
@@ -420,17 +463,21 @@ complete endpoint map and algorithm notes live in
 
 ## 11. Testing
 
-```bash
-make test                                  # everything: all 3 API suites + frontend type-check
-```
+* **Windows:** double-click **`windows-test.bat`** (installs test deps, runs
+  all three suites, prints a clear pass/fail summary).
+* **Mac/Linux:** `make test` — all three API suites plus the frontend type-check.
 
-Or individually:
+Or run any suite directly (works on every OS — run each line separately):
 
 ```bash
 python -m pytest dashboard_api/tests -q   # from the repo root (48 tests)
-cd threat_api && pytest -q
-cd ../log_api && pytest -q
-cd ../frontend && npx tsc --noEmit && npm run build
+cd threat_api
+python -m pytest -q
+cd ../log_api
+python -m pytest -q
+cd ../frontend
+npx tsc --noEmit
+npm run build
 ```
 
 Tests set their own API keys and use an isolated temp database via
@@ -439,6 +486,26 @@ Tests set their own API keys and use an isolated temp database via
 ---
 
 ## 12. Troubleshooting
+
+**Windows-specific**
+
+* **`'python' is not recognized`**: Python isn’t on PATH. Re-run the installer
+  and tick **“Add python.exe to PATH”**, or replace `python` with `py -3` in
+  every command. `windows-start.bat` / `windows-test.bat` handle this fallback
+  automatically.
+* **`'make' is not recognized`**: `make` is a Mac/Linux tool — on Windows use
+  `windows-start.bat` / `windows-test.bat` instead.
+* **`The token '&&' is not a valid statement separator`**: older PowerShell
+  doesn’t support `&&`. Run each command on its own line.
+* **pip errors mentioning “Microsoft Visual C++” or “building wheel”**: you’re
+  likely on a very new Python before our pinned ranges — run
+  `python -m pip install --upgrade pip` and retry; all dependencies ship
+  prebuilt wheels for Python 3.11–3.13.
+* **A service window closes immediately**: a port is already in use. Close
+  other ThreatOrbit windows (or anything on ports 3000/8000/8001/8002) and
+  run `windows-start.bat` again.
+
+**General**
 
 * **401 Unauthorized**: the `X-API-Key` header is missing or does not match `APP_API_KEY` / `ADMIN_API_KEY`.
 * **403 Admin access required**: the route needs `ADMIN_API_KEY` and you sent the user key.
