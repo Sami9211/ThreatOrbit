@@ -9,7 +9,7 @@ import {
   TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchFeeds, toggleFeed, type Feed as ApiFeed } from '@/lib/api'
+import { fetchFeeds, toggleFeed, fetchFeedsSummary, type Feed as ApiFeed, type FeedsSummary } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -463,14 +463,16 @@ export default function FeedsPage() {
   const [confirmed, setConfirmed] = useState<ThreatEntry[]>(CONFIRMED_SEED)
   const [unconfirmed, setUnconfirmed] = useState<ThreatEntry[]>(UNCONFIRMED_SEED)
   const [apiFeeds, setApiFeeds] = useState<ApiFeed[]>([])
+  const [feedsSummary, setFeedsSummary] = useState<FeedsSummary | null>(null)
   const [newIds, setNewIds] = useState<Set<string>>(new Set())
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [liveCount, setLiveCount] = useState(0)
   const [pulse, setPulse] = useState(false)
 
-  // Load feed sources from API
+  // Load feed sources and summary from API
   useEffect(() => {
     fetchFeeds().then(setApiFeeds).catch(() => {})
+    fetchFeedsSummary().then(setFeedsSummary).catch(() => {})
   }, [])
 
   // Simulate live incoming unconfirmed threats every 8–14 seconds
@@ -571,7 +573,7 @@ export default function FeedsPage() {
           { label: 'Confirmed', value: confirmed.length, color: 'text-safe', icon: CheckCircle2 },
           { label: 'Unconfirmed', value: unconfirmed.length, color: 'text-amber', icon: HelpCircle },
           { label: 'Critical', value: [...confirmed, ...unconfirmed].filter(e => e.severity === 'critical').length, color: 'text-magenta', icon: Flame },
-          { label: 'Live/hr rate', value: '2.4k', color: 'text-violet', icon: Activity },
+          { label: 'Total IOCs', value: feedsSummary ? feedsSummary.totalIndicators.toLocaleString() : '—', color: 'text-violet', icon: Activity },
         ].map(kpi => (
           <div key={kpi.label} className="flex items-center gap-3 px-4 py-3">
             <kpi.icon className={cn('w-4 h-4 shrink-0', kpi.color)} />
