@@ -1356,6 +1356,84 @@ def test_post_incident_report(client, auth):
     assert client.get("/reports/siem?period=daily", headers=auth).status_code == 200
 
 
+def test_ioc_lifecycle_units():
+    """Pure decay model: half-life per type, expiry floor, status bands."""
+    from datetime import datetime, timedelta, timezone
+    from dashboard_api.ioc_lifecycle import effective_confidence, lifecycle_of
+    now = datetime.now(timezone.utc)
+    iso = lambda d: (now - timedelta(days=d)).isoformat()
+    # fresh IP keeps ~full confidence
+    assert effective_confidence(90, now.isoformat(), "ip", now) >= 88
+    # one IP half-life (14d) ≈ half
+    assert 40 <= effective_confidence(90, iso(14), "ip", now) <= 50
+    # hashes decay far slower than IPs over the same span
+    assert effective_confidence(90, iso(14), "sha256", now) > effective_confidence(90, iso(14), "ip", now)
+    assert effective_confidence(90, iso(14), "sha256", now) >= 80
+    # a long-stale IP falls under the expiry floor → expired
+    aged = {"confidence": 90, "last_seen": iso(90), "type": "ip", "status": "active"}
+    assert lifecycle_of(aged, now)["status"] == "expired"
+    fresh = {"confidence": 90, "last_seen": now.isoformat(), "type": "ip", "status": "active"}
+    assert lifecycle_of(fresh, now)["status"] == "active"
+    # known-good is never auto-expired
+    kg = {**aged, "status": "known-good"}
+    assert lifecycle_of(kg, now)["status"] == "known-good"
+
+
+def test_ioc_lifecycle_api(client, auth):
+    """Sightings refresh + reactivate; known-good whitelists (stops TI matching
+    and reads benign); decay maintenance runs; status filter + summary counts."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    ip = "192.0.2.77"
+    imp = client.post("/cti/iocs/import", json={
+        "indicators": [{"type": "ip", "value": ip}],
+        "confidence": 90, "severity": "critical", "source": "test"}, headers=auth)
+    assert imp.json()["imported"] == 1
+    iid = client.get(f"/cti/iocs?q={ip}", headers=auth).json()["items"][0]["id"]
+
+    # detail carries lifecycle + empty sightings history
+    detail = client.get(f"/cti/iocs/{iid}", headers=auth).json()
+    assert detail["lifecycle"]["status"] == "active" and detail["lifecycle"]["sightings"] == 1
+    assert detail["sightingsHistory"] == []
+    assert detail["lifecycle"]["effectiveConfidence"] >= 85
+
+    # a manual sighting bumps the count, confidence, and history
+    s = client.post(f"/cti/iocs/{iid}/sighting", json={"source": "analyst", "context": "seen in IR"}, headers=auth)
+    assert s.status_code == 200 and s.json()["sightings"] == 2 and s.json()["confidence"] >= 95
+    assert len(client.get(f"/cti/iocs/{iid}", headers=auth).json()["sightingsHistory"]) == 1
+
+    # whitelist → known-good: lookup reads benign, list filter works
+    assert client.post(f"/cti/iocs/{iid}/known-good", headers=auth).json()["status"] == "known-good"
+    look = client.get(f"/cti/lookup?value={ip}", headers=auth).json()
+    assert look["verdict"] == "benign" and look["knownGood"] is True
+    assert any(x["id"] == iid for x in client.get("/cti/iocs?status=known-good", headers=auth).json()["items"])
+
+    # known-good no longer raises a threat-intel alert on a matching event
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 11:00:00 fw01 traffic from {ip} allowed"]}, headers=auth)
+    assert client.get(f"/siem/alerts?q={ip}", headers=auth).json()["total"] == 0
+
+    # un-whitelist reactivates; now a matching event DOES raise R-TIMATCH + a sighting
+    assert client.delete(f"/cti/iocs/{iid}/known-good", headers=auth).json()["status"] == "active"
+    client.post("/siem/ingest", json={
+        "lines": [f"Jan 10 11:05:00 fw01 traffic from {ip} allowed"]}, headers=auth)
+    assert client.get(f"/siem/alerts?q={ip}", headers=auth).json()["total"] >= 1
+    after = client.get(f"/cti/iocs/{iid}", headers=auth).json()
+    assert after["sightings"] >= 3
+    assert any(h["source"] == "siem:event" for h in after["sightingsHistory"])
+
+    # decay maintenance runs and the summary exposes lifecycle bands
+    dec = client.post("/cti/iocs/decay", headers=auth).json()
+    assert {"scanned", "expired", "reactivated"} <= dec.keys()
+    summ = client.get("/cti/summary", headers=auth).json()
+    assert {"activeIocs", "expiredIocs", "knownGoodIocs"} <= summ.keys()
+
+    # guard rails
+    assert client.get("/cti/iocs/NOPE", headers=auth).status_code == 404
+    assert client.post("/cti/iocs/NOPE/sighting", json={}, headers=auth).status_code == 404
+    assert client.get("/cti/iocs?status=bogus", headers=auth).status_code == 400
+
+
 def test_ueba_entity_risk(client, auth):
     """UEBA: entities ranked by alert-derived risk, with drill-down timeline."""
     from dashboard_api.engine import seed_builtin_rules

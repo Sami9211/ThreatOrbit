@@ -367,7 +367,9 @@ _SEV_FROM_CONF = lambda c: "critical" if c >= 85 else "high" if c >= 70 else "me
 def _write_ioc(conn, ioc: dict, source: str):
     value = ioc["value"]
     if conn.execute("SELECT 1 FROM iocs WHERE value=?", (value,)).fetchone():
-        conn.execute("UPDATE iocs SET last_seen=? WHERE value=?", (_now(), value))
+        # re-observation → a sighting (refreshes last_seen, nudges confidence).
+        from dashboard_api.ioc_lifecycle import record_sighting
+        record_sighting(conn, value=value, source=source, boost=4)
         return False
     conf = int(ioc.get("confidence", 50))
     conn.execute(
@@ -468,6 +470,10 @@ def process_tick(max_events: int = 6) -> dict:
             )
             dark += 1
         cases = _maybe_escalate_case(conn)
+        # IOC lifecycle maintenance: occasionally age out stale indicators.
+        if rng.random() < 0.15:
+            from dashboard_api.ioc_lifecycle import decay_iocs
+            decay_iocs(conn)
         # SOAR automation: auto-trigger playbooks whose criteria match new alerts.
         from dashboard_api.playbook_engine import auto_trigger_playbooks
         pb_runs, pb_dispatches = auto_trigger_playbooks(conn)

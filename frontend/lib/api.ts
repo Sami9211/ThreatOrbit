@@ -287,6 +287,19 @@ export interface Ioc {
   threatType: string
   confidence: number
   tags: string[]
+  status: 'active' | 'expired' | 'known-good'
+  sightings: number
+  effectiveConfidence: number
+}
+
+export interface IocLifecycle {
+  effectiveConfidence: number; assertedConfidence: number
+  ageDays: number; halfLifeDays: number; sightings: number
+  status: 'active' | 'expired' | 'known-good'; expiresInDays: number | null
+}
+export interface IocDetail extends Ioc {
+  lifecycle: IocLifecycle
+  sightingsHistory: Array<{ id: string; ts: string; source: string | null; context: string | null }>
 }
 
 export interface IocType {
@@ -302,6 +315,9 @@ export interface CtiSummary {
   cybercrime: number
   hacktivist: number
   totalIocs: number
+  activeIocs: number
+  expiredIocs: number
+  knownGoodIocs: number
 }
 
 export interface IocLookup {
@@ -788,6 +804,15 @@ export const fetchIocs    = (params?: Record<string, string>) => {
 }
 export const fetchIocTypes  = () => api<IocType[]>('/cti/ioc-types')
 export const fetchCtiSummary = () => api<CtiSummary>('/cti/summary')
+export const fetchIoc = (id: string) => api<IocDetail>(`/cti/iocs/${id}`)
+export const addIocSighting = (id: string, source = 'manual', context?: string) =>
+  api<IocDetail>(`/cti/iocs/${id}/sighting`, { method: 'POST', body: JSON.stringify({ source, context }) })
+export const setIocKnownGood = (id: string) =>
+  api<Ioc & { lifecycle: IocLifecycle }>(`/cti/iocs/${id}/known-good`, { method: 'POST' })
+export const removeIocKnownGood = (id: string) =>
+  api<Ioc & { lifecycle: IocLifecycle }>(`/cti/iocs/${id}/known-good`, { method: 'DELETE' })
+export const runIocDecay = () =>
+  api<{ scanned: number; expired: number; reactivated: number }>('/cti/iocs/decay', { method: 'POST' })
 export const lookupIoc = (value: string) =>
   api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
 export interface ImportResult { imported: number; duplicates: number; skipped: number; total: number }

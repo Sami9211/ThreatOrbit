@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
+import IocLifecyclePanel from '@/components/dashboard/IocLifecyclePanel'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
 import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, type SavedHunt as ApiSavedHunt, type Actor as ApiActor } from '@/lib/api'
@@ -747,6 +748,9 @@ export default function CTIPage() {
           </motion.div>
         ))}
       </div>
+
+      {/* IOC database with lifecycle (decay / sightings / known-good) */}
+      <IocLifecyclePanel />
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Actor list */}

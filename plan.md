@@ -110,8 +110,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       TTPs, interactive, with pivoting and path-finding.
 - [ ] **Enrichment pipeline** — pluggable enrichers (VirusTotal, GreyNoise,
       Shodan, WHOIS, geo/ASN) with caching and per-IOC enrichment history.
-- [ ] **IOC lifecycle** — confidence decay over time, sighting tracking,
-      whitelist/known-good handling, expiry.
+- [x] **IOC lifecycle** — DONE (see CHANGELOG): per-type confidence decay,
+      sighting tracking (events/connectors/manual), known-good whitelisting,
+      and expiry — wired into TI matching, with an IOC database + lifecycle
+      drawer on the CTI hub.
 - [ ] **Campaign & report management** — analyst-authored intel reports, MISP
       events import/export.
 - [ ] **Attribution scoring** — evidence-weighted actor attribution.
@@ -144,6 +146,27 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · IOC lifecycle (Phase 3)** — threat indicators now age like real
+  intel. `ioc_lifecycle.py`: per-type confidence **decay** (half-life: IPs 14d,
+  domains 45d, hashes 180d, CVEs 365d) so `effective_confidence` falls off from
+  the asserted value with age since last seen; **expiry** below a confidence
+  floor / age ceiling stops stale intel matching; **sightings** (a SIEM event
+  matching the IOC, a connector re-import, or a manual confirmation) are
+  recorded in `ioc_sightings`, bump the count, refresh last_seen, nudge
+  confidence up and reactivate expired indicators; **known-good** whitelisting
+  makes an indicator read benign and never match. Wired into TI matching
+  (skips known-good/expired, records a sighting on every match), the engine
+  (`_write_ioc` re-observation → sighting; periodic `decay_iocs` maintenance),
+  and the lookup verdict (benign/expired). New endpoints: `/cti/iocs/{id}`
+  (detail + lifecycle + sightings history), `/iocs/{id}/sighting`,
+  `/iocs/{id}/known-good` (POST/DELETE), `/iocs/decay`; list gains a `status`
+  filter + `effectiveConfidence`; summary gains active/expired/known-good
+  counts. Frontend: IOC database & lifecycle panel on the CTI hub (status
+  tabs, effective-vs-asserted confidence bars, a drawer with the decay model,
+  sightings timeline, and record-sighting / known-good actions). Tested: decay
+  model units + the full API lifecycle (sighting → reactivate, whitelist stops
+  TI matching, decay maintenance).
 
 - **2026-06-10 · Sigma rule import/export (Phase 1 close-out)** — community
   detection content ports in: `POST /siem/rules/import-sigma` parses Sigma

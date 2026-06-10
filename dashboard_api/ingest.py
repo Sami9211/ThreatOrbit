@@ -200,11 +200,15 @@ def match_threat_intel(conn) -> int:
             if not val or val in seen:
                 continue
             ioc = conn.execute(
-                "SELECT type, value, severity, confidence, threat_type, actor, source "
-                "FROM iocs WHERE value=? AND severity IN ('critical','high')", (val,)
+                "SELECT id, type, value, severity, confidence, threat_type, actor, source "
+                "FROM iocs WHERE value=? AND severity IN ('critical','high') AND status='active'", (val,)
             ).fetchone()
             if not ioc:
                 continue
+            # the event observing this indicator IS a sighting — record it.
+            from dashboard_api.ioc_lifecycle import record_sighting
+            record_sighting(conn, ioc_id=ioc["id"], source="siem:event",
+                            context=f"event {e['id']} matched {val}")
             # avoid duplicate intel alerts for the same value
             if conn.execute("SELECT 1 FROM alerts WHERE src_ip=? AND rule_id='R-TIMATCH'", (val,)).fetchone():
                 seen.add(val)

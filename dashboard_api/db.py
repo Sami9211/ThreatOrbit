@@ -296,7 +296,17 @@ CREATE TABLE IF NOT EXISTS iocs (
     actor       TEXT,
     first_seen  TEXT,
     last_seen   TEXT,
-    tags        TEXT NOT NULL DEFAULT '[]'
+    tags        TEXT NOT NULL DEFAULT '[]',
+    status      TEXT NOT NULL DEFAULT 'active',   -- active|expired|known-good
+    sightings   INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS ioc_sightings (
+    id      TEXT PRIMARY KEY,
+    ioc_id  TEXT NOT NULL,
+    ts      TEXT NOT NULL,
+    source  TEXT,
+    context TEXT
 );
 
 CREATE TABLE IF NOT EXISTS feeds (
@@ -520,6 +530,8 @@ _MIGRATIONS = [
     ("detection_rules", "definition", "TEXT NOT NULL DEFAULT '{}'"),
     ("detection_rules", "mitre_tactic_id", "TEXT"),
     ("playbooks", "trigger_match", "TEXT NOT NULL DEFAULT '{}'"),
+    ("iocs", "status", "TEXT NOT NULL DEFAULT 'active'"),
+    ("iocs", "sightings", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user
+from dashboard_api.auth import current_user, require_role
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
+from dashboard_api.ioc_lifecycle import (
+    decay_iocs, effective_confidence, lifecycle_of, record_sighting, set_known_good)
 
 router = APIRouter(prefix="/cti", tags=["cti"], dependencies=[Depends(current_user)])
 
@@ -75,6 +77,7 @@ _IOC_SORTS = {
 @router.get("/iocs")
 def list_iocs(type: str | None = None, severity: str | None = None,
               actor: str | None = None, source: str | None = None,
+              status: str | None = None,
               min_confidence: int | None = Query(None, ge=0, le=100),
               q: str | None = None,
               sort: str = Query("last_seen", description=f"one of {sorted(_IOC_SORTS)}"),
@@ -82,8 +85,11 @@ def list_iocs(type: str | None = None, severity: str | None = None,
               limit: int = Query(100, le=1000), offset: int = 0):
     if sort not in _IOC_SORTS:
         raise HTTPException(status_code=400, detail=f"sort must be one of {sorted(_IOC_SORTS)}")
+    if status is not None and status not in ("active", "expired", "known-good"):
+        raise HTTPException(status_code=400, detail="status must be active|expired|known-good")
     clauses, params = [], []
-    for col, val in (("type", type), ("severity", severity), ("actor", actor), ("source", source)):
+    for col, val in (("type", type), ("severity", severity), ("actor", actor),
+                     ("source", source), ("status", status)):
         if val:
             clauses.append(f"{col}=?"); params.append(val)
     if min_confidence is not None:
@@ -98,7 +104,11 @@ def list_iocs(type: str | None = None, severity: str | None = None,
             f"SELECT * FROM iocs {where} ORDER BY {order_sql} LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
-    return {"total": total, "items": rows_to_dicts(rows)}
+    items = []
+    for ioc in rows_to_dicts(rows):
+        items.append({**ioc, "effectiveConfidence": effective_confidence(
+            ioc["confidence"], ioc["last_seen"], ioc["type"])})
+    return {"total": total, "items": items}
 
 
 @router.post("/iocs/import", status_code=201)
@@ -152,6 +162,8 @@ def cti_summary():
     with get_conn() as conn:
         actors = conn.execute("SELECT type, active, campaign_count FROM threat_actors").fetchall()
         total_iocs = conn.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
+        life = {r["status"]: r["n"] for r in conn.execute(
+            "SELECT status, COUNT(*) AS n FROM iocs GROUP BY status").fetchall()}
     by_type: dict[str, int] = {}
     active = active_campaigns = 0
     for a in actors:
@@ -169,6 +181,9 @@ def cti_summary():
         "cybercrime": by_type.get("cybercrime", 0),
         "hacktivist": by_type.get("hacktivist", 0),
         "totalIocs": total_iocs,
+        "activeIocs": life.get("active", 0),
+        "expiredIocs": life.get("expired", 0),
+        "knownGoodIocs": life.get("known-good", 0),
     }
 
 
@@ -193,14 +208,90 @@ def ioc_lookup(value: str):
                 "severity": None, "threatType": None, "actor": None, "source": None,
                 "firstSeen": None, "lastSeen": None, "tags": []}
     ioc = row_to_dict(row)
-    verdict = "malicious" if ioc["severity"] in ("critical", "high") else (
-        "suspicious" if ioc["severity"] == "medium" else "clean")
+    life = lifecycle_of(ioc)
+    if ioc.get("status") == "known-good":
+        verdict = "benign"
+    elif life["status"] == "expired":
+        verdict = "expired"
+    else:
+        verdict = "malicious" if ioc["severity"] in ("critical", "high") else (
+            "suspicious" if ioc["severity"] == "medium" else "clean")
     return {
         "value": ioc["value"], "found": True, "verdict": verdict,
         "confidence": ioc["confidence"], "severity": ioc["severity"],
         "threatType": ioc["threat_type"], "actor": ioc["actor"], "source": ioc["source"],
         "firstSeen": ioc["first_seen"], "lastSeen": ioc["last_seen"], "tags": ioc["tags"],
+        "status": life["status"], "effectiveConfidence": life["effectiveConfidence"],
+        "sightings": life["sightings"], "knownGood": ioc.get("status") == "known-good",
     }
+
+
+class SightingBody(BaseModel):
+    source: str = "manual"
+    context: str | None = None
+
+
+@router.get("/iocs/{ioc_id}")
+def get_ioc(ioc_id: str):
+    """IOC detail with full lifecycle (effective confidence, decay, expiry) and
+    its sightings history."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="IOC not found")
+        ioc = row_to_dict(row)
+        sightings = rows_to_dicts(conn.execute(
+            "SELECT id, ts, source, context FROM ioc_sightings WHERE ioc_id=? "
+            "ORDER BY ts DESC LIMIT 50", (ioc_id,)).fetchall())
+    return {**ioc, "lifecycle": lifecycle_of(ioc), "sightingsHistory": sightings}
+
+
+@router.post("/iocs/{ioc_id}/sighting")
+def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(current_user)):
+    """Record a manual sighting — refreshes the indicator and reactivates it."""
+    with get_conn() as conn:
+        updated = record_sighting(conn, ioc_id=ioc_id, source=body.source.strip() or "manual",
+                                  context=body.context)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="IOC not found")
+        audit(conn, user["email"], "ioc.sighting", ioc_id, f"source={body.source}")
+        conn.commit()
+    return {**updated, "lifecycle": lifecycle_of(updated)}
+
+
+@router.post("/iocs/{ioc_id}/known-good")
+def whitelist_ioc(ioc_id: str, user: dict = Depends(current_user)):
+    """Mark an indicator known-good: it stops matching and reads back benign."""
+    with get_conn() as conn:
+        if not set_known_good(conn, ioc_id, True):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        audit(conn, user["email"], "ioc.known_good", ioc_id, "whitelisted")
+        conn.commit()
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+    return {**row_to_dict(row), "lifecycle": lifecycle_of(row_to_dict(row))}
+
+
+@router.delete("/iocs/{ioc_id}/known-good")
+def unwhitelist_ioc(ioc_id: str, user: dict = Depends(current_user)):
+    """Remove the known-good flag and reactivate the indicator."""
+    with get_conn() as conn:
+        if not set_known_good(conn, ioc_id, False):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        audit(conn, user["email"], "ioc.known_good", ioc_id, "removed")
+        conn.commit()
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+    return {**row_to_dict(row), "lifecycle": lifecycle_of(row_to_dict(row))}
+
+
+@router.post("/iocs/decay")
+def run_decay(user: dict = Depends(require_role("admin", "manager"))):
+    """Run IOC decay maintenance: expire stale indicators, reactivate refreshed."""
+    with get_conn() as conn:
+        result = decay_iocs(conn)
+        audit(conn, user["email"], "ioc.decay", None,
+              f"expired={result['expired']} reactivated={result['reactivated']}")
+        conn.commit()
+    return result
 
 
 @router.get("/hunts")
