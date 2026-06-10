@@ -660,6 +660,17 @@ export const deleteWebhook = (id: string) =>
 export const testWebhook = (id: string) =>
   api<{ ok: boolean; status: string; lastDelivery: string | null }>(`/config/webhooks/${id}/test`, { method: 'POST' })
 
+export interface JobEntry {
+  id: string
+  kind: string
+  status: string
+  progress: number
+  createdAt: string
+  updatedAt: string
+  meta: Record<string, unknown>
+}
+export const fetchJobs = (limit = 25) => api<JobEntry[]>(`/config/jobs?limit=${limit}`)
+
 export const fetchAuditLog   = (limit = 100, action?: string) => {
   const q = new URLSearchParams({ limit: String(limit), ...(action ? { action } : {}) })
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)

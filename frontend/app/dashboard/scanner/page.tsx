@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { lookupIoc, recordScan, fetchScans, importIocs, type ScanEntry } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -154,6 +154,20 @@ const SCAN_TYPES = [
   { key: 'hash', label: 'Hash',     icon: Hash,   placeholder: 'MD5 / SHA1 / SHA256' },
   { key: 'file', label: 'File',     icon: File,   placeholder: 'Drop a file or browse...' },
 ]
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// SHA-256 of a file via Web Crypto — the same first-pass fingerprint a
+// detonation pipeline would compute before deciding to run the sample.
+async function sha256Hex(file: globalThis.File): Promise<string> {
+  const buf = await file.arrayBuffer()
+  const digest = await crypto.subtle.digest('SHA-256', buf)
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime()
@@ -309,7 +323,7 @@ export default function ScannerPage() {
       }
     }, 900)
 
-    if (scanType === 'file' || !query.trim()) { finish(demo, false); return }
+    if (!query.trim()) { finish(demo, false); return }
 
     lookupIoc(query.trim())
       .then((hit) => {
@@ -334,6 +348,58 @@ export default function ScannerPage() {
         })
       })
       .catch(() => finish(demo, false))  // API unreachable → demo result, nothing persisted
+  }
+
+  // File scan: fingerprint the file in-browser (SHA-256, nothing uploaded)
+  // and check the digest against the live threat-intel store.
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileScan(file: globalThis.File | undefined) {
+    if (!file || scanning) return
+    if (file.size > 32 * 1024 * 1024) return
+    setScanning(true)
+    setResult(null)
+    setSaved(false)
+    try {
+      const hash = await sha256Hex(file)
+      const fileInfo = {
+        name: file.name,
+        size: fmtBytes(file.size),
+        type: file.type || 'unknown',
+        compiler: '—',
+        signature: `sha256:${hash.slice(0, 16)}…`,
+      }
+      const base: ScanResult = {
+        target: hash, type: 'file', verdict: 'clean', detectionRatio: '0/90', score: 0,
+        firstSeen: '—', lastSeen: '—', categories: [],
+        community: { votes: 0, malicious: 0, clean: 0 },
+        network: { asn: 'N/A', ip: 'N/A', country: 'N/A', registrar: 'N/A' },
+        engines: [], iocs: [hash], mitre: [], fileInfo,
+      }
+      let scanResult = base
+      try {
+        const hit = await lookupIoc(hash)
+        if (hit.found) {
+          scanResult = {
+            ...base,
+            verdict: hit.verdict,
+            score: hit.confidence,
+            firstSeen: hit.firstSeen ?? '—',
+            lastSeen: hit.lastSeen ?? '—',
+            categories: [hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
+              .filter(Boolean) as string[],
+          }
+        }
+      } catch { /* TI store unreachable — report the unverified fingerprint */ }
+      setResult(scanResult)
+      recordScan({
+        target: `${file.name} (${hash.slice(0, 12)}…)`, type: 'file',
+        verdict: scanResult.verdict, score: scanResult.score, engines: scanResult.detectionRatio,
+      }).then(refreshHistory).catch(() => {})
+    } finally {
+      setScanning(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
   }
 
   // Save the scanned indicator into the CTI IOC store.
@@ -413,11 +479,22 @@ export default function ScannerPage() {
 
           {/* Input */}
           {scanType === 'file' ? (
-            <div className="flex items-center justify-center h-24 border-2 border-dashed border-white/10 rounded-xl text-ink-500 hover:border-magenta/30 hover:text-ink-300 transition-colors cursor-pointer">
+            <div
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); handleFileScan(e.dataTransfer.files?.[0]) }}
+              className="flex items-center justify-center h-24 border-2 border-dashed border-white/10 rounded-xl text-ink-500 hover:border-magenta/30 hover:text-ink-300 transition-colors cursor-pointer"
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => handleFileScan(e.target.files?.[0])}
+              />
               <div className="flex flex-col items-center gap-2 text-sm">
                 <Upload className="w-5 h-5" />
                 <span>Drop a file here, or click to browse</span>
-                <span className="text-[10px]">Max 32 MB · PE, APK, PDF, DOCX, ZIP</span>
+                <span className="text-[10px]">Max 32 MB · fingerprinted in your browser (SHA-256), never uploaded</span>
               </div>
             </div>
           ) : (

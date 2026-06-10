@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user
-from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, dumps, get_conn, record_job, row_to_dict, rows_to_dicts
 from dashboard_api.scoring import fleet_risk_distribution, recompute_asset_risk, risk_breakdown
 
 router = APIRouter(prefix="/assets", tags=["assets"], dependencies=[Depends(current_user)])
@@ -124,6 +124,8 @@ def recompute_risk(user: dict = Depends(current_user)):
     with get_conn() as conn:
         count = recompute_asset_risk(conn)
         audit(conn, user["email"], "asset.recompute_risk", None, f"assets={count}")
+        record_job(conn, "assets.recompute_risk", "completed",
+                   {"updated": count, "actor": user["email"]})
         conn.commit()
     return {"updated": count}
 

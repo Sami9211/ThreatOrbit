@@ -92,6 +92,17 @@ def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_role("admin"
             "revoked": 0, "secret": secret}
 
 
+@router.get("/jobs")
+def list_jobs(limit: int = 50, _: dict = Depends(require_role("admin", "manager"))):
+    """Recent background jobs (IOC syncs, risk recomputes, log analyses)."""
+    limit = max(1, min(limit, 200))
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return rows_to_dicts(rows)
+
+
 @router.get("/audit-log")
 def list_audit_log(
     limit: int = 100,

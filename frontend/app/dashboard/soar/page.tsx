@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, type SoarMetrics } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, type SoarMetrics } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -884,6 +884,15 @@ export default function SOARPage() {
     const pb = playbooks.find((p) => p.id === id)
     if (!pb || pb.status === 'running') return
     setSelectedPBId(id)
+    // Execute the real run server-side (bumps runs / last_run, audited);
+    // the step timeline below animates while it completes.
+    apiRunPlaybook(id)
+      .then((updated) => {
+        setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
+          ...p, runs: updated.runs ?? p.runs,
+        }))
+      })
+      .catch(() => {})  // demo entry or API offline — the animation still runs
     // Reset all steps to idle and mark playbook as running
     setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
       ...p, status: 'running',

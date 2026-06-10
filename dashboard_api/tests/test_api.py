@@ -623,3 +623,11 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     listed = client.get("/config/webhooks", headers=auth).json()
     assert next(w for w in listed if w["id"] == hook["id"])["status"] == "failing"
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
+
+
+def test_background_jobs_recorded(client, auth):
+    client.post("/assets/recompute-risk", headers=auth)
+    jobs = client.get("/config/jobs", headers=auth).json()
+    job = next(j for j in jobs if j["kind"] == "assets.recompute_risk")
+    assert job["status"] == "completed" and job["progress"] == 100
+    assert job["meta"]["updated"] >= 1

@@ -17,7 +17,7 @@ from dashboard_api.auth import current_user, require_role
 from dashboard_api.config import (
     LOG_API_URL, SERVICES_ADMIN_KEY, SERVICES_API_KEY, THREAT_API_URL,
 )
-from dashboard_api.db import audit, dumps, get_conn
+from dashboard_api.db import audit, dumps, get_conn, record_job
 
 router = APIRouter(prefix="/services", tags=["services"], dependencies=[Depends(current_user)])
 
@@ -143,6 +143,9 @@ def sync_threat_iocs(limit: int = 500, user: dict = Depends(require_role("admin"
             imported += 1
         audit(conn, user["email"], "services.sync_iocs", None,
               f"imported={imported} duplicates={duplicates} skipped={skipped}")
+        record_job(conn, "threat.sync_iocs", "completed",
+                   {"imported": imported, "duplicates": duplicates, "skipped": skipped,
+                    "actor": user["email"]})
         conn.commit()
     if imported:
         from dashboard_api.webhooks import dispatch
@@ -193,6 +196,10 @@ async def logs_analyse(
     with get_conn() as conn:
         audit(conn, user["email"], "services.log_analyse", file.filename,
               f"format={log_format} bytes={len(content)}")
+        record_job(conn, "logs.analyse", "completed",
+                   {"file": file.filename, "format": log_format,
+                    "findings": len(body.get("findings", [])) if isinstance(body, dict) else 0,
+                    "actor": user["email"]})
         conn.commit()
     return body
 

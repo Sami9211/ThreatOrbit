@@ -12,8 +12,8 @@ import { cn } from '@/lib/utils'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
   fetchApiKeys, createApiKey, revokeApiKey,
-  fetchFeeds, toggleFeed, fetchSoarIntegrations,
-  type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration,
+  fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
+  type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
 } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
@@ -723,6 +723,61 @@ function AuditTrail() {
   )
 }
 
+/* ── Background jobs ─────────────────────────────────────────────── */
+const JOB_LABEL: Record<string, string> = {
+  'threat.sync_iocs': 'IOC sync from Threat API',
+  'logs.analyse': 'Log anomaly analysis',
+  'assets.recompute_risk': 'Asset risk recompute',
+}
+
+function jobSummary(j: JobEntry): string {
+  const m = j.meta ?? {}
+  if (j.kind === 'threat.sync_iocs') return `${m.imported ?? 0} imported · ${m.duplicates ?? 0} known`
+  if (j.kind === 'logs.analyse') return `${m.file ?? 'file'} · ${m.findings ?? 0} findings`
+  if (j.kind === 'assets.recompute_risk') return `${m.updated ?? 0} assets rescored`
+  return ''
+}
+
+function BackgroundJobs() {
+  const [jobs, setJobs] = useState<JobEntry[] | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    fetchJobs(25).then(setJobs).catch(() => setError(true))
+  }, [])
+
+  return (
+    <Section title="Background Jobs" icon={Zap} color="#FFB23E">
+      <p className="text-[11px] text-ink-500 mb-4">
+        Heavy operations — Threat-API IOC syncs, log analyses, fleet risk recomputes —
+        are recorded here with their outcome.
+      </p>
+      {error && (
+        <p className="text-xs text-ink-600 py-6 text-center">Job history unavailable. Start the dashboard API to see runs.</p>
+      )}
+      {!error && jobs !== null && jobs.length === 0 && (
+        <p className="text-xs text-ink-600 py-6 text-center">No background jobs recorded yet — trigger a sync, analysis or recompute.</p>
+      )}
+      {!error && jobs === null && (
+        <p className="text-xs text-ink-600 py-6 text-center animate-pulse">Loading jobs…</p>
+      )}
+      {!error && jobs !== null && jobs.length > 0 && (
+        <div className="space-y-0.5 max-h-72 overflow-y-auto">
+          {jobs.map((j) => (
+            <div key={j.id} className="flex items-center gap-3 py-2 border-b border-white/4 last:border-0 text-[11px]">
+              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0',
+                j.status === 'completed' ? 'bg-safe' : j.status === 'failed' ? 'bg-threat' : 'bg-amber')} />
+              <span className="text-ink-200 shrink-0 w-44 truncate">{JOB_LABEL[j.kind] ?? j.kind}</span>
+              <span className="text-ink-500 flex-1 min-w-0 truncate">{jobSummary(j)}</span>
+              <span className="text-ink-600 shrink-0 tabular-nums">{relativeTime(j.createdAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 export default function ConfigPage() {
   const [tab, setTab] = useState('general')
   const [saved, setSaved] = useState(false)
@@ -870,6 +925,8 @@ export default function ConfigPage() {
           )}
 
           {tab === 'security' && <ChangePassword />}
+
+          {tab === 'security' && <BackgroundJobs />}
 
           {tab === 'security' && <AuditTrail />}
 

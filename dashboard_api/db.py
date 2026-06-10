@@ -374,6 +374,21 @@ def audit(conn: sqlite3.Connection, actor: str | None, action: str,
     )
 
 
+def record_job(conn: sqlite3.Connection, kind: str, status: str, meta: dict | None = None) -> str:
+    """Insert a jobs row inside an open connection (caller must commit)."""
+    import datetime
+    import uuid
+    ts = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+    jid = str(uuid.uuid4())
+    progress = 100 if status == "completed" else 0
+    conn.execute(
+        "INSERT INTO jobs (id, kind, status, progress, created_at, updated_at, meta) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (jid, kind, status, progress, ts, ts, dumps(meta or {})),
+    )
+    return jid
+
+
 # Columns added after the initial schema shipped. CREATE TABLE IF NOT EXISTS
 # never alters an existing table, so additive columns are applied here for
 # databases created before the column existed. (table, column, DDL type/default)
