@@ -165,3 +165,44 @@ def build_objects(iocs: list[dict], actors: list[dict], *, with_relationships=Tr
 
 def bundle(objects: list[dict]) -> dict:
     return {"type": "bundle", "id": f"bundle--{uuid.uuid4()}", "objects": objects}
+
+
+# ── Inbound: parse STIX → IOCs (TAXII write / push ingest) ────────────────────────
+
+_PATTERN_RE = re.compile(
+    r"(ipv4-addr|ipv6-addr|domain-name|url|email-addr|file:hashes[^=]*)"
+    r"[^=]*=\s*'([^']+)'", re.IGNORECASE)
+
+
+def parse_indicator_pattern(pattern: str) -> dict | None:
+    """Extract {type, value} from a STIX 2.1 indicator pattern, or None."""
+    m = _PATTERN_RE.search(pattern or "")
+    if not m:
+        return None
+    kind, value = m.group(1).lower(), m.group(2)
+    t = ("ip" if "ipv" in kind else "domain" if "domain" in kind
+         else "url" if "url" in kind else "email" if "email" in kind
+         else "hash" if "hash" in kind or "file" in kind else None)
+    if not t:
+        return None
+    return {"type": t, "value": value}
+
+
+def objects_to_iocs(objects: list[dict]) -> list[dict]:
+    """Map inbound STIX `indicator` SDOs to importable IOC records."""
+    out = []
+    for obj in objects:
+        if obj.get("type") != "indicator":
+            continue
+        parsed = parse_indicator_pattern(obj.get("pattern", ""))
+        if not parsed:
+            continue
+        labels = obj.get("labels") or obj.get("indicator_types") or []
+        out.append({
+            **parsed,
+            "threat_type": (obj.get("name") or (labels[0] if labels else "stix-indicator")),
+            "confidence": int(obj.get("confidence") or 60),
+            "severity": "high" if int(obj.get("confidence") or 60) >= 70 else "medium",
+            "tags": [str(l) for l in labels],
+        })
+    return out

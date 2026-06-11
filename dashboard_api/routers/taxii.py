@@ -8,8 +8,10 @@ STIX 2.1. Authenticated with either a dashboard JWT or a platform API key
 This makes ThreatOrbit a genuine CTI hub others can consume, not just a UI.
 """
 import hashlib
+import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -23,11 +25,12 @@ STIX_MEDIA = "application/stix+json;version=2.1"
 _bearer = HTTPBearer(auto_error=False)
 
 # id → (title, description, stix types served)
+# id → (title, description, served types, can_write)
 COLLECTIONS = {
     "indicators": ("Indicators", "Malicious indicators (IPs, domains, URLs, hashes, CVEs) as STIX 2.1.",
-                   {"indicator", "vulnerability", "relationship"}),
+                   {"indicator", "vulnerability", "relationship"}, True),
     "threat-actors": ("Threat Actors", "Tracked threat actors as STIX 2.1 threat-actor objects.",
-                      {"threat-actor"}),
+                      {"threat-actor"}, False),
 }
 
 
@@ -104,8 +107,8 @@ def api_root():
 @router.get("/api/collections/")
 def list_collections():
     cols = [{"id": cid, "title": title, "description": desc,
-             "can_read": True, "can_write": False, "media_types": [STIX_MEDIA]}
-            for cid, (title, desc, _types) in COLLECTIONS.items()]
+             "can_read": True, "can_write": can_write, "media_types": [STIX_MEDIA]}
+            for cid, (title, desc, _types, can_write) in COLLECTIONS.items()]
     return _taxii({"collections": cols})
 
 
@@ -113,9 +116,9 @@ def list_collections():
 def get_collection(collection_id: str):
     if collection_id not in COLLECTIONS:
         raise HTTPException(status_code=404, detail="Collection not found")
-    title, desc, _ = COLLECTIONS[collection_id]
+    title, desc, _types, can_write = COLLECTIONS[collection_id]
     return _taxii({"id": collection_id, "title": title, "description": desc,
-                   "can_read": True, "can_write": False, "media_types": [STIX_MEDIA]})
+                   "can_read": True, "can_write": can_write, "media_types": [STIX_MEDIA]})
 
 
 @router.get("/api/collections/{collection_id}/objects/")
@@ -139,3 +142,59 @@ def get_objects(collection_id: str,
     if page:
         body["next"] = page[-1].get("modified") or page[-1].get("created")
     return _taxii(body)
+
+
+@router.post("/api/collections/{collection_id}/objects/", status_code=202)
+def add_objects(collection_id: str, principal: dict = Depends(taxii_principal),
+                envelope: dict = Body(...)):
+    """TAXII write/push: accept a STIX envelope (or bundle) and ingest its
+    `indicator` objects into the IOC store — true publish-subscribe. Returns a
+    TAXII status resource."""
+    if collection_id not in COLLECTIONS:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    if not COLLECTIONS[collection_id][3]:
+        raise HTTPException(status_code=403, detail="Collection is read-only")
+    objects = envelope.get("objects") or []
+    if not isinstance(objects, list) or not objects:
+        raise HTTPException(status_code=422, detail="envelope must contain a non-empty 'objects' list")
+
+    iocs = stix.objects_to_iocs(objects)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    actor = principal.get("email") or f"apikey:{principal.get('id', '?')}"
+    success, failure = 0, 0
+    statuses = []
+    from dashboard_api.db import dumps, audit
+    with get_conn() as conn:
+        importable = {i["value"]: i for i in iocs}
+        for obj in objects:
+            if obj.get("type") != "indicator":
+                statuses.append({"id": obj.get("id", "?"), "status": "failure",
+                                 "message": "not an indicator"})
+                failure += 1
+                continue
+            parsed = stix.parse_indicator_pattern(obj.get("pattern", ""))
+            ioc = importable.get(parsed["value"]) if parsed else None
+            if not ioc:
+                statuses.append({"id": obj.get("id", "?"), "status": "failure",
+                                 "message": "unparseable indicator pattern"})
+                failure += 1
+                continue
+            if conn.execute("SELECT 1 FROM iocs WHERE value=?", (ioc["value"],)).fetchone():
+                conn.execute("UPDATE iocs SET last_seen=? WHERE value=?", (now, ioc["value"]))
+            else:
+                conn.execute(
+                    "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
+                    "first_seen,last_seen,tags,status,sightings) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'active',1)",
+                    (str(uuid.uuid4()), ioc["type"], ioc["value"], ioc["threat_type"],
+                     ioc["confidence"], ioc["severity"], "TAXII push", "", now, now,
+                     dumps(ioc.get("tags", []) + ["taxii"])))
+            statuses.append({"id": obj.get("id", "?"), "status": "complete"})
+            success += 1
+        audit(conn, actor, "taxii.push", collection_id, f"success={success} failure={failure}")
+        conn.commit()
+    return JSONResponse(status_code=202, media_type=TAXII_MEDIA, content={
+        "id": str(uuid.uuid4()), "status": "complete",
+        "total_count": len(objects), "success_count": success, "failure_count": failure,
+        "successes": [s for s in statuses if s["status"] == "complete"],
+        "failures": [s for s in statuses if s["status"] == "failure"],
+    })

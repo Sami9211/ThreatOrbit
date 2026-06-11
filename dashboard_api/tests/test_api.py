@@ -2382,6 +2382,49 @@ def test_stix_serialization_units():
     assert b["type"] == "bundle" and b["id"].startswith("bundle--") and b["objects"] == objs
 
 
+def test_taxii_write_push(client, auth):
+    """TAXII write/push: STIX indicators POSTed to the indicators collection are
+    ingested into the IOC store (true publish-subscribe)."""
+    from dashboard_api import stix
+    # pattern parser units
+    assert stix.parse_indicator_pattern("[ipv4-addr:value = '5.6.7.8']") == {"type": "ip", "value": "5.6.7.8"}
+    assert stix.parse_indicator_pattern("[domain-name:value = 'evil.test']")["type"] == "domain"
+    assert stix.parse_indicator_pattern("[file:hashes.'SHA-256' = '" + "a" * 64 + "']")["type"] == "hash"
+    assert stix.parse_indicator_pattern("nonsense") is None
+
+    # the indicators collection advertises write
+    col = client.get("/taxii2/api/collections/indicators/", headers=auth).json()
+    assert col["can_write"] is True
+    assert client.get("/taxii2/api/collections/threat-actors/", headers=auth).json()["can_write"] is False
+
+    envelope = {"objects": [
+        {"type": "indicator", "spec_version": "2.1", "id": "indicator--1",
+         "pattern": "[ipv4-addr:value = '203.0.113.55']", "pattern_type": "stix",
+         "confidence": 88, "name": "c2-push", "labels": ["malicious-activity"]},
+        {"type": "indicator", "spec_version": "2.1", "id": "indicator--2",
+         "pattern": "[domain-name:value = 'pushed-evil.test']", "confidence": 50},
+        {"type": "malware", "id": "malware--x", "name": "ignored"},  # not an indicator → failure
+    ]}
+    r = client.post("/taxii2/api/collections/indicators/objects/", json=envelope, headers=auth)
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["success_count"] == 2 and body["failure_count"] == 1
+    # the pushed indicators are now real IOCs
+    hit = client.get("/cti/lookup?value=203.0.113.55", headers=auth).json()
+    assert hit["found"] is True and hit["source"] == "TAXII push"
+    assert client.get("/cti/lookup?value=pushed-evil.test", headers=auth).json()["found"] is True
+
+    # writing to a read-only collection → 403; empty envelope → 422
+    assert client.post("/taxii2/api/collections/threat-actors/objects/", json=envelope,
+                       headers=auth).status_code == 403
+    assert client.post("/taxii2/api/collections/indicators/objects/", json={"objects": []},
+                       headers=auth).status_code == 422
+    assert client.post("/taxii2/api/collections/nope/objects/", json=envelope,
+                       headers=auth).status_code == 404
+    # auth still enforced
+    assert client.post("/taxii2/api/collections/indicators/objects/", json=envelope).status_code == 401
+
+
 def test_taxii_server(client, auth):
     """TAXII 2.1 read API: discovery → collections → STIX objects, with auth
     by JWT or API key, type filtering, and a downloadable bundle."""

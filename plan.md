@@ -115,10 +115,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 3 — CTI depth (intelligence & library)
 
-- [~] **Full STIX 2.1 / TAXII 2.1 server** — DONE (see CHANGELOG): read-side
-      TAXII 2.1 server (discovery → collections → STIX 2.1 objects) + STIX
-      bundle export, auth by JWT or API key. Remaining: TAXII write/push
-      (POST objects to a collection) for true publish-subscribe.
+- [x] **Full STIX 2.1 / TAXII 2.1 server** — DONE (see CHANGELOG): read-side
+      (discovery → collections → STIX objects) + STIX bundle export, **and**
+      write/push (POST a STIX envelope to the indicators collection → ingested
+      into the IOC store) for true publish-subscribe. Auth by JWT or API key.
 - [x] **Relationship graph at scale** — DONE (see CHANGELOG): a multi-entity
       graph (actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors) built from the
       live stores, with pivot (`/cti/graph/expand`) and shortest-path
@@ -201,6 +201,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · TAXII 2.1 write/push (Phase 3, closes STIX/TAXII)** — the TAXII
+  server now accepts pushed intel, not just serves it: `POST
+  /taxii2/api/collections/indicators/objects/` takes a STIX envelope and
+  ingests its `indicator` SDOs into the IOC store (deduped, source "TAXII
+  push"), returning a TAXII status resource (per-object success/failure). New
+  `stix.parse_indicator_pattern` / `objects_to_iocs` map STIX patterns
+  (ipv4/ipv6/domain/url/email/file-hash) back to indicators. The indicators
+  collection advertises `can_write:true`; threat-actors stays read-only.
+  Auth (JWT or API key) enforced on writes. Tested: pattern-parser units, a
+  push of mixed objects (2 indicators ingested → real IOCs, 1 non-indicator
+  failed), read-only-collection 403, empty 422, unknown 404, unauth 401.
 
 - **2026-06-10 · Case management depth: evidence custody, link, merge/split
   (Phase 2, closes case depth)** — `POST /soar/cases/{id}/evidence` attaches an
