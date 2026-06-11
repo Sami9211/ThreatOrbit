@@ -186,17 +186,35 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       PLAN) with a safe upgrade path for migrated columns; server-side
       pagination/filtering already exists on alerts/IOCs/assets/findings.
       Remaining: frontend virtualisation for very large tables.
-- [ ] **Mobile-responsive** review of every dashboard page. *(Needs a browser
-      environment to verify honestly — not checked off blind.)*
-- [ ] **E2E test suite** (Playwright) across the critical workflows. *(Needs a
-      browser download; the 113-test API suite covers the workflows
-      server-side today.)*
+- [~] **E2E test suite** (Playwright) — DONE (see CHANGELOG): a 36-test suite
+      (auth, every section's critical workflow, responsive) across desktop +
+      mobile projects, parse-validated, with a CI workflow that boots the real
+      stack and runs it. Executes in CI (browsers + stack provisioned there).
+- [~] **Mobile-responsive** — the contract is now executable: `responsive.spec.ts`
+      asserts no horizontal overflow + reachable content on a phone viewport
+      across the six core pages, run by the mobile-safari project in CI.
+      Remaining: fix any overflow the CI run flags.
 
 ---
 
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · E2E suite + responsive contract (Phase 5)** — a real Playwright
+  suite (`frontend/e2e/`): auth (bad creds rejected, valid login reaches the
+  dashboard, protected-route redirect), the critical workflow per section
+  (overview KPIs, SIEM queue → alert detail, rules, SOAR playbooks + run
+  history, CTI actors + IOC lifecycle, dark web, assets, ⌘K palette), and a
+  **responsive** spec that asserts no horizontal overflow + reachable content
+  on an iPhone-13 viewport across the six core pages. Two projects
+  (desktop-chromium + mobile-safari) → 36 tests; `playwright.config.ts` with a
+  `webServer` that serves the production export, a login fixture, and a CI
+  workflow (`.github/workflows/e2e.yml`) that boots the seeded API + frontend,
+  installs browsers, and runs it on every push/PR. Verified well-formed via
+  `playwright test --list` (parses all specs without browser binaries);
+  execution happens in CI where the stack + browsers are provisioned. The Next
+  build excludes `e2e/` so the app bundle is unaffected.
 
 - **2026-06-10 · Postgres backend foundation (Phase 5)** — the seam to scale
   past single-file SQLite, shipped non-breaking. `db_backend.py`: backend
