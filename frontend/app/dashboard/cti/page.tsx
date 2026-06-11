@@ -12,7 +12,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import IocLifecyclePanel from '@/components/dashboard/IocLifecyclePanel'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
-import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, type SavedHunt as ApiSavedHunt, type Actor as ApiActor } from '@/lib/api'
+import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, fetchCtiSummary, type SavedHunt as ApiSavedHunt, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 
 /* ── Threat Actors ───────────────────────────────────────────────── */
@@ -501,6 +501,8 @@ function SectorTargeting() {
 
 /* ── Normal Mode: Threat Brief ───────────────────────────────────── */
 function NormalCTI() {
+  const [sum, setSum] = useState<CtiSummary | null>(null)
+  useEffect(() => { fetchCtiSummary().then(setSum).catch(() => {}) }, [])
   const BRIEFS = [
     {
       id:     'lazarus',
@@ -540,10 +542,10 @@ function NormalCTI() {
   const SEV_COLOR: Record<string, string> = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E' }
 
   const SUMMARY = [
-    { label: 'Tracked Actors', value: '6',      icon: Target, color: '#FF2E97' },
-    { label: 'Total IOCs',     value: '14,671', icon: Hash,   color: '#7A3CFF' },
-    { label: 'Campaigns',      value: '9',      icon: Shield, color: '#FFB23E' },
-    { label: 'Threat Feeds',   value: '23',     icon: Globe,  color: '#2DD4BF' },
+    { label: 'Tracked Actors', value: (sum?.trackedActors ?? 0).toLocaleString(), icon: Target, color: '#FF2E97' },
+    { label: 'Total IOCs',     value: (sum?.totalIocs ?? 0).toLocaleString(),     icon: Hash,   color: '#7A3CFF' },
+    { label: 'Campaigns',      value: (sum?.activeCampaigns ?? 0).toLocaleString(), icon: Shield, color: '#FFB23E' },
+    { label: 'Active IOCs',    value: (sum?.activeIocs ?? 0).toLocaleString(),    icon: Globe,  color: '#2DD4BF' },
   ]
 
   return (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { fetchSoarMetrics, type SoarMetrics } from '@/lib/api'
+import { fetchSoarMetrics, fetchSiemKpis, type SoarMetrics, type SiemKpis } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
   TrendingDown, TrendingUp, Clock, Zap, AlertTriangle,
@@ -352,10 +352,26 @@ export default function SOCMetricsPage() {
   const [mode] = useExperienceMode()
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
   const [metrics, setMetrics] = useState<SoarMetrics | null>(null)
+  const [siem, setSiem] = useState<SiemKpis | null>(null)
 
   useEffect(() => {
     fetchSoarMetrics().then(setMetrics).catch(() => {})
+    fetchSiemKpis().then(setSiem).catch(() => {})
   }, [])
+
+  // Real KPI values overlaid onto the card styling (by label). Unbacked values
+  // fall back to the card's static placeholder.
+  const fmtMin = (m?: number) => m == null ? undefined : `${m.toFixed(1)} min`
+  const liveValue: Record<string, string | undefined> = {
+    'MTTD': fmtMin(siem?.mttd),
+    'MTTR': fmtMin(siem?.mttr ?? metrics?.mttr),
+    'Alert Volume': siem ? siem.totalAlerts.toLocaleString() : undefined,
+    'Automation Rate': metrics ? `${Math.round(metrics.automationRate)}%` : undefined,
+    'FP Rate': siem ? `${siem.fpRate}%` : undefined,
+    'SLA Compliance': metrics && metrics.openCases > 0
+      ? `${Math.round((1 - (metrics.slaBreached ?? 0) / metrics.openCases) * 100)}%`
+      : metrics ? '100%' : undefined,
+  }
 
   const timeRanges: TimeRange[] = ['7d', '30d', '90d']
 
@@ -395,8 +411,7 @@ export default function SOCMetricsPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {KPI_DATA.map((k, i) => {
             const Icon = k.icon
-            const isImproving = (k.trend < 0 && k.good) || (k.trend > 0 && k.good)
-            const TrendIcon = k.trend === 0 ? Minus : isImproving ? TrendingDown : TrendingUp
+            const value = liveValue[k.label] ?? k.value
 
             return (
               <motion.div
@@ -413,23 +428,11 @@ export default function SOCMetricsPage() {
                   <div className={cn('p-1.5 rounded-lg', k.bgColor)}>
                     <Icon className={cn('w-3.5 h-3.5', k.color)} />
                   </div>
-                  <div className={cn(
-                    'flex items-center gap-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded',
-                    isImproving ? 'bg-safe/10 text-safe' : 'bg-threat/10 text-threat',
-                  )}>
-                    <TrendIcon className="w-2.5 h-2.5" />
-                    {Math.abs(k.trend)}%
-                  </div>
                 </div>
                 <div>
-                  <p className={cn('text-xl font-bold', k.color)}>
-                    {metrics && k.label === 'MTTR' ? `${metrics.mttr.toFixed(1)} min` :
-                     metrics && k.label === 'Automation Rate' ? `${metrics.automationRate.toFixed(0)}%` :
-                     k.value}
-                  </p>
+                  <p className={cn('text-xl font-bold', k.color)}>{value}</p>
                   <p className="text-[10px] text-ink-600 leading-snug mt-0.5">{k.sublabel}</p>
                 </div>
-                <p className="text-[9px] text-ink-700">{k.trendLabel}</p>
               </motion.div>
             )
           })}
