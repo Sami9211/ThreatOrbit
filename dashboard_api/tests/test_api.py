@@ -1085,6 +1085,78 @@ def test_playbook_real_execution(client, auth):
     assert any(n["type"] == "playbook" for n in notes)
 
 
+def test_integration_action_units():
+    """Vendor request specs are built correctly per category."""
+    from dashboard_api.integration_actions import _category, _request_spec
+    assert _category({"vendor": "CrowdStrike", "category": "EDR", "name": "Falcon"}) == "edr"
+    assert _category({"vendor": "Palo Alto", "category": "Firewall", "name": "PANW"}) == "firewall"
+    assert _category({"vendor": "Okta", "category": "Identity", "name": "Okta"}) == "identity"
+    assert _category({"vendor": "Atlassian", "category": "Ticketing", "name": "Jira"}) == "ticketing"
+    assert _category({"vendor": "X", "category": "Y", "name": "Z"}) == "webhook"
+    m, url, headers, body = _request_spec("firewall", "https://fw.test", "KEY", "block_ip", {"ip": "1.2.3.4"})
+    assert m == "POST" and url.endswith("/api/blocklist") and body["ip"] == "1.2.3.4"
+    assert "Bearer KEY" in headers["Authorization"]
+    _, eurl, _, ebody = _request_spec("edr", "https://edr.test", "K", "isolate_host", {"host": "PC-1"})
+    assert ebody["action_name"] == "contain" and ebody["ids"] == ["PC-1"]
+
+
+def test_real_integration_actions(client, auth, monkeypatch):
+    """A credentialled integration makes a real vendor call; an uncredentialled
+    one records a not-configured action. Every attempt hits the audit trail and
+    the API key is never returned."""
+    import httpx
+
+    # 1) uncredentialled integration → not-configured, no live call
+    bare = client.post("/soar/integrations", json={
+        "name": "Bare EDR", "vendor": "CrowdStrike", "category": "EDR"}, headers=auth).json()
+    assert "api_key" not in bare and bare["credentialed"] is False
+    client.post(f"/soar/integrations/{bare['id']}/test", headers=auth)  # → connected
+    r1 = client.post(f"/soar/integrations/{bare['id']}/actions/run",
+                     json={"action": "isolate_host", "params": {"host": "PC-9"}}, headers=auth).json()
+    assert r1["result"]["status"] == "not-configured" and r1["result"]["mode"] == "simulated"
+    assert r1["actions_run"] == 1
+
+    # 2) credentialled integration → real outbound call (mocked transport)
+    captured = {}
+    class FakeResp:
+        status_code = 202
+    def fake_request(method, url, headers=None, json=None, timeout=None):
+        captured.update(method=method, url=url, headers=headers, json=json)
+        return FakeResp()
+    monkeypatch.setattr(httpx, "request", fake_request)
+
+    fw = client.post("/soar/integrations", json={
+        "name": "Edge FW", "vendor": "Palo Alto", "category": "Firewall",
+        "base_url": "https://fw.example/", "api_key": "secret-key"}, headers=auth).json()
+    assert fw["credentialed"] is True and "api_key" not in fw
+    client.post(f"/soar/integrations/{fw['id']}/test", headers=auth)
+    r2 = client.post(f"/soar/integrations/{fw['id']}/actions/run",
+                     json={"action": "block_ip", "params": {"ip": "45.9.1.2"}}, headers=auth).json()
+    assert r2["result"]["status"] == "success" and r2["result"]["mode"] == "live"
+    # the real vendor request was constructed + sent
+    assert captured["url"].endswith("/api/blocklist") and captured["json"]["ip"] == "45.9.1.2"
+    assert captured["headers"]["Authorization"] == "Bearer secret-key"
+
+    # 3) action audit trail records both attempts, never leaking the key
+    trail = client.get(f"/soar/integrations/{fw['id']}/actions", headers=auth).json()
+    assert trail and trail[0]["action"] == "block_ip" and trail[0]["target"] == "45.9.1.2"
+    assert trail[0]["mode"] == "live" and "secret-key" not in str(trail)
+    assert client.get("/soar/integrations/NOPE/actions", headers=auth).status_code == 404
+
+    # 4) a network failure is recorded as failed, never crashes
+    def boom(*a, **k):
+        raise RuntimeError("connection refused")
+    monkeypatch.setattr(httpx, "request", boom)
+    r3 = client.post(f"/soar/integrations/{fw['id']}/actions/run",
+                     json={"action": "block_ip", "params": {"ip": "9.9.9.9"}}, headers=auth).json()
+    assert r3["result"]["status"] == "failed" and "refused" in r3["result"]["detail"]
+
+    # RBAC: viewers can't run actions
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post(f"/soar/integrations/{fw['id']}/actions/run",
+                       json={"action": "block_ip"}, headers=viewer).status_code == 403
+
+
 def test_playbook_versioning_and_builder_meta(client, auth):
     """The visual builder's catalogue + playbook version history / revert."""
     kinds = client.get("/soar/step-kinds", headers=auth).json()

@@ -552,17 +552,28 @@ class IntegrationCreate(BaseModel):
     category: str | None = None
     description: str | None = None
     actions: list[str] = []
+    base_url: str | None = None
+    api_key: str | None = None
 
 
 class ActionRun(BaseModel):
     action: str
+    params: dict = {}
+
+
+def _integration_public(d: dict) -> dict:
+    """Strip the credential; expose only whether one is configured."""
+    d = dict(d)
+    d["credentialed"] = bool(d.get("base_url") and d.get("api_key"))
+    d.pop("api_key", None)
+    return d
 
 
 @router.get("/integrations")
 def list_integrations():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM integrations ORDER BY name").fetchall()
-    return rows_to_dicts(rows)
+    return [_integration_public(r) for r in rows_to_dicts(rows)]
 
 
 @router.post("/integrations", status_code=201)
@@ -575,14 +586,17 @@ def create_integration(body: IntegrationCreate, user: dict = Depends(require_per
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO integrations (id,name,vendor,category,status,last_sync,actions_run,"
-            "avg_response_ms,description,actions,enabled) VALUES (?,?,?,?,'pending',NULL,0,0,?,?,1)",
+            "avg_response_ms,description,actions,enabled,base_url,api_key) "
+            "VALUES (?,?,?,?,'pending',NULL,0,0,?,?,1,?,?)",
             (iid, name, body.vendor or name, body.category or "Custom",
-             body.description or f"{name} connector.", dumps(body.actions)),
+             body.description or f"{name} connector.", dumps(body.actions),
+             (body.base_url or "").strip() or None, (body.api_key or "").strip() or None),
         )
-        audit(conn, user["email"], "integration.create", iid, f"name={name}")
+        audit(conn, user["email"], "integration.create", iid,
+              f"name={name} credentialed={bool(body.base_url and body.api_key)}")
         conn.commit()
         row = conn.execute("SELECT * FROM integrations WHERE id=?", (iid,)).fetchone()
-    return row_to_dict(row)
+    return _integration_public(row_to_dict(row))
 
 
 @router.post("/integrations/{integration_id}/test")
@@ -604,26 +618,39 @@ def test_integration(integration_id: str, user: dict = Depends(current_user)):
 
 @router.post("/integrations/{integration_id}/actions/run")
 def run_integration_action(integration_id: str, body: ActionRun, user: dict = Depends(require_perm("soar.write"))):
-    """Execute a response action on a connected tool: bumps the action counter."""
+    """Execute a real response action on the tool: when the integration is
+    credentialled, calls the vendor API (CrowdStrike contain / firewall block /
+    IdP suspend / Jira issue); otherwise records a `not-configured` action.
+    Every attempt is written to the action audit trail."""
+    from dashboard_api.integration_actions import run_action
     action = body.action.strip()
     if not action:
         raise HTTPException(status_code=400, detail="Action is required")
-    now = _now_iso()
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Integration not found")
         if not row["enabled"] or row["status"] == "disconnected":
             raise HTTPException(status_code=409, detail="Integration is not connected")
-        conn.execute(
-            "UPDATE integrations SET actions_run=actions_run+1, last_sync=? WHERE id=?",
-            (now, integration_id),
-        )
+        result = run_action(conn, dict(row), action, body.params, user["email"])
         audit(conn, user["email"], "integration.action", integration_id,
-              f"action={action} tool={row['name']}")
+              f"action={action} tool={row['name']} status={result['status']}")
         conn.commit()
         updated = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
-    return row_to_dict(updated)
+    return {**_integration_public(row_to_dict(updated)), "result": result}
+
+
+@router.get("/integrations/{integration_id}/actions")
+def integration_action_trail(integration_id: str, limit: int = 50):
+    """The action audit trail for one integration — what was done, to whom, and
+    whether it was a live vendor call or recorded-only."""
+    with get_conn() as conn:
+        if not conn.execute("SELECT 1 FROM integrations WHERE id=?", (integration_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Integration not found")
+        rows = conn.execute(
+            "SELECT id, action, target, status, mode, detail, actor, ts FROM integration_actions "
+            "WHERE integration_id=? ORDER BY ts DESC LIMIT ?", (integration_id, min(limit, 200))).fetchall()
+    return rows_to_dicts(rows)
 
 
 @router.get("/metrics")

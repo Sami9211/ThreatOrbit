@@ -845,13 +845,24 @@ export const revertPlaybook = (id: string, version: number) =>
 export const fetchSoarIntegrations = () => api<Integration[]>('/soar/integrations')
 export const createIntegration = (body: {
   name: string; vendor?: string; category?: string; description?: string; actions?: string[]
-}) => api<Integration>('/soar/integrations', { method: 'POST', body: JSON.stringify(body) })
+  base_url?: string; api_key?: string
+}) => api<Integration & { credentialed: boolean }>('/soar/integrations', { method: 'POST', body: JSON.stringify(body) })
 export const testIntegration = (id: string) =>
   api<Integration>(`/soar/integrations/${id}/test`, { method: 'POST' })
-export const runIntegrationAction = (id: string, action: string) =>
-  api<Integration & { actionsRun: number }>(`/soar/integrations/${id}/actions/run`, {
-    method: 'POST', body: JSON.stringify({ action }),
+export interface IntegrationActionResult {
+  id: string; action: string; target: string; category: string
+  status: 'success' | 'failed' | 'simulated' | 'not-configured'; mode: 'live' | 'simulated'; detail: string; ts: string
+}
+export const runIntegrationAction = (id: string, action: string, params?: Record<string, unknown>) =>
+  api<Integration & { actionsRun: number; result: IntegrationActionResult }>(`/soar/integrations/${id}/actions/run`, {
+    method: 'POST', body: JSON.stringify({ action, params: params ?? {} }),
   })
+export interface IntegrationAction {
+  id: string; action: string; target: string | null; status: string; mode: string
+  detail: string | null; actor: string | null; ts: string
+}
+export const fetchIntegrationActions = (id: string) =>
+  api<IntegrationAction[]>(`/soar/integrations/${id}/actions`)
 export const fetchSoarMetrics = () => api<SoarMetrics>('/soar/metrics')
 
 // ── CTI ──────────────────────────────────────────────────────────────

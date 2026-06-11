@@ -304,7 +304,23 @@ CREATE TABLE IF NOT EXISTS integrations (
     avg_response_ms INTEGER NOT NULL DEFAULT 0,
     description     TEXT,
     actions         TEXT NOT NULL DEFAULT '[]',
-    enabled         INTEGER NOT NULL DEFAULT 1
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    base_url        TEXT,                          -- vendor API endpoint (real calls)
+    api_key         TEXT                           -- credential (never returned to the client)
+);
+
+-- Action audit trail: every response action attempted on an integration, with
+-- its real request target + outcome (real call when credentialled, else logged).
+CREATE TABLE IF NOT EXISTS integration_actions (
+    id             TEXT PRIMARY KEY,
+    integration_id TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    target         TEXT,
+    status         TEXT NOT NULL,   -- success|failed|simulated|not-configured
+    mode           TEXT NOT NULL,   -- live|simulated
+    detail         TEXT,
+    actor          TEXT,
+    ts             TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS threat_actors (
@@ -628,6 +644,8 @@ _MIGRATIONS = [
     ("users", "org_id", "TEXT"),
     ("assets", "software", "TEXT NOT NULL DEFAULT '[]'"),
     ("dark_web_findings", "matched_user", "TEXT"),
+    ("integrations", "base_url", "TEXT"),
+    ("integrations", "api_key", "TEXT"),
 ]
 
 

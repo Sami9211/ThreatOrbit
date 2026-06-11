@@ -90,10 +90,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       authoring canvas (palette of the 11 executable kinds, reorderable cards,
       per-step params, live dry-run) over the real execution engine, plus
       append-only version history with one-click revert.
-- [~] **Real action integrations** — playbook actions are recorded on connected
-      integrations (block_ip → firewall, isolate_host → EDR, disable_user →
-      IdP) with a full per-step audit trail. Remaining: real outbound API
-      calls with credentialled connectors (CrowdStrike/Palo/Jira adapters).
+- [~] **Real action integrations** — DONE (see CHANGELOG): credentialled
+      connectors make **real** outbound vendor calls (CrowdStrike contain /
+      firewall block / IdP suspend / Jira issue), uncredentialled ones record a
+      not-configured action, and every attempt hits an action audit trail; the
+      API key is never returned. Remaining: a credential-entry UI form +
+      per-vendor request-shape config (clients shipped).
 - [x] **Automation triggers** — DONE (see CHANGELOG): enabled auto playbooks
       with `trigger_match` criteria (severities/techniques/rule) run
       automatically on matching fresh alerts, once per alert, throttled per
@@ -200,6 +202,24 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Real SOAR action integrations + action trail (Phase 2)** —
+  response actions actually call vendor APIs. `integration_actions.py` builds
+  the real request per category (EDR→CrowdStrike `devices-actions` contain,
+  firewall→`/api/blocklist` deny, identity→IdP suspend, ticketing→Jira issue,
+  else generic webhook POST) and, when the integration has a `base_url` +
+  `api_key` configured, performs the live outbound httpx call (short timeout,
+  failures recorded never crash) — otherwise records a `not-configured` action
+  honestly. Every attempt (live or not) is written to the `integration_actions`
+  audit trail: action, target, status, mode (live/simulated), detail, actor.
+  Integrations gained `base_url`/`api_key` columns; the **credential is never
+  returned** (a `credentialed` boolean is, instead). Endpoints:
+  `POST /soar/integrations/{id}/actions/run` (now returns the action result) +
+  `GET /soar/integrations/{id}/actions` (the trail). Frontend clients shipped.
+  Tested: request-spec units per category, a credentialled firewall block that
+  asserts the real vendor request shape (URL/headers/body) was sent, the
+  not-configured path, the trail (no key leakage), a network-failure record,
+  and viewer-blocked.
 
 - **2026-06-10 · Visual playbook builder + versioning (Phase 2)** — a real
   authoring canvas over the (already-real) execution engine. `PlaybookBuilder`:
