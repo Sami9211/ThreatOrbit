@@ -100,12 +100,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       with `trigger_match` criteria (severities/techniques/rule) run
       automatically on matching fresh alerts, once per alert, throttled per
       engine tick.
-- [~] **Case management depth** — DONE (see CHANGELOG): SLA tracking computed
-      on every case (within / at-risk / breached / met, deadline + % elapsed,
-      `slaBreached` metric) and linked evidence (`/soar/cases/{id}/related`):
-      alerts/IOCs/playbook-runs matched through case entities + a MITRE-mapped
-      merged timeline, surfaced in the case drawer. Remaining: case
-      merge/split + linked-case relations, evidence chain-of-custody.
+- [x] **Case management depth** — DONE (see CHANGELOG): SLA tracking, linked
+      evidence (`/related`), **plus** evidence chain-of-custody (SHA-256 +
+      custody log), linked cases (related/duplicate, both-sided), and
+      merge/split (combine entities/war-room/evidence + sum alerts + close
+      source / spin a child case). MITRE-mapped merged timeline in the drawer.
 - [x] **Response approvals** — DONE (see CHANGELOG): `approval` steps pause the
       run, raise a notification, and resume/cancel via approve/reject — in the
       Run history panel.
@@ -202,6 +201,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Case management depth: evidence custody, link, merge/split
+  (Phase 2, closes case depth)** — `POST /soar/cases/{id}/evidence` attaches an
+  evidence item with **tamper-evident chain-of-custody** (SHA-256 of the
+  content + a custody log of who collected it, when). `…/link` relates two
+  cases (related|duplicate, recorded on both sides). `…/merge` folds a source
+  case into the target (dedup-combines entities, concatenates war-room +
+  evidence, sums alert counts, closes the source as a duplicate with a
+  system note). `…/split` spins selected entities off into a linked child
+  case. `cases.linked_cases` column (migrated). Frontend clients shipped.
+  Tested: evidence sha256 + custody, two-sided link, split parent/child links,
+  merge (entities combined, alerts summed, source closed, note), 400/404/RBAC.
 
 - **2026-06-10 · Real SOAR action integrations + action trail (Phase 2)** —
   response actions actually call vendor APIs. `integration_actions.py` builds

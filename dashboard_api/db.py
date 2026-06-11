@@ -20,7 +20,7 @@ JSON_COLUMNS = {
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
     "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
-    "context", "trigger_match", "data", "actors", "software",
+    "context", "trigger_match", "data", "actors", "software", "linked_cases",
 }
 
 
@@ -646,6 +646,7 @@ _MIGRATIONS = [
     ("dark_web_findings", "matched_user", "TEXT"),
     ("integrations", "base_url", "TEXT"),
     ("integrations", "api_key", "TEXT"),
+    ("cases", "linked_cases", "TEXT NOT NULL DEFAULT '[]'"),
 ]
 
 

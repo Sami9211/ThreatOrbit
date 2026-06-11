@@ -279,6 +279,166 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(require_per
     return updated_case
 
 
+class EvidenceAdd(BaseModel):
+    type: str = "note"          # note|file|ioc|screenshot|log
+    name: str
+    content: str | None = None
+
+
+class CaseLink(BaseModel):
+    case_id: str
+    relation: str = "related"   # related|duplicate
+
+
+class CaseMerge(BaseModel):
+    source_id: str
+
+
+class CaseSplit(BaseModel):
+    title: str
+    entities: list[dict] = []
+
+
+def _load(row, col):
+    return json.loads(row[col] or "[]") if isinstance(row[col], str) else (row[col] or [])
+
+
+@router.post("/cases/{case_id}/evidence", status_code=201)
+def add_evidence(case_id: str, body: EvidenceAdd, user: dict = Depends(require_perm("soar.write"))):
+    """Attach an evidence item with tamper-evident chain-of-custody: who added
+    what, when, and a SHA-256 of the content for integrity."""
+    import hashlib
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Evidence name is required")
+    now = _now_iso()
+    content = body.content or ""
+    sha = hashlib.sha256(content.encode()).hexdigest()
+    item = {"id": str(__import__("uuid").uuid4()), "type": body.type, "name": name,
+            "content": content[:2000], "sha256": sha, "addedBy": user["email"], "ts": now,
+            "custody": [{"actor": user["email"], "action": "collected", "ts": now}]}
+    with get_conn() as conn:
+        row = conn.execute("SELECT evidence FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Case not found")
+        evidence = _load(row, "evidence")
+        evidence.append(item)
+        conn.execute("UPDATE cases SET evidence=?, updated=? WHERE id=?",
+                     (dumps(evidence), now, case_id))
+        audit(conn, user["email"], "case.evidence_add", case_id, f"name={name} sha256={sha[:12]}")
+        conn.commit()
+        updated = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return row_to_dict(updated)
+
+
+@router.post("/cases/{case_id}/link")
+def link_case(case_id: str, body: CaseLink, user: dict = Depends(require_perm("soar.write"))):
+    """Relate two cases (related|duplicate) — recorded on both sides."""
+    if body.relation not in ("related", "duplicate"):
+        raise HTTPException(status_code=400, detail="relation must be related|duplicate")
+    if body.case_id == case_id:
+        raise HTTPException(status_code=400, detail="A case cannot link to itself")
+    now = _now_iso()
+    with get_conn() as conn:
+        a = conn.execute("SELECT linked_cases FROM cases WHERE id=?", (case_id,)).fetchone()
+        b = conn.execute("SELECT linked_cases FROM cases WHERE id=?", (body.case_id,)).fetchone()
+        if not a or not b:
+            raise HTTPException(status_code=404, detail="Case not found")
+        la = _load(a, "linked_cases")
+        if not any(x.get("caseId") == body.case_id for x in la):
+            la.append({"caseId": body.case_id, "relation": body.relation, "ts": now})
+        lb = _load(b, "linked_cases")
+        if not any(x.get("caseId") == case_id for x in lb):
+            lb.append({"caseId": case_id, "relation": body.relation, "ts": now})
+        conn.execute("UPDATE cases SET linked_cases=? WHERE id=?", (dumps(la), case_id))
+        conn.execute("UPDATE cases SET linked_cases=? WHERE id=?", (dumps(lb), body.case_id))
+        audit(conn, user["email"], "case.link", case_id, f"to={body.case_id} relation={body.relation}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.post("/cases/{case_id}/merge")
+def merge_case(case_id: str, body: CaseMerge, user: dict = Depends(require_perm("soar.write"))):
+    """Merge a source case INTO this one: combine entities + war-room + evidence,
+    sum alert counts, close the source (linked as a duplicate)."""
+    if body.source_id == case_id:
+        raise HTTPException(status_code=400, detail="Cannot merge a case into itself")
+    now = _now_iso()
+    with get_conn() as conn:
+        tgt = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        src = conn.execute("SELECT * FROM cases WHERE id=?", (body.source_id,)).fetchone()
+        if not tgt or not src:
+            raise HTTPException(status_code=404, detail="Case not found")
+        # merge entities (dedupe by value), war-room, evidence; sum alert counts
+        ents = _load(tgt, "entities")
+        seen = {e.get("value") for e in ents if isinstance(e, dict)}
+        for e in _load(src, "entities"):
+            if isinstance(e, dict) and e.get("value") not in seen:
+                ents.append(e); seen.add(e.get("value"))
+        war = _load(tgt, "war_room") + [{"ts": now, "actor": user["email"], "type": "system",
+              "content": f"Merged case {body.source_id} ({src['title']}) into this case."}] + _load(src, "war_room")
+        evidence = _load(tgt, "evidence") + _load(src, "evidence")
+        links = _load(tgt, "linked_cases")
+        if not any(x.get("caseId") == body.source_id for x in links):
+            links.append({"caseId": body.source_id, "relation": "merged", "ts": now})
+        conn.execute(
+            "UPDATE cases SET entities=?, war_room=?, evidence=?, linked_cases=?, "
+            "alert_count=alert_count+?, updated=? WHERE id=?",
+            (dumps(ents), dumps(war), dumps(evidence), dumps(links),
+             src["alert_count"] or 0, now, case_id))
+        # close the source, pointing at the target
+        src_links = _load(src, "linked_cases")
+        src_links.append({"caseId": case_id, "relation": "merged-into", "ts": now})
+        conn.execute(
+            "UPDATE cases SET status='closed', linked_cases=?, updated=? WHERE id=?",
+            (dumps(src_links), now, body.source_id))
+        audit(conn, user["email"], "case.merge", case_id, f"source={body.source_id}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.post("/cases/{case_id}/split", status_code=201)
+def split_case(case_id: str, body: CaseSplit, user: dict = Depends(require_perm("soar.write"))):
+    """Split selected entities off into a new child case, linked to the parent."""
+    import random
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="New case title is required")
+    now = _now_iso()
+    with get_conn() as conn:
+        parent = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Case not found")
+        cid = None
+        for _ in range(50):
+            cand = f"CASE-{random.randint(1000, 9999)}"
+            if not conn.execute("SELECT 1 FROM cases WHERE id=?", (cand,)).fetchone():
+                cid = cand; break
+        if cid is None:
+            raise HTTPException(status_code=500, detail="Could not allocate a case id")
+        war = [{"ts": now, "actor": user["email"], "type": "system",
+                "content": f"Split from case {case_id} ({parent['title']})."}]
+        tasks = [{"id": f"T{i+1}", "phase": p, "name": n, "status": "pending", "assignee": None, "notes": ""}
+                 for i, (p, n) in enumerate([("Triage", "Validate split scope"),
+                                             ("Containment", "Contain"), ("Recovery", "Restore")])]
+        conn.execute(
+            "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
+            "alert_count,description,entities,war_room,tasks,evidence,linked_cases) "
+            "VALUES (?,?,?,?,'new',?,'',?,?,?,0,?,?,?,?,?,?)",
+            (cid, title, parent["type"], parent["severity"], user["email"], parent["sla_hours"],
+             now, now, f"Split from {case_id}.", dumps(body.entities or []), dumps(war),
+             dumps(tasks), dumps([]), dumps([{"caseId": case_id, "relation": "split-from", "ts": now}])))
+        plinks = _load(parent, "linked_cases")
+        plinks.append({"caseId": cid, "relation": "split-into", "ts": now})
+        conn.execute("UPDATE cases SET linked_cases=?, updated=? WHERE id=?", (dumps(plinks), now, case_id))
+        audit(conn, user["email"], "case.split", case_id, f"child={cid}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (cid,)).fetchone()
+    return row_to_dict(row)
+
+
 class PlaybookCreate(BaseModel):
     name: str
     category: str = "Network"

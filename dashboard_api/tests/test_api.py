@@ -1085,6 +1085,50 @@ def test_playbook_real_execution(client, auth):
     assert any(n["type"] == "playbook" for n in notes)
 
 
+def test_case_evidence_linking_merge_split(client, auth):
+    """Case depth: evidence chain-of-custody, linking, merge, and split."""
+    a = client.post("/soar/cases", json={"title": "Primary intrusion", "severity": "high",
+                                         "entities": [{"type": "host", "value": "HOST-A"}]}, headers=auth).json()
+    b = client.post("/soar/cases", json={"title": "Duplicate report", "severity": "medium",
+                                         "entities": [{"type": "ip", "value": "10.1.1.9"}],
+                                         "alert_count": 3}, headers=auth).json()
+
+    import hashlib
+    ev = client.post(f"/soar/cases/{a['id']}/evidence", json={
+        "type": "log", "name": "auth.log excerpt", "content": "Failed password for root"}, headers=auth)
+    assert ev.status_code == 201
+    item = ev.json()["evidence"][-1]
+    assert item["sha256"] == hashlib.sha256("Failed password for root".encode()).hexdigest()
+    assert item["addedBy"] and item["custody"][0]["action"] == "collected"
+    assert client.post(f"/soar/cases/{a['id']}/evidence", json={"name": ""}, headers=auth).status_code == 400
+
+    linked = client.post(f"/soar/cases/{a['id']}/link", json={"case_id": b["id"], "relation": "duplicate"}, headers=auth)
+    assert linked.status_code == 200
+    assert any(x["caseId"] == b["id"] for x in linked.json()["linked_cases"])
+    assert any(x["caseId"] == a["id"] for x in client.get(f"/soar/cases/{b['id']}", headers=auth).json()["linked_cases"])
+    assert client.post(f"/soar/cases/{a['id']}/link", json={"case_id": a["id"]}, headers=auth).status_code == 400
+
+    child = client.post(f"/soar/cases/{a['id']}/split", json={
+        "title": "Lateral movement sub-case", "entities": [{"type": "host", "value": "HOST-B"}]}, headers=auth)
+    assert child.status_code == 201
+    assert any(x["relation"] == "split-from" for x in child.json()["linked_cases"])
+    assert any(x["caseId"] == child.json()["id"] for x in client.get(f"/soar/cases/{a['id']}", headers=auth).json()["linked_cases"])
+
+    a_before = client.get(f"/soar/cases/{a['id']}", headers=auth).json()
+    merged = client.post(f"/soar/cases/{a['id']}/merge", json={"source_id": b["id"]}, headers=auth)
+    assert merged.status_code == 200
+    vals = {e["value"] for e in merged.json()["entities"]}
+    assert {"HOST-A", "10.1.1.9"} <= vals
+    assert merged.json()["alert_count"] == (a_before["alert_count"] + 3)
+    assert client.get(f"/soar/cases/{b['id']}", headers=auth).json()["status"] == "closed"
+    assert any("Merged case" in w["content"] for w in merged.json()["war_room"])
+    assert client.post(f"/soar/cases/{a['id']}/merge", json={"source_id": a['id']}, headers=auth).status_code == 400
+
+    assert client.post("/soar/cases/NOPE/evidence", json={"name": "x"}, headers=auth).status_code == 404
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post(f"/soar/cases/{a['id']}/evidence", json={"name": "x"}, headers=viewer).status_code == 403
+
+
 def test_integration_action_units():
     """Vendor request specs are built correctly per category."""
     from dashboard_api.integration_actions import _category, _request_spec

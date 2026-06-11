@@ -842,6 +842,15 @@ export const fetchPlaybookVersions = (id: string) =>
 export const revertPlaybook = (id: string, version: number) =>
   api<Playbook & { revertedTo: number; newVersion: number }>(
     `/soar/playbooks/${id}/revert/${version}`, { method: 'POST' })
+// Case depth: evidence chain-of-custody, linking, merge/split.
+export const addCaseEvidence = (caseId: string, body: { type?: string; name: string; content?: string }) =>
+  api<Case>(`/soar/cases/${caseId}/evidence`, { method: 'POST', body: JSON.stringify(body) })
+export const linkCase = (caseId: string, otherId: string, relation = 'related') =>
+  api<Case>(`/soar/cases/${caseId}/link`, { method: 'POST', body: JSON.stringify({ case_id: otherId, relation }) })
+export const mergeCase = (caseId: string, sourceId: string) =>
+  api<Case>(`/soar/cases/${caseId}/merge`, { method: 'POST', body: JSON.stringify({ source_id: sourceId }) })
+export const splitCase = (caseId: string, title: string, entities: Array<{ type: string; value: string }> = []) =>
+  api<Case>(`/soar/cases/${caseId}/split`, { method: 'POST', body: JSON.stringify({ title, entities }) })
 export const fetchSoarIntegrations = () => api<Integration[]>('/soar/integrations')
 export const createIntegration = (body: {
   name: string; vendor?: string; category?: string; description?: string; actions?: string[]
