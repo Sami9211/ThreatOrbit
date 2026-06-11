@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { fetchCtiHunts, runCtiHunt, type SavedHunt as ApiSavedHunt } from '@/lib/api'
+import { fetchCtiHunts, runCtiHunt, fetchAttackCoverage, type SavedHunt as ApiSavedHunt } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Crosshair, Target, ChevronRight, Play, Pause, CheckCircle,
@@ -259,13 +259,6 @@ const MATRIX_TACTICS = [
 ] as const
 
 /* ─── KPI strip ──────────────────────────────────────────────────────── */
-const KPIS = [
-  { label: 'Active Hunts',     value: '6',   icon: Crosshair,   color: '#FF2E97', sub: 'in progress' },
-  { label: 'Hypotheses Open',  value: '14',  icon: FlaskConical, color: '#7A3CFF', sub: 'under investigation' },
-  { label: 'IOCs Validated',   value: '37',  icon: ShieldCheck, color: '#34F5C5', sub: 'confirmed indicators' },
-  { label: 'Coverage',         value: '68%', icon: Layers,      color: '#FFB23E', sub: 'ATT&CK mapped' },
-]
-
 /* ─── Hypothesis row ─────────────────────────────────────────────────── */
 function HypothesisRow({ hyp }: { hyp: Hypothesis }) {
   const cfg = HYP_STATUS[hyp.status]
@@ -532,6 +525,7 @@ function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
 export default function ThreatHuntPage() {
   const [expandedId, setExpandedId] = useState<string | null>(HUNTS[0].id)
   const [hunts, setHunts] = useState<Hunt[]>(HUNTS)
+  const [coverage, setCoverage] = useState<number | null>(null)
 
   // Execute a hunt against the live IOC store; mark it running while the
   // backend works, then reflect the persisted outcome.
@@ -572,7 +566,16 @@ export default function ThreatHuntPage() {
         if (merged.length > 0) setExpandedId(merged[0].id)
       }
     }).catch(() => {})
+    fetchAttackCoverage().then((c) => setCoverage(c.summary.coveragePct)).catch(() => {})
   }, [])
+
+  // KPI tiles derived from real hunts + ATT&CK coverage (no hardcoded values).
+  const kpis = [
+    { label: 'Active Hunts',    value: String(hunts.filter((h) => h.status === 'active').length), icon: Crosshair,   color: '#FF2E97', sub: 'in progress' },
+    { label: 'Saved Hunts',     value: String(hunts.length), icon: FlaskConical, color: '#7A3CFF', sub: 'hypotheses tracked' },
+    { label: 'Completed',       value: String(hunts.filter((h) => h.status === 'completed').length), icon: ShieldCheck, color: '#34F5C5', sub: 'hunts run' },
+    { label: 'ATT&CK Coverage', value: coverage == null ? '—' : `${coverage}%`, icon: Layers, color: '#FFB23E', sub: 'techniques mapped' },
+  ]
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -590,7 +593,7 @@ export default function ThreatHuntPage() {
       {/* KPI strip */}
       <div className="px-6 py-4 border-b border-white/5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {KPIS.map(({ label, value, icon: Icon, color, sub }) => (
+          {kpis.map(({ label, value, icon: Icon, color, sub }) => (
             <motion.div
               key={label}
               initial={{ opacity: 0, y: 8 }}
