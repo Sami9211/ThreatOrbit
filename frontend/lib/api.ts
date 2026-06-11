@@ -255,6 +255,7 @@ export interface Integration {
 export interface SoarMetrics {
   openCases: number
   criticalOpen: number
+  slaBreached: number
   mttr: number
   mttrTrend: string
   automationRate: number

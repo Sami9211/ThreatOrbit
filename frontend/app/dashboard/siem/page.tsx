@@ -1517,13 +1517,13 @@ export default function SIEMPage() {
               {/* Alert funnel + severity breakdown */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
-                  <p className="text-xs font-semibold text-white mb-4">Alert Triage Funnel (Today)</p>
+                  <p className="text-xs font-semibold text-white mb-4">Alert Triage Funnel</p>
                   {[
-                    { stage: 'Total Alerts',    count: 2847, color: '#7A3CFF' },
-                    { stage: 'Acknowledged',    count: 1824, color: '#FFB23E' },
-                    { stage: 'Investigated',    count: 1012, color: '#2DD4BF' },
-                    { stage: 'Escalated',       count: 124,  color: '#FF4D6D' },
-                    { stage: 'True Positives',  count: 68,   color: '#FF2E97' },
+                    { stage: 'Total Alerts',    count: alerts.length, color: '#7A3CFF' },
+                    { stage: 'Acknowledged',    count: alerts.filter(a => a.status !== 'new').length, color: '#FFB23E' },
+                    { stage: 'Investigated',    count: alerts.filter(a => ['in-progress','resolved','closed'].includes(a.status)).length, color: '#2DD4BF' },
+                    { stage: 'Escalated',       count: alerts.filter(a => ['resolved','closed'].includes(a.status)).length, color: '#FF4D6D' },
+                    { stage: 'True Positives',  count: alerts.filter(a => a.disposition === 'true-positive').length, color: '#FF2E97' },
                   ].map((f, i, arr) => (
                     <div key={f.stage} className="flex items-center gap-3 mb-2">
                       <span className="text-[11px] text-ink-400 w-36 shrink-0">{f.stage}</span>
@@ -1543,20 +1543,23 @@ export default function SIEMPage() {
                 </div>
 
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
-                  <p className="text-xs font-semibold text-white mb-4">Severity Distribution (Today)</p>
-                  {[
-                    { sev: 'Critical', count: 43,   color: '#FF2E97' },
-                    { sev: 'High',     count: 81,   color: '#FF4D6D' },
-                    { sev: 'Medium',   count: 224,  color: '#FFB23E' },
-                    { sev: 'Low',      count: 1847, color: '#34F5C5' },
-                    { sev: 'Info',     count: 652,  color: '#7A3CFF' },
-                  ].map((s, i) => (
+                  <p className="text-xs font-semibold text-white mb-4">Severity Distribution</p>
+                  {(() => {
+                    const sevs = [
+                      { sev: 'Critical', key: 'critical', color: '#FF2E97' },
+                      { sev: 'High',     key: 'high',     color: '#FF4D6D' },
+                      { sev: 'Medium',   key: 'medium',   color: '#FFB23E' },
+                      { sev: 'Low',      key: 'low',      color: '#34F5C5' },
+                      { sev: 'Info',     key: 'info',     color: '#7A3CFF' },
+                    ].map((s) => ({ ...s, count: alerts.filter(a => a.severity === s.key).length }))
+                    const max = Math.max(1, ...sevs.map(s => s.count))
+                    return sevs.map((s, i) => (
                     <div key={s.sev} className="flex items-center gap-3 mb-2">
                       <span className="text-[11px] w-16 shrink-0" style={{ color: s.color }}>{s.sev}</span>
                       <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: `${(s.count / 1847) * 100}%` }}
+                          animate={{ width: `${(s.count / max) * 100}%` }}
                           transition={{ duration: 0.5, delay: i * 0.07 }}
                           className="h-full rounded-full"
                           style={{ background: s.color }}
@@ -1564,7 +1567,8 @@ export default function SIEMPage() {
                       </div>
                       <span className="text-[11px] font-mono text-ink-500 w-10 text-right">{s.count.toLocaleString()}</span>
                     </div>
-                  ))}
+                    ))
+                  })()}
                 </div>
               </div>
 
@@ -1579,10 +1583,10 @@ export default function SIEMPage() {
                     { metric: 'Mean Time to Acknowledge (MTTA)', value: metrics.mtta, target: '< 15m', status: apiKpis ? (apiKpis.mtta < 15 ? 'good' : 'warn') : 'good' },
                     { metric: 'Mean Time to Respond (MTTR)',     value: metrics.mttr, target: '< 30m', status: apiKpis ? (apiKpis.mttr < 30 ? 'good' : 'warn') : 'good' },
                     { metric: 'False Positive Rate',             value: `${metrics.fpRate}%`, target: '< 20%', status: apiKpis ? (apiKpis.fpRate < 20 ? 'good' : 'warn') : 'warn' },
-                    { metric: 'Alert-to-Incident Escalation',   value: '4.4%',    target: '1–5%',  status: 'good' },
+                    { metric: 'Alert-to-Incident Escalation',
+                      value: `${alerts.length ? Math.round(alerts.filter(a => ['resolved','closed'].includes(a.status)).length / alerts.length * 100) : 0}%`,
+                      target: '1–10%', status: 'good' },
                     { metric: 'Automation Rate (SOAR)',          value: `${metrics.automationRate}%`, target: '> 60%', status: apiKpis ? (apiKpis.automationRate > 60 ? 'good' : 'warn') : 'good' },
-                    { metric: 'SLA Compliance (P1 incidents)',   value: '94.2%',   target: '> 95%', status: 'warn' },
-                    { metric: 'Analyst Throughput',              value: '47/shift', target: '30-50', status: 'good' },
                   ].map((row) => (
                     <div key={row.metric} className="grid grid-cols-3 px-4 py-2.5 text-xs">
                       <span className="text-ink-300">{row.metric}</span>

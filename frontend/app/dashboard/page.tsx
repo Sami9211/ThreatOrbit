@@ -17,9 +17,10 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
   fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
-  fetchRiskDistribution, fetchHeatmap,
+  fetchRiskDistribution, fetchHeatmap, fetchSiemKpis, fetchSoarMetrics,
   type OverviewKpis, type OverviewAlert, type Incident,
   type TopActor, type ThreatVector, type LiveFeedItem, type RiskDistribution,
+  type SiemKpis, type SoarMetrics,
 } from '@/lib/api'
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -851,11 +852,15 @@ export default function DashboardOverview() {
   const [liveFeed, setLiveFeed]             = useState<LiveFeedItem[]>([])
   const [riskDist, setRiskDist]             = useState<RiskDistribution | null>(null)
   const [heatmap, setHeatmap]               = useState<Array<{ label: string; vals: number[] }>>([])
+  const [siemKpis, setSiemKpis]             = useState<SiemKpis | null>(null)
+  const [soarMetrics, setSoarMetrics]       = useState<SoarMetrics | null>(null)
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
 
   useEffect(() => {
     fetchKpis().then(setKpis).catch(() => {})
+    fetchSiemKpis().then(setSiemKpis).catch(() => {})
+    fetchSoarMetrics().then(setSoarMetrics).catch(() => {})
     fetchRecentAlerts(8).then(setRecentAlerts).catch(() => {})
     fetchRecentIncidents(6).then(setIncidents).catch(() => {})
     fetchTopActors(5).then(setTopActors).catch(() => {})
@@ -902,14 +907,20 @@ export default function DashboardOverview() {
       {/* SOC operations metrics (Power User only) */}
       {isPower && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 glass border border-white/5 rounded-xl overflow-hidden">
-          {[
-            { label: 'MTTD',            value: '4m 12s',  sub: '↓ from 6m',     color: 'text-safe' },
-            { label: 'MTTA',            value: '8m 03s',  sub: '< 15m target',  color: 'text-safe' },
-            { label: 'MTTR',            value: '23m 41s', sub: '↑ from 19m',    color: 'text-amber' },
-            { label: 'Open Incidents',  value: String(incidents.filter(i => !['resolved','closed'].includes(i.status)).length), sub: '1 critical', color: 'text-magenta' },
-            { label: 'Automation Rate', value: '73%',     sub: '+5% MoM',       color: 'text-violet' },
-            { label: 'SLA Compliance',  value: '94.2%',   sub: 'P1 incidents',  color: 'text-amber' },
-          ].map((m) => (
+          {(() => {
+            const fmtMin = (m?: number) => m == null ? '—'
+              : m < 1 ? `${Math.round(m * 60)}s` : `${Math.floor(m)}m ${String(Math.round((m % 1) * 60)).padStart(2, '0')}s`
+            const slaComp = soarMetrics && soarMetrics.openCases > 0
+              ? `${Math.round((1 - (soarMetrics.slaBreached ?? 0) / soarMetrics.openCases) * 100)}%`
+              : soarMetrics ? '100%' : '—'
+            return [
+            { label: 'MTTD',            value: fmtMin(siemKpis?.mttd), sub: '< 10m target', color: 'text-safe' },
+            { label: 'MTTA',            value: fmtMin(siemKpis?.mtta), sub: '< 15m target', color: 'text-safe' },
+            { label: 'MTTR',            value: fmtMin(siemKpis?.mttr), sub: '< 30m target', color: 'text-amber' },
+            { label: 'Open Incidents',  value: String(incidents.filter(i => !['resolved','closed'].includes(i.status)).length), sub: `${incidents.filter(i => i.severity === 'critical' && !['resolved','closed'].includes(i.status)).length} critical`, color: 'text-magenta' },
+            { label: 'Automation Rate', value: soarMetrics ? `${Math.round(soarMetrics.automationRate)}%` : '—', sub: 'SOAR-handled', color: 'text-violet' },
+            { label: 'SLA Compliance',  value: slaComp, sub: `${soarMetrics?.slaBreached ?? 0} breached`, color: 'text-amber' },
+          ]})().map((m) => (
             <div key={m.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{m.label}</p>
               <p className={cn('text-lg font-bold mt-0.5', m.color)}>{m.value}</p>
