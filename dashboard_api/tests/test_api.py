@@ -172,6 +172,21 @@ def test_ioc_lookup(client, auth):
     assert miss["found"] is False and miss["verdict"] == "clean"
 
 
+def test_ioc_import_history(client, auth):
+    """Imports (manual + MISP) are recorded in the import-history log."""
+    client.post("/cti/iocs/import", json={
+        "indicators": [{"type": "ip", "value": "198.18.7.7"}],
+        "source": "history-test-feed"}, headers=auth)
+    hist = client.get("/cti/import-history", headers=auth).json()
+    h = next((x for x in hist if x["source"] == "history-test-feed"), None)
+    assert h and h["imported"] == 1 and h["method"] == "manual" and h["status"] == "completed"
+    assert h["actor"] and h["ts"]
+    # a MISP import is recorded with method=misp
+    client.post("/cti/misp/import", json={"event": {"Event": {"info": "Feed X", "Attribute": [
+        {"type": "ip-dst", "value": "198.18.7.8"}]}}}, headers=auth)
+    assert any(x["method"] == "misp" for x in client.get("/cti/import-history", headers=auth).json())
+
+
 def test_ioc_import(client, auth):
     """Importing indicators inserts new ones, skips duplicates and bad types."""
     body = {

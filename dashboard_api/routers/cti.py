@@ -138,6 +138,8 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
                  now, now, tags_json),
             )
             imported += 1
+        _record_import(conn, body.source or "manual import", "manual", imported, duplicates,
+                       skipped, user["email"])
         audit(conn, user["email"], "ioc.import", None,
               f"imported={imported} duplicates={duplicates} skipped={skipped}")
         conn.commit()
@@ -147,6 +149,26 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
                                    "importedBy": user["email"]})
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
             "total": len(body.indicators)}
+
+
+def _record_import(conn, source: str, method: str, imported: int, duplicates: int,
+                   skipped: int, actor: str):
+    status = "completed" if imported and not skipped else "partial" if imported else "failed"
+    conn.execute(
+        "INSERT INTO ioc_imports (id,source,method,imported,duplicates,skipped,status,actor,ts) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (str(uuid.uuid4()), source[:120], method, imported, duplicates, skipped, status, actor,
+         datetime.now(timezone.utc).replace(microsecond=0).isoformat()))
+
+
+@router.get("/import-history")
+def import_history(limit: int = Query(50, le=200)):
+    """Recent IOC imports (manual / MISP / connector) — the Feeds → Import log."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, source, method, imported, duplicates, skipped, status, actor, ts "
+            "FROM ioc_imports ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    return rows_to_dicts(rows)
 
 
 @router.get("/ioc-types")
@@ -434,6 +456,8 @@ def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write")
                  70 if a.get("to_ids") else 50, sev, "MISP import", "", now, now,
                  dumps([f"tlp:{tlp}", "misp"])))
             imported += 1
+        _record_import(conn, f"MISP event ({body.event.get('Event', {}).get('info', 'import')})"[:100],
+                       "misp", imported, duplicates, skipped, user["email"])
         audit(conn, user["email"], "intel.misp_import", None,
               f"imported={imported} duplicates={duplicates} skipped={skipped}")
         conn.commit()

@@ -371,6 +371,19 @@ CREATE TABLE IF NOT EXISTS ioc_sightings (
     context TEXT
 );
 
+-- IOC import history (feeds → Import page).
+CREATE TABLE IF NOT EXISTS ioc_imports (
+    id        TEXT PRIMARY KEY,
+    source    TEXT NOT NULL,
+    method    TEXT NOT NULL DEFAULT 'manual',   -- manual|misp|connector
+    imported  INTEGER NOT NULL DEFAULT 0,
+    duplicates INTEGER NOT NULL DEFAULT 0,
+    skipped   INTEGER NOT NULL DEFAULT 0,
+    status    TEXT NOT NULL DEFAULT 'completed', -- completed|partial|failed
+    actor     TEXT,
+    ts        TEXT NOT NULL
+);
+
 -- Analyst-authored CTI intel reports (campaign & report management).
 CREATE TABLE IF NOT EXISTS intel_reports (
     id          TEXT PRIMARY KEY,

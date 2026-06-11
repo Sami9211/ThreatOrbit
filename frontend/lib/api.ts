@@ -958,6 +958,11 @@ export const fetchStixBundle = (type?: string) =>
 export const lookupIoc = (value: string) =>
   api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
 export interface ImportResult { imported: number; duplicates: number; skipped: number; total: number }
+export interface ImportHistoryRow {
+  id: string; source: string; method: string; imported: number; duplicates: number
+  skipped: number; status: 'completed' | 'partial' | 'failed'; actor: string | null; ts: string
+}
+export const fetchImportHistory = () => api<ImportHistoryRow[]>('/cti/import-history')
 export const importIocs = (body: {
   indicators: { type: string; value: string }[]
   confidence?: number; severity?: string; source?: string

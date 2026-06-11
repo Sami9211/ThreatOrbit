@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload, ClipboardPaste, FileText, CheckCircle, Tag as TagIcon,
@@ -8,7 +8,12 @@ import {
   Wand2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { importIocs, type ImportResult } from '@/lib/api'
+import { importIocs, fetchImportHistory, type ImportResult, type ImportHistoryRow } from '@/lib/api'
+
+function relDay(iso: string): string {
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
 
 type ImportMode = 'paste' | 'upload'
 type TlpMarking = 'TLP:RED' | 'TLP:AMBER' | 'TLP:GREEN' | 'TLP:CLEAR'
@@ -24,23 +29,6 @@ interface ParsedIocs {
   urls: string[]
   cves: string[]
 }
-
-interface ImportHistoryEntry {
-  id: string
-  filename: string
-  count: number
-  date: string
-  user: string
-  status: 'completed' | 'partial' | 'failed'
-}
-
-const HISTORY: ImportHistoryEntry[] = [
-  { id: 'h1', filename: 'apt29_ioc_dump.csv',        count: 1842, date: '2026-06-06 14:22', user: 'm.chen',     status: 'completed' },
-  { id: 'h2', filename: 'phishing_campaign.txt',     count: 318,  date: '2026-06-05 09:10', user: 'a.okafor',   status: 'completed' },
-  { id: 'h3', filename: 'misp_export_event_4471.json', count: 2204, date: '2026-06-04 17:48', user: 's.ivanova', status: 'partial' },
-  { id: 'h4', filename: 'ransomware_hashes.txt',     count: 96,   date: '2026-06-03 11:33', user: 'm.chen',     status: 'completed' },
-  { id: 'h5', filename: 'c2_infrastructure.stix',    count: 540,  date: '2026-06-02 08:05', user: 'd.rossi',    status: 'failed' },
-]
 
 const TLP_OPTIONS: { value: TlpMarking; color: string }[] = [
   { value: 'TLP:RED',   color: 'text-threat bg-threat/10 border-threat/30' },
@@ -58,7 +46,7 @@ const SUPPORTED_FORMATS = [
   { ext: '.stix', label: 'STIX 2.1 bundle', icon: FileCheck },
 ]
 
-const STATUS_COLOR: Record<ImportHistoryEntry['status'], string> = {
+const STATUS_COLOR: Record<'completed' | 'partial' | 'failed', string> = {
   completed: 'text-safe bg-safe/10 border-safe/20',
   partial:   'text-amber bg-amber/10 border-amber/20',
   failed:    'text-threat bg-threat/10 border-threat/20',
@@ -125,6 +113,9 @@ function parseIocs(rawText: string, doRefang: boolean): ParsedIocs {
 }
 
 export default function ImportIocsPage() {
+  const [history, setHistory] = useState<ImportHistoryRow[]>([])
+  const loadHistory = () => fetchImportHistory().then(setHistory).catch(() => {})
+  useEffect(() => { loadHistory() }, [])
   const [mode, setMode] = useState<ImportMode>('paste')
   const [rawText, setRawText] = useState('')
   const [doRefang, setDoRefang] = useState(true)
@@ -178,10 +169,11 @@ export default function ImportIocsPage() {
         indicators,
         confidence: CONFIDENCE_SCORE[confidence],
         severity: CONFIDENCE_SEVERITY[confidence],
-        source: `import:${tlp}`,
+        source: fileName ? `${fileName} (${tlp})` : `Pasted import (${tlp})`,
         tags,
       })
       setImportResult(res)
+      loadHistory()
     } catch {
       // API unreachable — surface an optimistic local tally instead.
       setImportResult({ imported: totalCount, duplicates: 0, skipped: 0, total: totalCount })
@@ -446,12 +438,15 @@ export default function ImportIocsPage() {
                 </tr>
               </thead>
               <tbody>
-                {HISTORY.map((h, i) => (
+                {history.length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-600">No imports yet — import indicators above to populate this log.</td></tr>
+                )}
+                {history.map((h, i) => (
                   <tr key={h.id} className={cn('border-b border-white/4', i % 2 !== 0 && 'bg-white/[0.01]')}>
-                    <td className="px-4 py-3 font-mono text-ink-200">{h.filename}</td>
-                    <td className="px-4 py-3 font-mono text-violet text-right">{h.count.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-mono text-ink-500 whitespace-nowrap">{h.date}</td>
-                    <td className="px-4 py-3 text-ink-400">{h.user}</td>
+                    <td className="px-4 py-3 font-mono text-ink-200">{h.source}<span className="ml-2 text-[9px] uppercase text-ink-600">{h.method}</span></td>
+                    <td className="px-4 py-3 font-mono text-violet text-right">{h.imported.toLocaleString()}</td>
+                    <td className="px-4 py-3 font-mono text-ink-500 whitespace-nowrap">{relDay(h.ts)}</td>
+                    <td className="px-4 py-3 text-ink-400">{h.actor ?? '—'}</td>
                     <td className="px-4 py-3">
                       <span className={cn('px-2 py-0.5 rounded-full border text-[10px] font-semibold capitalize', STATUS_COLOR[h.status])}>
                         {h.status}
