@@ -266,6 +266,18 @@ CREATE TABLE IF NOT EXISTS playbooks (
     trigger_match     TEXT NOT NULL DEFAULT '{}'   -- auto-run criteria {severities,techniques,rule}
 );
 
+-- Versioned snapshots of a playbook's step definition (visual builder history).
+CREATE TABLE IF NOT EXISTS playbook_versions (
+    id            TEXT PRIMARY KEY,
+    playbook_id   TEXT NOT NULL,
+    version       INTEGER NOT NULL,
+    steps         TEXT NOT NULL DEFAULT '[]',
+    trigger_match TEXT NOT NULL DEFAULT '{}',
+    author        TEXT,
+    note          TEXT,
+    created_at    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS playbook_runs (
     id            TEXT PRIMARY KEY,
     playbook_id   TEXT NOT NULL,

@@ -86,10 +86,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 2 — SOAR depth (orchestration & response)
 
-- [~] **Visual playbook builder** — the execution side is DONE (see CHANGELOG):
-      playbooks are authorable step definitions (11 executable kinds incl.
-      condition + human-approval gates), validated CRUD, and dry-run preview.
-      Remaining: the drag-and-drop canvas UI (node editor) + versioning.
+- [x] **Visual playbook builder** — DONE (see CHANGELOG): a visual step-flow
+      authoring canvas (palette of the 11 executable kinds, reorderable cards,
+      per-step params, live dry-run) over the real execution engine, plus
+      append-only version history with one-click revert.
 - [~] **Real action integrations** — playbook actions are recorded on connected
       integrations (block_ip → firewall, isolate_host → EDR, disable_user →
       IdP) with a full per-step audit trail. Remaining: real outbound API
@@ -200,6 +200,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Visual playbook builder + versioning (Phase 2)** — a real
+  authoring canvas over the (already-real) execution engine. `PlaybookBuilder`:
+  a step-kind palette (`GET /soar/step-kinds` — the 11 executable kinds with
+  display type + which run-context params each reads), an ordered, drag-to-
+  reorder list of step cards with inline name + per-step parameter editing, a
+  live **dry-run** preview (no side effects), and save through the real
+  `/soar/playbooks` API. Wired to the previously-dead "New Playbook" button and
+  an Edit action on each playbook. **Versioning**: `playbook_versions` snapshots
+  the step definition on every create/edit/revert (append-only history);
+  `GET /soar/playbooks/{id}/versions` + `POST …/revert/{version}` (restoring is
+  itself a new version). The builder seeds an edited playbook from the latest
+  version snapshot (which carries the real `kind`-bearing steps). Tested:
+  step-kind catalogue, version history (create→v1, edit→v2, revert→v3 with the
+  restored definition), 404/RBAC.
 
 - **2026-06-10 · E2E suite + responsive contract (Phase 5)** — a real Playwright
   suite (`frontend/e2e/`): auth (bad creds rejected, valid login reaches the

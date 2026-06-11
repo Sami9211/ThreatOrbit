@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fetchPlaybooks, runPlaybook, updatePlaybook, type Playbook as ApiPlaybook } from '@/lib/api'
 import PlaybookRunsPanel from '@/components/dashboard/PlaybookRunsPanel'
+import PlaybookBuilder from '@/components/dashboard/PlaybookBuilder'
 import {
   Zap, CheckCircle, RefreshCw, AlertTriangle, X, Shield, User,
   GitBranch, MessageSquare, Activity, Play, Edit2, Clock,
@@ -300,7 +301,7 @@ const KPI = [
 const FILTER_CATS: FilterCat[] = ['All', 'Network', 'Endpoint', 'Cloud', 'Identity', 'Compliance']
 
 /* ── Step detail panel ────────────────────────────────────────────── */
-function StepDetailPanel({ pb, onClose }: { pb: Playbook; onClose: () => void }) {
+function StepDetailPanel({ pb, onClose, onEdit }: { pb: Playbook; onClose: () => void; onEdit?: () => void }) {
   return (
     <motion.div
       key={pb.id}
@@ -320,6 +321,12 @@ function StepDetailPanel({ pb, onClose }: { pb: Playbook; onClose: () => void })
             <p className="text-sm font-semibold text-white leading-snug">{pb.name}</p>
             <p className="text-[10px] text-ink-500 mt-0.5">{pb.trigger}</p>
           </div>
+          {onEdit && (
+            <button onClick={onEdit}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] text-magenta border border-magenta/30 hover:bg-magenta/15 transition-colors shrink-0">
+              Edit
+            </button>
+          )}
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors shrink-0"
@@ -631,6 +638,12 @@ export default function PlaybooksPage() {
   }, [])
 
   const [runningId, setRunningId] = useState<string | null>(null)
+  // null = closed; {} = new; {id,name,steps} = edit. Drives the visual builder.
+  const [builder, setBuilder] = useState<{ id?: string; name?: string; steps?: Array<{ kind?: string; name: string; params?: Record<string, unknown> }> } | null>(null)
+  // After a builder save/revert, refetch so the new definition is reflected.
+  function reloadPlaybooks() {
+    if (typeof window !== 'undefined') window.location.reload()
+  }
 
   const selectedPB = playbooks.find((p) => p.id === selectedId) ?? null
 
@@ -685,7 +698,8 @@ export default function PlaybooksPage() {
               <span className="text-ink-400">Each trigger auto-runs when conditions are met.</span>
             </p>
           </div>
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/18 transition-colors shrink-0 self-start">
+          <button onClick={() => setBuilder({})}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-magenta/10 border border-magenta/25 text-magenta hover:bg-magenta/18 transition-colors shrink-0 self-start">
             <Plus className="w-3.5 h-3.5" /> New Playbook
           </button>
         </div>
@@ -789,8 +803,24 @@ export default function PlaybooksPage() {
             <StepDetailPanel
               pb={selectedPB}
               onClose={() => setSelectedId(null)}
+              onEdit={() => {
+                setBuilder({ id: selectedPB.id, name: selectedPB.name,
+                  steps: (selectedPB.steps ?? []).map((s) => ({ kind: (s as { kind?: string }).kind, name: s.name })) })
+                setSelectedId(null)
+              }}
             />
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Visual playbook builder (create / edit) */}
+      <AnimatePresence>
+        {builder && (
+          <PlaybookBuilder
+            playbook={builder.id ? { id: builder.id, name: builder.name ?? '', steps: builder.steps } : null}
+            onClose={() => setBuilder(null)}
+            onSaved={reloadPlaybooks}
+          />
         )}
       </AnimatePresence>
     </div>

@@ -818,6 +818,30 @@ export const updatePlaybook = (id: string, body: {
       trigger_type: body.triggerType, description: body.description,
     }),
   })
+export type BuilderStep = { kind: string; name: string; params?: Record<string, unknown> }
+export interface StepKind { kind: string; type: string; label: string; params: string[] }
+export const fetchStepKinds = () => api<StepKind[]>('/soar/step-kinds')
+export const createPlaybook = (body: {
+  name: string; category?: string; trigger?: string; triggerType?: string
+  description?: string; steps: BuilderStep[]; triggerMatch?: Record<string, unknown>
+}) =>
+  api<Playbook>('/soar/playbooks', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: body.name, category: body.category, trigger: body.trigger,
+      trigger_type: body.triggerType, description: body.description,
+      steps: body.steps, trigger_match: body.triggerMatch ?? {},
+    }),
+  })
+export interface PlaybookVersion {
+  id: string; version: number; steps: BuilderStep[]
+  triggerMatch: Record<string, unknown>; author: string | null; note: string | null; createdAt: string
+}
+export const fetchPlaybookVersions = (id: string) =>
+  api<PlaybookVersion[]>(`/soar/playbooks/${id}/versions`)
+export const revertPlaybook = (id: string, version: number) =>
+  api<Playbook & { revertedTo: number; newVersion: number }>(
+    `/soar/playbooks/${id}/revert/${version}`, { method: 'POST' })
 export const fetchSoarIntegrations = () => api<Integration[]>('/soar/integrations')
 export const createIntegration = (body: {
   name: string; vendor?: string; category?: string; description?: string; actions?: string[]

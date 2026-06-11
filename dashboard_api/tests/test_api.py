@@ -1085,6 +1085,42 @@ def test_playbook_real_execution(client, auth):
     assert any(n["type"] == "playbook" for n in notes)
 
 
+def test_playbook_versioning_and_builder_meta(client, auth):
+    """The visual builder's catalogue + playbook version history / revert."""
+    kinds = client.get("/soar/step-kinds", headers=auth).json()
+    bykind = {k["kind"]: k for k in kinds}
+    assert {"enrich", "block_ip", "approval", "condition"} <= set(bykind)
+    assert bykind["condition"]["type"] == "decision" and "field" in bykind["condition"]["params"]
+    assert bykind["approval"]["type"] == "human"
+
+    pb = client.post("/soar/playbooks", json={
+        "name": "Versioned PB", "steps": [{"kind": "notify", "name": "Ping"}]}, headers=auth).json()
+    pid = pb["id"]
+    # creation made v1
+    v = client.get(f"/soar/playbooks/{pid}/versions", headers=auth).json()
+    assert len(v) == 1 and v[0]["version"] == 1 and v[0]["note"] == "created"
+
+    # editing the steps snapshots v2
+    client.patch(f"/soar/playbooks/{pid}", json={"steps": [
+        {"kind": "enrich", "name": "Enrich"}, {"kind": "block_ip", "name": "Block"},
+        {"kind": "notify", "name": "Ping"}]}, headers=auth)
+    v = client.get(f"/soar/playbooks/{pid}/versions", headers=auth).json()
+    assert len(v) == 2 and v[0]["version"] == 2
+    assert [s["kind"] for s in v[0]["steps"]] == ["enrich", "block_ip", "notify"]
+
+    # revert to v1 restores the single step (and appends v3, history is append-only)
+    rev = client.post(f"/soar/playbooks/{pid}/revert/1", headers=auth)
+    assert rev.status_code == 200 and rev.json()["revertedTo"] == 1
+    cur = client.get(f"/soar/playbooks/{pid}", headers=auth).json()
+    assert [s["kind"] for s in cur["steps"]] == ["notify"]
+    assert len(client.get(f"/soar/playbooks/{pid}/versions", headers=auth).json()) == 3
+
+    assert client.post(f"/soar/playbooks/{pid}/revert/99", headers=auth).status_code == 404
+    # RBAC: viewer can't revert
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post(f"/soar/playbooks/{pid}/revert/1", headers=viewer).status_code == 403
+
+
 def test_playbook_dry_run_no_side_effects(client, auth):
     """Dry-run previews every step without writing anything."""
     from dashboard_api.engine import seed_builtin_rules

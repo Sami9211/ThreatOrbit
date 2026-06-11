@@ -313,11 +313,49 @@ def _validate_steps(steps: list[dict]):
             raise HTTPException(status_code=400, detail=f"Step {i+1}: name is required")
 
 
+@router.get("/step-kinds")
+def step_kinds():
+    """The executable step kinds the visual builder offers, with display type
+    and which run-context param each reads (for the param editor)."""
+    from dashboard_api.playbook_engine import STEP_KINDS
+    meta = {
+        "enrich": {"label": "Enrich entity", "params": []},
+        "condition": {"label": "Condition gate", "params": ["field", "op", "value"]},
+        "block_ip": {"label": "Block IP", "params": ["ip"]},
+        "isolate_host": {"label": "Isolate host", "params": ["host"]},
+        "disable_user": {"label": "Disable user", "params": ["user"]},
+        "create_case": {"label": "Open case", "params": ["title"]},
+        "add_note": {"label": "Add case note", "params": ["content"]},
+        "close_alerts": {"label": "Resolve alerts", "params": []},
+        "notify": {"label": "Notify", "params": ["message"]},
+        "webhook": {"label": "Webhook", "params": []},
+        "approval": {"label": "Human approval", "params": ["message"]},
+    }
+    return [{"kind": k, "type": STEP_KINDS[k], **meta.get(k, {"label": k, "params": []})}
+            for k in STEP_KINDS]
+
+
 @router.get("/playbooks")
 def list_playbooks():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM playbooks ORDER BY runs DESC").fetchall()
     return rows_to_dicts(rows)
+
+
+def _snapshot_version(conn, playbook_id: str, steps_json: str, trigger_match_json: str,
+                      author: str, note: str) -> int:
+    """Save a versioned snapshot of a playbook's definition. Returns the new
+    version number."""
+    import uuid as _uuid
+    row = conn.execute("SELECT COALESCE(MAX(version),0) AS v FROM playbook_versions "
+                       "WHERE playbook_id=?", (playbook_id,)).fetchone()
+    version = (row["v"] or 0) + 1
+    conn.execute(
+        "INSERT INTO playbook_versions (id,playbook_id,version,steps,trigger_match,author,note,"
+        "created_at) VALUES (?,?,?,?,?,?,?,?)",
+        (str(_uuid.uuid4()), playbook_id, version, steps_json, trigger_match_json,
+         author, note, _now_iso()))
+    return version
 
 
 @router.post("/playbooks", status_code=201)
@@ -340,6 +378,8 @@ def create_playbook(body: PlaybookCreate, user: dict = Depends(require_perm("soa
              body.description or f"{name} workflow.",
              dumps(display_steps(body.steps)), dumps(body.trigger_match)),
         )
+        _snapshot_version(conn, pid, dumps(display_steps(body.steps)),
+                          dumps(body.trigger_match), user["email"], "created")
         audit(conn, user["email"], "playbook.create", pid, f"name={name} steps={len(body.steps)}")
         conn.commit()
         row = conn.execute("SELECT * FROM playbooks WHERE id=?", (pid,)).fetchone()
@@ -379,10 +419,48 @@ def update_playbook(playbook_id: str, body: PlaybookUpdate, user: dict = Depends
         cur = conn.execute(f"UPDATE playbooks SET {','.join(fields)} WHERE id=?", values)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Playbook not found")
+        # Snapshot a new version whenever the step definition / triggers change.
+        if body.steps is not None or body.trigger_match is not None:
+            cur2 = conn.execute("SELECT steps, trigger_match FROM playbooks WHERE id=?",
+                               (playbook_id,)).fetchone()
+            _snapshot_version(conn, playbook_id, cur2["steps"], cur2["trigger_match"],
+                              user["email"], "edited")
         audit(conn, user["email"], "playbook.update", playbook_id)
         conn.commit()
         row = conn.execute("SELECT * FROM playbooks WHERE id=?", (playbook_id,)).fetchone()
     return row_to_dict(row)
+
+
+@router.get("/playbooks/{playbook_id}/versions")
+def list_playbook_versions(playbook_id: str):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, version, steps, trigger_match, author, note, created_at "
+            "FROM playbook_versions WHERE playbook_id=? ORDER BY version DESC",
+            (playbook_id,)).fetchall()
+    return rows_to_dicts(rows)
+
+
+@router.post("/playbooks/{playbook_id}/revert/{version}")
+def revert_playbook(playbook_id: str, version: int, user: dict = Depends(require_perm("soar.write"))):
+    """Restore a playbook's step definition to a previous version (which itself
+    snapshots a new version, so history is append-only)."""
+    with get_conn() as conn:
+        snap = conn.execute(
+            "SELECT steps, trigger_match FROM playbook_versions WHERE playbook_id=? AND version=?",
+            (playbook_id, version)).fetchone()
+        if not snap:
+            raise HTTPException(status_code=404, detail="Version not found")
+        cur = conn.execute("UPDATE playbooks SET steps=?, trigger_match=? WHERE id=?",
+                           (snap["steps"], snap["trigger_match"], playbook_id))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Playbook not found")
+        new_v = _snapshot_version(conn, playbook_id, snap["steps"], snap["trigger_match"],
+                                 user["email"], f"reverted to v{version}")
+        audit(conn, user["email"], "playbook.revert", playbook_id, f"to_version={version}")
+        conn.commit()
+        row = conn.execute("SELECT * FROM playbooks WHERE id=?", (playbook_id,)).fetchone()
+    return {**row_to_dict(row), "revertedTo": version, "newVersion": new_v}
 
 
 @router.post("/playbooks/{playbook_id}/run")
