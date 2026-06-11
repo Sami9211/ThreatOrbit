@@ -137,6 +137,14 @@ def startup():
                 logger.exception("Initial engine prime failed")
         threading.Thread(target=_connector_scheduler, daemon=True).start()
         threading.Thread(target=_engine_loop, daemon=True).start()
+        # Long-running log collectors (syslog UDP + file/dir watcher), if configured.
+        try:
+            from dashboard_api.log_listeners import start_listeners
+            started = start_listeners()
+            if started["syslog"] or started["fileWatch"]:
+                logger.info("Live mode: log collectors started %s", started)
+        except Exception:
+            logger.exception("Log collectors failed to start")
         logger.info("Live mode: connector scheduler + live engine started")
     elif AUTO_SEED:
         from dashboard_api.seed import seed

@@ -986,6 +986,45 @@ def test_engine_rule_driven_detection(client, auth):
     assert any(a["rule_name"] and a["mitre_tech_id"] for a in after["items"])
 
 
+def test_syslog_and_file_watch_ingestion(client, auth, tmp_path):
+    """The syslog UDP datagram path and the file/dir watcher feed the same
+    ingest pipeline → real events + alerts."""
+    from dashboard_api.engine import seed_builtin_rules
+    from dashboard_api import log_listeners
+    seed_builtin_rules()
+
+    # 1) a syslog datagram (multi-line) → parsed + alerts
+    before = client.get("/siem/alerts", headers=auth).json()["total"]
+    data = (b"Jan 10 14:00:00 web sshd[1]: Failed password for root from 198.51.100.61 port 5000\n"
+            b'{"event_type":"beacon","src_ip":"10.0.0.3","dest_ip":"185.7.7.7","dest_port":443}\n')
+    res = log_listeners.ingest_datagram(data)
+    assert res["parsed"] == 2 and res["alerts"] >= 1
+    assert client.get("/siem/alerts", headers=auth).json()["total"] > before
+    assert client.get("/siem/alerts?q=198.51.100.61", headers=auth).json()["total"] >= 1
+
+    # 2) file/dir watcher: tails only NEW appends from its last offset
+    d = tmp_path / "logs"
+    d.mkdir()
+    f = d / "auth.log"
+    f.write_text("Jan 10 14:01:00 web sshd[2]: Failed password for admin from 198.51.100.62 port 6000\n")
+    offsets: dict = {}
+    r1 = log_listeners.scan_log_dir(str(d), offsets)
+    assert r1["ingested"] == 1 and r1["alerts"] >= 1
+    # no new lines → nothing re-ingested (offset respected)
+    assert log_listeners.scan_log_dir(str(d), offsets)["ingested"] == 0
+    # append a line → only the new line is ingested
+    with open(f, "a") as fh:
+        fh.write("Jan 10 14:02:00 web sshd[3]: Failed password for root from 198.51.100.63 port 7000\n")
+    r2 = log_listeners.scan_log_dir(str(d), offsets)
+    assert r2["ingested"] == 1
+    assert client.get("/siem/alerts?q=198.51.100.63", headers=auth).json()["total"] >= 1
+
+    # status endpoint + empty/missing dir is a safe no-op
+    st = client.get("/siem/log-listeners", headers=auth).json()
+    assert {"syslogEnabled", "watchEnabled", "watchIntervalSeconds"} <= st.keys()
+    assert log_listeners.scan_log_dir("/no/such/dir", {})["ingested"] == 0
+
+
 def test_log_ingestion_parses_and_detects(client, auth):
     """Native collector: raw log lines → events → rule-driven alerts."""
     from dashboard_api.engine import seed_builtin_rules

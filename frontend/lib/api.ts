@@ -745,6 +745,11 @@ export const scheduleHunt = (id: string, scheduleMinutes: number, autoAlert = tr
     `/siem/hunts/${id}/schedule`, { method: 'POST', body: JSON.stringify({ schedule_minutes: scheduleMinutes, auto_alert: autoAlert }) })
 export const runScheduledHunts = () =>
   api<{ ran: number; alerts: number }>('/siem/hunts/run-scheduled', { method: 'POST' })
+export interface LogListenerStatus {
+  syslogPort: number | null; syslogEnabled: boolean
+  watchDir: string | null; watchEnabled: boolean; watchIntervalSeconds: number
+}
+export const fetchLogListeners = () => api<LogListenerStatus>('/siem/log-listeners')
 export const fetchCorrelations = (minAlerts = 2) =>
   api<Correlation[]>(`/siem/correlations?min_alerts=${minAlerts}`)
 export const fetchMitreDistribution = () =>

@@ -55,10 +55,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       AND/OR logic, threshold-over-window aggregation, and a live backtest;
       built-in rules evaluate the raw event stream; per-rule/entity
       suppression UI + FP tuning; Sigma import/export (see CHANGELOG).
-- [~] **Real log-source ingestion** — DONE: native HTTP collector
-      (`POST /siem/ingest`) parses syslog/Apache/JSON/key=value lines into
-      events and runs detection on them; a Log Collector panel on SIEM →
-      Sources. Remaining: a long-running syslog UDP listener + file/dir watcher.
+- [x] **Real log-source ingestion** — DONE: native HTTP collector
+      (`POST /siem/ingest`), **plus** long-running collectors — a syslog UDP
+      listener (`DASHBOARD_SYSLOG_PORT`) and a file/directory watcher
+      (`DASHBOARD_LOG_WATCH_DIR`, tails new appends) that feed the same
+      parse→events→detect→alert pipeline; status at `/siem/log-listeners`.
 - [x] **Field normalization to ECS** — DONE (see CHANGELOG): an ECS alias layer
       resolves Elastic Common Schema names (`source.ip`, `user.name`,
       `destination.port`, `event.action`, …) to native event fields at match
@@ -201,6 +202,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Syslog UDP listener + file/dir watcher (Phase 1, closes log
+  ingestion)** — `log_listeners.py`: a long-running syslog UDP listener
+  (`DASHBOARD_SYSLOG_PORT`) that ingests datagrams, and a file/directory
+  watcher (`DASHBOARD_LOG_WATCH_DIR`) that tails only new appends from a
+  per-file byte offset (handles rotation/truncation), both feeding the same
+  `ingest_lines` pipeline (parse → events → detection + threat-intel → alerts).
+  Off by default; started in live mode when configured. Socket/thread-free core
+  (`ingest_datagram`, `scan_log_dir`) so it's unit-tested without binding ports.
+  `GET /siem/log-listeners` reports status. Tested: a multi-line syslog
+  datagram → events + alerts; the watcher ingests a new file, re-scans without
+  duplication (offset respected), and ingests only appended lines; missing dir
+  is a safe no-op.
 
 - **2026-06-10 · SMTP email delivery channel (Phase 0)** — scheduled reports can
   now be emailed, not just webhooked. `mailer.py` sends a real MIME multipart

@@ -516,6 +516,14 @@ def ingest(body: IngestBody, user: dict = Depends(current_user)):
     return result
 
 
+@router.get("/log-listeners")
+def log_listeners_status():
+    """Status of the long-running log collectors (syslog UDP listener + file/dir
+    watcher) — what's enabled and where."""
+    from dashboard_api.log_listeners import listener_status
+    return listener_status()
+
+
 @router.get("/attack-coverage")
 def attack_coverage():
     """ATT&CK navigator data: per-technique rule coverage + observed alert
