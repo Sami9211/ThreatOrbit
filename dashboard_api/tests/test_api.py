@@ -1633,6 +1633,46 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_email_channel(client, auth, monkeypatch):
+    """SMTP delivery: honest not-configured by default; real send + report
+    email delivery when configured (smtplib mocked)."""
+    from dashboard_api import mailer
+    # default: not configured
+    assert client.get("/config/email", headers=auth).json()["configured"] is False
+    nc = client.post("/config/email/test", json={"to": "soc@acme.test"}, headers=auth).json()
+    assert nc["sent"] is False and "not configured" in nc["reason"]
+
+    # configure SMTP via env + a captured transport
+    sent = {}
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None): sent["host"] = host
+        def starttls(self): sent["tls"] = True
+        def login(self, u, p): sent["user"] = u
+        def sendmail(self, frm, to, msg): sent["to"] = to; sent["body"] = msg
+        def quit(self): pass
+    monkeypatch.setenv("SMTP_HOST", "smtp.acme.test")
+    monkeypatch.setenv("SMTP_USER", "mailer@acme.test")
+    monkeypatch.setenv("SMTP_PASSWORD", "pw")
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+
+    assert client.get("/config/email", headers=auth).json()["configured"] is True
+    ok = client.post("/config/email/test", json={"to": "soc@acme.test"}, headers=auth).json()
+    assert ok["sent"] is True and ok["recipients"] == ["soc@acme.test"]
+    assert sent["host"] == "smtp.acme.test" and sent["to"] == ["soc@acme.test"]
+
+    # a report schedule with an email target delivers via SMTP on run
+    s = client.post("/report-schedules", json={
+        "kind": "executive", "cadence": "weekly", "email": "ciso@acme.test"}, headers=auth)
+    assert s.status_code == 201
+    run = client.post(f"/report-schedules/{s.json()['id']}/run", headers=auth).json()
+    assert run["email"]["sent"] is True and sent["to"] == ["ciso@acme.test"]
+    assert "ThreatOrbit" in sent["body"]
+
+    # RBAC: only admin/manager
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.get("/config/email", headers=viewer).status_code == 403
+
+
 def test_db_backend_dialect_units():
     """SQLite→Postgres statement translation (the staged Postgres seam)."""
     from dashboard_api.db_backend import to_postgres, is_postgres

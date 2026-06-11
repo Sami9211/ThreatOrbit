@@ -106,6 +106,7 @@ class ScheduleCreate(BaseModel):
     period: str = "weekly"
     cadence: str = "weekly"
     webhook_url: str | None = None
+    email: str | None = None
 
 
 @router.get("/report-schedules")
@@ -125,9 +126,9 @@ def create_schedule(body: ScheduleCreate, user: dict = Depends(require_role("adm
     sid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO report_schedules (id,kind,period,cadence,webhook_url,enabled,created_at,created_by) "
-            "VALUES (?,?,?,?,?,1,?,?)",
-            (sid, body.kind, body.period, body.cadence, body.webhook_url, _now(), user["email"]),
+            "INSERT INTO report_schedules (id,kind,period,cadence,webhook_url,email,enabled,created_at,created_by) "
+            "VALUES (?,?,?,?,?,?,1,?,?)",
+            (sid, body.kind, body.period, body.cadence, body.webhook_url, body.email, _now(), user["email"]),
         )
         audit(conn, user["email"], "report.schedule", sid, f"kind={body.kind} cadence={body.cadence}")
         conn.commit()
@@ -145,14 +146,30 @@ def run_schedule(schedule_id: str, user: dict = Depends(require_role("admin", "m
     s = dict(row)
     report = build_report(s["kind"], s["period"])
     delivered = _deliver_report(s.get("webhook_url"), report)
+    emailed = _email_report(s.get("email"), report)
     with get_conn() as conn:
         conn.execute("UPDATE report_schedules SET last_run=? WHERE id=?", (_now(), schedule_id))
         notify(conn, type="report", title=f"{report['meta']['title']} generated",
                detail=f"{report['meta']['period']} · {len(report['findings'])} findings",
                link="/dashboard")
-        audit(conn, user["email"], "report.run_schedule", schedule_id, f"delivered={delivered}")
+        audit(conn, user["email"], "report.run_schedule", schedule_id,
+              f"delivered={delivered} emailed={emailed.get('sent')}")
         conn.commit()
-    return {"generated": True, "delivered": delivered, "title": report["meta"]["title"]}
+    return {"generated": True, "delivered": delivered, "email": emailed,
+            "title": report["meta"]["title"]}
+
+
+def _email_report(email: str | None, report: dict) -> dict:
+    if not email:
+        return {"sent": False, "reason": "no email target"}
+    from dashboard_api.mailer import send_email
+    m = report["meta"]
+    html = (f"<h2>{m['title']}</h2><p>{m['period']} · generated {m['generatedAt']}</p>"
+            f"<p>{report['summary'].get('narrative', '')}</p>"
+            f"<h3>Findings ({len(report['findings'])})</h3><ul>"
+            + "".join(f"<li>{f.get('severity', '')}: {f.get('title', '')}</li>"
+                      for f in report["findings"][:25]) + "</ul>")
+    return send_email(email, f"[ThreatOrbit] {m['title']} — {m['period']}", html)
 
 
 @router.delete("/report-schedules/{schedule_id}", status_code=204)

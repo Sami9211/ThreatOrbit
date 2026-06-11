@@ -650,6 +650,7 @@ _MIGRATIONS = [
     ("saved_hunts", "schedule_minutes", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "last_scheduled", "TEXT"),
     ("saved_hunts", "auto_alert", "INTEGER NOT NULL DEFAULT 1"),
+    ("report_schedules", "email", "TEXT"),
 ]
 
 

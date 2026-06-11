@@ -79,6 +79,29 @@ class LicenseIssue(BaseModel):
     expires: str | None = None
 
 
+class TestEmail(BaseModel):
+    to: str
+
+
+@router.get("/email")
+def email_status(_: dict = Depends(require_role("admin", "manager"))):
+    """SMTP delivery readiness (the email channel for scheduled reports)."""
+    from dashboard_api.mailer import status
+    return status()
+
+
+@router.post("/email/test")
+def test_email(body: TestEmail, user: dict = Depends(require_role("admin", "manager"))):
+    """Send a test email (real send when SMTP is configured, else reports why)."""
+    from dashboard_api.mailer import send_email
+    result = send_email(body.to, "ThreatOrbit SMTP test",
+                        "<p>Your ThreatOrbit email delivery is working.</p>")
+    with get_conn() as conn:
+        audit(conn, user["email"], "email.test", body.to, f"sent={result.get('sent')}")
+        conn.commit()
+    return result
+
+
 @router.get("/database")
 def database_backend(_: dict = Depends(require_role("admin", "manager"))):
     """Active storage backend + Postgres-readiness (the Postgres option is

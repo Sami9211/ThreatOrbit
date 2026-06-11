@@ -14,8 +14,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## Phase 0 — Cross-cutting platform (foundations everything needs)
 
 - [x] **Scheduled & emailed reports** — DONE: report schedules (daily/weekly)
-      with webhook delivery + a background scheduler; "Schedule" in the report
-      viewer. Remaining: SMTP email channel (webhook works today).
+      with webhook **and SMTP email** delivery + a background scheduler;
+      "Schedule" in the report viewer. Real SMTP send when configured (honest
+      not-configured otherwise); `/config/email` status + test-send.
 - [x] **Deep-linking** — DONE: the SIEM queue honours `?q=` from search / the
       detail drawer / the ATT&CK navigator. (Extend to other sections as needed.)
 - [x] **Global search + command palette** — DONE: `/search` across alerts,
@@ -28,8 +29,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       bell and SIEM queue the instant data lands (polling kept as a safety net).
 - [x] **Notifications centre** — DONE: live notification bell (real
       `/notifications` feed from critical alerts, escalated cases, credential
-      leaks, scheduled reports), mark-read, deep-link on click. Remaining:
-      per-user routing rules (email/Slack) on top of the webhook engine.
+      leaks, scheduled reports), mark-read, deep-link on click. An SMTP email
+      channel now backs report delivery (see Scheduled reports); per-user
+      Slack routing remains a thin add on the webhook engine.
 - [~] **RBAC depth** — DONE (see CHANGELOG): a capability matrix (roles →
       named per-section/per-action permissions), a `require_perm` dependency
       that audits denials, applied so viewers are read-only and analysts hold
@@ -199,6 +201,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · SMTP email delivery channel (Phase 0)** — scheduled reports can
+  now be emailed, not just webhooked. `mailer.py` sends a real MIME multipart
+  email via SMTP when the deployment provides settings (SMTP_HOST/PORT/USER/
+  PASSWORD/FROM/TLS), and honestly reports `not-configured` otherwise — never
+  raises (a mail failure can't break a request or the engine tick). Report
+  schedules gained an `email` target (`run` delivers the report's summary +
+  findings as HTML); `GET /config/email` shows readiness and
+  `POST /config/email/test` sends a test (admin/manager). Frontend clients +
+  the schedule email field shipped. Tested: not-configured default, configured
+  send (mocked smtplib asserts host/recipient/body), report-schedule email
+  delivery, RBAC.
 
 - **2026-06-10 · Scheduled hunts → alerts (Phase 1)** — a saved hunt becomes a
   detection over time. `POST /siem/hunts/{id}/schedule` sets an interval

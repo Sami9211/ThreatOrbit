@@ -652,7 +652,7 @@ export interface ReportSchedule {
   webhookUrl: string | null; enabled: number; lastRun: string | null; createdBy: string | null
 }
 export const fetchReportSchedules = () => api<ReportSchedule[]>('/report-schedules')
-export const createReportSchedule = (body: { kind: string; period?: string; cadence?: string; webhook_url?: string }) =>
+export const createReportSchedule = (body: { kind: string; period?: string; cadence?: string; webhook_url?: string; email?: string }) =>
   api<ReportSchedule>('/report-schedules', { method: 'POST', body: JSON.stringify(body) })
 export const runReportSchedule = (id: string) =>
   api<{ generated: boolean; delivered: boolean; title: string }>(`/report-schedules/${id}/run`, { method: 'POST' })
@@ -1211,6 +1211,12 @@ export const clearLicense = () => api<void>('/config/license', { method: 'DELETE
 
 export interface DatabaseInfo { backend: string; configured: boolean; driverReady: boolean; note: string }
 export const fetchDatabaseInfo = () => api<DatabaseInfo>('/config/database')
+
+export interface EmailStatus { configured: boolean; host: string | null; port: number; from: string | null }
+export const fetchEmailStatus = () => api<EmailStatus>('/config/email')
+export const sendTestEmail = (to: string) =>
+  api<{ sent: boolean; reason?: string; recipients?: string[] }>('/config/email/test',
+    { method: 'POST', body: JSON.stringify({ to }) })
 
 // First-run onboarding checklist (computed from real platform state).
 export interface OnboardingStatus {
