@@ -478,6 +478,12 @@ def process_tick(max_events: int = 6) -> dict:
         if dark:
             from dashboard_api.darkweb_logic import match_credential_leaks
             match_credential_leaks(conn)
+        # Scheduled hunts: run any that are due → alerts on hits (detection over time).
+        try:
+            from dashboard_api.hunting import run_due_scheduled_hunts
+            run_due_scheduled_hunts(conn)
+        except Exception:
+            pass
         # SOAR automation: auto-trigger playbooks whose criteria match new alerts.
         from dashboard_api.playbook_engine import auto_trigger_playbooks
         pb_runs, pb_dispatches = auto_trigger_playbooks(conn)

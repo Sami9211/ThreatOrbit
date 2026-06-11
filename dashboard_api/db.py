@@ -647,6 +647,9 @@ _MIGRATIONS = [
     ("integrations", "base_url", "TEXT"),
     ("integrations", "api_key", "TEXT"),
     ("cases", "linked_cases", "TEXT NOT NULL DEFAULT '[]'"),
+    ("saved_hunts", "schedule_minutes", "INTEGER NOT NULL DEFAULT 0"),
+    ("saved_hunts", "last_scheduled", "TEXT"),
+    ("saved_hunts", "auto_alert", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

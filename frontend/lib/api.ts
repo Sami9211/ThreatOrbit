@@ -740,6 +740,11 @@ export const createSiemHunt = (body: { name: string; description?: string; query
   api<SavedHunt>('/siem/hunts', { method: 'POST', body: JSON.stringify(body) })
 export const runSiemHunt = (id: string) =>
   api<HuntRunOutcome>(`/siem/hunts/${id}/run`, { method: 'POST' })
+export const scheduleHunt = (id: string, scheduleMinutes: number, autoAlert = true) =>
+  api<{ id: string; name: string; scheduleMinutes: number; status: string }>(
+    `/siem/hunts/${id}/schedule`, { method: 'POST', body: JSON.stringify({ schedule_minutes: scheduleMinutes, auto_alert: autoAlert }) })
+export const runScheduledHunts = () =>
+  api<{ ran: number; alerts: number }>('/siem/hunts/run-scheduled', { method: 'POST' })
 export const fetchCorrelations = (minAlerts = 2) =>
   api<Correlation[]>(`/siem/correlations?min_alerts=${minAlerts}`)
 export const fetchMitreDistribution = () =>

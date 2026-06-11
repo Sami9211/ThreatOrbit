@@ -273,6 +273,50 @@ def event_search(query: str, time_range: str = "24h", limit: int = 200) -> dict:
             "interpreted": interpreted, "stats": None, "results": results}
 
 
+def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
+    """Run any saved SIEM hunt whose schedule is due (event-stream search), and
+    raise a SIEM alert when it has hits and auto_alert is on. Returns a summary.
+    Called by the live engine; the hunt becomes a real detection-over-time."""
+    from dashboard_api.detections import _insert_alert
+    now = now or datetime.now(timezone.utc)
+    rows = conn.execute(
+        "SELECT * FROM saved_hunts WHERE domain='siem' AND schedule_minutes > 0").fetchall()
+    ran = alerts = 0
+    for h in rows:
+        last = h["last_scheduled"]
+        due = True
+        if last:
+            try:
+                lt = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+                if lt.tzinfo is None:
+                    lt = lt.replace(tzinfo=timezone.utc)
+                due = (now - lt) >= timedelta(minutes=int(h["schedule_minutes"]))
+            except (ValueError, TypeError):
+                due = True
+        if not due:
+            continue
+        query = " ".join(filter(None, [h["query"], h["technique"]]))
+        result = event_search(query, "24h", limit=200)
+        nowiso = now.replace(microsecond=0).isoformat()
+        conn.execute(
+            "UPDATE saved_hunts SET last_scheduled=?, last_run=?, hit_count=?, status='scheduled' "
+            "WHERE id=?", (nowiso, nowiso, result["hits"], h["id"]))
+        ran += 1
+        if result["hits"] > 0 and h["auto_alert"]:
+            ev = result["results"][0] if result["results"] else {}
+            _insert_alert(
+                conn, title=f"Scheduled hunt matched: {h['name']} ({result['hits']} hits)",
+                severity="medium", risk=52, rule_name=f"Hunt · {h['name']}",
+                src_ip=ev.get("src_ip"), hostname=ev.get("hostname"), username=ev.get("username"),
+                mitre_tech_id=h["technique"] or ev.get("mitre_tech_id"),
+                description=f"Saved hunt '{h['name']}' ({query}) returned {result['hits']} events on its schedule.",
+                raw_log=ev.get("raw"), event_count=result["hits"])
+            conn.execute("UPDATE alerts SET rule_id='R-HUNT' WHERE id=(SELECT id FROM alerts "
+                         "ORDER BY ts DESC LIMIT 1)")
+            alerts += 1
+    return {"ran": ran, "alerts": alerts}
+
+
 def run_ioc_hunt(query: str, limit: int = 50) -> dict:
     """Match extracted tokens against the IOC store. Returns real IOCs."""
     started = time.perf_counter()

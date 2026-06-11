@@ -431,6 +431,47 @@ def test_hunt_query_engine(client, auth):
     assert client.post("/siem/hunt-query", json={"query": "x", "time_range": "1y"}, headers=auth).status_code == 400
 
 
+def test_scheduled_hunt_raises_alerts(client, auth):
+    """A saved hunt put on a schedule runs over the event stream and raises a
+    SIEM alert when it finds matching events (detection over time)."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    # ensure there are failed_login events to match
+    client.post("/siem/ingest", json={"lines": [
+        "Jan 10 13:00:00 web sshd[1]: Failed password for root from 198.51.100.30 port 5000",
+    ]}, headers=auth)
+    hunt = client.post("/siem/hunts", json={
+        "name": "Failed login sweep", "query": "event_type=failed_login"}, headers=auth).json()
+
+    sch = client.post(f"/siem/hunts/{hunt['id']}/schedule",
+                      json={"schedule_minutes": 15, "auto_alert": True}, headers=auth)
+    assert sch.status_code == 200 and sch.json()["schedule_minutes"] == 15
+    assert sch.json()["status"] == "scheduled"
+
+    before = client.get("/siem/alerts?q=Failed login sweep", headers=auth).json()["total"]
+    run = client.post("/siem/hunts/run-scheduled", headers=auth).json()
+    assert run["ran"] >= 1 and run["alerts"] >= 1
+    after = client.get("/siem/alerts?q=Failed login sweep", headers=auth).json()
+    assert after["total"] > before
+    assert any("Scheduled hunt matched" in a["title"] for a in after["items"])
+
+    # a second immediate run is throttled (not due yet) → no new alert
+    run2 = client.post("/siem/hunts/run-scheduled", headers=auth).json()
+    assert run2["ran"] == 0
+
+    # turning the schedule off
+    assert client.post(f"/siem/hunts/{hunt['id']}/schedule", json={"schedule_minutes": 0},
+                       headers=auth).json()["status"] == "idle"
+    # guard rails
+    assert client.post(f"/siem/hunts/{hunt['id']}/schedule", json={"schedule_minutes": 99999},
+                       headers=auth).status_code == 400
+    assert client.post("/siem/hunts/NOPE/schedule", json={"schedule_minutes": 5},
+                       headers=auth).status_code == 404
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.post(f"/siem/hunts/{hunt['id']}/schedule", json={"schedule_minutes": 5},
+                       headers=viewer).status_code == 403
+
+
 def test_saved_hunt_create_and_run(client, auth):
     created = client.post("/siem/hunts", json={
         "name": "PowerShell abuse sweep", "description": "Encoded PowerShell launches",

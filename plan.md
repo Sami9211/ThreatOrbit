@@ -74,13 +74,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       Remaining: time-boxed/recurring suppression windows.
 - [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
       tactic, per-technique drill-down to rules/alerts, gaps highlighted.
-- [~] **Search/hunt language** — DONE: a real field-operator query language over
-      the raw event stream (`POST /siem/search`) — `field=value`, `!= > < >= <=`,
-      `~regex`, `:contains`, `field in a,b,c`, bare full-text, and
-      `| stats count by <field>` aggregation; compiles to the same condition
-      shape the detection engine evaluates. Event-stream search panel on the Hunt
-      page. Remaining: joins across sources, and saved/scheduled event-searches
-      that raise alerts on threshold.
+- [x] **Search/hunt language** — DONE: a real field-operator query language over
+      the raw event stream (`POST /siem/search`) + `| stats count by`, **plus**
+      scheduled hunts — a saved hunt put on an interval runs the event search on
+      the engine tick and raises a SIEM alert on hits (detection over time).
+      Remaining (minor): joins across sources.
 - [x] **Threat-intel matching** — DONE: ingested/generated events whose IP
       matches a known malicious IOC raise an enriched intel alert (R-TIMATCH).
 
@@ -201,6 +199,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Scheduled hunts → alerts (Phase 1)** — a saved hunt becomes a
+  detection over time. `POST /siem/hunts/{id}/schedule` sets an interval
+  (+ auto_alert); `run_due_scheduled_hunts` (engine tick + `POST
+  /siem/hunts/run-scheduled`) runs each due hunt's query through the
+  event-stream search and, on hits, raises a SIEM alert ("Scheduled hunt
+  matched …", rule R-HUNT) carrying the matched entity/technique, then stamps
+  `last_scheduled` so it's throttled to its interval. saved_hunts gains
+  schedule_minutes / last_scheduled / auto_alert. Tested: schedule → run →
+  alert raised, throttle (second immediate run does nothing), off, range
+  validation, 404, viewer-blocked.
 
 - **2026-06-10 · TAXII 2.1 write/push (Phase 3, closes STIX/TAXII)** — the TAXII
   server now accepts pushed intel, not just serves it: `POST

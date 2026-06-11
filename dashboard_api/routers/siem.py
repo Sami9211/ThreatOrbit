@@ -744,6 +744,42 @@ def run_hunt(hunt_id: str, user: dict = Depends(current_user)):
     return result
 
 
+class HuntSchedule(BaseModel):
+    schedule_minutes: int = 0
+    auto_alert: bool = True
+
+
+@router.post("/hunts/{hunt_id}/schedule")
+def schedule_hunt(hunt_id: str, body: HuntSchedule, user: dict = Depends(require_perm("siem.write"))):
+    """Schedule a saved hunt to run on an interval (0 = off). When it runs and
+    finds events, it raises a SIEM alert (auto_alert) — a detection over time."""
+    if body.schedule_minutes < 0 or body.schedule_minutes > 10080:
+        raise HTTPException(status_code=400, detail="schedule_minutes must be 0..10080")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE saved_hunts SET schedule_minutes=?, auto_alert=?, "
+            "status=CASE WHEN ?>0 THEN 'scheduled' ELSE 'idle' END WHERE id=? AND domain='siem'",
+            (body.schedule_minutes, 1 if body.auto_alert else 0, body.schedule_minutes, hunt_id))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Hunt not found")
+        audit(conn, user["email"], "hunt.schedule", hunt_id, f"every={body.schedule_minutes}m")
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, name, description AS hypothesis, query, technique, schedule_minutes, "
+            "auto_alert, last_scheduled, status FROM saved_hunts WHERE id=?", (hunt_id,)).fetchone()
+    return row_to_dict(row)
+
+
+@router.post("/hunts/run-scheduled")
+def run_scheduled_hunts_now(user: dict = Depends(require_perm("siem.write"))):
+    """Run all due scheduled hunts immediately (also runs on the engine tick)."""
+    from dashboard_api.hunting import run_due_scheduled_hunts
+    with get_conn() as conn:
+        result = run_due_scheduled_hunts(conn)
+        conn.commit()
+    return result
+
+
 @router.post("/hunt-query")
 def hunt_query(body: HuntQuery):
     """Run an ad-hoc hunt query against the live alert store."""
