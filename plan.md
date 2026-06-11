@@ -176,10 +176,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       server-side (402), activate/issue/clear endpoints + a License card with
       usage bars. Remaining: payment-processor integration (Stripe) for
       self-serve purchase.
-- [ ] **Postgres option** for scale beyond single-file SQLite; migrations.
-      *(STAGED — like multi-tenancy data isolation, this is a breaking
-      migration across ~50 raw-SQL call sites; do as its own effort with a
-      driver seam, not rushed onto main.)*
+- [~] **Postgres option** — FOUNDATION DONE (see CHANGELOG): backend selection
+      (`DASHBOARD_DB_BACKEND`/`DATABASE_URL`), a tested SQLite→Postgres dialect
+      translation layer, a guarded connection seam (SQLite default unchanged),
+      and `/config/database` readiness. Remaining (staged): wire the translator
+      into `get_conn().execute`, psycopg row-dict factory, and flip the flag.
 - [~] **Performance** — DONE for the data layer (see CHANGELOG): hot-path
       indexes on every dashboard-refresh query (verified with EXPLAIN QUERY
       PLAN) with a safe upgrade path for migrated columns; server-side
@@ -196,6 +197,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · Postgres backend foundation (Phase 5)** — the seam to scale
+  past single-file SQLite, shipped non-breaking. `db_backend.py`: backend
+  selection (`DASHBOARD_DB_BACKEND`, default `sqlite`; `DATABASE_URL`), a guarded
+  Postgres connection path (lazy psycopg import with a clear error; only taken
+  when explicitly selected — SQLite installs are byte-for-byte unchanged), and
+  a **pure, unit-tested SQLite→Postgres dialect translator** (`to_postgres`):
+  `?`→`%s` placeholders (string-literal-aware), `INSERT OR REPLACE`→
+  `INSERT … ON CONFLICT … DO UPDATE` (rewritten after the VALUES list),
+  `AUTOINCREMENT`→`BIGSERIAL`, `datetime('now')`→`now()`, `PRAGMA` stripped.
+  `GET /config/database` reports the active backend + psycopg readiness. The
+  breaking flip (wiring the translator into every execute + a row-dict factory)
+  is staged behind the flag so it lands reviewably on its own — `main` stays
+  green. Frontend: a Storage card on Config → General. Tested: translation
+  units (placeholders/idioms/upsert) + the backend endpoint + RBAC.
 
 - **2026-06-10 · Data-layer performance (Phase 5)** — hot-path indexes for the
   queries every dashboard refresh runs: alerts (ts, severity+status, hostname,

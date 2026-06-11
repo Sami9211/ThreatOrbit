@@ -1440,6 +1440,36 @@ def _token(client, email, password="Password123!"):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
+def test_db_backend_dialect_units():
+    """SQLite→Postgres statement translation (the staged Postgres seam)."""
+    from dashboard_api.db_backend import to_postgres, is_postgres
+    # default backend is SQLite, unaffected
+    assert is_postgres() is False
+    # placeholder translation, but not inside string literals
+    assert to_postgres("SELECT * FROM iocs WHERE value=? AND type=?") == \
+        "SELECT * FROM iocs WHERE value=%s AND type=%s"
+    assert to_postgres("SELECT * FROM a WHERE x='who?' AND y=?") == \
+        "SELECT * FROM a WHERE x='who?' AND y=%s"
+    # idioms
+    assert "now()" in to_postgres("UPDATE t SET ts=datetime('now') WHERE id=?")
+    assert "BIGSERIAL PRIMARY KEY" in to_postgres("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT)")
+    assert "PRAGMA" not in to_postgres("PRAGMA journal_mode=WAL")
+    # INSERT OR REPLACE → ON CONFLICT upsert, placed after VALUES
+    pg = to_postgres("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)")
+    assert pg.startswith("INSERT INTO settings (key,value) VALUES (%s,%s)")
+    assert "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value" in pg
+
+
+def test_database_backend_endpoint(client, auth):
+    """The backend info endpoint reports SQLite (the live default) + readiness."""
+    info = client.get("/config/database", headers=auth).json()
+    assert info["backend"] == "sqlite" and info["configured"] is False
+    assert "note" in info and isinstance(info["driverReady"], bool)
+    # admin/manager only
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.get("/config/database", headers=viewer).status_code == 403
+
+
 def test_hot_path_indexes_in_use():
     """The hot-path indexes exist and SQLite actually uses them."""
     from dashboard_api.db import get_conn

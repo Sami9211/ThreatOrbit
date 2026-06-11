@@ -1160,6 +1160,9 @@ export const activateLicense = (key: string) =>
     { method: 'POST', body: JSON.stringify({ key }) })
 export const clearLicense = () => api<void>('/config/license', { method: 'DELETE' })
 
+export interface DatabaseInfo { backend: string; configured: boolean; driverReady: boolean; note: string }
+export const fetchDatabaseInfo = () => api<DatabaseInfo>('/config/database')
+
 // First-run onboarding checklist (computed from real platform state).
 export interface OnboardingStatus {
   steps: Array<{ id: string; label: string; done: boolean; link: string }>

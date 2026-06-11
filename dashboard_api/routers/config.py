@@ -79,6 +79,14 @@ class LicenseIssue(BaseModel):
     expires: str | None = None
 
 
+@router.get("/database")
+def database_backend(_: dict = Depends(require_role("admin", "manager"))):
+    """Active storage backend + Postgres-readiness (the Postgres option is
+    staged; this surfaces what's needed to flip it on)."""
+    from dashboard_api.db_backend import backend_info
+    return backend_info()
+
+
 @router.get("/license")
 def license_status(_: dict = Depends(current_user)):
     """The active license: plan, limits, current usage, validity."""

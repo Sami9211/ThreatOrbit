@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Settings, Key, Bell, Shield, Globe, Plug,
+  Settings, Key, Bell, Shield, Globe, Plug, Database,
   Eye, Copy, CheckCircle, Save,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
   PanelLeftOpen, PanelLeftClose, ScrollText,
@@ -16,6 +16,7 @@ import {
   fetchEngineStatus, controlEngine, enforceRetention,
   fetchCurrentOrg, type Org,
   fetchLicense, activateLicense, type LicenseStatus,
+  fetchDatabaseInfo, type DatabaseInfo,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
@@ -771,6 +772,30 @@ function WorkspaceCard() {
   )
 }
 
+function StorageCard() {
+  const [db, setDb] = useState<DatabaseInfo | null>(null)
+  useEffect(() => { fetchDatabaseInfo().then(setDb).catch(() => {}) }, [])
+  if (!db) return null
+  return (
+    <Section title="Storage" icon={Database} color="#34F5C5">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-[180px]">
+          <p className="text-sm font-semibold text-white capitalize">{db.backend}
+            <span className={cn('ml-2 text-[9px] px-1.5 py-0.5 rounded-full uppercase',
+              db.backend === 'postgres' ? 'bg-safe/12 text-safe' : 'bg-white/8 text-ink-400')}>
+              {db.backend === 'postgres' ? (db.configured ? 'configured' : 'selected') : 'single-node'}
+            </span>
+          </p>
+          <p className="text-[10px] text-ink-500 mt-0.5">{db.note}</p>
+        </div>
+        <span className="text-[10px] text-ink-600">
+          psycopg driver: <b className={db.driverReady ? 'text-safe' : 'text-ink-400'}>{db.driverReady ? 'ready' : 'not installed'}</b>
+        </span>
+      </div>
+    </Section>
+  )
+}
+
 function LicenseCard() {
   const [lic, setLic] = useState<LicenseStatus | null>(null)
   const [key, setKey] = useState('')
@@ -1027,6 +1052,9 @@ export default function ConfigPage() {
 
               {/* ── License & plan limits ───────────────────────────── */}
               <LicenseCard />
+
+              {/* ── Storage backend (Postgres staged) ───────────────── */}
+              <StorageCard />
 
               {/* ── Live Processing Engine ──────────────────────────── */}
               <LiveEngineCard />

@@ -25,6 +25,12 @@ JSON_COLUMNS = {
 
 
 def _connect() -> sqlite3.Connection:
+    # Backend seam (see db_backend.py): SQLite is the default and unchanged;
+    # the Postgres path is staged and only taken when explicitly selected.
+    from dashboard_api.db_backend import is_postgres
+    if is_postgres():  # pragma: no cover - opt-in, requires psycopg + DSN
+        from dashboard_api.db_backend import connect_postgres
+        return connect_postgres()
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
