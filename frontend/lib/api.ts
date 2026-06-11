@@ -1004,6 +1004,13 @@ export const createAsset = (body: {
 export const fetchRiskDistribution = () => api<RiskDistribution>('/assets/risk-distribution')
 export const fetchAssetsSummary = () => api<AssetSummary>('/assets/summary')
 export const fetchVulns = () => api<Asset[]>('/assets/vulns')
+export interface VulnSummary {
+  totalFindings: number; distinctCves: number
+  bySeverity: { critical: number; high: number; medium: number; low: number }
+  criticalAndHigh: number; activelyExploited: number
+  avgPatchAge: number; exposureScore: number; internetFacing: number
+}
+export const fetchVulnSummary = () => api<VulnSummary>('/assets/vulns/summary')
 export const recomputeAssetRisk = () =>
   api<{ updated: number }>('/assets/recompute-risk', { method: 'POST' })
 

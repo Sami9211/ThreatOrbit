@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { fetchVulns, type Asset as ApiAsset } from '@/lib/api'
+import { fetchVulns, fetchVulnSummary, type Asset as ApiAsset, type VulnSummary } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShieldAlert, Bug, Search, X, ExternalLink, Crosshair, Clock,
@@ -305,6 +305,8 @@ function ExploitBadge({ exploit }: { exploit: ExploitMaturity }) {
 /* ── Main page ─────────────────────────────────────────────────── */
 export default function VulnsPage() {
   const [vulns, setVulns] = useState<Vuln[]>(SEED)
+  const [vsum, setVsum] = useState<VulnSummary | null>(null)
+  useEffect(() => { fetchVulnSummary().then(setVsum).catch(() => {}) }, [])
 
   useEffect(() => {
     fetchVulns().then((assets: ApiAsset[]) => {
@@ -395,11 +397,11 @@ export default function VulnsPage() {
   ), [vulns, sevFilter, statusFilter, kevOnly, exploitOnly, search])
 
   const kpis = [
-    { label: 'Total CVEs',        value: '342',     color: 'text-white'  },
-    { label: 'Critical',          value: '28',      color: 'text-magenta' },
-    { label: 'Actively Exploited', value: '11',     color: 'text-threat' },
-    { label: 'Avg Patch Age',     value: '18d',     color: 'text-amber'  },
-    { label: 'Exposure Score',    value: '72/100',  color: 'text-threat' },
+    { label: 'Total CVEs',         value: vsum ? vsum.distinctCves.toLocaleString() : '—', color: 'text-white'  },
+    { label: 'Critical',           value: vsum ? String(vsum.bySeverity.critical) : '—',   color: 'text-magenta' },
+    { label: 'Actively Exploited', value: vsum ? String(vsum.activelyExploited) : '—',     color: 'text-threat' },
+    { label: 'Avg Patch Age',      value: vsum ? `${vsum.avgPatchAge}d` : '—',             color: 'text-amber'  },
+    { label: 'Exposure Score',     value: vsum ? `${Math.round(vsum.exposureScore)}/100` : '—', color: 'text-threat' },
   ]
 
   return (

@@ -2003,6 +2003,20 @@ def test_attack_surface_discovery(client, auth):
                        headers=viewer).status_code == 403
 
 
+def test_vuln_summary_from_real_findings(client, auth):
+    """The vuln summary KPIs aggregate real scanner findings, not constants."""
+    a = client.post("/assets", json={
+        "name": "vuln-sum-test", "type": "server", "value": "10.8.8.8", "criticality": "high",
+        "software": [{"product": "log4j", "version": "2.14.1"},
+                     {"product": "openssl", "version": "1.0.1f"}]}, headers=auth).json()
+    client.post(f"/assets/{a['id']}/scan", headers=auth)
+    s = client.get("/assets/vulns/summary", headers=auth).json()
+    assert s["totalFindings"] >= 2 and s["distinctCves"] >= 2
+    assert s["bySeverity"]["critical"] >= 1  # Log4Shell
+    assert s["activelyExploited"] >= 1       # CVSS >= 9 (Log4Shell 10.0)
+    assert "avgPatchAge" in s and "exposureScore" in s
+
+
 def test_vuln_scanner_units():
     """Real CVE matching from software versions (version ranges + lt)."""
     from dashboard_api.vuln_scanner import scan_software, _lt

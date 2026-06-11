@@ -105,6 +105,34 @@ def risk_distribution():
     return fleet_risk_distribution(rows_to_dicts(rows))
 
 
+@router.get("/vulns/summary")
+def vuln_summary():
+    """Fleet vulnerability KPIs from real scanner findings + asset state."""
+    from dashboard_api.attack_surface import exposure_inventory
+    with get_conn() as conn:
+        findings = conn.execute(
+            "SELECT cve, severity, cvss FROM vuln_findings WHERE status='open'").fetchall()
+        patch = conn.execute("SELECT AVG(patch_age) AS a FROM assets").fetchone()
+        exposure = exposure_inventory(conn)["summary"]
+    by_sev = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for f in findings:
+        if f["severity"] in by_sev:
+            by_sev[f["severity"]] += 1
+    distinct = {f["cve"] for f in findings}
+    # "Actively exploited" = critical-CVSS findings (the catalogue's RCE-class CVEs).
+    exploited = sum(1 for f in findings if (f["cvss"] or 0) >= 9.0)
+    return {
+        "totalFindings": len(findings),
+        "distinctCves": len(distinct),
+        "bySeverity": by_sev,
+        "criticalAndHigh": by_sev["critical"] + by_sev["high"],
+        "activelyExploited": exploited,
+        "avgPatchAge": round(patch["a"] or 0),
+        "exposureScore": exposure["avgExposure"],
+        "internetFacing": exposure["internetFacing"],
+    }
+
+
 @router.get("/vulns")
 def vulnerabilities():
     """Vulnerability rollup per asset, highest CVE burden first."""
