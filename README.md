@@ -196,13 +196,18 @@ runs on a background tick and is a real pipeline, stage by stage:
                                                    actor chatter, access listings)
 ```
 
-> **Is this "fake data"?** No — it is **live telemetry simulation**, the same
-> mechanism every SIEM uses when it is not wired to a production log feed. Each
-> tick produces *brand-new* events that flow through the **real** detection,
-> correlation, and escalation code — it is not static seed data. And the source
-> is swappable: real log uploads (Log API detectors) and connector feeds write
-> into the exact same stores. You can pause it, or click **Generate burst now**,
-> from **Config → General → Live Processing Engine**.
+Every stage above — parsing, the detection rule engine, correlation, SOAR
+escalation, IOC extraction, dark-web matching — is real, executable code, and
+all of it runs on **real data** wherever real data is available: uploaded logs,
+the syslog listener / file watcher, connector feeds, TAXII push, and threat-intel
+matches all write into these same stores. The **only** seeded/generated input is
+*environment telemetry* — the raw auth/network/endpoint event stream a SIEM
+normally receives from your own infrastructure. That stream genuinely requires a
+deployment with log forwarding configured (see
+[§4a](#4a-real-data-vs-demo-mode) and the [FAQ](#faq)); until then the engine
+generates a representative stream so the detection/correlation/response pipeline
+has something real to act on. You can pause it, or click **Generate burst now**,
+from **Config → General → Live Processing Engine**.
 
 ### Each section's workflow — distinct by design
 
@@ -727,3 +732,37 @@ Tests set their own API keys and use an isolated temp database via
 ## 13. Intended users
 
 ThreatOrbit suits individual analysts and small-to-mid security teams who want a deployable CTI plus anomaly-detection workflow that integrates with OpenCTI — topped with a lightweight SOC dashboard (SIEM triage, SOAR cases/playbooks, asset risk, audit trail) — without standing up a heavy SIEM. The three services can run independently or together, locally or in containers.
+
+## FAQ
+
+**Is the data real, or is it simulated?**
+Wherever real data can be obtained, ThreatOrbit uses real data — and it is wired
+end-to-end, not faked in the UI. Threat intelligence is real OSINT (abuse.ch,
+NVD, RSS, OTX, custom connectors, TAXII push). Detections, correlation, UEBA,
+SOAR playbook execution, vulnerability scanning, dark-web credential matching,
+enrichment, attribution and reporting are all real, executable backend code
+operating on that data. The dashboard reads it live from the API.
+
+**Then what part is generated?**
+One input: the raw **environment event stream** (auth/network/endpoint/cloud
+logs from *your own* infrastructure). A SIEM only sees that once it is deployed
+and your systems forward logs to it — there is no way to have it be "real"
+before then. So in demo mode the engine generates a representative stream for
+that one input, and the **real** detection→correlation→response pipeline runs on
+it. You can feed genuine logs at any time and they flow through the identical
+pipeline:
+
+* **Upload** a log file (SIEM → Sources → Log Collector, or the Log API).
+* **Syslog**: point a forwarder at the UDP listener (`DASHBOARD_SYSLOG_PORT`).
+* **File watcher**: drop/append files into `DASHBOARD_LOG_WATCH_DIR`.
+* **Connectors / TAXII push** for indicators.
+
+**How do I run it on fully real data?**
+Set `DASHBOARD_DATA_MODE=live` (starts empty, no generated stream), enable
+connectors for intel, and forward your logs via one of the paths above. See
+[§4a](#4a-real-data-vs-demo-mode).
+
+**Is anything hardcoded in the UI?**
+No section should display invented numbers — the dashboard pulls from the API.
+If you spot a value that does not trace back to the API, it is a bug; please
+open an issue.

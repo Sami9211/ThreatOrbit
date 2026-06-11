@@ -1047,7 +1047,10 @@ function NormalSIEM({
   alerts: SiemAlert[]
   onUpdate: (id: string, patch: Partial<SiemAlert>) => void
 }) {
-  const open = alerts.filter((a) => ['new', 'assigned', 'in-progress'].includes(a.status))
+  // The triage board shows alerts that still need a decision (untriaged).
+  // Acknowledging (→assigned) or dismissing (→closed) removes the card, so both
+  // actions visibly take effect.
+  const open = alerts.filter((a) => a.status === 'new')
   const critical = open.filter((a) => a.severity === 'critical')
   const high = open.filter((a) => a.severity === 'high')
   const medium = open.filter((a) => a.severity === 'medium')

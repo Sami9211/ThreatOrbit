@@ -161,7 +161,13 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
       </div>
       <div className="flex-1 divide-y divide-white/4">
         {items.map((item, i) => (
-          <div key={i} className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
+          <div key={i}
+            onClick={() => openDetail({
+              title: item.headline, subtitle: `${item.src} · ${item.age}`, severity: item.severity,
+              rows: [{ label: 'Source', value: item.src, mono: true }, { label: 'Severity', value: item.severity }, { label: 'Observed', value: item.age }],
+              actions: [{ label: 'Investigate in SIEM', href: `/dashboard/siem?q=${encodeURIComponent(item.headline)}` }],
+            })}
+            className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
             <span
               className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
               style={{ background: SEVERITY_COLOR[item.severity as keyof typeof SEVERITY_COLOR] }}
@@ -176,8 +182,8 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
       </div>
       <div className="px-5 py-2.5 border-t border-white/5 bg-white/1">
         <div className="flex items-center justify-between text-[10px] text-ink-600">
-          <span>Aggregated from 23 intelligence sources</span>
-          <span className="text-magenta hover:underline cursor-pointer">View all →</span>
+          <span>Aggregated across your intelligence sources</span>
+          <Link href="/dashboard/cti" className="text-magenta hover:underline">View all →</Link>
         </div>
       </div>
     </div>
@@ -651,12 +657,19 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
 }
 
 /* ── Normal Mode Dashboard ───────────────────────────────────────── */
-function NormalDashboard({ count }: { count: { threats: number; iocs: number; sources: number; score: number } }) {
-  const TOP_ALERTS = [
-    { id: 'a1', title: 'Ransomware encryption detected on DESKTOP-FIN-087', severity: 'critical' as const, age: '2m ago' },
-    { id: 'a2', title: 'Suspicious C2 beacon to known Lazarus Group IP address', severity: 'critical' as const, age: '7m ago' },
-    { id: 'a3', title: 'Multiple failed logins from 14 IPs — credential attack suspected', severity: 'high' as const, age: '12m ago' },
-  ]
+function NormalDashboard({ count, alerts, incidents }: {
+  count: { threats: number; iocs: number; sources: number; score: number }
+  alerts: OverviewAlert[]; incidents: Incident[]
+}) {
+  // Real, actionable alerts (highest severity first) — no hardcoded data.
+  const sevRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
+  const topAlerts = [...alerts]
+    .sort((a, b) => (sevRank[b.severity] ?? 0) - (sevRank[a.severity] ?? 0))
+    .slice(0, 5)
+  const openIncidents = incidents.filter((i) => !['resolved', 'closed'].includes(i.status))
+  const score = Math.round(Number(count.score ?? 0))
+  const band = score >= 80 ? 'Strong' : score >= 60 ? 'Good' : score >= 40 ? 'At risk' : 'Critical'
+  const bandColor = score >= 60 ? 'text-safe' : score >= 40 ? 'text-amber' : 'text-threat'
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto w-full">
       {/* Header */}
@@ -687,7 +700,7 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
               strokeLinecap="round"
               strokeDasharray={427}
               initial={{ strokeDashoffset: 427 }}
-              animate={{ strokeDashoffset: 427 * (1 - 0.74) }}
+              animate={{ strokeDashoffset: 427 * (1 - score / 100) }}
               transition={{ duration: 1.6, ease: 'easeOut', delay: 0.2 }}
               transform="rotate(-90 80 80)"
             />
@@ -699,13 +712,15 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
             </defs>
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-display text-5xl font-bold text-white">74</span>
+            <span className="font-display text-5xl font-bold text-white">{score}</span>
             <span className="text-sm text-ink-500 mt-0.5">/ 100</span>
           </div>
         </div>
         <div className="mt-5 relative">
-          <p className="text-safe font-semibold text-xl">Good</p>
-          <p className="text-sm text-ink-400 mt-1">1 integration degraded · 2 critical alerts need review</p>
+          <p className={cn('font-semibold text-xl', bandColor)}>{band}</p>
+          <p className="text-sm text-ink-400 mt-1">
+            {openIncidents.length} open incident{openIncidents.length !== 1 ? 's' : ''} · {topAlerts.filter(a => a.severity === 'critical').length} critical alert{topAlerts.filter(a => a.severity === 'critical').length !== 1 ? 's' : ''} need review
+          </p>
         </div>
         <div className="flex justify-center gap-3 mt-6 relative">
           {[
@@ -724,9 +739,9 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
       {/* 3 big status cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats.toLocaleString(), sub: '↑ 12% since yesterday',     iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-threat' },
-          { icon: CheckCircle2,  label: 'Sources Online',       value: '22 / 24',                      sub: '2 integrations degraded',     iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-amber'  },
-          { icon: Clock,         label: 'Alerts Pending Review', value: '7',                            sub: '2 critical · 5 high priority', iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat' },
+          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats.toLocaleString(), sub: `${count.iocs.toLocaleString()} indicators tracked`, iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-ink-500' },
+          { icon: CheckCircle2,  label: 'Sources Online',       value: count.sources.toLocaleString(), sub: 'feeds & connectors active',   iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-ink-500'  },
+          { icon: Clock,         label: 'Alerts Pending Review', value: String(topAlerts.length || alerts.length), sub: `${topAlerts.filter(a => ['critical','high'].includes(a.severity)).length} high priority`, iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat' },
         ].map((c, i) => (
           <motion.div key={c.label}
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
@@ -747,29 +762,40 @@ function NormalDashboard({ count }: { count: { threats: number; iocs: number; so
           <div className="flex items-center gap-2.5">
             <span className="w-2 h-2 rounded-full bg-threat animate-pulse" />
             <h2 className="text-base font-semibold text-white">Requires Your Attention</h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-threat/10 text-threat font-semibold border border-threat/20">3</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-threat/10 text-threat font-semibold border border-threat/20">{topAlerts.length}</span>
           </div>
           <Link href="/dashboard/siem" className="text-xs text-magenta hover:underline transition-colors">View All Alerts →</Link>
         </div>
         <div className="divide-y divide-white/4">
-          {TOP_ALERTS.map((a, i) => (
+          {topAlerts.length === 0 && (
+            <div className="px-6 py-8 text-center text-sm text-ink-500">No open alerts need attention right now.</div>
+          )}
+          {topAlerts.map((a, i) => (
             <motion.div key={a.id}
               initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.07 }}
-              className="flex items-center gap-4 px-6 py-4 hover:bg-white/2 transition-colors group">
+              onClick={() => openDetail({
+                title: a.title, subtitle: `Alert ${a.id}`, severity: a.severity,
+                rows: [
+                  { label: 'Source', value: a.src, mono: true }, { label: 'Severity', value: a.severity },
+                  { label: 'Time', value: a.time },
+                ],
+                actions: [{ label: 'Investigate in SIEM', href: `/dashboard/siem?q=${encodeURIComponent(a.src || a.title)}` }],
+              })}
+              className="flex items-center gap-4 px-6 py-4 hover:bg-white/2 transition-colors group cursor-pointer">
               <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0',
                 a.severity === 'critical' ? 'bg-magenta/10' : 'bg-threat/10')}>
                 <AlertTriangle className={cn('w-5 h-5', a.severity === 'critical' ? 'text-magenta' : 'text-threat')} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-ink-100 group-hover:text-white transition-colors">{a.title}</p>
+                <p className="text-sm text-ink-100 group-hover:text-white transition-colors truncate">{a.title}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wide',
                     a.severity === 'critical' ? 'bg-magenta/10 text-magenta' : 'bg-threat/10 text-threat'
                   )}>{a.severity}</span>
-                  <span className="text-[11px] text-ink-600">{a.age}</span>
+                  <span className="text-[11px] text-ink-600 font-mono">{a.src} · {timeAgo(a.time)}</span>
                 </div>
               </div>
-              <Link href="/dashboard/siem"
+              <Link href={`/dashboard/siem?q=${encodeURIComponent(a.src || a.title)}`} onClick={(e) => e.stopPropagation()}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-magenta/10 text-magenta hover:bg-magenta/20 transition-colors border border-magenta/20 shrink-0">
                 Investigate →
               </Link>
@@ -840,7 +866,7 @@ export default function DashboardOverview() {
     fetchHeatmap().then(setHeatmap).catch(() => {})
   }, [])
 
-  if (!isPower) return <NormalDashboard count={kpis} />
+  if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} />
 
   const fmtScore = Number(kpis.score ?? 0).toFixed(1)
 
