@@ -628,6 +628,7 @@ export interface EntityDetail {
   value: string; type: string; risk: number; alertCount: number
   timeline: Array<{ day: string; count: number }>
   topTechniques: Array<{ technique: string; count: number }>
+  baseline: { mean: number; stdDev: number; current: number; zScore: number; deviating: boolean; confidence: string }
   alerts: Array<{ id: string; title: string; severity: string; ts: string; status: string; rule_name: string; mitre_tech_id: string }>
 }
 export const fetchEntityDetail = (type: string, value: string) =>

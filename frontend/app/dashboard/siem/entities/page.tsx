@@ -152,6 +152,24 @@ export default function EntityRiskPage() {
                 </div>
               )}
 
+              {/* Learned baseline (deviation-from-norm) */}
+              {selected.baseline && selected.baseline.confidence !== 'insufficient-history' && (
+                <div className={cn('rounded-xl border p-3',
+                  selected.baseline.deviating ? 'border-magenta/30 bg-magenta/8' : 'border-white/8 bg-surface-2/50')}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-ink-500 uppercase tracking-wider">Behavioural baseline</span>
+                    {selected.baseline.deviating
+                      ? <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-magenta/15 text-magenta font-semibold uppercase">deviating</span>
+                      : <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/12 text-safe font-semibold uppercase">normal</span>}
+                  </div>
+                  <p className="text-[11px] text-ink-300 mt-1.5">
+                    Today <b className="font-mono text-white">{selected.baseline.current}</b> vs norm{' '}
+                    <span className="font-mono">{selected.baseline.mean}±{selected.baseline.stdDev}</span>/day ·
+                    z-score <b className="font-mono" style={{ color: selected.baseline.deviating ? '#FF2E97' : '#34F5C5' }}>{selected.baseline.zScore}</b>
+                  </p>
+                </div>
+              )}
+
               {/* Top techniques */}
               {selected.topTechniques.length > 0 && (
                 <div>

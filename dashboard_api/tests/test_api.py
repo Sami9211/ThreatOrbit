@@ -2594,6 +2594,22 @@ def TAXII_VERSIONS(client, auth) -> bool:
     return "application/taxii+json;version=2.1" in root["versions"]
 
 
+def test_ueba_learned_baseline_units():
+    """Deviation-from-norm baseline: z-score over the entity's own daily history."""
+    from dashboard_api.routers.siem import _entity_baseline
+    # too little history → no anomaly call
+    assert _entity_baseline({"2025-01-01": 5})["confidence"] == "insufficient-history"
+    # steady history (2/day) then a spike on the latest day → deviating
+    steady = {f"2025-01-0{i}": 2 for i in range(1, 8)}
+    steady["2025-01-09"] = 20
+    b = _entity_baseline(steady)
+    assert b["mean"] == 2.0 and b["current"] == 20 and b["zScore"] >= 2.0 and b["deviating"] is True
+    # a normal latest day is not flagged
+    normal = {f"2025-01-0{i}": 3 for i in range(1, 8)}
+    normal["2025-01-09"] = 3
+    assert _entity_baseline(normal)["deviating"] is False
+
+
 def test_ueba_entity_risk(client, auth):
     """UEBA: entities ranked by alert-derived risk, with drill-down timeline."""
     from dashboard_api.engine import seed_builtin_rules

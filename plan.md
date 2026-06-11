@@ -68,9 +68,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       full ECS ingest-time normalization of stored events (alias layer covers
       read/query today).
 - [x] **UEBA** — DONE (see CHANGELOG): per-entity (user/host/ip) risk scoring
-      from alert history (severity-weighted volume + technique diversity), an
-      Entity Risk page with ranking + drill-down timeline. Remaining: true
-      learned baselines / deviation-from-norm anomaly scoring.
+      (severity-weighted volume + technique diversity), an Entity Risk page with
+      ranking + drill-down, **and** a learned behavioural baseline — each
+      entity's daily-volume norm (mean ± stddev) with the latest day's z-score
+      flagging deviation-from-self, surfaced in the drawer.
 - [x] **Alert tuning workflow** — DONE (see CHANGELOG): false-positive feedback
       bumps rule FP rate; suppressions/allow-lists per entity (and rule) that
       retro-close open alerts and drop future matches, with a hit counter.
@@ -202,6 +203,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-10 · UEBA learned baselines (Phase 1)** — entity risk gains
+  deviation-from-self anomaly scoring: `_entity_baseline` computes each entity's
+  own daily-alert-volume norm (mean + population stddev over its prior days) and
+  the latest day's z-score, flagging `deviating` at z≥2 with a confidence band
+  from the history length — real behavioural-baseline anomaly detection, not
+  just raw volume. Surfaced in the Entity Risk drawer (today vs norm, z-score,
+  deviating/normal badge). Tested: insufficient-history guard, a spike over a
+  steady baseline flags deviating, a normal day does not.
 
 - **2026-06-10 · Syslog UDP listener + file/dir watcher (Phase 1, closes log
   ingestion)** — `log_listeners.py`: a long-running syslog UDP listener

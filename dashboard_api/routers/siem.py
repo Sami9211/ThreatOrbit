@@ -388,8 +388,29 @@ def entity_detail(type: str = Query(..., pattern="^(user|host|ip)$"), value: str
         "timeline": [{"day": k, "count": v} for k, v in sorted(timeline.items())],
         "topTechniques": [{"technique": k, "count": v}
                           for k, v in sorted(techniques.items(), key=lambda x: -x[1])[:8]],
+        "baseline": _entity_baseline(timeline),
         "alerts": alerts[:50],
     }
+
+
+def _entity_baseline(timeline: dict[str, int]) -> dict:
+    """Learned baseline: the entity's own daily-volume norm (mean + stddev over
+    its prior days) and how far its latest day deviates (z-score). This is
+    deviation-from-self anomaly scoring, not just raw volume."""
+    import math
+    days = sorted(timeline.items())
+    if len(days) < 3:
+        return {"mean": 0.0, "stdDev": 0.0, "current": days[-1][1] if days else 0,
+                "zScore": 0.0, "deviating": False, "confidence": "insufficient-history"}
+    history = [c for _, c in days[:-1]]          # all but the latest day
+    current = days[-1][1]
+    mean = sum(history) / len(history)
+    var = sum((x - mean) ** 2 for x in history) / len(history)
+    std = math.sqrt(var)
+    z = round((current - mean) / std, 2) if std > 0 else (0.0 if current <= mean else 4.0)
+    return {"mean": round(mean, 2), "stdDev": round(std, 2), "current": current,
+            "zScore": z, "deviating": z >= 2.0,
+            "confidence": "high" if len(history) >= 7 else "moderate"}
 
 
 @router.get("/mitre-distribution")
