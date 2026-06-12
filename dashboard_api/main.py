@@ -32,6 +32,7 @@ observability.init_error_tracking()
 app = FastAPI(title="ThreatOrbit Dashboard API", version="1.0.0")
 
 app.add_middleware(observability.MetricsMiddleware)
+app.add_middleware(observability.SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in CORS_ORIGINS.split(",")],

@@ -688,6 +688,18 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
 
 
+def test_security_headers(client):
+    """Tier-1 hardening: every API response carries the baseline headers."""
+    r = client.get("/health")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["x-frame-options"] == "DENY"
+    assert r.headers["referrer-policy"] == "no-referrer"
+    assert r.headers["cache-control"] == "no-store"
+    # also on error responses
+    e = client.get("/siem/alerts")  # 401 unauthenticated
+    assert e.status_code == 401 and e.headers["x-content-type-options"] == "nosniff"
+
+
 def test_observability_metrics(client, auth, monkeypatch):
     """Tier-1 observability: /metrics renders Prometheus text exposition with
     request series under route TEMPLATES (not per-id paths), domain counters,

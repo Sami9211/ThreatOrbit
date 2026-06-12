@@ -280,9 +280,14 @@ that buying companies require. Realistic positioning today:
       backup|verify` for cron), Postgres `pg_dump` guidance, an offline
       restore drill, the additive-only upgrade/rollback contract, and a key-
       management table — all in `docs/OPERATIONS.md`.
-- [ ] **Deployment hardening guide** — TLS termination + reverse-proxy
-      reference config, secure cookie/headers/CSP on the frontend, non-root
-      containers, resource limits in compose; pin image digests.
+- [x] **Deployment hardening** — DONE (see CHANGELOG): baseline security
+      headers on every API response (middleware, tested), non-root API
+      container (`USER app`, only `/data` writable; build-verify with docker
+      where registry access exists), and `docs/DEPLOYMENT.md` with nginx +
+      Caddy reference configs (TLS, HSTS, CSP for the static frontend,
+      SSE-safe proxying), the fail-the-deploy env checklist, compose
+      hardening (read-only root, limits, no-new-privileges), and digest
+      pinning guidance.
 - [x] **Observability baseline** — DONE (see CHANGELOG): Prometheus
       `/metrics` (request rate/latency by route template, engine tick
       health/failures, ingest counters, table-row gauges; optional bearer
@@ -363,6 +368,18 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Deployment hardening (Tier 1)** — a
+  SecurityHeadersMiddleware stamps nosniff / DENY-framing / no-referrer /
+  no-store on every API response including errors (tested); the API
+  Dockerfile drops to an unprivileged `app` user (uid 10001) with only the
+  `/data` volume writable (registry rate-limits block a local build-verify —
+  standard pattern, verify at deploy); and `docs/DEPLOYMENT.md` ships the
+  topology (TLS at the proxy, app ports internal-only), nginx and Caddy
+  reference configs (HSTS, frontend CSP for the static export, SSE-safe
+  proxy settings, upload size), the env checklist that should fail a deploy
+  when unset, compose hardening, digest pinning, and an honest "what the
+  platform refuses to pretend about" section (no app-level TLS, /metrics
+  gating, plain-UDP syslog until Tier-2 RFC 5425).
 - **2026-06-12 · Observability baseline (Tier 1)** —
   `dashboard_api/observability.py`, stdlib-only: a pure-ASGI middleware
   records every request under its resolved route TEMPLATE (so
