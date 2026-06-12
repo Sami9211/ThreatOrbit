@@ -239,6 +239,115 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ---
 
+## Production readiness — honest gap list to go-live (2026-06-12)
+
+**Where the product stands.** Functionally, the SIEM + SOAR + CTI + asset +
+dark-web surface is complete and real (138 backend tests, every feature
+backed by live data paths, honest degradation where keys/deployment are
+required). What separates it from "sellable and operable" is not features —
+it is hardening, scale architecture, and the operational/compliance machinery
+that buying companies require. Realistic positioning today:
+
+- **Small companies (single node, ≤ ~50 assets, low EPS):** close — a strong
+  beta. Tier 1 below is the punch list; most items are days-to-weeks, not
+  months.
+- **Mid-size (multiple teams, hundreds of assets, real log volume):** needs
+  Tier 1 + Tier 2 — SSO, parser/content breadth, published load limits.
+- **Large enterprise / MSSP:** needs Tiers 1–3 — a re-architected event
+  pipeline, finished tenant isolation, HA/DR, and a vendor compliance
+  posture. This is the substantial engineering tranche (months).
+
+### Tier 1 — required before ANY paying deployment (small scale)
+
+- [ ] **Secrets encryption at rest** — connector/integration API keys, the
+      SMTP password and per-user Slack webhooks are stored plaintext in the
+      DB. Encrypt with a deployment master key (env/KMS), rotate-able.
+- [ ] **Real MFA (TOTP)** — `mfa_enabled` is a stored flag with no
+      enrolment/verification behind it. Implement TOTP enrol + login step-up,
+      or remove the toggle until it exists (data-honesty rule).
+- [ ] **Honest auth-method selector** — Config → Security offers OIDC/SAML
+      options that have no backend. Remove or mark "not yet available" until
+      Tier 2 lands SSO.
+- [ ] **Backup / restore / upgrade path** — documented + scripted SQLite/
+      Postgres backup, restore drill, and a versioned upgrade procedure
+      (schema migrations are additive-only today; that's fine, but say so and
+      test downgrade/restore).
+- [ ] **Deployment hardening guide** — TLS termination + reverse-proxy
+      reference config, secure cookie/headers/CSP on the frontend, non-root
+      containers, resource limits in compose; pin image digests.
+- [ ] **Observability baseline** — structured JSON logs, a Prometheus
+      `/metrics` endpoint (request rates/latency, engine tick health, ingest
+      EPS, queue depths), and an error-tracking hook (e.g. Sentry DSN env).
+- [ ] **Security pass** — dependency audit in CI (pip-audit / npm audit),
+      a third-party pentest before first sale, and a documented
+      vulnerability-disclosure + patch-release process for the product itself.
+- [ ] **Pilot validation with real logs** — deploy against a live
+      environment, forward real syslog/files, and tune parsers + built-in
+      rules on actual data (the generated event stream only proves the
+      pipeline, not parser coverage).
+- [ ] **Validate the Postgres path against a live server** (adapter is
+      implemented + unit-tested; needs a real PG run) — required even for
+      small scale if the customer mandates Postgres.
+- [ ] **Execute the E2E suite in CI and fix what it flags** (browsers are
+      CDN-blocked in the dev environment; the workflow exists).
+- [ ] **Licensing/billing decision** — keys work today (HMAC, limits
+      enforced); Stripe self-serve is only needed if selling without a
+      sales-led motion.
+
+### Tier 2 — mid-size deployments
+
+- [ ] **SSO** — OIDC first (then SAML), JIT user provisioning + SCIM for
+      deprovisioning; map IdP groups → roles in the capability matrix.
+- [ ] **Parser & source breadth** — Windows Event/Sysmon, AWS CloudTrail,
+      Azure AD / M365, GCP audit, common EDR + firewall exports; TLS syslog
+      (RFC 5425) and an agentless-pull option (S3/blob bucket tail). Publish
+      a supported-sources matrix.
+- [ ] **Detection content library** — ship a curated Sigma pack (the
+      importer exists) with per-rule noise ratings, and a content-update
+      channel so new detections arrive without a product upgrade.
+- [ ] **Published load limits** — benchmark and document sustained EPS,
+      alert volume, and UI dataset ceilings on reference hardware (SQLite vs
+      Postgres); add ingest backpressure (bounded queue + 429) instead of
+      best-effort inserts.
+- [ ] **Background-service HA story** — syslog listener, file watcher,
+      scheduler and engine tick are single-instance; either document the
+      single-writer constraint or add leader election so two app replicas
+      don't double-run them.
+- [ ] **Retention tiering** — per-table retention exists; add event-stream
+      archive/export (compressed NDJSON to object storage) before purge, so
+      compliance teams keep raw logs cheaply.
+
+### Tier 3 — large enterprise / MSSP
+
+- [ ] **Event pipeline at scale** — the events table + in-process detection
+      won't hold at enterprise EPS. Separate ingest from detection with a
+      queue/worker model, partition or externalise the event store (e.g.
+      ClickHouse/OpenSearch behind the same search API), and make the hunt
+      language push predicates down to it.
+- [ ] **Finish multi-tenancy for GA** — the documented limits must close
+      before MSSP sale: org-scope get-by-id detail endpoints (404 cross-org),
+      org-scope global search and the SSE stream, per-org engine/ingest
+      context (org-tagged sources), tenant lifecycle tooling (create/suspend/
+      export/delete with data purge), and per-tenant quotas + retention.
+      Then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
+- [ ] **HA / DR / zero-downtime** — k8s/Helm chart, rolling upgrades with
+      migration gating, RPO/RTO targets with tested failover, multi-AZ
+      Postgres guidance.
+- [ ] **Vendor compliance posture** — SOC 2 Type II (then ISO 27001)
+      program, DPA template, GDPR data-subject tooling (export/erase per
+      user), data-residency options. Enterprises ask for these before the
+      first PoC ends.
+- [ ] **Collector ecosystem** — a lightweight agent or certified
+      Beats/Fluent Bit/Vector configs, with mTLS enrolment — "POST your logs
+      here" is not an enterprise answer.
+- [ ] **API stability contract** — versioned REST API (`/v1`), deprecation
+      policy, webhook signing (HMAC header on outbound webhooks), and
+      OpenAPI docs published per release.
+- [ ] **Scale-grade RBAC** — custom roles (the matrix is fixed today),
+      per-workspace role assignment, and break-glass/audit-everything mode.
+
+---
+
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
