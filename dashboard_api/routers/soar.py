@@ -811,6 +811,39 @@ def create_integration(body: IntegrationCreate, user: dict = Depends(require_per
     return _integration_public(row_to_dict(row))
 
 
+class IntegrationUpdate(BaseModel):
+    base_url: str | None = None
+    api_key: str | None = None   # empty string clears the stored key
+    enabled: bool | None = None
+
+
+@router.patch("/integrations/{integration_id}")
+def update_integration(integration_id: str, body: IntegrationUpdate,
+                       user: dict = Depends(require_perm("soar.write"))):
+    """Credential entry for an action integration: set/clear the vendor base
+    URL + API key (the key is stored, never returned — list/detail expose only
+    `credentialed`) and toggle enablement."""
+    fields, values = [], []
+    if body.base_url is not None:
+        fields.append("base_url=?"); values.append(body.base_url.strip() or None)
+    if body.api_key is not None:
+        fields.append("api_key=?"); values.append(body.api_key.strip() or None)
+    if body.enabled is not None:
+        fields.append("enabled=?"); values.append(1 if body.enabled else 0)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    values.append(integration_id)
+    with get_conn() as conn:
+        cur = conn.execute(f"UPDATE integrations SET {','.join(fields)} WHERE id=?", values)
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Integration not found")
+        audit(conn, user["email"], "integration.update", integration_id,
+              "credentials" if (body.base_url is not None or body.api_key is not None) else "enabled")
+        conn.commit()
+        row = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
+    return _integration_public(row_to_dict(row))
+
+
 @router.post("/integrations/{integration_id}/test")
 def test_integration(integration_id: str, user: dict = Depends(current_user)):
     """Record a connectivity check: stamps last_sync and marks the connector live."""
@@ -825,7 +858,7 @@ def test_integration(integration_id: str, user: dict = Depends(current_user)):
         audit(conn, user["email"], "integration.test", integration_id)
         conn.commit()
         row = conn.execute("SELECT * FROM integrations WHERE id=?", (integration_id,)).fetchone()
-    return row_to_dict(row)
+    return _integration_public(row_to_dict(row))
 
 
 @router.post("/integrations/{integration_id}/actions/run")

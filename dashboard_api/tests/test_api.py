@@ -812,6 +812,23 @@ def test_integration_lifecycle(client, auth):
     assert client.post("/soar/integrations/missing/actions/run",
                        json={"action": "x"}, headers=auth).status_code == 404
 
+    # credential entry: PATCH stores base_url + key; the key never leaves the
+    # server — every payload (patch/test/list) exposes only `credentialed`
+    upd = client.patch(f"/soar/integrations/{iid}",
+                       json={"base_url": "https://api.pagerduty.example", "api_key": "pd-secret-1"},
+                       headers=auth).json()
+    assert upd["credentialed"] is True and upd["base_url"] == "https://api.pagerduty.example"
+    assert "api_key" not in upd
+    assert "api_key" not in client.post(f"/soar/integrations/{iid}/test", headers=auth).json()
+    listed = next(i for i in client.get("/soar/integrations", headers=auth).json() if i["id"] == iid)
+    assert listed["credentialed"] is True and "api_key" not in listed
+    # toggle + clear
+    assert client.patch(f"/soar/integrations/{iid}", json={"enabled": False}, headers=auth).json()["enabled"] == 0
+    cleared = client.patch(f"/soar/integrations/{iid}", json={"base_url": "", "api_key": ""}, headers=auth).json()
+    assert cleared["credentialed"] is False
+    assert client.patch(f"/soar/integrations/{iid}", json={}, headers=auth).status_code == 400
+    assert client.patch("/soar/integrations/missing", json={"enabled": True}, headers=auth).status_code == 404
+
 
 def test_rule_delete(client, auth):
     rule = client.post("/siem/rules", json={"name": "Temp rule", "severity": "low"}, headers=auth).json()

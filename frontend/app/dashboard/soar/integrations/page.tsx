@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchSoarIntegrations, createIntegration, testIntegration, runIntegrationAction, type Integration as ApiIntegration } from '@/lib/api'
+import { fetchSoarIntegrations, createIntegration, testIntegration, runIntegrationAction, updateIntegration, type Integration as ApiIntegration } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import {
   Link, Plus, CheckCircle, AlertTriangle, XCircle, Settings,
@@ -26,21 +26,24 @@ interface Integration {
   description: string
   actions: string[]
   enabled: boolean
+  /** Whether a vendor base URL + API key are stored (the key itself is write-only). */
+  credentialed: boolean
+  baseUrl: string | null
 }
 
 const INTEGRATIONS: Integration[] = [
-  { id: 'i01', name: 'CrowdStrike Falcon',  vendor: 'CrowdStrike',  category: 'EDR',          status: 'connected',    lastSync: '8s ago',   actionsRun: 1847, avgResponseMs: 220,  description: 'Endpoint isolation, process kill, containment via RTR', actions: ['Contain Host', 'Kill Process', 'Get Process Tree', 'Network Quarantine'], enabled: true },
-  { id: 'i02', name: 'Palo Alto NGFW',      vendor: 'Palo Alto',    category: 'Firewall',     status: 'connected',    lastSync: '3m ago',   actionsRun: 924,  avgResponseMs: 540,  description: 'Block IPs, add to DAGs, update security policy', actions: ['Block IP', 'Block URL', 'Add to DAG', 'Get Traffic Logs'], enabled: true },
-  { id: 'i03', name: 'Splunk ES',           vendor: 'Splunk',       category: 'SIEM',         status: 'connected',    lastSync: '1m ago',   actionsRun: 3241, avgResponseMs: 180,  description: 'Create notable events, run SPL searches, update risk scores', actions: ['Create Notable', 'Run Search', 'Add Risk Score', 'Correlate Events'], enabled: true },
-  { id: 'i04', name: 'Jira Service Mgmt',   vendor: 'Atlassian',    category: 'Ticketing',    status: 'connected',    lastSync: '2m ago',   actionsRun: 548,  avgResponseMs: 1200, description: 'Auto-create incidents, assign tickets, update SLA fields', actions: ['Create Issue', 'Update Issue', 'Assign Issue', 'Add Comment'], enabled: true },
-  { id: 'i05', name: 'PagerDuty',           vendor: 'PagerDuty',    category: 'Communication', status: 'connected',   lastSync: '45s ago',  actionsRun: 287,  avgResponseMs: 340,  description: 'Page on-call engineers, trigger incidents, resolve alerts', actions: ['Create Incident', 'Trigger Alert', 'Resolve Incident', 'Send Notification'], enabled: true },
-  { id: 'i06', name: 'Slack',               vendor: 'Slack',        category: 'Communication', status: 'connected',   lastSync: '12s ago',  actionsRun: 2140, avgResponseMs: 290,  description: 'War room notifications, analyst alerts, status updates', actions: ['Send Message', 'Create Channel', 'Post File', 'Add Reaction'], enabled: true },
-  { id: 'i07', name: 'VirusTotal',          vendor: 'Google',       category: 'Threat Intel', status: 'connected',    lastSync: '5m ago',   actionsRun: 7824, avgResponseMs: 680,  description: 'Enrich IOCs — IPs, domains, hashes, URLs against 90+ engines', actions: ['Scan IP', 'Scan URL', 'Scan Hash', 'Get File Report'], enabled: true },
-  { id: 'i08', name: 'Recorded Future',     vendor: 'Recorded Future', category: 'Threat Intel', status: 'connected', lastSync: '11m ago',  actionsRun: 1203, avgResponseMs: 820,  description: 'Threat actor enrichment, risk scoring, C2 infrastructure lookup', actions: ['Enrich IP', 'Actor Lookup', 'Risk Score', 'IOC Context'], enabled: true },
-  { id: 'i09', name: 'Okta',               vendor: 'Okta',          category: 'Identity',     status: 'degraded',    lastSync: '18m ago',  actionsRun: 344,  avgResponseMs: 4800, description: 'Suspend user, reset MFA, revoke sessions, get user activity', actions: ['Suspend User', 'Reset MFA', 'Revoke Sessions', 'Get User Logs'], enabled: true },
-  { id: 'i10', name: 'AWS Security Hub',   vendor: 'Amazon',         category: 'Cloud',        status: 'connected',   lastSync: '2m ago',   actionsRun: 892,  avgResponseMs: 450,  description: 'Update findings, isolate EC2, revoke IAM keys, S3 lockdown', actions: ['Update Finding', 'Isolate EC2', 'Revoke IAM Key', 'Block S3 Access'], enabled: true },
-  { id: 'i11', name: 'Microsoft Sentinel', vendor: 'Microsoft',      category: 'SIEM',         status: 'pending',     lastSync: 'Never',    actionsRun: 0,    avgResponseMs: 0,    description: 'Pending API configuration — requires Azure app registration', actions: ['Create Incident', 'Run Logic App', 'Update Alert'], enabled: false },
-  { id: 'i12', name: 'ServiceNow ITSM',   vendor: 'ServiceNow',      category: 'Ticketing',   status: 'disconnected', lastSync: '3d ago',   actionsRun: 0,    avgResponseMs: 0,    description: 'Disconnected — credential rotation required', actions: ['Create Incident', 'Update Incident', 'Assign CI'], enabled: false },
+  { id: 'i01', name: 'CrowdStrike Falcon',  vendor: 'CrowdStrike',  category: 'EDR',          status: 'connected',    lastSync: '8s ago',   actionsRun: 1847, avgResponseMs: 220,  description: 'Endpoint isolation, process kill, containment via RTR', actions: ['Contain Host', 'Kill Process', 'Get Process Tree', 'Network Quarantine'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i02', name: 'Palo Alto NGFW',      vendor: 'Palo Alto',    category: 'Firewall',     status: 'connected',    lastSync: '3m ago',   actionsRun: 924,  avgResponseMs: 540,  description: 'Block IPs, add to DAGs, update security policy', actions: ['Block IP', 'Block URL', 'Add to DAG', 'Get Traffic Logs'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i03', name: 'Splunk ES',           vendor: 'Splunk',       category: 'SIEM',         status: 'connected',    lastSync: '1m ago',   actionsRun: 3241, avgResponseMs: 180,  description: 'Create notable events, run SPL searches, update risk scores', actions: ['Create Notable', 'Run Search', 'Add Risk Score', 'Correlate Events'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i04', name: 'Jira Service Mgmt',   vendor: 'Atlassian',    category: 'Ticketing',    status: 'connected',    lastSync: '2m ago',   actionsRun: 548,  avgResponseMs: 1200, description: 'Auto-create incidents, assign tickets, update SLA fields', actions: ['Create Issue', 'Update Issue', 'Assign Issue', 'Add Comment'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i05', name: 'PagerDuty',           vendor: 'PagerDuty',    category: 'Communication', status: 'connected',   lastSync: '45s ago',  actionsRun: 287,  avgResponseMs: 340,  description: 'Page on-call engineers, trigger incidents, resolve alerts', actions: ['Create Incident', 'Trigger Alert', 'Resolve Incident', 'Send Notification'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i06', name: 'Slack',               vendor: 'Slack',        category: 'Communication', status: 'connected',   lastSync: '12s ago',  actionsRun: 2140, avgResponseMs: 290,  description: 'War room notifications, analyst alerts, status updates', actions: ['Send Message', 'Create Channel', 'Post File', 'Add Reaction'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i07', name: 'VirusTotal',          vendor: 'Google',       category: 'Threat Intel', status: 'connected',    lastSync: '5m ago',   actionsRun: 7824, avgResponseMs: 680,  description: 'Enrich IOCs — IPs, domains, hashes, URLs against 90+ engines', actions: ['Scan IP', 'Scan URL', 'Scan Hash', 'Get File Report'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i08', name: 'Recorded Future',     vendor: 'Recorded Future', category: 'Threat Intel', status: 'connected', lastSync: '11m ago',  actionsRun: 1203, avgResponseMs: 820,  description: 'Threat actor enrichment, risk scoring, C2 infrastructure lookup', actions: ['Enrich IP', 'Actor Lookup', 'Risk Score', 'IOC Context'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i09', name: 'Okta',               vendor: 'Okta',          category: 'Identity',     status: 'degraded',    lastSync: '18m ago',  actionsRun: 344,  avgResponseMs: 4800, description: 'Suspend user, reset MFA, revoke sessions, get user activity', actions: ['Suspend User', 'Reset MFA', 'Revoke Sessions', 'Get User Logs'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i10', name: 'AWS Security Hub',   vendor: 'Amazon',         category: 'Cloud',        status: 'connected',   lastSync: '2m ago',   actionsRun: 892,  avgResponseMs: 450,  description: 'Update findings, isolate EC2, revoke IAM keys, S3 lockdown', actions: ['Update Finding', 'Isolate EC2', 'Revoke IAM Key', 'Block S3 Access'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i11', name: 'Microsoft Sentinel', vendor: 'Microsoft',      category: 'SIEM',         status: 'pending',     lastSync: 'Never',    actionsRun: 0,    avgResponseMs: 0,    description: 'Pending API configuration — requires Azure app registration', actions: ['Create Incident', 'Run Logic App', 'Update Alert'], enabled: false, credentialed: false, baseUrl: null },
+  { id: 'i12', name: 'ServiceNow ITSM',   vendor: 'ServiceNow',      category: 'Ticketing',   status: 'disconnected', lastSync: '3d ago',   actionsRun: 0,    avgResponseMs: 0,    description: 'Disconnected — credential rotation required', actions: ['Create Incident', 'Update Incident', 'Assign CI'], enabled: false, credentialed: false, baseUrl: null },
 ]
 
 const CAT_COLORS: Record<IntCategory, string> = {
@@ -65,6 +68,7 @@ const STATUS_CFG: Record<IntStatus, { label: string; cls: string; dot: string }>
 const apiToIntegration = (d: ApiIntegration & {
   vendor?: string; category?: string; actionsRun?: number
   avgResponseMs?: number; actions?: string[]; enabled?: number
+  credentialed?: boolean; baseUrl?: string | null
 }): Integration => ({
   id: d.id,
   name: d.name,
@@ -78,7 +82,68 @@ const apiToIntegration = (d: ApiIntegration & {
   description: d.description ?? '',
   actions: d.actions ?? [],
   enabled: Boolean(d.enabled ?? (d.status === 'connected')),
+  credentialed: Boolean(d.credentialed),
+  baseUrl: d.baseUrl ?? null,
 })
+
+/* Credential entry for an action integration. The API key is write-only:
+   we never display a stored key, only whether one exists (`credentialed`). */
+function CredentialsForm({ integration, onSaved }: {
+  integration: Integration
+  onSaved: (updated: Integration) => void
+}) {
+  const [baseUrl, setBaseUrl] = useState(integration.baseUrl ?? '')
+  const [apiKey, setApiKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => { setBaseUrl(integration.baseUrl ?? ''); setApiKey(''); setErr(null) }, [integration.id, integration.baseUrl])
+
+  function save(clear = false) {
+    if (busy) return
+    setBusy(true); setErr(null)
+    updateIntegration(integration.id, clear
+      ? { baseUrl: '', apiKey: '' }
+      : { baseUrl, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) })
+      .then((u) => { setApiKey(''); onSaved(apiToIntegration(u as Parameters<typeof apiToIntegration>[0])) })
+      .catch(() => setErr('Could not save credentials.'))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="mt-4 p-4 rounded-xl border border-white/10 bg-white/3">
+      <div className="flex items-center gap-2 mb-1">
+        <Shield className="w-3.5 h-3.5 text-safe" />
+        <p className="text-xs font-semibold text-white">API credentials</p>
+        <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-medium',
+          integration.credentialed ? 'text-safe bg-safe/12' : 'text-ink-500 bg-white/6')}>
+          {integration.credentialed ? 'configured' : 'not configured'}
+        </span>
+      </div>
+      <p className="text-[10px] text-ink-600 mb-3">
+        With a base URL + API key, response actions call the live vendor API; without them,
+        attempts are honestly recorded as not-configured. The key is write-only — it is never shown again.
+      </p>
+      <div className="grid sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
+        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="https://api.vendor.example"
+          className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-safe/40 placeholder-ink-600" />
+        <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password"
+          placeholder={integration.credentialed ? 'API key (leave blank to keep current)' : 'API key'}
+          className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-safe/40 placeholder-ink-600" />
+        <button onClick={() => save(false)} disabled={busy || !baseUrl.trim()}
+          className="px-3 py-2 rounded-lg text-xs font-medium bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 disabled:opacity-50 transition-colors">
+          Save
+        </button>
+        <button onClick={() => save(true)} disabled={busy || !integration.credentialed}
+          title="Remove the stored base URL and API key"
+          className="px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-threat disabled:opacity-40 transition-colors">
+          Clear
+        </button>
+      </div>
+      {err && <p className="text-[10px] text-threat mt-2">{err}</p>}
+    </div>
+  )
+}
 
 export default function SoarIntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS)
@@ -112,6 +177,8 @@ export default function SoarIntegrationsPage() {
       category: values.category || undefined,
       description: values.description || undefined,
       actions: [],
+      base_url: values.baseUrl || undefined,
+      api_key: values.apiKey || undefined,
     })
     const mapped = apiToIntegration(created as Parameters<typeof apiToIntegration>[0])
     setIntegrations((prev) => [mapped, ...prev])
@@ -229,7 +296,14 @@ export default function SoarIntegrationsPage() {
                   </div>
                   <div className="flex items-center gap-2 ml-2">
                     <button
-                      onClick={e => { e.stopPropagation(); setEnabledMap(prev => ({ ...prev, [int.id]: !prev[int.id] })) }}
+                      title={isEnabled ? 'Disable integration' : 'Enable integration'}
+                      onClick={e => {
+                        e.stopPropagation()
+                        const next = !isEnabled
+                        setEnabledMap(prev => ({ ...prev, [int.id]: next }))  // optimistic
+                        updateIntegration(int.id, { enabled: next })
+                          .catch(() => setEnabledMap(prev => ({ ...prev, [int.id]: !next })))  // roll back
+                      }}
                     >
                       {isEnabled
                         ? <ToggleRight className="w-5 h-5 text-safe" />
@@ -238,13 +312,22 @@ export default function SoarIntegrationsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full border', CAT_COLORS[int.category])}>
                     {int.category}
                   </span>
                   <span className={cn('flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full border', st.cls)}>
                     <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />
                     {st.label}
+                  </span>
+                  <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded-full border',
+                    int.credentialed
+                      ? 'text-safe border-safe/20 bg-safe/10'
+                      : 'text-ink-500 border-white/10 bg-white/5')}
+                    title={int.credentialed
+                      ? 'API credentials configured — actions call the live vendor API'
+                      : 'No credentials — actions are recorded as not-configured until a base URL + API key are set'}>
+                    {int.credentialed ? 'live API' : 'no credentials'}
                   </span>
                 </div>
 
@@ -303,6 +386,17 @@ export default function SoarIntegrationsPage() {
                     ))}
                   </div>
                 )}
+                {/* Credential entry — set the vendor base URL + API key so
+                    actions call the live API instead of recording not-configured */}
+                <CredentialsForm
+                  integration={selectedInt}
+                  onSaved={(updated) => {
+                    setIntegrations((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
+                    note(updated.credentialed
+                      ? `Credentials saved — ${updated.name} actions now call the live API`
+                      : 'Credentials cleared — actions will record as not-configured')
+                  }}
+                />
                 <div className="flex items-center gap-2 mt-4 flex-wrap">
                   <button
                     onClick={(e) => { e.stopPropagation(); handleTest(selectedInt.id) }}
@@ -339,6 +433,8 @@ export default function SoarIntegrationsPage() {
                 'EDR', 'Firewall', 'SIEM', 'Ticketing', 'Communication', 'Threat Intel', 'Identity', 'Cloud',
               ].map((c) => ({ value: c, label: c })) },
               { key: 'description', label: 'Description', type: 'textarea', placeholder: 'What this connector is used for' },
+              { key: 'baseUrl', label: 'API base URL (optional)', placeholder: 'https://api.vendor.example' },
+              { key: 'apiKey', label: 'API key (optional, write-only)', placeholder: 'Set now or later via the card' },
             ]}
           />
         )}

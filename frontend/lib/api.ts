@@ -897,6 +897,15 @@ export const createIntegration = (body: {
 }) => api<Integration & { credentialed: boolean }>('/soar/integrations', { method: 'POST', body: JSON.stringify(body) })
 export const testIntegration = (id: string) =>
   api<Integration>(`/soar/integrations/${id}/test`, { method: 'POST' })
+// Credential entry: set/clear the vendor base URL + API key, toggle enablement.
+// The key is write-only; responses expose only `credentialed`.
+export const updateIntegration = (id: string, body: {
+  baseUrl?: string | null; apiKey?: string | null; enabled?: boolean
+}) =>
+  api<Integration & { credentialed: boolean; enabled: number }>(`/soar/integrations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ base_url: body.baseUrl, api_key: body.apiKey, enabled: body.enabled }),
+  })
 export interface IntegrationActionResult {
   id: string; action: string; target: string; category: string
   status: 'success' | 'failed' | 'simulated' | 'not-configured'; mode: 'live' | 'simulated'; detail: string; ts: string

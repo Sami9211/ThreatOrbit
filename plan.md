@@ -114,12 +114,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       authoring canvas (palette of the 11 executable kinds, reorderable cards,
       per-step params, live dry-run) over the real execution engine, plus
       append-only version history with one-click revert.
-- [~] **Real action integrations** — DONE (see CHANGELOG): credentialled
+- [x] **Real action integrations** — DONE (see CHANGELOG): credentialled
       connectors make **real** outbound vendor calls (CrowdStrike contain /
       firewall block / IdP suspend / Jira issue), uncredentialled ones record a
       not-configured action, and every attempt hits an action audit trail; the
-      API key is never returned. Remaining: a credential-entry UI form +
-      per-vendor request-shape config (clients shipped).
+      API key is never returned. **Credential entry is in the UI**: a per-tool
+      form (base URL + write-only API key, save/clear) on the integration
+      card, live-API/no-credentials badges, a persisted enable toggle, and
+      optional credentials on Connect Tool; `PATCH /soar/integrations/{id}`
+      backs it (vendor request shapes live in `integration_actions.py` —
+      extend there per vendor).
 - [x] **Automation triggers** — DONE (see CHANGELOG): enabled auto playbooks
       with `trigger_match` criteria (severities/techniques/rule) run
       automatically on matching fresh alerts, once per alert, throttled per
@@ -228,6 +232,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Integration credential entry (Phase 2 closed)** — new
+  `PATCH /soar/integrations/{id}` sets/clears the vendor base URL + API key
+  (write-only; every payload exposes only `credentialed`) and persists the
+  enable toggle. The integrations page gains a per-tool credentials form
+  (save/clear, configured badge), live-API/no-credentials badges on cards,
+  a previously local-only enable toggle that now persists (optimistic with
+  rollback), and optional base URL/key fields on Connect Tool. Also fixed a
+  real credential leak: the test-connection endpoint returned the raw row
+  including `api_key` — now sanitised.
 - **2026-06-12 · Search joins across sources (Phase 1 fully closed)** — the
   hunt language gains `| join <field> <subquery>`: keep left-side rows whose
   field value also appears in the subquery's matches over the same window
