@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm, require_role
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
@@ -145,10 +146,10 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
                 continue
             conn.execute(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (str(uuid.uuid4()), itype, val, body.threat_type,
                  max(0, min(100, body.confidence)), body.severity, body.source, body.actor,
-                 now, now, tags_json),
+                 now, now, tags_json, tenancy.org_of(user)),
             )
             imported += 1
         _record_import(conn, body.source or "manual import", "manual", imported, duplicates,
@@ -464,10 +465,10 @@ def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write")
             sev = "high" if a.get("to_ids") else "medium"
             conn.execute(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (str(uuid.uuid4()), a["type"], val, a.get("comment") or "misp-import",
                  70 if a.get("to_ids") else 50, sev, "MISP import", "", now, now,
-                 dumps([f"tlp:{tlp}", "misp"])))
+                 dumps([f"tlp:{tlp}", "misp"]), tenancy.org_of(user)))
             imported += 1
         _record_import(conn, f"MISP event ({body.event.get('Event', {}).get('info', 'import')})"[:100],
                        "misp", imported, duplicates, skipped, user["email"])
@@ -620,7 +621,8 @@ def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Hunt name is required")
-    return create_saved_hunt("cti", name, body.description, body.query, body.technique, user["email"])
+    return create_saved_hunt("cti", name, body.description, body.query, body.technique,
+                             user["email"], org_id=tenancy.org_of(user))
 
 
 @router.post("/hunts/{hunt_id}/run")
@@ -682,8 +684,10 @@ def record_scan(body: ScanRecord, user: dict = Depends(require_perm("cti.write")
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO scans (id,ts,target,type,verdict,score,engines,actor) VALUES (?,?,?,?,?,?,?,?)",
-            (sid, now, target, body.type, body.verdict, body.score, body.engines, user["email"]),
+            "INSERT INTO scans (id,ts,target,type,verdict,score,engines,actor,org_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (sid, now, target, body.type, body.verdict, body.score, body.engines,
+             user["email"], tenancy.org_of(user)),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM scans WHERE id=?", (sid,)).fetchone()

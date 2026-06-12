@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, dumps, get_conn, record_job, row_to_dict, rows_to_dicts
 from dashboard_api.scoring import fleet_risk_distribution, recompute_asset_risk, risk_breakdown
@@ -66,12 +67,12 @@ def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
-            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software) "
-            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,?,?,0,?,100.0,?,?)",
+            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software,org_id) "
+            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,?,?,0,?,100.0,?,?,?)",
             (aid, name, body.type, value, body.criticality,
              dumps({"critical": 0, "high": 0, "medium": 0, "low": 0}), dumps([]),
              body.os, body.owner or user["email"], dumps(body.tags or ["new"]), now,
-             dumps(body.software or [])),
+             dumps(body.software or []), tenancy.org_of(user)),
         )
         audit(conn, user["email"], "asset.create", aid, f"name={name} type={body.type}")
         conn.commit()
@@ -234,11 +235,11 @@ def promote_discovered(body: PromoteBody, user: dict = Depends(require_perm("ass
             raise HTTPException(status_code=409, detail="Asset already in the inventory")
         conn.execute(
             "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
-            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software) "
-            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,NULL,?,0,?,100.0,?,'[]')",
+            "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software,org_id) "
+            "VALUES (?,?,?,?,?,'unscanned',0,NULL,0,?,?,NULL,?,0,?,100.0,?,'[]',?)",
             (aid, name, body.type, name, body.criticality,
              dumps({"critical": 0, "high": 0, "medium": 0, "low": 0}), dumps([]),
-             user["email"], dumps(["discovered"]), now),
+             user["email"], dumps(["discovered"]), now, tenancy.org_of(user)),
         )
         audit(conn, user["email"], "asset.promote_discovered", aid, f"hostname={name}")
         conn.commit()

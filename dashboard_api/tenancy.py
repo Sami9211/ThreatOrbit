@@ -12,10 +12,12 @@ now **wired but off by default**: every table in TENANT_TABLES carries a
 defaulted `org_id` column, and each one's list endpoint scopes reads to the
 caller's workspace when `DASHBOARD_MULTI_TENANT` is on (default off, so
 single-tenant deployments behave exactly as before — proven by the test suite
-running with the flag off). Remaining for a true multi-org rollout:
-`org_of(user)` stamping on the write paths so new rows land in the creator's
-workspace rather than the default one, and scoping the aggregate/summary
-endpoints (KPIs, summaries) the same way.
+running with the flag off). User-driven create endpoints stamp `org_of(user)`
+so rows land in the creator's workspace (the single-tenant value IS the
+default org, so nothing changes there either). Engine/seed/background writers
+deliberately stay in the default workspace — they run as the deployment, not
+a user; a per-org engine context is a deployment-level concern. Remaining:
+scoping the aggregate/summary endpoints (KPIs, summaries) the same way.
 """
 import os
 import uuid

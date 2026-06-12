@@ -123,17 +123,21 @@ _HUNT_COLS = ("id, name, description AS hypothesis, author AS analyst, query, te
 
 
 def create_saved_hunt(domain: str, name: str, description: str | None,
-                      query: str | None, technique: str | None, author: str) -> dict:
+                      query: str | None, technique: str | None, author: str,
+                      org_id: str | None = None) -> dict:
     """Insert a saved hunt row and return it in the API shape."""
     import uuid
+    from dashboard_api import tenancy
     from dashboard_api.db import audit, row_to_dict
     hid = str(uuid.uuid4())
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO saved_hunts (id,domain,name,description,query,technique,last_run,"
-            "hit_count,author,status,progress,created) VALUES (?,?,?,?,?,?,NULL,0,?, 'idle',0,?)",
-            (hid, domain, name, description, query, technique, author, now),
+            "hit_count,author,status,progress,created,org_id) "
+            "VALUES (?,?,?,?,?,?,NULL,0,?, 'idle',0,?,?)",
+            (hid, domain, name, description, query, technique, author, now,
+             org_id or tenancy.DEFAULT_ORG_ID),
         )
         audit(conn, author, "hunt.create", hid, f"domain={domain} name={name}")
         conn.commit()

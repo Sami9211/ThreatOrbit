@@ -2491,6 +2491,48 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
     assert len(pbs) == 2
 
 
+def test_tenant_write_stamping(client, auth, monkeypatch):
+    """Create endpoints stamp the caller's workspace: rows made by a user in a
+    foreign org land there (not in the default), so flag-on isolation works
+    end-to-end — the foreign analyst sees their row, the default admin doesn't."""
+    import uuid as _uuid
+    from dashboard_api import tenancy
+    from dashboard_api.db import get_conn
+
+    marker = f"STAMP-{_uuid.uuid4().hex[:6]}"
+    email = f"{marker.lower()}@threatorbit.space"
+    u = client.post("/users", json={"email": email, "name": "Other-Org Analyst",
+                                    "role": "analyst", "password": "Password123!"},
+                    headers=auth).json()
+    with get_conn() as conn:  # move them to a foreign workspace
+        conn.execute("UPDATE users SET org_id='org-other' WHERE id=?", (u["id"],))
+        conn.commit()
+    tok = client.post("/auth/login", json={"email": email, "password": "Password123!"}).json()["token"]
+    other = {"Authorization": f"Bearer {tok}"}
+
+    # their IOC import and case land in org-other (stamping is always on)
+    r = client.post("/cti/iocs/import", headers=other,
+                    json={"indicators": [{"type": "domain", "value": f"{marker}.stamp.test"}]})
+    assert r.status_code == 201 and r.json()["imported"] == 1
+    case = client.post("/soar/cases", headers=other,
+                       json={"title": f"{marker} stamped case", "severity": "low"}).json()
+    with get_conn() as conn:
+        ioc_org = conn.execute("SELECT org_id FROM iocs WHERE value=?",
+                               (f"{marker}.stamp.test",)).fetchone()["org_id"]
+        case_org = conn.execute("SELECT org_id FROM cases WHERE id=?",
+                                (case["id"],)).fetchone()["org_id"]
+    assert ioc_org == "org-other" and case_org == "org-other"
+
+    # flag on → the default-workspace admin can't see them; their author can
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    assert client.get(f"/cti/iocs?q={marker}", headers=auth).json()["total"] == 0
+    assert client.get(f"/cti/iocs?q={marker}", headers=other).json()["total"] == 1
+    assert not any(c["id"] == case["id"] for c in client.get("/soar/cases", headers=auth).json())
+    assert any(c["id"] == case["id"] for c in client.get("/soar/cases", headers=other).json())
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    client.delete(f"/users/{u['id']}", headers=auth)
+
+
 def test_tenancy_scope_helper_units():
     """The staged isolation seam is a no-op while enforcement is off, and emits
     a real org filter when on — so wiring it into queries later is safe."""

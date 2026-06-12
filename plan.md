@@ -49,9 +49,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       assets, dark_web_findings, detection_rules) plus the secondary ones
       (feeds, actors, connectors, playbooks, runs, hunts, scans, suppressions,
       log sources, notifications, saved views, report schedules; events carry
-      the column). Remaining for a true multi-org rollout: `org_of(user)`
-      stamping on write paths so new rows land in the creator's workspace, and
-      scoping the aggregate/summary endpoints the same way.
+      the column). **Write stamping is live too**: every user-driven create
+      endpoint stamps `org_of(user)` so rows land in the creator's workspace
+      (engine/seed writers stay in the deployment's default workspace by
+      design). Remaining: scoping the aggregate/summary endpoints (KPIs,
+      summaries) the same way.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
       Security. Remaining: signed/immutable evidence bundles.
@@ -213,6 +215,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Tenant write stamping (Phase 0)** — every user-driven create
+  endpoint now stamps `org_of(user)` so new rows land in the creator's
+  workspace: IOC import + MISP import, scans, cases (create + split),
+  playbooks, assets (create + promote), detection rules (create + Sigma
+  import), suppressions, log sources, feeds, connectors, report schedules,
+  saved views, saved hunts. Single-tenant value is the default org, so
+  behaviour is unchanged; engine/seed/background writers stay in the
+  deployment workspace by design. New end-to-end test: an analyst moved to a
+  foreign workspace imports an IOC + opens a case, the rows land in their org,
+  and with the flag on the default-workspace admin can't see them while the
+  author can (131-test suite green).
 - **2026-06-12 · Tenant read isolation: all TENANT_TABLES (Phase 0)** — the
   rollout completes the read side: defaulted `org_id` migrations on the 13
   remaining tables (events, threat_actors, log_sources, feeds, connectors,

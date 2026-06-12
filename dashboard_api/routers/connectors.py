@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_role
 from dashboard_api.connectors import KIND_PRESETS, run_connector
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
@@ -87,11 +88,12 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_role("a
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO connectors (id,name,kind,url,api_key,auth_header,enabled,"
-            "interval_minutes,field_map,status,builtin,created_at,created_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?, 'idle',0,?,?)",
+            "interval_minutes,field_map,status,builtin,created_at,created_by,org_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?, 'idle',0,?,?,?)",
             (cid, name, body.kind, (body.url or KIND_PRESETS[body.kind]["default_url"]) or None,
              body.api_key or None, body.auth_header or None, 1 if body.enabled else 0,
-             max(5, body.interval_minutes), dumps(body.field_map or {}), _now(), user["email"]),
+             max(5, body.interval_minutes), dumps(body.field_map or {}), _now(), user["email"],
+             tenancy.org_of(user)),
         )
         audit(conn, user["email"], "connector.create", cid, f"kind={body.kind} name={name}")
         conn.commit()

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.hunting import run_alert_hunt
@@ -255,10 +256,10 @@ def create_suppression(body: SuppressionCreate, user: dict = Depends(require_per
     sid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO suppressions (id,rule_id,field,value,mode,reason,created_at,created_by) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO suppressions (id,rule_id,field,value,mode,reason,created_at,created_by,org_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
             (sid, body.rule_id or "*", body.field, value, body.mode, body.reason,
-             _now_iso(), user["email"]),
+             _now_iso(), user["email"], tenancy.org_of(user)),
         )
         # retro-close any currently-open alerts this suppression covers
         clause = f"{body.field}=?"
@@ -471,12 +472,12 @@ def create_rule(body: RuleCreate, user: dict = Depends(require_perm("siem.write"
         conn.execute(
             "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tech_id,"
             "mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,created,updated_by,"
-            "description,kql,suppression_window,severity_override,tags,definition) "
-            "VALUES (?,?,?,?,?,?,?,0,0,0,'enabled','custom',NULL,?,?,?,?,0,NULL,?,?)",
+            "description,kql,suppression_window,severity_override,tags,definition,org_id) "
+            "VALUES (?,?,?,?,?,?,?,0,0,0,'enabled','custom',NULL,?,?,?,?,0,NULL,?,?,?)",
             (rid, name, body.category, body.severity, body.mitre_tactic, body.mitre_tech_id,
              body.mitre_tech, now, user["email"],
              body.description or f"Custom detection: {name}.", body.kql, dumps(body.tags),
-             dumps(body.definition or {})),
+             dumps(body.definition or {}), tenancy.org_of(user)),
         )
         audit(conn, user["email"], "rule.create", rid, f"name={name} severity={body.severity}")
         conn.commit()
@@ -505,11 +506,13 @@ def import_sigma_rule(body: SigmaImport, user: dict = Depends(require_perm("siem
         conn.execute(
             "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tactic_id,"
             "mitre_tech_id,mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,"
-            "created,updated_by,description,kql,suppression_window,severity_override,tags,definition) "
-            "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','sigma',NULL,?,?,?,?,0,NULL,?,?)",
+            "created,updated_by,description,kql,suppression_window,severity_override,tags,definition,"
+            "org_id) "
+            "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','sigma',NULL,?,?,?,?,0,NULL,?,?,?)",
             (rid, mapped["name"], mapped["category"], mapped["severity"], mapped["mitre_tactic"],
              mapped["mitre_tactic_id"], mapped["mitre_tech_id"], now, user["email"],
-             mapped["description"], body.yaml, dumps(mapped["tags"]), dumps(mapped["definition"])),
+             mapped["description"], body.yaml, dumps(mapped["tags"]), dumps(mapped["definition"]),
+             tenancy.org_of(user)),
         )
         audit(conn, user["email"], "rule.import_sigma", rid, f"name={mapped['name']}")
         conn.commit()
@@ -706,9 +709,10 @@ def create_source(body: SourceCreate, user: dict = Depends(current_user)):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO log_sources (id,name,type,host,status,eps_avg,eps_peak,last_event,"
-            "total_events_24h,latency_ms,parse_success,format,tags) "
-            "VALUES (?,?,?,?,'healthy',0,0,NULL,0,0,100,?,?)",
-            (sid, name, body.type, body.host, body.format or body.type, dumps(body.tags)),
+            "total_events_24h,latency_ms,parse_success,format,tags,org_id) "
+            "VALUES (?,?,?,?,'healthy',0,0,NULL,0,0,100,?,?,?)",
+            (sid, name, body.type, body.host, body.format or body.type, dumps(body.tags),
+             tenancy.org_of(user)),
         )
         audit(conn, user["email"], "source.create", sid, f"name={name} type={body.type}")
         conn.commit()
@@ -789,7 +793,8 @@ def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Hunt name is required")
-    return create_saved_hunt("siem", name, body.description, body.query, body.technique, user["email"])
+    return create_saved_hunt("siem", name, body.description, body.query, body.technique,
+                             user["email"], org_id=tenancy.org_of(user))
 
 
 @router.post("/hunts/{hunt_id}/run")

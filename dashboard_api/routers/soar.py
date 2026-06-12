@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
@@ -131,11 +132,13 @@ def create_case(body: CaseCreate, user: dict = Depends(require_perm("soar.write"
             raise HTTPException(status_code=500, detail="Could not allocate a case id")
         conn.execute(
             "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
-            "alert_count,description,entities,war_room,tasks,evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "alert_count,description,entities,war_room,tasks,evidence,org_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (case_id, title, body.type or "Investigation", body.severity, "new", owner, "",
              body.sla_hours, now, now, body.alert_count,
              body.description or f"Investigation into {title.lower()}.",
-             dumps(body.entities), dumps(war_room), dumps(tasks), dumps([])),
+             dumps(body.entities), dumps(war_room), dumps(tasks), dumps([]),
+             tenancy.org_of(user)),
         )
         audit(conn, user["email"], "case.create", case_id, f"title={title} severity={body.severity}")
         conn.commit()
@@ -430,11 +433,12 @@ def split_case(case_id: str, body: CaseSplit, user: dict = Depends(require_perm(
                                              ("Containment", "Contain"), ("Recovery", "Restore")])]
         conn.execute(
             "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
-            "alert_count,description,entities,war_room,tasks,evidence,linked_cases) "
-            "VALUES (?,?,?,?,'new',?,'',?,?,?,0,?,?,?,?,?,?)",
+            "alert_count,description,entities,war_room,tasks,evidence,linked_cases,org_id) "
+            "VALUES (?,?,?,?,'new',?,'',?,?,?,0,?,?,?,?,?,?,?)",
             (cid, title, parent["type"], parent["severity"], user["email"], parent["sla_hours"],
              now, now, f"Split from {case_id}.", dumps(body.entities or []), dumps(war),
-             dumps(tasks), dumps([]), dumps([{"caseId": case_id, "relation": "split-from", "ts": now}])))
+             dumps(tasks), dumps([]), dumps([{"caseId": case_id, "relation": "split-from", "ts": now}]),
+             tenancy.org_of(user)))
         plinks = _load(parent, "linked_cases")
         plinks.append({"caseId": cid, "relation": "split-into", "ts": now})
         conn.execute("UPDATE cases SET linked_cases=?, updated=? WHERE id=?", (dumps(plinks), now, case_id))
@@ -542,11 +546,12 @@ def create_playbook(body: PlaybookCreate, user: dict = Depends(require_perm("soa
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO playbooks (id,name,category,trigger,trigger_type,description,runs,"
-            "success_rate,avg_time,last_run,last_run_status,status,enabled,steps,trigger_match) "
-            "VALUES (?,?,?,?,?,?,0,0,30,NULL,'idle','idle',1,?,?)",
+            "success_rate,avg_time,last_run,last_run_status,status,enabled,steps,trigger_match,org_id) "
+            "VALUES (?,?,?,?,?,?,0,0,30,NULL,'idle','idle',1,?,?,?)",
             (pid, name, body.category, body.trigger or "Manual", body.trigger_type,
              body.description or f"{name} workflow.",
-             dumps(display_steps(body.steps)), dumps(body.trigger_match)),
+             dumps(display_steps(body.steps)), dumps(body.trigger_match),
+             tenancy.org_of(user)),
         )
         _snapshot_version(conn, pid, dumps(display_steps(body.steps)),
                           dumps(body.trigger_match), user["email"], "created")

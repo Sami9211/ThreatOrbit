@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
@@ -71,9 +72,9 @@ def create_feed(body: FeedCreate, user: dict = Depends(current_user)):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO feeds (id,name,provider,type,status,enabled,indicators,last_sync,"
-            "sync_interval,reliability,url,format) VALUES (?,?,?,?,'active',1,0,NULL,?,?,?,?)",
+            "sync_interval,reliability,url,format,org_id) VALUES (?,?,?,?,'active',1,0,NULL,?,?,?,?,?)",
             (fid, name, body.provider or name, body.type, body.sync_interval,
-             body.reliability, body.url, body.format),
+             body.reliability, body.url, body.format, tenancy.org_of(user)),
         )
         audit(conn, user["email"], "feed.create", fid, f"name={name} type={body.type}")
         conn.commit()

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_role
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 
@@ -140,9 +141,10 @@ def create_schedule(body: ScheduleCreate, user: dict = Depends(require_role("adm
     sid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO report_schedules (id,kind,period,cadence,webhook_url,email,enabled,created_at,created_by) "
-            "VALUES (?,?,?,?,?,?,1,?,?)",
-            (sid, body.kind, body.period, body.cadence, body.webhook_url, body.email, _now(), user["email"]),
+            "INSERT INTO report_schedules (id,kind,period,cadence,webhook_url,email,enabled,"
+            "created_at,created_by,org_id) VALUES (?,?,?,?,?,?,1,?,?,?)",
+            (sid, body.kind, body.period, body.cadence, body.webhook_url, body.email, _now(),
+             user["email"], tenancy.org_of(user)),
         )
         audit(conn, user["email"], "report.schedule", sid, f"kind={body.kind} cadence={body.cadence}")
         conn.commit()
@@ -266,8 +268,10 @@ def create_view(body: ViewCreate, user: dict = Depends(current_user)):
     vid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO saved_views (id,section,name,filters,owner,created_at) VALUES (?,?,?,?,?,?)",
-            (vid, body.section, body.name.strip(), dumps(body.filters), user["email"], _now()),
+            "INSERT INTO saved_views (id,section,name,filters,owner,created_at,org_id) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (vid, body.section, body.name.strip(), dumps(body.filters), user["email"], _now(),
+             tenancy.org_of(user)),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM saved_views WHERE id=?", (vid,)).fetchone()
