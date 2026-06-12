@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
-from dashboard_api.auth import current_user, require_role
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.connectors import KIND_PRESETS, run_connector
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 
@@ -71,7 +71,7 @@ def list_connectors(user: dict = Depends(current_user)):
 
 
 @router.post("", status_code=201)
-def create_connector(body: ConnectorCreate, user: dict = Depends(require_role("admin", "manager"))):
+def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("connectors.manage"))):
     if body.kind not in KIND_PRESETS:
         raise HTTPException(status_code=400, detail=f"kind must be one of {sorted(KIND_PRESETS)}")
     name = body.name.strip()
@@ -103,7 +103,7 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_role("a
 
 @router.patch("/{connector_id}")
 def update_connector(connector_id: str, body: ConnectorUpdate,
-                     user: dict = Depends(require_role("admin", "manager"))):
+                     user: dict = Depends(require_perm("connectors.manage"))):
     fields, values = [], []
     for col in ("name", "url", "auth_header", "interval_minutes"):
         v = getattr(body, col)
@@ -129,7 +129,7 @@ def update_connector(connector_id: str, body: ConnectorUpdate,
 
 
 @router.delete("/{connector_id}", status_code=204)
-def delete_connector(connector_id: str, user: dict = Depends(require_role("admin", "manager"))):
+def delete_connector(connector_id: str, user: dict = Depends(require_perm("connectors.manage"))):
     with get_conn() as conn:
         row = conn.execute("SELECT builtin FROM connectors WHERE id=?", (connector_id,)).fetchone()
         if not row:
@@ -143,7 +143,7 @@ def delete_connector(connector_id: str, user: dict = Depends(require_role("admin
 
 
 @router.post("/{connector_id}/run")
-def run_now(connector_id: str, user: dict = Depends(require_role("admin", "manager"))):
+def run_now(connector_id: str, user: dict = Depends(require_perm("connectors.manage"))):
     """Sync this connector immediately and return the import result."""
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM connectors WHERE id=?", (connector_id,)).fetchone()

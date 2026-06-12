@@ -110,7 +110,11 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
 
 
 def require_role(*roles: str):
-    """Dependency factory enforcing one of the given roles."""
+    """Dependency factory enforcing one of the given roles.
+
+    Superseded: every endpoint now enforces a named capability via
+    `require_perm` (one matrix in permissions.py instead of scattered role
+    lists). Kept as an escape hatch for ad-hoc role gates in extensions."""
     def dep(user: dict = Depends(current_user)) -> dict:
         if user["role"] not in roles:
             raise HTTPException(status_code=403, detail="Insufficient permissions")

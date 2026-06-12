@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user, require_role
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/config", tags=["config"])
@@ -44,7 +44,7 @@ def get_settings(_: dict = Depends(current_user)):
 
 
 @router.put("/settings")
-def update_settings(body: SettingsUpdate, actor: dict = Depends(require_role("admin", "manager"))):
+def update_settings(body: SettingsUpdate, actor: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
         for k, v in body.values.items():
             conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (k, str(v)))
@@ -55,7 +55,7 @@ def update_settings(body: SettingsUpdate, actor: dict = Depends(require_role("ad
 
 
 @router.get("/api-keys")
-def list_api_keys(user: dict = Depends(require_role("admin", "manager"))):
+def list_api_keys(user: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id,name,prefix,scope,last_used,created_at,created_by,revoked "
@@ -84,14 +84,14 @@ class TestEmail(BaseModel):
 
 
 @router.get("/email")
-def email_status(_: dict = Depends(require_role("admin", "manager"))):
+def email_status(_: dict = Depends(require_perm("config.manage"))):
     """SMTP delivery readiness (the email channel for scheduled reports)."""
     from dashboard_api.mailer import status
     return status()
 
 
 @router.post("/email/test")
-def test_email(body: TestEmail, user: dict = Depends(require_role("admin", "manager"))):
+def test_email(body: TestEmail, user: dict = Depends(require_perm("config.manage"))):
     """Send a test email (real send when SMTP is configured, else reports why)."""
     from dashboard_api.mailer import send_email
     result = send_email(body.to, "ThreatOrbit SMTP test",
@@ -103,7 +103,7 @@ def test_email(body: TestEmail, user: dict = Depends(require_role("admin", "mana
 
 
 @router.get("/database")
-def database_backend(_: dict = Depends(require_role("admin", "manager"))):
+def database_backend(_: dict = Depends(require_perm("config.manage"))):
     """Active storage backend + Postgres-readiness (the Postgres option is
     staged; this surfaces what's needed to flip it on)."""
     from dashboard_api.db_backend import backend_info
@@ -125,7 +125,7 @@ def license_status(_: dict = Depends(current_user)):
 
 
 @router.post("/license/activate")
-def activate_license(body: LicenseActivate, user: dict = Depends(require_role("admin"))):
+def activate_license(body: LicenseActivate, user: dict = Depends(require_perm("license.manage"))):
     """Validate + store a signed license key (rejects forged/expired keys)."""
     from dashboard_api.licensing import verify_key
     try:
@@ -142,7 +142,7 @@ def activate_license(body: LicenseActivate, user: dict = Depends(require_role("a
 
 
 @router.post("/license/issue")
-def issue_license(body: LicenseIssue, user: dict = Depends(require_role("admin"))):
+def issue_license(body: LicenseIssue, user: dict = Depends(require_perm("license.manage"))):
     """Mint a signed key (vendor side, for self-hosted operators issuing
     licenses to their own tenants). The secret stays server-side."""
     from dashboard_api.licensing import generate_key
@@ -158,7 +158,7 @@ def issue_license(body: LicenseIssue, user: dict = Depends(require_role("admin")
 
 
 @router.delete("/license", status_code=204)
-def clear_license(user: dict = Depends(require_role("admin"))):
+def clear_license(user: dict = Depends(require_perm("license.manage"))):
     """Remove the activated key (falls back to the built-in license)."""
     with get_conn() as conn:
         conn.execute("DELETE FROM settings WHERE key='license_key'")
@@ -230,7 +230,7 @@ def dismiss_onboarding(user: dict = Depends(current_user)):
 
 
 @router.get("/roles")
-def list_roles(_: dict = Depends(require_role("admin", "manager"))):
+def list_roles(_: dict = Depends(require_perm("config.manage"))):
     """The full RBAC matrix: every capability and which roles hold it."""
     from dashboard_api.permissions import CAPABILITIES, ROLE_PERMISSIONS
     return {
@@ -240,7 +240,7 @@ def list_roles(_: dict = Depends(require_role("admin", "manager"))):
 
 
 @router.post("/api-keys", status_code=201)
-def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_role("admin", "manager"))):
+def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_perm("config.manage"))):
     if body.scope not in ("read", "write", "admin"):
         raise HTTPException(status_code=400, detail="scope must be read|write|admin")
     name = body.name.strip()
@@ -291,7 +291,7 @@ def engine_status(_: dict = Depends(current_user)):
 
 
 @router.post("/engine")
-def engine_control(body: EngineControl, user: dict = Depends(require_role("admin", "manager"))):
+def engine_control(body: EngineControl, user: dict = Depends(require_perm("config.manage"))):
     """Pause/resume the engine, or generate a burst of live data immediately."""
     result = {}
     if body.enabled is not None:
@@ -317,7 +317,7 @@ def engine_control(body: EngineControl, user: dict = Depends(require_role("admin
 
 
 @router.get("/jobs")
-def list_jobs(limit: int = 50, _: dict = Depends(require_role("admin", "manager"))):
+def list_jobs(limit: int = 50, _: dict = Depends(require_perm("config.manage"))):
     """Recent background jobs (IOC syncs, risk recomputes, log analyses)."""
     limit = max(1, min(limit, 200))
     with get_conn() as conn:
@@ -331,7 +331,7 @@ def list_jobs(limit: int = 50, _: dict = Depends(require_role("admin", "manager"
 def list_audit_log(
     limit: int = 100,
     action: str | None = None,
-    _: dict = Depends(require_role("admin", "manager")),
+    _: dict = Depends(require_perm("config.manage")),
 ):
     limit = max(1, min(limit, 500))
     clause, params = "", []
@@ -347,7 +347,7 @@ def list_audit_log(
 
 
 @router.delete("/api-keys/{key_id}", status_code=204)
-def revoke_api_key(key_id: str, actor: dict = Depends(require_role("admin", "manager"))):
+def revoke_api_key(key_id: str, actor: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
         cur = conn.execute("UPDATE api_keys SET revoked=1 WHERE id=?", (key_id,))
         if cur.rowcount == 0:
@@ -365,14 +365,14 @@ _WEBHOOK_EVENTS = {"alert.created", "incident.resolved", "ioc.confirmed", "case.
 
 
 @router.get("/webhooks")
-def list_webhooks(_: dict = Depends(require_role("admin", "manager"))):
+def list_webhooks(_: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM webhooks ORDER BY created_at DESC").fetchall()
     return rows_to_dicts(rows)
 
 
 @router.post("/webhooks", status_code=201)
-def create_webhook(body: WebhookCreate, user: dict = Depends(require_role("admin", "manager"))):
+def create_webhook(body: WebhookCreate, user: dict = Depends(require_perm("config.manage"))):
     url = body.url.strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="url must start with http:// or https://")
@@ -394,7 +394,7 @@ def create_webhook(body: WebhookCreate, user: dict = Depends(require_role("admin
 
 
 @router.patch("/webhooks/{webhook_id}")
-def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(require_role("admin", "manager"))):
+def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(require_perm("config.manage"))):
     if body.status is not None and body.status not in ("active", "paused"):
         raise HTTPException(status_code=400, detail="status must be active or paused")
     fields, values = [], []
@@ -420,7 +420,7 @@ def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(re
 
 
 @router.post("/webhooks/{webhook_id}/test")
-def test_webhook(webhook_id: str, actor: dict = Depends(require_role("admin", "manager"))):
+def test_webhook(webhook_id: str, actor: dict = Depends(require_perm("config.manage"))):
     """Deliver a synchronous test event so the operator can verify the endpoint."""
     from dashboard_api.webhooks import _deliver
     with get_conn() as conn:
@@ -438,7 +438,7 @@ def test_webhook(webhook_id: str, actor: dict = Depends(require_role("admin", "m
 
 
 @router.delete("/webhooks/{webhook_id}", status_code=204)
-def delete_webhook(webhook_id: str, actor: dict = Depends(require_role("admin", "manager"))):
+def delete_webhook(webhook_id: str, actor: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
         cur = conn.execute("DELETE FROM webhooks WHERE id=?", (webhook_id,))
         if cur.rowcount == 0:

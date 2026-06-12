@@ -32,12 +32,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       leaks, scheduled reports), mark-read, deep-link on click. An SMTP email
       channel now backs report delivery (see Scheduled reports); per-user
       Slack routing remains a thin add on the webhook engine.
-- [~] **RBAC depth** — DONE (see CHANGELOG): a capability matrix (roles →
+- [x] **RBAC depth** — DONE (see CHANGELOG): a capability matrix (roles →
       named per-section/per-action permissions), a `require_perm` dependency
       that audits denials, applied so viewers are read-only and analysts hold
       SOC write but not platform admin; `/auth/permissions` + `/config/roles`
-      drive UI gating. Remaining: extend `require_perm` to the last
-      config/connectors endpoints (still on the equivalent `require_role`).
+      drive UI gating. Every endpoint now enforces a named capability —
+      config/connectors/services/users/schedules included — with licensing on
+      its own admin-only `license.manage`; `require_role` survives only as a
+      documented escape hatch.
 - [x] **Multi-tenancy / workspaces** — DONE (see CHANGELOG): org model/CRUD/
       membership, then real data isolation behind `DASHBOARD_MULTI_TENANT`
       (default off, single-tenant behaviour byte-for-byte unchanged):
@@ -212,6 +214,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · RBAC: capability checks everywhere (Phase 0 closed)** — the
+  last `require_role` call sites are gone: config → `config.manage`,
+  connectors → `connectors.manage`, services → `services.run`, report
+  schedules → `reports.manage`, audit export + retention → `config.manage`,
+  users → `users.manage`/`users.delete`, IOC decay → `cti.write` (its
+  catalogue entry always named decay). Licensing gets its own admin-only
+  `license.manage` capability (managers keep config but not license keys).
+  Authorisation is now a single matrix in permissions.py; tests assert the
+  new admin/manager split and that analysts are denied connectors + license.
 - **2026-06-12 · Real SOAR trends (data honesty)** — `/soar/metrics` no longer
   returns fabricated "↓ 12% / ↑ 8%" trend strings: `mttrTrendPct` is the real
   week-over-week movement of average response latency and

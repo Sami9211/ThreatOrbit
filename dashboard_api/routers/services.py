@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from dashboard_api.auth import current_user, require_role
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.config import (
     LOG_API_URL, SERVICES_ADMIN_KEY, SERVICES_API_KEY, THREAT_API_URL,
 )
@@ -73,7 +73,7 @@ def threat_iocs(limit: int = 50):
 
 
 @router.post("/threat/fetch")
-def threat_fetch(user: dict = Depends(require_role("admin", "manager"))):
+def threat_fetch(user: dict = Depends(require_perm("services.run"))):
     """Trigger an ingestion run on the Threat API. Returns the upstream job id."""
     try:
         r = httpx.post(f"{THREAT_API_URL}/fetch", headers=_headers(admin=True), timeout=_TIMEOUT)
@@ -109,7 +109,7 @@ _TYPE_MAP = {"ip": "ip", "domain": "domain", "url": "url", "hash": "hash",
 
 
 @router.post("/threat/sync-iocs")
-def sync_threat_iocs(limit: int = 500, user: dict = Depends(require_role("admin", "manager"))):
+def sync_threat_iocs(limit: int = 500, user: dict = Depends(require_perm("services.run"))):
     """Pull indicators from the Threat API ingestion store into the dashboard
     CTI IOC store (deduplicated by value). This is the live bridge between the
     OSINT engine and the operator console."""

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from dashboard_api.auth import current_user, hash_password, require_role
+from dashboard_api.auth import current_user, hash_password, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -42,7 +42,7 @@ def list_users(_: dict = Depends(current_user)):
 
 
 @router.post("", status_code=201)
-def create_user(body: UserCreate, actor: dict = Depends(require_role("admin", "manager"))):
+def create_user(body: UserCreate, actor: dict = Depends(require_perm("users.manage"))):
     if body.role not in ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {sorted(ROLES)}")
     if len(body.password) < 8:
@@ -71,7 +71,7 @@ def create_user(body: UserCreate, actor: dict = Depends(require_role("admin", "m
 
 
 @router.patch("/{user_id}")
-def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_role("admin", "manager"))):
+def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_perm("users.manage"))):
     fields, values = [], []
     for col in ("name", "role", "status", "avatar_color", "mfa_enabled"):
         val = getattr(body, col)
@@ -97,7 +97,7 @@ def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_ro
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: str, actor: dict = Depends(require_role("admin"))):
+def delete_user(user_id: str, actor: dict = Depends(require_perm("users.delete"))):
     if user_id == actor["id"]:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
     with get_conn() as conn:

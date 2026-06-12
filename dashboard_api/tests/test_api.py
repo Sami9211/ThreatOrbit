@@ -2587,6 +2587,9 @@ def test_rbac_permissions_matrix(client, auth):
     assert roles["roles"]["viewer"] == []
     assert "siem.write" in roles["roles"]["analyst"]
     assert "config.manage" not in roles["roles"]["analyst"]
+    # licensing stays admin-only (its own capability, not bundled into config)
+    assert "license.manage" in roles["roles"]["admin"]
+    assert "license.manage" not in roles["roles"]["manager"]
 
 
 def test_rbac_viewer_is_read_only(client, auth):
@@ -2627,10 +2630,14 @@ def test_rbac_viewer_is_read_only(client, auth):
     assert client.get("/auth/permissions", headers=at).json()["permissions"]  # non-empty
     assert client.post("/siem/rules", json={"name": "Analyst rule", "severity": "medium"},
                        headers=at).status_code == 201
-    # but an analyst cannot do platform admin (manage users / api keys)
+    # but an analyst cannot do platform admin (manage users / api keys /
+    # connectors / settings — all capability-gated now, no role lists left)
     assert client.post("/users", json={"email": "z@z.com", "name": "Z", "role": "viewer",
                                        "password": "Password123!"}, headers=at).status_code == 403
     assert client.get("/config/api-keys", headers=at).status_code == 403
+    assert client.post("/connectors", json={"name": "x", "kind": "json", "url": "http://x"},
+                       headers=at).status_code == 403
+    assert client.post("/config/license/activate", json={"key": "x"}, headers=at).status_code == 403
     client.delete(f"/users/{analyst.json()['id']}", headers=auth)
 
 

@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
-from dashboard_api.auth import current_user, require_role
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
 
 router = APIRouter(tags=["platform"], dependencies=[Depends(current_user)])
@@ -119,7 +119,7 @@ class ScheduleCreate(BaseModel):
 
 
 @router.get("/report-schedules")
-def list_schedules(user: dict = Depends(require_role("admin", "manager"))):
+def list_schedules(user: dict = Depends(require_perm("reports.manage"))):
     where, params = "", []
     # Tenant isolation (same pattern as alerts): active only when flipped on.
     from dashboard_api import tenancy
@@ -132,7 +132,7 @@ def list_schedules(user: dict = Depends(require_role("admin", "manager"))):
 
 
 @router.post("/report-schedules", status_code=201)
-def create_schedule(body: ScheduleCreate, user: dict = Depends(require_role("admin", "manager"))):
+def create_schedule(body: ScheduleCreate, user: dict = Depends(require_perm("reports.manage"))):
     from dashboard_api.reports import REPORT_KINDS
     if body.kind not in REPORT_KINDS:
         raise HTTPException(status_code=400, detail=f"kind must be one of {REPORT_KINDS}")
@@ -153,7 +153,7 @@ def create_schedule(body: ScheduleCreate, user: dict = Depends(require_role("adm
 
 
 @router.post("/report-schedules/{schedule_id}/run")
-def run_schedule(schedule_id: str, user: dict = Depends(require_role("admin", "manager"))):
+def run_schedule(schedule_id: str, user: dict = Depends(require_perm("reports.manage"))):
     from dashboard_api.reports import build_report
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM report_schedules WHERE id=?", (schedule_id,)).fetchone()
@@ -189,7 +189,7 @@ def _email_report(email: str | None, report: dict) -> dict:
 
 
 @router.delete("/report-schedules/{schedule_id}", status_code=204)
-def delete_schedule(schedule_id: str, user: dict = Depends(require_role("admin", "manager"))):
+def delete_schedule(schedule_id: str, user: dict = Depends(require_perm("reports.manage"))):
     with get_conn() as conn:
         cur = conn.execute("DELETE FROM report_schedules WHERE id=?", (schedule_id,))
         if cur.rowcount == 0:
@@ -291,7 +291,7 @@ def delete_view(view_id: str, user: dict = Depends(current_user)):
 # ── Audit & compliance ───────────────────────────────────────────────────────────
 
 @router.get("/config/audit-export")
-def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_role("admin", "manager"))):
+def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_perm("config.manage"))):
     """Download the audit trail as CSV — tamper-evident evidence for compliance."""
     with get_conn() as conn:
         rows = conn.execute(
@@ -310,7 +310,7 @@ def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_r
 
 
 @router.post("/config/retention/enforce")
-def enforce_retention(user: dict = Depends(require_role("admin", "manager"))):
+def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
     """Purge data older than the configured retention window (data_retention_days)."""
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='data_retention_days'").fetchone()

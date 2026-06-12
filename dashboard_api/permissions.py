@@ -24,6 +24,7 @@ CAPABILITIES = {
     "services.run": "Trigger companion-service fetch/sync actions",
     "reports.manage": "Create/schedule/deliver reports",
     "config.manage": "Settings, API keys, webhooks, engine, jobs, retention",
+    "license.manage": "Activate, issue and clear license keys",
     "users.manage": "Create and update users",
     "users.delete": "Delete users",
 }
@@ -32,7 +33,7 @@ _ALL = set(CAPABILITIES)
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin": set(_ALL),
-    "manager": _ALL - {"users.delete"},
+    "manager": _ALL - {"users.delete", "license.manage"},
     "analyst": {"siem.write", "soar.write", "cti.write", "darkweb.write",
                 "assets.write", "reports.manage"},
     "viewer": set(),

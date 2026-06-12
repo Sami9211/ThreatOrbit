@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
-from dashboard_api.auth import current_user, require_perm, require_role
+from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
 from dashboard_api.ioc_lifecycle import (
@@ -591,7 +591,7 @@ def stix_bundle(type: str | None = None, limit: int = Query(2000, le=10000)):
 
 
 @router.post("/iocs/decay")
-def run_decay(user: dict = Depends(require_role("admin", "manager"))):
+def run_decay(user: dict = Depends(require_perm("cti.write"))):
     """Run IOC decay maintenance: expire stale indicators, reactivate refreshed."""
     with get_conn() as conn:
         result = decay_iocs(conn)
