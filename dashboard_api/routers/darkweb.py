@@ -27,8 +27,13 @@ class FindingUpdate(BaseModel):
 @router.get("/findings")
 def list_findings(category: str | None = None, severity: str | None = None,
                   status: str | None = None, q: str | None = None,
-                  limit: int = Query(100, le=500), offset: int = 0):
+                  limit: int = Query(100, le=500), offset: int = 0,
+                  user: dict = Depends(current_user)):
     clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
     for col, val in (("category", category), ("severity", severity), ("status", status)):
         if val:
             clauses.append(f"{col}=?"); params.append(val)

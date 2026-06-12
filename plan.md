@@ -44,8 +44,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       bootstrap workspace, so single-tenant data is untouched) and the queue
       read scopes by the caller's workspace only when `DASHBOARD_MULTI_TENANT`
       is on; tests flip the flag and show a foreign workspace's data
-      disappear. **Rolled out so far: alerts, cases, iocs** (the three primary
-      stores). Remaining (mechanical repeat): the other tables in
+      disappear. **Rolled out so far: alerts, cases, iocs, assets,
+      dark_web_findings, detection_rules** (all six primary stores).
+      Remaining (mechanical repeat): the secondary tables in
       `tenancy.TENANT_TABLES`, plus `org_of(user)` stamping on multi-org write
       paths.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
@@ -209,6 +210,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Tenant isolation: assets + dark web + rules (Phase 0)** — the
+  rollout reaches all six primary stores: defaulted `org_id` migrations on
+  `assets`, `dark_web_findings` and `detection_rules`, and the 3-line
+  `tenancy.enforced()` workspace clause on `GET /assets`,
+  `GET /darkweb/findings` and `GET /siem/rules`. The isolation test now also
+  inserts two-workspace assets and proves they vanish/reappear with the flag;
+  defaults remain byte-for-byte unchanged (130-test suite green).
 - **2026-06-12 · Tenant isolation: cases + iocs (Phase 0)** — the alerts
   reference pattern applied to the next two primary stores: defaulted
   `org_id` migrations on `cases` and `iocs`, and the 3-line

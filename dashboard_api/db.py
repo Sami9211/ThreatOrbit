@@ -674,6 +674,9 @@ _MIGRATIONS = [
     ("alerts", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("cases", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("iocs", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("assets", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("dark_web_findings", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("detection_rules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
 ]
 
 

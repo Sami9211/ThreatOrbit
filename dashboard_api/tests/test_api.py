@@ -2457,6 +2457,22 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
     monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
     assert len(client.get(f"/cti/iocs?q={marker}", headers=auth).json()["items"]) == 2
 
+    # …and on assets (the same clause shipped on darkweb + rules too)
+    with get_conn() as conn:
+        for org in ("org-default", "org-other"):
+            conn.execute(
+                "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
+                "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software,org_id) "
+                "VALUES (?,?,?,?,'low','unscanned',0,NULL,0,'{}','[]',NULL,'',0,'[]',100.0,"
+                "datetime('now'),'[]',?)",
+                (str(_uuid.uuid4()), f"{marker}-{org}", "server", f"{marker}.{org}", org))
+        conn.commit()
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    a = client.get(f"/assets?q={marker}", headers=auth).json()
+    assert a["total"] == 1 and a["items"][0]["org_id"] == "org-default"
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    assert client.get(f"/assets?q={marker}", headers=auth).json()["total"] == 2
+
 
 def test_tenancy_scope_helper_units():
     """The staged isolation seam is a no-op while enforcement is off, and emits
