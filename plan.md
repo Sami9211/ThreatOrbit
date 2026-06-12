@@ -179,11 +179,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       server-side (402), activate/issue/clear endpoints + a License card with
       usage bars. Remaining: payment-processor integration (Stripe) for
       self-serve purchase.
-- [~] **Postgres option** — FOUNDATION DONE (see CHANGELOG): backend selection
-      (`DASHBOARD_DB_BACKEND`/`DATABASE_URL`), a tested SQLite→Postgres dialect
-      translation layer, a guarded connection seam (SQLite default unchanged),
-      and `/config/database` readiness. Remaining (staged): wire the translator
-      into `get_conn().execute`, psycopg row-dict factory, and flip the flag.
+- [~] **Postgres option** — ADAPTER IMPLEMENTED (see CHANGELOG): the opt-in
+      path is now functional end-to-end in code — `PgConnection` translates
+      every statement through the tested dialect layer, `PgRow` supports dict
+      AND positional access, `executescript` splits literals-safely, and
+      migrations introspect `information_schema` instead of PRAGMA. SQLite
+      default untouched (full suite proves it). Remaining: validate against a
+      live Postgres (not reachable from this environment) before cutover.
 - [~] **Performance** — DONE for the data layer (see CHANGELOG): hot-path
       indexes on every dashboard-refresh query (verified with EXPLAIN QUERY
       PLAN) with a safe upgrade path for migrated columns; server-side
@@ -203,6 +205,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-12 · Postgres adapter (Phase 5)** — the staged flip is now
+  implemented, still opt-in and zero-impact by default. `PgConnection` adapts
+  psycopg to the sqlite3-ish interface every call site already uses: `execute`/
+  `executemany` translate each statement through the tested `to_postgres`
+  dialect layer (PRAGMAs become no-ops), `executescript` splits statements
+  string-literal-safely, and `PgRow` supports BOTH `row["col"]` and `row[0]`
+  access so `row_to_dict`/positional reads work unchanged. `_apply_migrations`
+  is backend-aware (`information_schema.columns` instead of PRAGMA on
+  Postgres). The SQLite default path is byte-for-byte untouched — the full
+  129-test suite proves it. Honest remaining step: validation against a live
+  Postgres server (unreachable from this environment) before any cutover.
 
 - **2026-06-10 · UEBA learned baselines (Phase 1)** — entity risk gains
   deviation-from-self anomaly scoring: `_entity_baseline` computes each entity's

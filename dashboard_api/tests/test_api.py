@@ -1747,6 +1747,20 @@ def test_db_backend_dialect_units():
     assert "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value" in pg
 
 
+def test_pg_adapter_units():
+    """The Postgres adapter's pure pieces: dual-access rows + script splitting."""
+    from dashboard_api.db_backend import PgRow, split_statements, table_columns_sql
+    r = PgRow([("id", "a1"), ("severity", "high")])
+    assert r["id"] == "a1" and r[0] == "a1" and r[1] == "high"  # dict AND positional
+    assert set(r.keys()) == {"id", "severity"}                   # row_to_dict compatible
+    # script splitting respects string literals containing semicolons
+    stmts = split_statements(
+        "CREATE TABLE a (x TEXT); INSERT INTO a VALUES ('semi;colon'); PRAGMA foo;")
+    assert len(stmts) == 3 and "semi;colon" in stmts[1]
+    # migration introspection query targets information_schema (no PRAGMA)
+    assert "information_schema.columns" in table_columns_sql()
+
+
 def test_database_backend_endpoint(client, auth):
     """The backend info endpoint reports SQLite (the live default) + readiness."""
     info = client.get("/config/database", headers=auth).json()

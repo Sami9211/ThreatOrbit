@@ -672,8 +672,13 @@ _MIGRATIONS = [
 
 
 def _apply_migrations(conn: sqlite3.Connection):
+    from dashboard_api.db_backend import is_postgres, table_columns_sql
     for table, column, ddl in _MIGRATIONS:
-        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if is_postgres():  # pragma: no cover - opt-in backend
+            rows = conn.execute(table_columns_sql(), (table,)).fetchall()
+        else:
+            rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        cols = {r["name"] for r in rows}
         if column not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 

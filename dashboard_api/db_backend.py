@@ -90,8 +90,100 @@ def to_postgres(sql: str) -> str:
     return _qmark_to_dollar(s)
 
 
+class PgRow(dict):
+    """Row supporting BOTH dict access (`row["col"]`) and positional access
+    (`row[0]`), matching how the codebase reads sqlite3.Row."""
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+def split_statements(script: str) -> list[str]:
+    """Split a SQL script on `;` outside string literals (for executescript)."""
+    out, buf, in_str = [], [], False
+    for ch in script:
+        if ch == "'":
+            in_str = not in_str
+        if ch == ";" and not in_str:
+            stmt = "".join(buf).strip()
+            if stmt:
+                out.append(stmt)
+            buf = []
+        else:
+            buf.append(ch)
+    tail = "".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
+class _PgCursor:  # pragma: no cover - exercised only against a live Postgres
+    def __init__(self, cur):
+        self._cur = cur
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+    def _wrap(self, row):
+        if row is None:
+            return None
+        cols = [d[0] for d in (self._cur.description or [])]
+        return PgRow(zip(cols, row))
+
+    def fetchone(self):
+        return self._wrap(self._cur.fetchone())
+
+    def fetchall(self):
+        return [self._wrap(r) for r in self._cur.fetchall()]
+
+
+class PgConnection:  # pragma: no cover - exercised only against a live Postgres
+    """Adapts a psycopg connection to the sqlite3-ish interface the codebase
+    uses (`execute`/`executemany`/`executescript`/`commit`/`close`), translating
+    each statement through `to_postgres` so call sites stay unchanged."""
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql, params=()):
+        translated = to_postgres(sql)
+        if not translated.strip():
+            return _PgCursor(self._raw.cursor())  # PRAGMA etc. → no-op
+        cur = self._raw.cursor()
+        cur.execute(translated, tuple(params))
+        return _PgCursor(cur)
+
+    def executemany(self, sql, seq):
+        cur = self._raw.cursor()
+        cur.executemany(to_postgres(sql), [tuple(p) for p in seq])
+        return _PgCursor(cur)
+
+    def executescript(self, script):
+        for stmt in split_statements(script):
+            translated = to_postgres(stmt)
+            if translated.strip():
+                self._raw.cursor().execute(translated)
+        return None
+
+    def commit(self):
+        self._raw.commit()
+
+    def close(self):
+        self._raw.close()
+
+
+def table_columns_sql() -> str:
+    """Backend-aware column introspection for migrations: Postgres can't use
+    `PRAGMA table_info`, so the migration runner asks information_schema."""
+    return ("SELECT column_name AS name FROM information_schema.columns "
+            "WHERE table_name = %s")
+
+
 def connect_postgres():
-    """Open a Postgres connection (staged path). Requires psycopg + a DSN."""
+    """Open a Postgres connection (opt-in path). Requires psycopg + a DSN.
+    Returns the adapter, so every existing call site works unchanged."""
     if not DATABASE_URL:
         raise RuntimeError("DASHBOARD_DB_BACKEND=postgres requires DATABASE_URL")
     try:
@@ -101,8 +193,7 @@ def connect_postgres():
             "Postgres backend selected but 'psycopg' is not installed "
             "(pip install psycopg[binary]).") from e
     import psycopg
-    conn = psycopg.connect(DATABASE_URL, autocommit=False)
-    return conn
+    return PgConnection(psycopg.connect(DATABASE_URL, autocommit=False))
 
 
 def backend_info() -> dict:
@@ -110,9 +201,10 @@ def backend_info() -> dict:
         "backend": "postgres" if is_postgres() else "sqlite",
         "configured": is_postgres() and bool(DATABASE_URL),
         "driverReady": _driver_ready(),
-        "note": ("Postgres is staged: dialect translation is in place and "
-                 "tested; flip DASHBOARD_DB_BACKEND=postgres + install psycopg "
-                 "+ set DATABASE_URL to enable."),
+        "note": ("Postgres adapter implemented (translated execute, dual-access "
+                 "rows, backend-aware migrations). Enable with "
+                 "DASHBOARD_DB_BACKEND=postgres + DATABASE_URL + psycopg; "
+                 "validate against your Postgres before production cutover."),
     }
 
 
