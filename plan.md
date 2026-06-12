@@ -212,6 +212,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Real SOAR trends (data honesty)** — `/soar/metrics` no longer
+  returns fabricated "↓ 12% / ↑ 8%" trend strings: `mttrTrendPct` is the real
+  week-over-week movement of average response latency and
+  `automationTrendPp` the percentage-point change in playbook-driven closure
+  rate, both null when there is no prior-week baseline. The SOAR KPI strip
+  renders the real numbers (or "no prior-week baseline"), and the invented
+  "≈ $127K analyst time" sub was replaced with the actual run count behind
+  the time-saved figure.
 - **2026-06-12 · Tenant scoping on aggregates — multi-tenancy complete
   (Phase 0)** — the last seam: every overview rollup (KPIs, threat vectors,
   hourly volume, MITRE heatmap, recent alerts/incidents, top actors, geo,

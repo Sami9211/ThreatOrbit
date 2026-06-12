@@ -1,7 +1,7 @@
 """SOAR routes: cases (create/update/notes/tasks), playbooks, integrations, metrics."""
 import json
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -837,6 +837,9 @@ def integration_action_trail(integration_id: str, limit: int = 50):
 def soar_metrics(user: dict = Depends(current_user)):
     # Workspace clause for the rollups — a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    now = datetime.now(timezone.utc)
+    week = (now - timedelta(days=7)).replace(microsecond=0).isoformat()
+    fortnight = (now - timedelta(days=14)).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         cases = conn.execute(
             f"SELECT status, severity, playbook, created, updated, sla_hours FROM cases WHERE 1=1 {sc}",
@@ -847,6 +850,15 @@ def soar_metrics(user: dict = Depends(current_user)):
         mttr_row = conn.execute(
             "SELECT AVG(respond_latency_sec) / 60.0 AS v FROM alerts "
             f"WHERE respond_latency_sec IS NOT NULL {sc}", sp
+        ).fetchone()
+        # Real week-over-week MTTR movement: this week's average response
+        # latency vs the prior week's. Null when a window has no data — the UI
+        # shows "no baseline" instead of a made-up arrow.
+        wow = conn.execute(
+            "SELECT AVG(CASE WHEN ts >= ? THEN respond_latency_sec END) AS cur, "
+            "AVG(CASE WHEN ts >= ? AND ts < ? THEN respond_latency_sec END) AS prev "
+            f"FROM alerts WHERE respond_latency_sec IS NOT NULL {sc}",
+            [week, fortnight, week] + sp
         ).fetchone()
     open_cases = sum(1 for c in cases if c["status"] not in ("resolved", "closed"))
     crit_open = sum(1 for c in cases if c["status"] not in ("resolved", "closed") and c["severity"] == "critical")
@@ -860,13 +872,26 @@ def soar_metrics(user: dict = Depends(current_user)):
     automated = sum(1 for c in closed if c["playbook"])
     automation_rate = round(automated / closed_week * 100, 1) if closed_week else 0
     mttr = round(mttr_row["v"] or 0, 1)
+    mttr_trend_pct = (round((wow["cur"] - wow["prev"]) / wow["prev"] * 100, 1)
+                      if wow["cur"] is not None and wow["prev"] else None)
+
+    # Automation-rate movement in percentage points: closed-this-week vs
+    # closed-the-week-before. Null when either window is empty.
+    def _auto_rate(lo: str, hi: str | None) -> float | None:
+        sel = [c for c in closed
+               if (c["updated"] or "") >= lo and (hi is None or (c["updated"] or "") < hi)]
+        return round(sum(1 for c in sel if c["playbook"]) / len(sel) * 100, 1) if sel else None
+    cur_rate, prev_rate = _auto_rate(week, None), _auto_rate(fortnight, week)
+    automation_trend_pp = (round(cur_rate - prev_rate, 1)
+                           if cur_rate is not None and prev_rate is not None else None)
     return {
         "openCases": open_cases,
         "criticalOpen": crit_open,
         "slaBreached": sla_breached,
-        "mttr": mttr, "mttrTrend": "↓ 12%",
-        "automationRate": automation_rate, "automationTrend": "↑ 8%",
+        "mttr": mttr, "mttrTrendPct": mttr_trend_pct,
+        "automationRate": automation_rate, "automationTrendPp": automation_trend_pp,
         "timeSavedMonth": round(total_runs * avg_pb / 3600, 1),
+        "totalRuns": total_runs,
         "playbooksToday": sum(1 for p in pbs if p["last_run"]),
         "avgPlaybookTime": avg_pb,
         "casesClosedWeek": closed_week,

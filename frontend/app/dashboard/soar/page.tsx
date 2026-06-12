@@ -306,15 +306,16 @@ const PLAYBOOKS: Playbook[] = [
   },
 ]
 
-/* ── Metrics ──────────────────────────────────────────────────────── */
+/* ── Metrics (offline fallback only; replaced by live /soar/metrics) ─ */
 const SOAR_METRICS = {
   openCases: 5,
   criticalOpen: 1,
   mttr: '2h 17m',
-  mttrTrend: -34,
+  mttrTrendPct: null as number | null,
   automationRate: 73,
-  automationTrend: 5,
+  automationTrendPp: null as number | null,
   timeSavedMonth: 847,
+  totalRuns: 1243,
   playbooksToday: 1243,
   avgPlaybookTime: '3m 08s',
   casesClosedWeek: 28,
@@ -907,8 +908,8 @@ export default function SOARPage() {
     fetchSoarMetrics().then(setSoarApi).catch(() => {})
   }, [])
 
-  // Prefer live SOAR metrics; fall back to static demo values. Trend deltas
-  // stay cosmetic (the backend exposes them as arrows, not signed numbers).
+  // Prefer live SOAR metrics; fall back to static demo values. Trends are
+  // real week-over-week movements from the backend (null = no baseline yet).
   const metrics = useMemo(() => {
     if (!soarApi) return SOAR_METRICS
     return {
@@ -916,8 +917,11 @@ export default function SOARPage() {
       openCases: soarApi.openCases,
       criticalOpen: soarApi.criticalOpen,
       mttr: fmtMinsShort(soarApi.mttr),
+      mttrTrendPct: soarApi.mttrTrendPct,
       automationRate: Math.round(soarApi.automationRate),
+      automationTrendPp: soarApi.automationTrendPp,
       timeSavedMonth: Math.round(soarApi.timeSavedMonth),
+      totalRuns: soarApi.totalRuns,
       playbooksToday: soarApi.playbooksToday,
       avgPlaybookTime: fmtSecsShort(soarApi.avgPlaybookTime),
       casesClosedWeek: soarApi.casesClosedWeek,
@@ -996,9 +1000,14 @@ export default function SOARPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-0 border-b border-white/5 shrink-0">
           {[
             { label: 'Open Cases',           value: `${metrics.openCases}`,          sub: `${metrics.criticalOpen} critical`,          color: 'text-magenta', trend: null },
-            { label: 'MTTR',                  value: metrics.mttr,                    sub: `${metrics.mttrTrend}m from last week`,     color: 'text-safe',    trend: 'down' },
-            { label: 'Automation Rate',       value: `${metrics.automationRate}%`,    sub: `+${metrics.automationTrend}% from last month`, color: 'text-violet', trend: 'up' },
-            { label: 'Time Saved (month)',    value: `${metrics.timeSavedMonth}h`,    sub: '≈ $127K analyst time',                           color: 'text-amber',   trend: 'up' },
+            // Real week-over-week movement; "no baseline" until a prior week exists.
+            { label: 'MTTR',                  value: metrics.mttr,
+              sub: metrics.mttrTrendPct != null ? `${metrics.mttrTrendPct > 0 ? '+' : ''}${metrics.mttrTrendPct}% vs prior week` : 'no prior-week baseline',
+              color: 'text-safe',    trend: metrics.mttrTrendPct == null ? null : metrics.mttrTrendPct < 0 ? 'down' : 'up' },
+            { label: 'Automation Rate',       value: `${metrics.automationRate}%`,
+              sub: metrics.automationTrendPp != null ? `${metrics.automationTrendPp > 0 ? '+' : ''}${metrics.automationTrendPp}pp vs prior week` : 'no prior-week baseline',
+              color: 'text-violet', trend: metrics.automationTrendPp == null ? null : metrics.automationTrendPp > 0 ? 'up' : 'down' },
+            { label: 'Time Saved (month)',    value: `${metrics.timeSavedMonth}h`,    sub: `from ${metrics.totalRuns.toLocaleString()} playbook runs`, color: 'text-amber', trend: null },
             { label: 'Playbooks Today',       value: metrics.playbooksToday.toLocaleString(), sub: `avg ${metrics.avgPlaybookTime}/run`, color: 'text-white',   trend: null },
           ].map((k) => (
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">

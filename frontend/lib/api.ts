@@ -257,10 +257,13 @@ export interface SoarMetrics {
   criticalOpen: number
   slaBreached: number
   mttr: number
-  mttrTrend: string
+  /** Real week-over-week MTTR movement (%); null when there is no prior-week baseline. */
+  mttrTrendPct: number | null
   automationRate: number
-  automationTrend: string
+  /** Automation-rate movement in percentage points vs the prior week; null without a baseline. */
+  automationTrendPp: number | null
   timeSavedMonth: number
+  totalRuns: number
   playbooksToday: number
   avgPlaybookTime: number
   casesClosedWeek: number

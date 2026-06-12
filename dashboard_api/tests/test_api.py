@@ -118,6 +118,11 @@ def test_soar(client, auth):
     m = client.get("/soar/metrics", headers=auth).json()
     assert "openCases" in m
     assert 0 <= m["automationRate"] <= 100  # a real ratio, not a saturating proxy
+    # trends are real week-over-week numbers (or null without a baseline) —
+    # never fabricated arrow strings
+    for k in ("mttrTrendPct", "automationTrendPp"):
+        assert k in m and (m[k] is None or isinstance(m[k], (int, float)))
+    assert m["totalRuns"] >= 0
 
 
 def test_soar_playbook_run(client, auth):
