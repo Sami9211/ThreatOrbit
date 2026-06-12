@@ -82,12 +82,17 @@ def list_iocs(type: str | None = None, severity: str | None = None,
               q: str | None = None,
               sort: str = Query("last_seen", description=f"one of {sorted(_IOC_SORTS)}"),
               order: str = Query("desc", pattern="^(asc|desc)$"),
-              limit: int = Query(100, le=1000), offset: int = 0):
+              limit: int = Query(100, le=1000), offset: int = 0,
+              user: dict = Depends(current_user)):
     if sort not in _IOC_SORTS:
         raise HTTPException(status_code=400, detail=f"sort must be one of {sorted(_IOC_SORTS)}")
     if status is not None and status not in ("active", "expired", "known-good"):
         raise HTTPException(status_code=400, detail="status must be active|expired|known-good")
     clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
     for col, val in (("type", type), ("severity", severity), ("actor", actor),
                      ("source", source), ("status", status)):
         if val:

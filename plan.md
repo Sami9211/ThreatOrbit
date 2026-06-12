@@ -43,11 +43,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       now proven on the alerts table** — `org_id` column (defaults to the
       bootstrap workspace, so single-tenant data is untouched) and the queue
       read scopes by the caller's workspace only when `DASHBOARD_MULTI_TENANT`
-      is on; a test flips the flag and shows a foreign workspace's alerts
-      disappear. Remaining (mechanical, per-table repeat of the pattern): the
-      other tables in `tenancy.TENANT_TABLES` — add the defaulted `org_id`
-      migration, append the 3-line `tenancy.enforced()` clause to each list
-      query, stamp `org_of(user)` on multi-org write paths.
+      is on; tests flip the flag and show a foreign workspace's data
+      disappear. **Rolled out so far: alerts, cases, iocs** (the three primary
+      stores). Remaining (mechanical repeat): the other tables in
+      `tenancy.TENANT_TABLES`, plus `org_of(user)` stamping on multi-org write
+      paths.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
       Security. Remaining: signed/immutable evidence bundles.
@@ -208,6 +208,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-12 · Tenant isolation: cases + iocs (Phase 0)** — the alerts
+  reference pattern applied to the next two primary stores: defaulted
+  `org_id` migrations on `cases` and `iocs`, and the 3-line
+  `tenancy.enforced()` workspace clause on `GET /soar/cases` and
+  `GET /cti/iocs`. The isolation test now proves all three: with
+  `DASHBOARD_MULTI_TENANT` on, a foreign workspace's alerts, cases and IOCs
+  all disappear from the caller's views; with it off (default), behaviour is
+  byte-for-byte unchanged (full 130-test suite green).
 
 - **2026-06-12 · Tenant isolation reference pattern (Phase 0)** — the breaking
   half of multi-tenancy now exists, demonstrated end-to-end on the alerts

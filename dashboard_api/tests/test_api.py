@@ -2434,6 +2434,29 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
     monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
     assert client.get(f"/siem/alerts?q={marker}", headers=auth).json()["total"] == 2
 
+    # the same pattern holds on cases and iocs
+    with get_conn() as conn:
+        for org in ("org-default", "org-other"):
+            conn.execute(
+                "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,"
+                "created,updated,alert_count,description,entities,war_room,tasks,evidence,org_id) "
+                "VALUES (?,?, 'Intrusion','low','new','','',24,datetime('now'),datetime('now'),"
+                "0,?, '[]','[]','[]','[]',?)",
+                (f"CASE-T{org[-3:]}{marker[-4:]}", f"{marker} case {org}", marker, org))
+            conn.execute(
+                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
+                "first_seen,last_seen,tags,org_id) VALUES (?,?,?,?,50,'low',?, '',"
+                "datetime('now'),datetime('now'),'[]',?)",
+                (str(_uuid.uuid4()), "domain", f"{marker}-{org}.test", marker, marker, org))
+        conn.commit()
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    cs = [c for c in client.get("/soar/cases", headers=auth).json() if marker in c["title"]]
+    assert len(cs) == 1 and cs[0]["org_id"] == "org-default"
+    iocs = client.get(f"/cti/iocs?q={marker}", headers=auth).json()["items"]
+    assert len(iocs) == 1 and iocs[0]["org_id"] == "org-default"
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    assert len(client.get(f"/cti/iocs?q={marker}", headers=auth).json()["items"]) == 2
+
 
 def test_tenancy_scope_helper_units():
     """The staged isolation seam is a no-op while enforcement is off, and emits

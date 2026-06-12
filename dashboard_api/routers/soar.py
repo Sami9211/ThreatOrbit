@@ -90,8 +90,13 @@ class TaskUpdate(BaseModel):
 
 
 @router.get("/cases")
-def list_cases(status: str | None = None, severity: str | None = None):
+def list_cases(status: str | None = None, severity: str | None = None,
+               user: dict = Depends(current_user)):
     clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
     if status:
         clauses.append("status=?"); params.append(status)
     if severity:

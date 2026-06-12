@@ -672,6 +672,8 @@ _MIGRATIONS = [
     # defaults to the bootstrap workspace so single-tenant data is unchanged;
     # reads scope by it only when DASHBOARD_MULTI_TENANT is on.
     ("alerts", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("cases", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("iocs", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
 ]
 
 
