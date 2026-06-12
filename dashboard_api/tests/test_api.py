@@ -2490,6 +2490,9 @@ def test_geo_distribution_is_observed(client, auth):
     # the engine-produced alerts genuinely carry src_country
     rows = client.get("/siem/alerts?limit=200", headers=auth).json()["items"]
     assert any(a.get("src_country") for a in rows)
+    # ISO codes from seeded rows are normalised to display names (no 2-letter leaks)
+    geo2 = client.get("/overview/geo", headers=auth).json()
+    assert all(len(str(c["country"])) > 2 for c in geo2["countries"]), geo2["countries"][:3]
 
 
 def test_event_stream_broker_units():

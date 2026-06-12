@@ -109,6 +109,17 @@ def top_actors(limit: int = 5):
     return rows_to_dicts(rows)
 
 
+# ISO 3166 alpha-2 → display name, so geo rows from different producers
+# (seeded alerts use codes, engine telemetry uses names) merge consistently.
+_CC = {"RU": "Russia", "CN": "China", "KP": "North Korea", "IR": "Iran",
+       "US": "United States", "BR": "Brazil", "NL": "Netherlands", "RO": "Romania",
+       "VN": "Vietnam", "NG": "Nigeria", "IN": "India", "GB": "United Kingdom",
+       "DE": "Germany", "UA": "Ukraine", "EG": "Egypt", "AU": "Australia",
+       "JP": "Japan", "KR": "South Korea", "SG": "Singapore", "AE": "UAE",
+       "FR": "France", "IT": "Italy", "ES": "Spain", "TR": "Turkey", "PK": "Pakistan",
+       "ID": "Indonesia", "MX": "Mexico", "CA": "Canada", "PL": "Poland", "BY": "Belarus"}
+
+
 @router.get("/geo")
 def geo_distribution(limit: int = 20):
     """Observed attack origins, by country, from the platform's OWN alert
@@ -121,12 +132,24 @@ def geo_distribution(limit: int = 20):
             "SUM(CASE WHEN severity='high' THEN 1 ELSE 0 END) AS high, "
             "MAX(ts) AS last_seen "
             "FROM alerts WHERE src_country IS NOT NULL AND src_country != '' "
-            "GROUP BY src_country ORDER BY observed DESC LIMIT ?", (limit,)
+            "GROUP BY src_country", ()
         ).fetchall()
         total = conn.execute(
             "SELECT COUNT(*) AS n FROM alerts WHERE src_country IS NOT NULL AND src_country != ''"
         ).fetchone()["n"]
-    return {"countries": rows_to_dicts(rows), "totalGeolocated": total}
+    merged: dict[str, dict] = {}
+    for r in rows_to_dicts(rows):
+        name = _CC.get(str(r["country"]).upper(), r["country"]) if len(str(r["country"])) == 2 \
+            else r["country"]
+        g = merged.setdefault(name, {"country": name, "observed": 0, "critical": 0,
+                                     "high": 0, "last_seen": r["last_seen"]})
+        g["observed"] += r["observed"]
+        g["critical"] += r["critical"]
+        g["high"] += r["high"]
+        if r["last_seen"] and r["last_seen"] > (g["last_seen"] or ""):
+            g["last_seen"] = r["last_seen"]
+    out = sorted(merged.values(), key=lambda x: -x["observed"])[:limit]
+    return {"countries": out, "totalGeolocated": total}
 
 
 @router.get("/live-feed")
