@@ -151,22 +151,144 @@ def _enrich_indicator(conn, value: str, ioc_type: str) -> dict:
             "summary": summary, "data": data}
 
 
+_HTTP_TIMEOUT = 6.0
+
+
+def _vt_lookup(key: str, value: str, ioc_type: str) -> dict:
+    """VirusTotal v3: last_analysis_stats over the indicator."""
+    import base64
+    import httpx
+    t = (ioc_type or "").lower()
+    if t == "ip":
+        path = f"ip_addresses/{value}"
+    elif t == "domain":
+        path = f"domains/{value}"
+    elif t == "hash":
+        path = f"files/{value}"
+    elif t == "url":
+        path = f"urls/{base64.urlsafe_b64encode(value.encode()).decode().rstrip('=')}"
+    else:
+        return {"available": False, "reason": f"VirusTotal does not cover type '{t}'"}
+    r = httpx.get(f"https://www.virustotal.com/api/v3/{path}",
+                  headers={"x-apikey": key}, timeout=_HTTP_TIMEOUT)
+    if r.status_code == 404:
+        return {"available": True, "verdict": "unknown", "summary": "not seen by VirusTotal",
+                "data": {"found": False}}
+    r.raise_for_status()
+    stats = (r.json().get("data", {}).get("attributes", {})
+             .get("last_analysis_stats", {}))
+    mal, susp = stats.get("malicious", 0), stats.get("suspicious", 0)
+    total = sum(v for v in stats.values() if isinstance(v, int))
+    verdict = "malicious" if mal > 0 else "suspicious" if susp > 0 else "benign"
+    return {"available": True, "verdict": verdict,
+            "summary": f"{mal}/{total} engines flag malicious"
+                       + (f", {susp} suspicious" if susp else ""),
+            "data": {"stats": stats, "found": True}}
+
+
+def _greynoise_lookup(key: str, value: str, ioc_type: str) -> dict:
+    """GreyNoise community: internet-scanner classification for an IP."""
+    import httpx
+    if (ioc_type or "").lower() != "ip":
+        return {"available": False, "reason": "GreyNoise covers IPs only"}
+    r = httpx.get(f"https://api.greynoise.io/v3/community/{value}",
+                  headers={"key": key}, timeout=_HTTP_TIMEOUT)
+    if r.status_code == 404:
+        return {"available": True, "verdict": "unknown",
+                "summary": "not observed scanning the internet", "data": {"noise": False}}
+    r.raise_for_status()
+    d = r.json()
+    cls = (d.get("classification") or "unknown").lower()
+    verdict = {"malicious": "malicious", "benign": "benign"}.get(cls, "unknown")
+    bits = [f"classification={cls}"]
+    if d.get("name") and d["name"] != "unknown":
+        bits.append(d["name"])
+    if d.get("noise"):
+        bits.append("internet noise")
+    return {"available": True, "verdict": verdict, "summary": "; ".join(bits),
+            "data": {k: d.get(k) for k in ("noise", "riot", "classification", "name", "last_seen")}}
+
+
+def _shodan_lookup(key: str, value: str, ioc_type: str) -> dict:
+    """Shodan host: open ports / org / known vulns for an IP."""
+    import httpx
+    if (ioc_type or "").lower() != "ip":
+        return {"available": False, "reason": "Shodan host lookup covers IPs only"}
+    r = httpx.get(f"https://api.shodan.io/shodan/host/{value}",
+                  params={"key": key}, timeout=_HTTP_TIMEOUT)
+    if r.status_code == 404:
+        return {"available": True, "verdict": "unknown", "summary": "no Shodan records",
+                "data": {"found": False}}
+    r.raise_for_status()
+    d = r.json()
+    ports = d.get("ports") or []
+    vulns = sorted(d.get("vulns") or [])
+    verdict = "suspicious" if vulns else "unknown"
+    summary = f"{len(ports)} open ports" + (f"; {len(vulns)} known vulns" if vulns else "")
+    if d.get("org"):
+        summary += f"; org={d['org']}"
+    return {"available": True, "verdict": verdict, "summary": summary,
+            "data": {"ports": ports[:50], "vulns": vulns[:25], "org": d.get("org"),
+                     "os": d.get("os"), "country": d.get("country_name")}}
+
+
+def _whois_lookup(key: str, value: str, ioc_type: str) -> dict:
+    """WHOIS (whoisxmlapi-compatible): registration age for a domain."""
+    import httpx
+    if (ioc_type or "").lower() != "domain":
+        return {"available": False, "reason": "WHOIS lookup covers domains only"}
+    r = httpx.get("https://www.whoisxmlapi.com/whoisserver/WhoisService",
+                  params={"apiKey": key, "domainName": value, "outputFormat": "JSON"},
+                  timeout=_HTTP_TIMEOUT)
+    r.raise_for_status()
+    rec = r.json().get("WhoisRecord", {})
+    created = rec.get("createdDate") or rec.get("registryData", {}).get("createdDate")
+    registrar = rec.get("registrarName")
+    age_days = None
+    if created:
+        try:
+            age_days = (datetime.now(timezone.utc)
+                        - datetime.fromisoformat(str(created).replace("Z", "+00:00"))).days
+        except (ValueError, TypeError):
+            pass
+    verdict = "suspicious" if age_days is not None and age_days < 30 else "unknown"
+    summary = (f"registered {age_days}d ago" if age_days is not None else "registration date unknown")
+    if registrar:
+        summary += f" via {registrar}"
+    return {"available": True, "verdict": verdict, "summary": summary,
+            "data": {"createdDate": created, "registrar": registrar, "ageDays": age_days}}
+
+
+_PROVIDER_CALLS = {
+    "virustotal": _vt_lookup,
+    "greynoise": _greynoise_lookup,
+    "shodan": _shodan_lookup,
+    "whois": _whois_lookup,
+}
+
+
 def _enrich_external(provider: str, value: str, ioc_type: str) -> dict:
     """External provider adapter. Honestly reports unavailable when no API key
-    is configured (rather than fabricating a verdict). The call structure is in
-    place for when a key is supplied."""
+    is configured (rather than fabricating a verdict); with a key set it makes
+    the real provider call, and a failed call is reported as a failure — never
+    a made-up verdict."""
     env = EXTERNAL_PROVIDERS[provider]
     key = os.environ.get(env, "")
     if not key:
         return {"provider": provider, "available": False,
                 "reason": f"no API key configured ({env})",
                 "verdict": "unknown", "summary": "not configured", "data": {}}
-    # With a key present, a real deployment performs the provider lookup here.
-    # Kept minimal + offline-safe: report configured-but-not-invoked so the
-    # pipeline never blocks on a network call in this environment.
-    return {"provider": provider, "available": True, "verdict": "unknown",
-            "summary": "provider configured; live lookup performed by the deployment",
-            "data": {"configured": True}}
+    try:
+        res = _PROVIDER_CALLS[provider](key, value, ioc_type)
+    except Exception as e:  # network/HTTP/parse — honest failure, no fabrication
+        return {"provider": provider, "available": False,
+                "reason": f"lookup failed: {e.__class__.__name__}",
+                "verdict": "unknown", "summary": "lookup failed", "data": {}}
+    out = {"provider": provider, "verdict": "unknown", "summary": "", "data": {}, **res}
+    if not out.get("available"):
+        out.setdefault("reason", "not applicable")
+        out["summary"] = out.get("summary") or out["reason"]
+    return out
 
 
 BUILTIN = {"internal": _enrich_internal, "indicator": _enrich_indicator}

@@ -2413,6 +2413,69 @@ def test_ioc_enrichment_units():
                               {"available": True, "verdict": "malicious"}]) == "malicious"
 
 
+def test_enrichment_live_providers(monkeypatch):
+    """With API keys set, external enrichers make the real provider call and
+    map the response into an honest verdict; failures report as failures."""
+    from dashboard_api import enrichment as en
+
+    class _Resp:
+        def __init__(self, status, payload):
+            self.status_code = status
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+    calls = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        calls.append(url)
+        if "virustotal" in url:
+            return _Resp(200, {"data": {"attributes": {"last_analysis_stats": {
+                "malicious": 12, "suspicious": 2, "harmless": 50, "undetected": 8}}}})
+        if "greynoise" in url:
+            return _Resp(200, {"noise": True, "riot": False, "classification": "malicious",
+                               "name": "Mirai", "last_seen": "2026-06-11"})
+        if "shodan" in url:
+            return _Resp(200, {"ports": [22, 23, 7547], "vulns": ["CVE-2024-3400"],
+                               "org": "BadCloud", "os": None, "country_name": "X"})
+        if "whoisxmlapi" in url:
+            return _Resp(200, {"WhoisRecord": {"createdDate": "2026-06-01T00:00:00Z",
+                                               "registrarName": "CheapNames"}})
+        return _Resp(404, {})
+
+    import httpx
+    monkeypatch.setattr(httpx, "get", fake_get)
+    for env in en.EXTERNAL_PROVIDERS.values():
+        monkeypatch.setenv(env, "test-key")
+
+    vt = en._enrich_external("virustotal", "203.0.113.66", "ip")
+    assert vt["available"] is True and vt["verdict"] == "malicious"
+    assert "12/72 engines" in vt["summary"]
+    gn = en._enrich_external("greynoise", "203.0.113.66", "ip")
+    assert gn["verdict"] == "malicious" and "Mirai" in gn["summary"]
+    sh = en._enrich_external("shodan", "203.0.113.66", "ip")
+    assert sh["verdict"] == "suspicious" and "1 known vulns" in sh["summary"]
+    who = en._enrich_external("whois", "fresh-phish.example", "domain")
+    assert who["verdict"] == "suspicious" and "registered" in who["summary"]  # <30d old
+    # type gating: GreyNoise/Shodan only cover IPs — honestly not applicable
+    assert en._enrich_external("greynoise", "x.example", "domain")["available"] is False
+    # VT URL ids are base64url-encoded
+    en._enrich_external("virustotal", "http://evil.example/p", "url")
+    assert any("/urls/" in u for u in calls)
+
+    # a network failure is an honest failure, never a fabricated verdict
+    def boom(*a, **k):
+        raise httpx.ConnectError("no route")
+    monkeypatch.setattr(httpx, "get", boom)
+    failed = en._enrich_external("virustotal", "203.0.113.66", "ip")
+    assert failed["available"] is False and "lookup failed" in failed["reason"]
+
+
 def test_ioc_enrichment_pipeline(client, auth):
     """Enrichment runs built-in enrichers, cross-references internal stores,
     caches results, keeps history, and reports external providers honestly."""

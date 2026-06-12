@@ -155,8 +155,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 - [x] **Enrichment pipeline** — DONE (see CHANGELOG): pluggable enrichers with
       per-IOC caching (TTL) + history. Real offline built-ins (internal
       cross-reference + indicator analysis incl. geo/ASN hint); VirusTotal/
-      GreyNoise/Shodan/WHOIS adapter seam that reports honestly-unavailable
-      without an API key. Remaining: live external calls when keys are set.
+      GreyNoise/Shodan/WHOIS report honestly-unavailable without an API key —
+      and **with a key set they make the real provider call** (VT v3 analysis
+      stats, GreyNoise community classification, Shodan host ports/vulns,
+      WHOIS registration age), with failed lookups reported as failures.
 - [x] **IOC lifecycle** — DONE (see CHANGELOG): per-type confidence decay,
       sighting tracking (events/connectors/manual), known-good whitelisting,
       and expiry — wired into TI matching, with an IOC database + lifecycle
@@ -232,6 +234,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Live enrichment providers (Phase 3)** — with an API key in
+  the environment, the external enrichers now perform the real lookup:
+  VirusTotal v3 (`last_analysis_stats` → X/N engines verdict, URL ids
+  base64url-encoded), GreyNoise community (scanner classification), Shodan
+  host (open ports + known vulns ⇒ suspicious), and WHOIS (registration age;
+  <30 days ⇒ suspicious). Type gating is honest (GreyNoise/Shodan IPs only,
+  WHOIS domains only), 404s map to "not seen", and any network/HTTP failure
+  reports `available:false, lookup failed` — never a fabricated verdict.
+  Unit-proven against canned provider payloads and a connection-error path.
 - **2026-06-12 · Integration credential entry (Phase 2 closed)** — new
   `PATCH /soar/integrations/{id}` sets/clears the vendor base URL + API key
   (write-only; every payload exposes only `credentialed`) and persists the
