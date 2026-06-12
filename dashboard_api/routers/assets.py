@@ -111,7 +111,7 @@ def vuln_summary():
     from dashboard_api.attack_surface import exposure_inventory
     with get_conn() as conn:
         findings = conn.execute(
-            "SELECT cve, severity, cvss FROM vuln_findings WHERE status='open'").fetchall()
+            "SELECT cve, severity, cvss, kev, exploit FROM vuln_findings WHERE status='open'").fetchall()
         patch = conn.execute("SELECT AVG(patch_age) AS a FROM assets").fetchone()
         exposure = exposure_inventory(conn)["summary"]
     by_sev = {"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -119,18 +119,57 @@ def vuln_summary():
         if f["severity"] in by_sev:
             by_sev[f["severity"]] += 1
     distinct = {f["cve"] for f in findings}
-    # "Actively exploited" = critical-CVSS findings (the catalogue's RCE-class CVEs).
-    exploited = sum(1 for f in findings if (f["cvss"] or 0) >= 9.0)
+    # Actively exploited = CISA-KEV-listed findings (a documented fact per CVE).
+    exploited = len({f["cve"] for f in findings if f["kev"]})
     return {
         "totalFindings": len(findings),
         "distinctCves": len(distinct),
         "bySeverity": by_sev,
         "criticalAndHigh": by_sev["critical"] + by_sev["high"],
         "activelyExploited": exploited,
+        "kevListed": exploited,
+        "withExploit": len({f["cve"] for f in findings if f["exploit"]}),
         "avgPatchAge": round(patch["a"] or 0),
         "exposureScore": exposure["avgExposure"],
         "internetFacing": exposure["internetFacing"],
     }
+
+
+@router.get("/vuln-findings")
+def fleet_vuln_findings(limit: int = Query(200, le=1000)):
+    """Fleet-wide CVE findings grouped per CVE: which assets are affected,
+    KEV/exploit status, CVSS, fix version — the real Vulnerabilities list."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT v.cve, v.product, v.version, v.severity, v.cvss, v.fixed_in, v.summary, "
+            "v.status, v.found_at, v.kev, v.exploit, a.name AS asset_name, a.owner AS asset_owner "
+            "FROM vuln_findings v LEFT JOIN assets a ON a.id = v.asset_id "
+            "WHERE v.status='open' ORDER BY v.cvss DESC, v.found_at DESC LIMIT ?",
+            (limit,)).fetchall()
+    grouped: dict[str, dict] = {}
+    for r in rows:
+        g = grouped.setdefault(r["cve"], {
+            "cve": r["cve"], "cvss": r["cvss"], "severity": r["severity"],
+            "summary": r["summary"], "fixedIn": r["fixed_in"],
+            "kev": bool(r["kev"]), "exploit": bool(r["exploit"]),
+            "products": set(), "affectedAssets": set(), "owners": set(),
+            "firstFound": r["found_at"],
+        })
+        g["products"].add(f"{r['product']} {r['version']}")
+        if r["asset_name"]:
+            g["affectedAssets"].add(r["asset_name"])
+        if r["asset_owner"]:
+            g["owners"].add(r["asset_owner"])
+        if r["found_at"] < g["firstFound"]:
+            g["firstFound"] = r["found_at"]
+    out = []
+    for g in grouped.values():
+        out.append({**g, "products": sorted(g["products"]),
+                    "affectedAssets": sorted(g["affectedAssets"]),
+                    "owners": sorted(g["owners"]),
+                    "reference": f"https://nvd.nist.gov/vuln/detail/{g['cve']}"})
+    out.sort(key=lambda x: -x["cvss"])
+    return out
 
 
 @router.get("/vulns")

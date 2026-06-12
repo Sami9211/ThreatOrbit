@@ -133,7 +133,9 @@ CREATE TABLE IF NOT EXISTS vuln_findings (
     fixed_in   TEXT,
     summary    TEXT,
     status     TEXT NOT NULL DEFAULT 'open',     -- open|fixed|accepted
-    found_at   TEXT NOT NULL
+    found_at   TEXT NOT NULL,
+    kev        INTEGER NOT NULL DEFAULT 0,       -- CISA Known Exploited Vulnerabilities
+    exploit    INTEGER NOT NULL DEFAULT 0        -- public exploit exists
 );
 
 CREATE TABLE IF NOT EXISTS alerts (
@@ -664,6 +666,8 @@ _MIGRATIONS = [
     ("saved_hunts", "last_scheduled", "TEXT"),
     ("saved_hunts", "auto_alert", "INTEGER NOT NULL DEFAULT 1"),
     ("report_schedules", "email", "TEXT"),
+    ("vuln_findings", "kev", "INTEGER NOT NULL DEFAULT 0"),
+    ("vuln_findings", "exploit", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

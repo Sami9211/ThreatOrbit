@@ -515,6 +515,11 @@ def seed(force: bool = False):
         # Now that alerts exist, align each asset's risk/status/alert-count with
         # real alert pressure so the stored scores match the live model.
         recompute_asset_risk(conn)
+        # Run the real vulnerability scanner over the seeded software inventories
+        # so vuln findings are genuine catalogue matches, not invented counts.
+        from dashboard_api.vuln_scanner import scan_all
+        scan_all(conn)
+        recompute_asset_risk(conn)
         # Place all seeded users in the default workspace (multi-tenancy foundation).
         from dashboard_api.tenancy import ensure_default_org
         ensure_default_org(conn)

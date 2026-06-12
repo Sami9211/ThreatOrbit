@@ -2018,6 +2018,28 @@ def test_attack_surface_discovery(client, auth):
                        headers=viewer).status_code == 403
 
 
+def test_fleet_vuln_findings_grouped(client, auth):
+    """The Vulnerabilities list is real: grouped per CVE with KEV/exploit facts
+    and the actually-affected assets (seed scans run at boot)."""
+    rows = client.get("/assets/vuln-findings", headers=auth).json()
+    assert rows, "seeded vulnerable software should produce findings"
+    bycve = {r["cve"]: r for r in rows}
+    # Log4Shell from legacy-app-01's seeded log4j 2.14.1 — a KEV fact
+    assert "CVE-2021-44228" in bycve
+    log4 = bycve["CVE-2021-44228"]
+    assert log4["kev"] is True and log4["exploit"] is True and log4["cvss"] == 10.0
+    assert "legacy-app-01" in log4["affectedAssets"]
+    assert log4["reference"].endswith("CVE-2021-44228")
+    # sorted by CVSS desc; non-KEV entries stay honest
+    cvss = [r["cvss"] for r in rows]
+    assert cvss == sorted(cvss, reverse=True)
+    if "CVE-2019-20372" in bycve:  # nginx smuggling: not KEV, no public exploit
+        assert bycve["CVE-2019-20372"]["kev"] is False
+    # summary uses the real KEV flag for "actively exploited"
+    s = client.get("/assets/vulns/summary", headers=auth).json()
+    assert s["kevListed"] >= 1 and s["activelyExploited"] == s["kevListed"]
+
+
 def test_vuln_summary_from_real_findings(client, auth):
     """The vuln summary KPIs aggregate real scanner findings, not constants."""
     a = client.post("/assets", json={

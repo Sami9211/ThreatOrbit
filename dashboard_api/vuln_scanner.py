@@ -16,32 +16,40 @@ import uuid
 from datetime import datetime, timezone
 
 # Real CVEs keyed by product (lowercased). `lt` = affected when version < fixed;
-# `range` = affected when min <= version <= max (inclusive).
+# `range` = affected when min <= version <= max (inclusive). `kev` = listed in
+# CISA's Known Exploited Vulnerabilities catalogue; `exploit` = a public
+# exploit exists. Both are documented facts for these CVEs, not estimates.
 CVE_CATALOGUE: dict[str, list[dict]] = {
     "log4j": [{"cve": "CVE-2021-44228", "cvss": 10.0, "severity": "critical",
-               "lt": "2.15.0", "fixed": "2.15.0", "summary": "Log4Shell — JNDI RCE in Apache Log4j 2"}],
+               "lt": "2.15.0", "fixed": "2.15.0", "kev": True, "exploit": True,
+               "summary": "Log4Shell — JNDI RCE in Apache Log4j 2"}],
     "openssl": [
         {"cve": "CVE-2014-0160", "cvss": 7.5, "severity": "high", "range": ("1.0.1", "1.0.1f"),
-         "fixed": "1.0.1g", "summary": "Heartbleed — TLS heartbeat memory disclosure"},
+         "fixed": "1.0.1g", "kev": True, "exploit": True,
+         "summary": "Heartbleed — TLS heartbeat memory disclosure"},
         {"cve": "CVE-2022-3602", "cvss": 7.5, "severity": "high", "range": ("3.0.0", "3.0.6"),
-         "fixed": "3.0.7", "summary": "X.509 email address buffer overflow"}],
+         "fixed": "3.0.7", "kev": False, "exploit": False,
+         "summary": "X.509 email address buffer overflow"}],
     "apache httpd": [{"cve": "CVE-2021-41773", "cvss": 7.5, "severity": "high",
-                      "range": ("2.4.49", "2.4.49"), "fixed": "2.4.51",
+                      "range": ("2.4.49", "2.4.49"), "fixed": "2.4.51", "kev": True, "exploit": True,
                       "summary": "Path traversal & RCE in Apache HTTP Server 2.4.49"}],
     "httpd": [{"cve": "CVE-2021-41773", "cvss": 7.5, "severity": "high",
-               "range": ("2.4.49", "2.4.49"), "fixed": "2.4.51",
+               "range": ("2.4.49", "2.4.49"), "fixed": "2.4.51", "kev": True, "exploit": True,
                "summary": "Path traversal & RCE in Apache HTTP Server 2.4.49"}],
     "nginx": [{"cve": "CVE-2019-20372", "cvss": 5.3, "severity": "medium", "lt": "1.17.7",
-               "fixed": "1.17.7", "summary": "HTTP request smuggling via error_page"}],
+               "fixed": "1.17.7", "kev": False, "exploit": False,
+               "summary": "HTTP request smuggling via error_page"}],
     "openssh": [{"cve": "CVE-2024-6387", "cvss": 8.1, "severity": "high",
-                 "range": ("8.5", "9.7"), "fixed": "9.8",
+                 "range": ("8.5", "9.7"), "fixed": "9.8", "kev": False, "exploit": True,
                  "summary": "regreSSHion — unauthenticated RCE in OpenSSH server"}],
     "sudo": [{"cve": "CVE-2021-3156", "cvss": 7.8, "severity": "high", "lt": "1.9.5p2",
-              "fixed": "1.9.5p2", "summary": "Baron Samedit — heap overflow privilege escalation"}],
+              "fixed": "1.9.5p2", "kev": True, "exploit": True,
+              "summary": "Baron Samedit — heap overflow privilege escalation"}],
     "exim": [{"cve": "CVE-2019-10149", "cvss": 9.8, "severity": "critical", "range": ("4.87", "4.91"),
-              "fixed": "4.92", "summary": "RCE in Exim deliver_message()"}],
+              "fixed": "4.92", "kev": True, "exploit": True,
+              "summary": "RCE in Exim deliver_message()"}],
     "windows": [{"cve": "CVE-2020-0796", "cvss": 10.0, "severity": "critical",
-                 "range": ("10.0", "10.0"), "fixed": "patched",
+                 "range": ("10.0", "10.0"), "fixed": "patched", "kev": True, "exploit": True,
                  "summary": "SMBGhost — SMBv3 compression RCE"}],
 }
 
@@ -81,6 +89,7 @@ def scan_software(software: list[dict], extra_catalogue: dict | None = None) -> 
                     "cve": entry["cve"], "product": product, "version": version,
                     "severity": entry["severity"], "cvss": entry["cvss"],
                     "fixed_in": entry.get("fixed"), "summary": entry.get("summary", ""),
+                    "kev": bool(entry.get("kev")), "exploit": bool(entry.get("exploit")),
                 })
     return findings
 
@@ -111,9 +120,10 @@ def scan_asset(conn, asset_id: str) -> dict | None:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
         conn.execute(
             "INSERT INTO vuln_findings (id,asset_id,cve,product,version,severity,cvss,fixed_in,"
-            "summary,status,found_at) VALUES (?,?,?,?,?,?,?,?,?, 'open', ?)",
+            "summary,status,found_at,kev,exploit) VALUES (?,?,?,?,?,?,?,?,?, 'open', ?,?,?)",
             (str(uuid.uuid4()), asset_id, f["cve"], f["product"], f["version"], f["severity"],
-             f["cvss"], f["fixed_in"], f["summary"], _now()))
+             f["cvss"], f["fixed_in"], f["summary"], _now(),
+             1 if f.get("kev") else 0, 1 if f.get("exploit") else 0))
     # Keep the asset's aggregate cve counts in sync with real findings.
     from dashboard_api.db import dumps
     conn.execute("UPDATE assets SET cves=?, last_scan=? WHERE id=?",

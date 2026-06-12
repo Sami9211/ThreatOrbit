@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { fetchVulns, fetchVulnSummary, type Asset as ApiAsset, type VulnSummary } from '@/lib/api'
+import { fetchFleetVulnFindings, fetchVulnSummary, type FleetVulnFinding, type VulnSummary } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShieldAlert, Bug, Search, X, ExternalLink, Crosshair, Clock,
@@ -309,66 +309,35 @@ export default function VulnsPage() {
   useEffect(() => { fetchVulnSummary().then(setVsum).catch(() => {}) }, [])
 
   useEffect(() => {
-    fetchVulns().then((assets: ApiAsset[]) => {
-      if (assets.length > 0) {
-        const extra: Vuln[] = assets
-          .filter((a) => a.cves.critical + a.cves.high > 0)
-          .flatMap((a) => {
-            const rows: Vuln[] = []
-            const totalCritical = a.cves.critical
-            const totalHigh = a.cves.high
-            if (totalCritical > 0) {
-              rows.push({
-                id: `CVE-API-${a.id}-C`,
-                cvss: 9.5,
-                title: `${totalCritical} critical CVE${totalCritical > 1 ? 's' : ''} on ${a.name}`,
-                description: `Asset ${a.name} has ${totalCritical} unpatched critical vulnerabilities detected during last scan.`,
-                severity: 'critical',
-                status: a.status === 'critical' ? 'open' : 'in-progress',
-                exploit: 'poc',
-                kev: false,
-                exploitAvailable: true,
-                affectedAssets: [a.name],
-                ageDays: a.patchAge,
-                assignee: a.owner,
-                cvssVector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
-                vectorBreakdown: [{ label: 'Attack Vector', value: 'Network' }],
-                epss: 0.5,
-                remediation: [`Apply available patches for ${a.name}.`, 'Update OS and software packages.'],
-                references: [],
-              })
-            }
-            if (totalHigh > 0) {
-              rows.push({
-                id: `CVE-API-${a.id}-H`,
-                cvss: 7.5,
-                title: `${totalHigh} high CVE${totalHigh > 1 ? 's' : ''} on ${a.name}`,
-                description: `Asset ${a.name} has ${totalHigh} unpatched high-severity vulnerabilities.`,
-                severity: 'high',
-                status: 'open',
-                exploit: 'poc',
-                kev: false,
-                exploitAvailable: false,
-                affectedAssets: [a.name],
-                ageDays: a.patchAge,
-                assignee: a.owner,
-                cvssVector: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N',
-                vectorBreakdown: [{ label: 'Attack Vector', value: 'Network' }],
-                epss: 0.3,
-                remediation: [`Patch high-severity findings on ${a.name}.`],
-                references: [],
-              })
-            }
-            return rows
-          })
-        if (extra.length > 0) {
-          setVulns((prev) => {
-            const existingIds = new Set(prev.map((v) => v.id))
-            const newOnly = extra.filter((v) => !existingIds.has(v.id))
-            return newOnly.length > 0 ? [...prev, ...newOnly] : prev
-          })
-        }
-      }
+    // Real per-CVE findings from the scanner (grouped fleet-wide). When the API
+    // returns rows they REPLACE the static showcase set entirely.
+    fetchFleetVulnFindings().then((rows: FleetVulnFinding[]) => {
+      if (rows.length === 0) return
+      const ageDays = (iso: string) =>
+        Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 86400000))
+      setVulns(rows.map((r) => ({
+        id: r.cve,
+        cvss: r.cvss,
+        title: r.summary || r.cve,
+        description: `${r.summary}. Affects ${r.products.join(', ')}.`
+          + (r.fixedIn ? ` Fixed in ${r.fixedIn}.` : ''),
+        severity: (['critical', 'high', 'medium', 'low'].includes(r.severity)
+          ? r.severity : 'medium') as Severity,
+        status: 'open' as VulnStatus,
+        exploit: (r.kev ? 'kev' : r.exploit ? 'weaponized' : 'none') as ExploitMaturity,
+        kev: r.kev,
+        exploitAvailable: r.exploit,
+        affectedAssets: r.affectedAssets,
+        ageDays: ageDays(r.firstFound),
+        assignee: r.owners[0] ?? null,
+        cvssVector: '',
+        vectorBreakdown: [],
+        epss: 0,
+        remediation: r.fixedIn
+          ? [`Upgrade ${r.products.join(', ')} to ${r.fixedIn} or later.`]
+          : ['Apply the vendor patch for this CVE.'],
+        references: [r.reference],
+      })))
     }).catch(() => {})
   }, [])
   const [search, setSearch] = useState('')
@@ -566,8 +535,8 @@ export default function VulnsPage() {
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label: 'Severity', value: SEVERITY_META[v.severity].label, color: SEVERITY_META[v.severity].color },
-                        { label: 'EPSS', value: `${(v.epss * 100).toFixed(0)}%`, color: cvssColor(v.cvss) },
-                        { label: 'Patch Age', value: `${v.ageDays}d`, color: v.ageDays > 30 ? '#FF4D6D' : '#FFB23E' },
+                        { label: 'CVSS', value: v.cvss.toFixed(1), color: cvssColor(v.cvss) },
+                        { label: 'Finding Age', value: `${v.ageDays}d`, color: v.ageDays > 30 ? '#FF4D6D' : '#FFB23E' },
                       ].map(({ label, value, color }) => (
                         <div key={label} className="rounded-xl border border-white/8 bg-white/3 px-3 py-2">
                           <p className="text-[9px] text-ink-600 uppercase tracking-wider">{label}</p>
@@ -582,7 +551,8 @@ export default function VulnsPage() {
                       <p className="text-xs text-ink-300 leading-relaxed">{v.description}</p>
                     </div>
 
-                    {/* CVSS vector */}
+                    {/* CVSS vector (only when the source supplies one) */}
+                    {v.cvssVector && (
                     <div>
                       <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1.5">CVSS Vector</p>
                       <p className="font-mono text-[10px] text-violet bg-violet/5 border border-violet/15 rounded-lg px-2.5 py-1.5 mb-2 break-all">{v.cvssVector}</p>
@@ -595,6 +565,7 @@ export default function VulnsPage() {
                         ))}
                       </div>
                     </div>
+                    )}
 
                     {/* Exploit maturity */}
                     <div className="rounded-xl border border-white/8 bg-white/3 px-3 py-2.5 flex items-center justify-between">

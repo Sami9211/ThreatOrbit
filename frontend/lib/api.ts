@@ -1016,6 +1016,12 @@ export interface VulnSummary {
   avgPatchAge: number; exposureScore: number; internetFacing: number
 }
 export const fetchVulnSummary = () => api<VulnSummary>('/assets/vulns/summary')
+export interface FleetVulnFinding {
+  cve: string; cvss: number; severity: string; summary: string; fixedIn: string | null
+  kev: boolean; exploit: boolean; products: string[]; affectedAssets: string[]
+  owners: string[]; firstFound: string; reference: string
+}
+export const fetchFleetVulnFindings = () => api<FleetVulnFinding[]>('/assets/vuln-findings')
 export const recomputeAssetRisk = () =>
   api<{ updated: number }>('/assets/recompute-risk', { method: 'POST' })
 
