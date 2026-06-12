@@ -695,6 +695,11 @@ _MIGRATIONS = [
     # the minimum severity that should reach it).
     ("users", "slack_webhook", "TEXT"),
     ("users", "slack_min_severity", "TEXT NOT NULL DEFAULT 'high'"),
+    # Time-boxed / recurring suppression windows: an absolute expiry and an
+    # optional daily HH:MM–HH:MM UTC window in which the suppression applies.
+    ("suppressions", "expires_at", "TEXT"),
+    ("suppressions", "window_start", "TEXT"),
+    ("suppressions", "window_end", "TEXT"),
 ]
 
 

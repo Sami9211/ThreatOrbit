@@ -68,6 +68,32 @@ def canonical_field(field: str | None) -> str | None:
     return ECS_ALIASES.get(field, field)
 
 
+def suppression_active(s: dict, now: datetime | None = None) -> bool:
+    """Whether a suppression applies right now.
+
+    Two independent time boxes (both optional, both must pass):
+      * `expires_at` — absolute ISO expiry; NULL/empty means permanent.
+      * `window_start`/`window_end` — a recurring daily HH:MM UTC window
+        (e.g. a 02:00–04:00 maintenance window); supports overnight wrap
+        (22:00–06:00). Only consulted when both ends are set.
+    """
+    now = now or datetime.now(timezone.utc)
+    exp = s.get("expires_at")
+    if exp:
+        try:
+            if now >= datetime.fromisoformat(str(exp)):
+                return False
+        except (ValueError, TypeError):
+            pass  # unparseable expiry never deactivates a rule silently
+    start, end = s.get("window_start"), s.get("window_end")
+    if start and end:
+        hhmm = now.strftime("%H:%M")
+        if start <= end:  # same-day window
+            return start <= hhmm < end
+        return hhmm >= start or hhmm < end  # overnight wrap
+    return True
+
+
 def _coerce_num(v):
     try:
         return float(v)

@@ -34,6 +34,9 @@ export default function SuppressionsPanel() {
   const [value, setValue] = useState('')
   const [mode, setMode] = useState('suppress')
   const [reason, setReason] = useState('')
+  const [expiresHours, setExpiresHours] = useState('')   // '' = permanent
+  const [windowStart, setWindowStart] = useState('')     // HH:MM UTC, optional pair
+  const [windowEnd, setWindowEnd] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,8 +50,13 @@ export default function SuppressionsPanel() {
     if (!v || busy) return
     setBusy(true)
     setError(null)
-    createSuppression({ value: v, field, mode, reason: reason.trim() || undefined })
-      .then(() => { setValue(''); setReason(''); load() })
+    createSuppression({
+      value: v, field, mode, reason: reason.trim() || undefined,
+      expiresHours: expiresHours.trim() ? Number(expiresHours) : undefined,
+      windowStart: windowStart.trim() || undefined,
+      windowEnd: windowEnd.trim() || undefined,
+    })
+      .then(() => { setValue(''); setReason(''); setExpiresHours(''); setWindowStart(''); setWindowEnd(''); load() })
       .catch((e) => setError(e?.message || 'Could not create suppression'))
       .finally(() => setBusy(false))
   }
@@ -107,6 +115,19 @@ export default function SuppressionsPanel() {
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}
             placeholder="reason (optional) — e.g. known vuln scanner"
             className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+          {/* Time-boxing: expiry in hours and/or a daily UTC window */}
+          <input value={expiresHours} onChange={(e) => setExpiresHours(e.target.value.replace(/\D/g, ''))}
+            placeholder="expires (h)" title="Auto-expire after this many hours (blank = permanent)"
+            className="w-20 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+          <div className="flex items-center gap-1" title="Recurring daily window (UTC) in which this rule applies — e.g. a 02:00–04:00 maintenance window">
+            <input value={windowStart} onChange={(e) => setWindowStart(e.target.value)}
+              placeholder="HH:MM"
+              className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+            <span className="text-[10px] text-ink-600">–</span>
+            <input value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)}
+              placeholder="HH:MM"
+              className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+          </div>
           <button onClick={add} disabled={busy || !value.trim()}
             className={cn('flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all',
               value.trim() && !busy ? 'bg-amber/20 border border-amber/35 text-amber hover:bg-amber/30' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
@@ -145,9 +166,18 @@ export default function SuppressionsPanel() {
                   {s.ruleId && s.ruleId !== '*' && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet/10 text-violet font-mono">{s.ruleId}</span>
                   )}
+                  {/* time-boxed entries show whether they apply right now */}
+                  {(s.expiresAt || s.windowStart) && (
+                    <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-semibold',
+                      s.active ? 'text-safe bg-safe/12' : 'text-ink-500 bg-white/6')}>
+                      {s.active ? 'active' : 'inactive'}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[10px] text-ink-600 mt-0.5 truncate">
                   {s.reason ? `${s.reason} · ` : ''}{relTime(s.createdAt)}{s.createdBy ? ` · ${s.createdBy}` : ''}
+                  {s.windowStart && s.windowEnd ? ` · daily ${s.windowStart}–${s.windowEnd} UTC` : ''}
+                  {s.expiresAt ? ` · expires ${new Date(s.expiresAt).toLocaleString()}` : ''}
                 </p>
               </div>
               <div className="text-right shrink-0">

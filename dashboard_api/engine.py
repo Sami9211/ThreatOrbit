@@ -275,9 +275,12 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -
 
     # Alert-tuning: active suppressions/allow-lists drop matching detections
     # before they ever become an alert (analyst feedback loop, not a hack).
+    # Time-boxed/windowed entries only apply while active (rule_engine helper).
+    from dashboard_api.rule_engine import suppression_active
     supp_rows = conn.execute(
-        "SELECT id, rule_id, field, value FROM suppressions").fetchall()
-    suppressions = [dict(s) for s in supp_rows]
+        "SELECT id, rule_id, field, value, expires_at, window_start, window_end "
+        "FROM suppressions").fetchall()
+    suppressions = [dict(s) for s in supp_rows if suppression_active(dict(s))]
 
     def _suppressed(rule_id: str, event: dict):
         for s in suppressions:

@@ -3032,6 +3032,70 @@ def test_alert_suppression_lifecycle(client, auth):
     assert revived["total"] > base and any(a["status"] not in ("resolved", "closed") for a in revived["items"])
 
 
+def test_suppression_time_windows(client, auth):
+    """Time-boxed suppressions: an out-of-window entry does NOT drop matches
+    (and doesn't retro-close), an in-window one does; expiry + window math is
+    unit-proven including overnight wrap."""
+    from datetime import datetime, timedelta, timezone
+    from dashboard_api.engine import seed_builtin_rules
+    from dashboard_api.rule_engine import suppression_active
+    seed_builtin_rules()
+
+    # — pure window/expiry math —
+    now = datetime(2026, 6, 12, 3, 0, tzinfo=timezone.utc)
+    assert suppression_active({}, now) is True  # permanent
+    assert suppression_active({"expires_at": "2026-06-12T02:59:00+00:00"}, now) is False
+    assert suppression_active({"expires_at": "2026-06-12T03:01:00+00:00"}, now) is True
+    assert suppression_active({"window_start": "02:00", "window_end": "04:00"}, now) is True
+    assert suppression_active({"window_start": "04:00", "window_end": "06:00"}, now) is False
+    assert suppression_active({"window_start": "22:00", "window_end": "06:00"}, now) is True  # overnight
+    assert suppression_active({"window_start": "22:00", "window_end": "02:00"}, now) is False
+
+    # — API behaviour —
+    ip = "203.0.113.222"
+    bf = f"Jan 10 04:30:00 web01 sshd[112]: Failed password for root from {ip} port 51110"
+    utcnow = datetime.now(timezone.utc)
+    closed_win = ((utcnow + timedelta(hours=2)).strftime("%H:%M"),
+                  (utcnow + timedelta(hours=3)).strftime("%H:%M"))
+    open_win = ((utcnow - timedelta(hours=1)).strftime("%H:%M"),
+                (utcnow + timedelta(hours=1)).strftime("%H:%M"))
+
+    # validation: HH:MM format, paired fields, sane expiry
+    assert client.post("/siem/suppressions", json={"value": ip, "window_start": "26:99",
+                       "window_end": "04:00"}, headers=auth).status_code == 400
+    assert client.post("/siem/suppressions", json={"value": ip, "window_start": "02:00"},
+                       headers=auth).status_code == 400
+    assert client.post("/siem/suppressions", json={"value": ip, "expires_hours": 0},
+                       headers=auth).status_code == 400
+
+    # an out-of-window suppression neither drops new matches nor retro-closes
+    s1 = client.post("/siem/suppressions", json={
+        "value": ip, "field": "src_ip", "reason": "future maintenance window",
+        "window_start": closed_win[0], "window_end": closed_win[1]}, headers=auth).json()
+    listed = next(x for x in client.get("/siem/suppressions", headers=auth).json() if x["id"] == s1["id"])
+    assert listed["active"] is False
+    before = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["total"]
+    client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
+    fired = client.get(f"/siem/alerts?q={ip}", headers=auth).json()
+    assert fired["total"] > before  # detection fired despite the (inactive) suppression
+    client.delete(f"/siem/suppressions/{s1['id']}", headers=auth)
+
+    # an in-window, time-boxed suppression drops matches and retro-closes
+    s2 = client.post("/siem/suppressions", json={
+        "value": ip, "field": "src_ip", "reason": "active maintenance",
+        "window_start": open_win[0], "window_end": open_win[1],
+        "expires_hours": 24}, headers=auth).json()
+    assert s2["expires_at"]  # absolute expiry stamped
+    listed = next(x for x in client.get("/siem/suppressions", headers=auth).json() if x["id"] == s2["id"])
+    assert listed["active"] is True
+    closed = client.get(f"/siem/alerts?q={ip}", headers=auth).json()
+    assert all(a["status"] == "closed" for a in closed["items"])  # retro-closed
+    base = closed["total"]
+    client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
+    assert client.get(f"/siem/alerts?q={ip}", headers=auth).json()["total"] == base  # dropped
+    client.delete(f"/siem/suppressions/{s2['id']}", headers=auth)
+
+
 def test_event_search_language(client, auth):
     """Real field-operator search over the raw event stream + stats aggregation."""
     from dashboard_api.engine import seed_builtin_rules

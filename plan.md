@@ -91,8 +91,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       flagging deviation-from-self, surfaced in the drawer.
 - [x] **Alert tuning workflow** — DONE (see CHANGELOG): false-positive feedback
       bumps rule FP rate; suppressions/allow-lists per entity (and rule) that
-      retro-close open alerts and drop future matches, with a hit counter.
-      Remaining: time-boxed/recurring suppression windows.
+      retro-close open alerts and drop future matches, with a hit counter —
+      **plus time-boxed/recurring windows**: auto-expiry after N hours and/or
+      a recurring daily HH:MM–HH:MM UTC window (overnight wrap supported);
+      out-of-window entries don't drop or retro-close, and the UI badges
+      active/inactive.
 - [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
       tactic, per-technique drill-down to rules/alerts, gaps highlighted.
 - [x] **Search/hunt language** — DONE: a real field-operator query language over
@@ -223,6 +226,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Time-boxed suppression windows (Phase 1 closed)** —
+  suppressions can now carry an absolute expiry (`expires_hours` → stamped
+  `expires_at`) and/or a recurring daily HH:MM–HH:MM UTC window (overnight
+  wrap supported). The engine only honours currently-active entries
+  (`rule_engine.suppression_active`); creation retro-closes open alerts only
+  when the rule applies right now; the list endpoint computes `active` and
+  the SuppressionsPanel gains expiry/window inputs + an active/inactive
+  badge. Tests cover the pure window/expiry math and the end-to-end
+  behaviour: an out-of-window suppression doesn't drop a brute-force alert,
+  an in-window time-boxed one does.
 - **2026-06-12 · ECS ingest-time normalization (Phase 1 closed)** — the JSON
   ingest parser now resolves Elastic Common Schema documents — nested Beats
   style (`{"source": {"ip": …}}`) and dotted keys (`"source.ip"`) — into the

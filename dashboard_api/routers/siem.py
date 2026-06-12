@@ -229,10 +229,19 @@ class SuppressionCreate(BaseModel):
     rule_id: str = "*"
     mode: str = "suppress"
     reason: str | None = None
+    # Time-boxing (both optional): an absolute lifetime in hours, and/or a
+    # recurring daily HH:MM–HH:MM UTC window (e.g. a maintenance window).
+    expires_hours: int | None = None
+    window_start: str | None = None
+    window_end: str | None = None
+
+
+_HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
 
 
 @router.get("/suppressions")
 def list_suppressions(user: dict = Depends(current_user)):
+    from dashboard_api.rule_engine import suppression_active
     where, params = "", []
     # Tenant isolation (same pattern as alerts): active only when flipped on.
     from dashboard_api import tenancy
@@ -241,11 +250,15 @@ def list_suppressions(user: dict = Depends(current_user)):
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT * FROM suppressions {where} ORDER BY created_at DESC", params).fetchall()
-    return rows_to_dicts(rows)
+    # `active` is computed (expiry + daily window), so the UI can show why a
+    # suppression isn't currently dropping matches.
+    return [{**s, "active": suppression_active(s)} for s in rows_to_dicts(rows)]
 
 
 @router.post("/suppressions", status_code=201)
 def create_suppression(body: SuppressionCreate, user: dict = Depends(require_perm("siem.write"))):
+    import re as _re
+    from datetime import timedelta
     if body.field not in ("src_ip", "username", "hostname"):
         raise HTTPException(status_code=400, detail="field must be src_ip|username|hostname")
     if body.mode not in ("suppress", "allow"):
@@ -253,22 +266,39 @@ def create_suppression(body: SuppressionCreate, user: dict = Depends(require_per
     value = body.value.strip()
     if not value:
         raise HTTPException(status_code=400, detail="value is required")
+    expires_at = None
+    if body.expires_hours is not None:
+        if not 1 <= body.expires_hours <= 8760:
+            raise HTTPException(status_code=400, detail="expires_hours must be 1–8760")
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=body.expires_hours)
+                      ).replace(microsecond=0).isoformat()
+    if bool(body.window_start) != bool(body.window_end):
+        raise HTTPException(status_code=400, detail="window_start and window_end must be set together")
+    for w in (body.window_start, body.window_end):
+        if w and not _re.match(_HHMM, w):
+            raise HTTPException(status_code=400, detail="window times must be HH:MM (UTC)")
     sid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO suppressions (id,rule_id,field,value,mode,reason,created_at,created_by,org_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO suppressions (id,rule_id,field,value,mode,reason,created_at,created_by,"
+            "org_id,expires_at,window_start,window_end) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (sid, body.rule_id or "*", body.field, value, body.mode, body.reason,
-             _now_iso(), user["email"], tenancy.org_of(user)),
+             _now_iso(), user["email"], tenancy.org_of(user),
+             expires_at, body.window_start, body.window_end),
         )
-        # retro-close any currently-open alerts this suppression covers
-        clause = f"{body.field}=?"
-        params = [value]
-        if body.rule_id and body.rule_id != "*":
-            clause += " AND rule_id=?"; params.append(body.rule_id)
-        conn.execute(
-            f"UPDATE alerts SET status='closed', disposition='false-positive' "
-            f"WHERE {clause} AND status NOT IN ('resolved','closed')", params)
+        # retro-close any currently-open alerts this suppression covers — but
+        # only if it applies right now (a future-window entry shouldn't close
+        # today's alerts before its window ever opens).
+        from dashboard_api.rule_engine import suppression_active
+        if suppression_active({"expires_at": expires_at, "window_start": body.window_start,
+                               "window_end": body.window_end}):
+            clause = f"{body.field}=?"
+            params = [value]
+            if body.rule_id and body.rule_id != "*":
+                clause += " AND rule_id=?"; params.append(body.rule_id)
+            conn.execute(
+                f"UPDATE alerts SET status='closed', disposition='false-positive' "
+                f"WHERE {clause} AND status NOT IN ('resolved','closed')", params)
         audit(conn, user["email"], "suppression.create", sid, f"{body.field}={value} mode={body.mode}")
         conn.commit()
         row = conn.execute("SELECT * FROM suppressions WHERE id=?", (sid,)).fetchone()

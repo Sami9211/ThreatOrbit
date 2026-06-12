@@ -567,16 +567,23 @@ export interface Suppression {
   id: string; ruleId: string; field: 'src_ip' | 'username' | 'hostname'
   value: string; mode: 'suppress' | 'allow'; reason: string | null
   hits: number; createdAt: string; createdBy: string | null
+  // Time-boxing: absolute expiry and/or a recurring daily UTC window.
+  expiresAt: string | null; windowStart: string | null; windowEnd: string | null
+  /** Computed server-side: whether the suppression applies right now. */
+  active: boolean
 }
 export const fetchSuppressions = () => api<Suppression[]>('/siem/suppressions')
 export const createSuppression = (body: {
   value: string; field?: string; ruleId?: string; mode?: string; reason?: string
+  expiresHours?: number; windowStart?: string; windowEnd?: string
 }) =>
   api<Suppression>('/siem/suppressions', {
     method: 'POST',
     body: JSON.stringify({
       value: body.value, field: body.field, rule_id: body.ruleId,
       mode: body.mode, reason: body.reason,
+      expires_hours: body.expiresHours, window_start: body.windowStart,
+      window_end: body.windowEnd,
     }),
   })
 export const deleteSuppression = (id: string) =>
