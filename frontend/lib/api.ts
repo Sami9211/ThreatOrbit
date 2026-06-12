@@ -475,11 +475,19 @@ export interface AuditEntry {
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────
-export const authLogin = (email: string, password: string) =>
+export const authLogin = (email: string, password: string, code?: string) =>
   api<{ token: string; user: User }>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...(code ? { code } : {}) }),
   })
+
+// TOTP MFA: enrolment is user-driven; the secret is shown once at enrol time.
+export const fetchMfaStatus = () => api<{ enabled: boolean; pending: boolean }>('/auth/mfa')
+export const mfaEnroll = () => api<{ secret: string; otpauthUri: string }>('/auth/mfa/enroll', { method: 'POST' })
+export const mfaVerify = (code: string) =>
+  api<{ enabled: boolean }>('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ code }) })
+export const mfaDisable = (code: string) =>
+  api<{ enabled: boolean }>('/auth/mfa/disable', { method: 'POST', body: JSON.stringify({ code }) })
 
 export const authRegister = (body: { name: string; email: string; password: string; company?: string }) =>
   api<{ token: string; user: User }>('/auth/register', {

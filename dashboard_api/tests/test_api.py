@@ -395,13 +395,15 @@ def test_login_throttled_after_repeated_failures(client):
 
 
 def test_patch_user_mfa(client, auth):
+    """Admins cannot switch MFA ON for a user (it requires the user's own TOTP
+    enrolment); reset-off is the supported admin recovery path."""
     r = client.post("/users", json={
         "email": "mfa.user@threatorbit.space", "name": "MFA User",
         "role": "viewer", "password": "Password123!"}, headers=auth)
     uid = r.json()["id"]
     assert r.json()["mfa_enabled"] == 0
-    updated = client.patch(f"/users/{uid}", json={"mfa_enabled": True}, headers=auth).json()
-    assert updated["mfa_enabled"] == 1
+    assert client.patch(f"/users/{uid}", json={"mfa_enabled": True}, headers=auth).status_code == 400
+    assert client.patch(f"/users/{uid}", json={"mfa_enabled": False}, headers=auth).json()["mfa_enabled"] == 0
     client.delete(f"/users/{uid}", headers=auth)
 
 
@@ -684,6 +686,70 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     listed = client.get("/config/webhooks", headers=auth).json()
     assert next(w for w in listed if w["id"] == hook["id"])["status"] == "failing"
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
+
+
+def test_totp_mfa_lifecycle(client, auth):
+    """Real TOTP MFA: enrol → verify → login requires a valid code →
+    disable requires possession proof. Secrets stay encrypted server-side."""
+    import uuid as _uuid
+    from dashboard_api import secretstore as ss
+    from dashboard_api.db import get_conn
+    from dashboard_api.mfa import totp_code, verify_code, new_secret, otpauth_uri
+
+    # — pure TOTP units: RFC 6238 SHA-1 test vector (secret "12345678901234567890") —
+    rfc_secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    assert totp_code(rfc_secret, at=59) == "287082"
+    assert totp_code(rfc_secret, at=1111111109) == "081804"
+    assert verify_code(rfc_secret, "287082", window=1) is False  # stale codes don't verify now
+    assert verify_code(new_secret(), "") is False
+    assert otpauth_uri("ABC234", "a@b.c").startswith("otpauth://totp/ThreatOrbit:a%40b.c?secret=ABC234")
+
+    # — enrol a fresh analyst —
+    email = f"mfa-{_uuid.uuid4().hex[:6]}@threatorbit.space"
+    u = client.post("/users", json={"email": email, "name": "MFA User", "role": "analyst",
+                                    "password": "Password123!"}, headers=auth).json()
+    tok = client.post("/auth/login", json={"email": email, "password": "Password123!"}).json()["token"]
+    hdr = {"Authorization": f"Bearer {tok}"}
+    assert client.get("/auth/mfa", headers=hdr).json() == {"enabled": False, "pending": False}
+
+    enr = client.post("/auth/mfa/enroll", headers=hdr).json()
+    secret = enr["secret"]
+    assert "otpauthUri" in enr and secret in enr["otpauthUri"]
+    assert client.get("/auth/mfa", headers=hdr).json() == {"enabled": False, "pending": True}
+    # stored encrypted; never on any user payload
+    with get_conn() as conn:
+        stored = conn.execute("SELECT mfa_secret FROM users WHERE email=?", (email,)).fetchone()[0]
+    assert ss.is_encrypted(stored) and secret not in stored
+    assert "mfa_secret" not in client.get("/auth/me", headers=hdr).json()
+
+    # wrong code doesn't enable; the real one does
+    assert client.post("/auth/mfa/verify", json={"code": "000000"}, headers=hdr).status_code == 400
+    assert client.post("/auth/mfa/verify", json={"code": totp_code(secret)},
+                       headers=hdr).json()["enabled"] is True
+
+    # — login step-up: password alone is no longer enough —
+    def _err(resp):
+        j = resp.json()
+        return j.get("detail") or j.get("error") or ""
+    r = client.post("/auth/login", json={"email": email, "password": "Password123!"})
+    assert r.status_code == 401 and _err(r) == "MFA code required"
+    r = client.post("/auth/login", json={"email": email, "password": "Password123!", "code": "999999"})
+    assert r.status_code == 401 and "Invalid MFA" in _err(r)
+    ok = client.post("/auth/login", json={"email": email, "password": "Password123!",
+                                          "code": totp_code(secret)})
+    assert ok.status_code == 200 and ok.json()["token"]
+    assert "mfa_secret" not in ok.json()["user"] and "slack_webhook" not in ok.json()["user"]
+
+    # — disable needs possession proof; then login is password-only again —
+    assert client.post("/auth/mfa/disable", json={"code": "000000"}, headers=hdr).status_code == 400
+    assert client.post("/auth/mfa/disable", json={"code": totp_code(secret)},
+                       headers=hdr).json()["enabled"] is False
+    assert client.post("/auth/login", json={"email": email, "password": "Password123!"}).status_code == 200
+
+    # — admins cannot switch MFA on for someone; reset-off is the recovery —
+    assert client.patch(f"/users/{u['id']}", json={"mfa_enabled": True}, headers=auth).status_code == 400
+    assert client.patch(f"/users/{u['id']}", json={"mfa_enabled": False}, headers=auth).status_code == 200
+    client.delete(f"/users/{u['id']}", headers=auth)
 
 
 def test_secrets_encrypted_at_rest(client, auth, monkeypatch):

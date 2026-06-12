@@ -18,12 +18,115 @@ import {
   fetchLicense, activateLicense, type LicenseStatus,
   fetchDatabaseInfo, type DatabaseInfo,
   fetchMySlackRouting, setMySlackRouting, testMySlackRouting,
+  fetchMfaStatus, mfaEnroll, mfaVerify, mfaDisable,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 import { useCursorEffect } from '@/lib/useCursorEffect'
+
+/* ── Two-factor authentication (real TOTP, per-user) ─────────────── */
+function MyMfaPanel() {
+  const [status, setStatus] = useState<{ enabled: boolean; pending: boolean } | null>(null)
+  const [enrolment, setEnrolment] = useState<{ secret: string; otpauthUri: string } | null>(null)
+  const [code, setCode] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = () => fetchMfaStatus().then(setStatus).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  function start() {
+    setBusy(true); setMsg(null)
+    mfaEnroll()
+      .then((e) => { setEnrolment(e); load() })
+      .catch((e) => setMsg(e instanceof Error ? e.message : 'Could not start enrolment.'))
+      .finally(() => setBusy(false))
+  }
+
+  function verify() {
+    if (code.length < 6 || busy) return
+    setBusy(true); setMsg(null)
+    mfaVerify(code)
+      .then(() => { setEnrolment(null); setCode(''); setMsg('Two-factor authentication is ON — your next login will ask for a code.'); load() })
+      .catch(() => setMsg('That code did not verify — check your authenticator and try again.'))
+      .finally(() => setBusy(false))
+  }
+
+  function disable() {
+    if (code.length < 6 || busy) return
+    setBusy(true); setMsg(null)
+    mfaDisable(code)
+      .then(() => { setCode(''); setMsg('Two-factor authentication is OFF.'); load() })
+      .catch(() => setMsg('That code did not verify — MFA stays on.'))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="mb-5 p-4 rounded-xl border border-safe/20 bg-safe/5">
+      <div className="flex items-center gap-2 mb-1">
+        <Shield className="w-3.5 h-3.5 text-safe" />
+        <p className="text-xs font-semibold text-white">Two-factor authentication (TOTP)</p>
+        {status && (
+          <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-semibold',
+            status.enabled ? 'text-safe bg-safe/12' : 'text-ink-500 bg-white/6')}>
+            {status.enabled ? 'enabled' : status.pending ? 'pending verification' : 'off'}
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] text-ink-600 mb-3">
+        Personal to your account. Once verified, every sign-in requires a 6-digit code from your
+        authenticator app (Google Authenticator, Authy, 1Password, …).
+      </p>
+
+      {!status?.enabled && !enrolment && (
+        <button onClick={start} disabled={busy}
+          className="px-3 py-2 rounded-lg text-xs font-medium bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 disabled:opacity-50 transition-colors">
+          {status?.pending ? 'Restart enrolment' : 'Set up two-factor authentication'}
+        </button>
+      )}
+
+      {enrolment && (
+        <div className="space-y-2.5">
+          <p className="text-[11px] text-ink-300">
+            1. Add this secret to your authenticator app (or paste the otpauth URI into a QR generator):
+          </p>
+          <div className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8">
+            <p className="text-sm font-mono tracking-wider text-white break-all">{enrolment.secret}</p>
+            <p className="text-[10px] font-mono text-ink-600 mt-1 break-all">{enrolment.otpauthUri}</p>
+          </div>
+          <p className="text-[10px] text-amber">
+            Shown once — it is stored encrypted server-side and cannot be displayed again.
+          </p>
+          <p className="text-[11px] text-ink-300">2. Enter the current code to verify and switch MFA on:</p>
+        </div>
+      )}
+
+      {(enrolment || status?.enabled) && (
+        <div className="flex items-center gap-2 mt-2.5">
+          <input value={code} inputMode="numeric" maxLength={6}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="6-digit code"
+            className="w-32 px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs font-mono tracking-[0.25em] text-ink-100 focus:outline-none focus:border-safe/40 placeholder-ink-600" />
+          {enrolment ? (
+            <button onClick={verify} disabled={busy || code.length < 6}
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 disabled:opacity-50 transition-colors">
+              Verify &amp; enable
+            </button>
+          ) : (
+            <button onClick={disable} disabled={busy || code.length < 6}
+              title="Requires a valid current code (possession proof)"
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-threat disabled:opacity-40 transition-colors">
+              Disable MFA
+            </button>
+          )}
+        </div>
+      )}
+      {msg && <p className="text-[11px] text-ink-400 mt-2" role="status">{msg}</p>}
+    </div>
+  )
+}
 
 /* ── Personal Slack routing (per-user, backed by /auth/me/slack) ── */
 function MySlackRouting() {
@@ -1200,15 +1303,14 @@ export default function ConfigPage() {
                     onChange={(e) => setSetting('auth_method')(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
                     <option value="jwt">Email + Password (JWT, default)</option>
-                    <option value="oidc">OAuth 2.0 (OIDC)</option>
-                    <option value="saml">SAML 2.0 SSO</option>
+                    {/* SSO (OIDC/SAML) is on the roadmap (Tier 2) — options appear here when implemented */}
                   </select>
                 </div>
                 <Field label="Session Timeout (minutes)" type="number" value={settings.session_timeout_minutes ?? '720'} onChange={setSetting('session_timeout_minutes')} />
                 <Field label="Allowed IP Ranges" value={settings.allowed_ip_ranges ?? '0.0.0.0/0'} onChange={setSetting('allowed_ip_ranges')} hint="Comma-separated CIDR blocks. Use 0.0.0.0/0 to allow all." />
               </div>
+              <MyMfaPanel />
               <p className="text-[10px] text-ink-600 mb-2">Saved with the Save Changes button above.</p>
-              <Toggle label="Enforce MFA"                  description="Require TOTP for all dashboard logins"        value={boolSetting('enforce_mfa', false)}      onChange={setBoolSetting('enforce_mfa')} />
               <Toggle label="Audit Logging"                description="Log all API calls and user actions"           value={boolSetting('audit_logging', true)}     onChange={setBoolSetting('audit_logging')} />
               <Toggle label="Rate Limiting"                description="Throttle repeated failed logins per client"   value={boolSetting('rate_limiting', true)}     onChange={setBoolSetting('rate_limiting')} />
               <Toggle label="Automated Threat Blocking"    description="Auto-block IPs with confidence score > 90%"  value={boolSetting('auto_threat_blocking', false)} onChange={setBoolSetting('auto_threat_blocking')} />

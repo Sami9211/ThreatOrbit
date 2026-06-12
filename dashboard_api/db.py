@@ -717,6 +717,8 @@ _MIGRATIONS = [
     ("users", "slack_min_severity", "TEXT NOT NULL DEFAULT 'high'"),
     # Time-boxed / recurring suppression windows: an absolute expiry and an
     # optional daily HH:MM–HH:MM UTC window in which the suppression applies.
+    # TOTP MFA: the user's enrolled secret (encrypted at rest via secretstore).
+    ("users", "mfa_secret", "TEXT"),
     ("suppressions", "expires_at", "TEXT"),
     ("suppressions", "window_start", "TEXT"),
     ("suppressions", "window_end", "TEXT"),

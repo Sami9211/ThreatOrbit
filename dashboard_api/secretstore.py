@@ -32,6 +32,7 @@ SECRET_COLUMNS = (
     ("connectors", "api_key"),
     ("integrations", "api_key"),
     ("users", "slack_webhook"),
+    ("users", "mfa_secret"),
 )
 
 

@@ -18,9 +18,12 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // TOTP step-up: shown when the account has MFA enrolled.
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
-  const canSubmit = emailValid && password.length > 0
+  const canSubmit = emailValid && password.length > 0 && (!mfaRequired || mfaCode.length >= 6)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,10 +31,18 @@ export default function LoginPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await login(email, password)
+      await login(email, password, mfaRequired ? mfaCode : undefined)
       router.push('/dashboard')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      const msg = err instanceof Error ? err.message : 'Login failed'
+      if (msg === 'MFA code required') {
+        // password verified — ask for the authenticator code
+        setMfaRequired(true)
+        setError(null)
+      } else {
+        setError(msg)
+        if (msg.includes('MFA')) setMfaCode('')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -98,6 +109,24 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              {mfaRequired && (
+                <div>
+                  <label className="block text-xs font-medium text-ink-300 mb-1.5">
+                    Authenticator code
+                  </label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-safe" />
+                    <input value={mfaCode} autoFocus inputMode="numeric" maxLength={6}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="6-digit code"
+                      className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-2 border border-safe/25 text-sm font-mono tracking-[0.3em] text-ink-100 focus:outline-none focus:border-safe/50 focus:ring-1 focus:ring-safe/15 transition-colors placeholder-ink-600" />
+                  </div>
+                  <p className="text-[10px] text-ink-600 mt-1">
+                    This account has two-factor authentication — enter the code from your authenticator app.
+                  </p>
+                </div>
+              )}
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}

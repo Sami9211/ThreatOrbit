@@ -53,6 +53,7 @@ def _clear_failures(key: str):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    code: str | None = None  # TOTP code — required only when MFA is enrolled
 
 
 class RegisterRequest(BaseModel):
@@ -72,7 +73,7 @@ def _now() -> str:
 
 
 def _public(user: dict) -> dict:
-    for k in ("password_hash", "password_salt"):
+    for k in ("password_hash", "password_salt", "slack_webhook", "mfa_secret"):
         user.pop(k, None)
     return user
 
@@ -92,6 +93,19 @@ def login(body: LoginRequest, request: Request):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if user["status"] == "disabled":
             raise HTTPException(status_code=403, detail="Account disabled")
+        # TOTP step-up: enrolled users must supply a valid current code. The
+        # password is verified FIRST, so this never becomes a user-enumeration
+        # oracle; wrong codes count against the same login throttle.
+        if user.get("mfa_enabled"):
+            from dashboard_api.mfa import verify_code
+            from dashboard_api.secretstore import decrypt
+            secret = decrypt(user.get("mfa_secret"))
+            if secret:  # enabled-but-secretless (admin reset) falls through
+                if not body.code:
+                    raise HTTPException(status_code=401, detail="MFA code required")
+                if not verify_code(secret, body.code):
+                    _record_failure(key)
+                    raise HTTPException(status_code=401, detail="Invalid MFA code")
         now = _now()
         conn.execute("UPDATE users SET last_login=? WHERE id=?", (now, user["id"]))
         conn.commit()
@@ -147,6 +161,80 @@ def register(body: RegisterRequest, request: Request):
 @router.get("/me")
 def me(user: dict = Depends(current_user)):
     return user
+
+
+# ── TOTP multi-factor authentication ─────────────────────────────────────────────
+
+class MfaCode(BaseModel):
+    code: str
+
+
+@router.get("/mfa")
+def mfa_status(user: dict = Depends(current_user)):
+    """Whether the caller has MFA enabled, and whether an enrolment is pending
+    verification. The secret itself never leaves the server after enrolment."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT mfa_enabled, mfa_secret FROM users WHERE id=?",
+                           (user["id"],)).fetchone()
+    return {"enabled": bool(row["mfa_enabled"]),
+            "pending": bool(row["mfa_secret"]) and not row["mfa_enabled"]}
+
+
+@router.post("/mfa/enroll")
+def mfa_enroll(user: dict = Depends(current_user)):
+    """Start TOTP enrolment: generate a secret (stored encrypted, not yet
+    active) and return it once, with the otpauth:// URI an authenticator app
+    scans. MFA only turns on after /auth/mfa/verify proves the app works."""
+    from dashboard_api.mfa import new_secret, otpauth_uri
+    from dashboard_api.secretstore import encrypt
+    with get_conn() as conn:
+        row = conn.execute("SELECT mfa_enabled FROM users WHERE id=?", (user["id"],)).fetchone()
+        if row["mfa_enabled"]:
+            raise HTTPException(status_code=400, detail="MFA is already enabled — disable it first")
+        secret = new_secret()
+        conn.execute("UPDATE users SET mfa_secret=? WHERE id=?", (encrypt(secret), user["id"]))
+        audit(conn, user["email"], "auth.mfa_enroll", user["id"])
+        conn.commit()
+    return {"secret": secret, "otpauthUri": otpauth_uri(secret, user["email"])}
+
+
+@router.post("/mfa/verify")
+def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
+    """Prove the authenticator works (a valid current code) and switch MFA on.
+    From the next login, the code is required."""
+    from dashboard_api.mfa import verify_code
+    from dashboard_api.secretstore import decrypt
+    with get_conn() as conn:
+        row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
+                           (user["id"],)).fetchone()
+        secret = decrypt(row["mfa_secret"])
+        if not secret:
+            raise HTTPException(status_code=400, detail="No enrolment in progress — call /auth/mfa/enroll first")
+        if not verify_code(secret, body.code):
+            raise HTTPException(status_code=400, detail="Invalid MFA code")
+        conn.execute("UPDATE users SET mfa_enabled=1 WHERE id=?", (user["id"],))
+        audit(conn, user["email"], "auth.mfa_enabled", user["id"])
+        conn.commit()
+    return {"enabled": True}
+
+
+@router.post("/mfa/disable")
+def mfa_disable(body: MfaCode, user: dict = Depends(current_user)):
+    """Turn MFA off — requires a valid current code (possession proof), so a
+    hijacked session can't silently strip the second factor."""
+    from dashboard_api.mfa import verify_code
+    from dashboard_api.secretstore import decrypt
+    with get_conn() as conn:
+        row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
+                           (user["id"],)).fetchone()
+        if not row["mfa_enabled"]:
+            raise HTTPException(status_code=400, detail="MFA is not enabled")
+        if not verify_code(decrypt(row["mfa_secret"]), body.code):
+            raise HTTPException(status_code=400, detail="Invalid MFA code")
+        conn.execute("UPDATE users SET mfa_enabled=0, mfa_secret=NULL WHERE id=?", (user["id"],))
+        audit(conn, user["email"], "auth.mfa_disabled", user["id"])
+        conn.commit()
+    return {"enabled": False}
 
 
 # ── Per-user Slack notification routing ─────────────────────────────────────────

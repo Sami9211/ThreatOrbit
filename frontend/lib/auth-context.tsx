@@ -7,7 +7,7 @@ interface AuthCtx {
   user: User | null
   token: string | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, code?: string) => Promise<void>
   register: (body: { name: string; email: string; password: string; company?: string }) => Promise<void>
   logout: () => void
 }
@@ -46,8 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u)
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { token: tok, user: u } = await authLogin(email, password)
+  const login = useCallback(async (email: string, password: string, code?: string) => {
+    const { token: tok, user: u } = await authLogin(email, password, code)
     storeSession(tok, u)
   }, [storeSession])
 

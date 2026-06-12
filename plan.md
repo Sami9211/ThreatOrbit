@@ -265,12 +265,15 @@ that buying companies require. Realistic positioning today:
       fallback, caveat documented); decrypt happens only at the point of use,
       legacy plaintext rows are upgraded on boot, and a rotated key degrades
       honestly to not-configured. SMTP credentials were already env-only.
-- [ ] **Real MFA (TOTP)** — `mfa_enabled` is a stored flag with no
-      enrolment/verification behind it. Implement TOTP enrol + login step-up,
-      or remove the toggle until it exists (data-honesty rule).
-- [ ] **Honest auth-method selector** — Config → Security offers OIDC/SAML
-      options that have no backend. Remove or mark "not yet available" until
-      Tier 2 lands SSO.
+- [x] **Real MFA (TOTP)** — DONE (see CHANGELOG): RFC 6238 enrolment
+      (`/auth/mfa/enroll` → secret + otpauth URI, shown once) → verify →
+      login step-up (password first, then the 6-digit code; wrong codes hit
+      the login throttle) → disable with possession proof. Secret encrypted
+      at rest, never on any payload; admins can only reset MFA *off*
+      (recovery), never on. Login page + Config → Security panel wired.
+- [x] **Honest auth-method selector** — DONE: the OIDC/SAML options are
+      removed from Config → Security until Tier 2 implements SSO (a roadmap
+      note marks where they return).
 - [ ] **Backup / restore / upgrade path** — documented + scripted SQLite/
       Postgres backup, restore drill, and a versioned upgrade procedure
       (schema migrations are additive-only today; that's fine, but say so and
@@ -355,6 +358,20 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Real TOTP MFA (Tier 1)** — `dashboard_api/mfa.py` implements
+  RFC 6238 with the stdlib (proven against the RFC's SHA-1 test vectors).
+  Flow: `/auth/mfa/enroll` generates a 160-bit secret (returned once with
+  the otpauth:// URI; stored Fernet-encrypted), `/auth/mfa/verify` proves
+  the authenticator works before switching MFA on, login then requires the
+  code (password verified first so it's no enumeration oracle; wrong codes
+  count against the login throttle; ±1-step skew window), and
+  `/auth/mfa/disable` demands a valid current code so a hijacked session
+  can't strip the factor. Admins can only reset MFA off (clears the secret)
+  — never enable it for someone. The login page gains the step-up code
+  field; Config → Security gains an enrol/verify/disable panel; the dead
+  "Enforce MFA" toggle and the backend-less OIDC/SAML dropdown options are
+  removed per the data-honesty rule. The login response also stops leaking
+  slack_webhook/mfa_secret via `_public`. 140 passed.
 - **2026-06-12 · Secrets at rest (Tier 1)** — `dashboard_api/secretstore.py`
   Fernet-encrypts every DB-stored credential (connectors.api_key,
   integrations.api_key, users.slack_webhook) as `enc:v1:<token>` under
