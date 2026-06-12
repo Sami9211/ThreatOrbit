@@ -123,10 +123,16 @@ def list_alerts(
     order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, le=500),
     offset: int = 0,
+    user: dict = Depends(current_user),
 ):
     if sort not in _ALERT_SORTS:
         raise HTTPException(status_code=400, detail=f"sort must be one of {sorted(_ALERT_SORTS)}")
     clauses, params = [], []
+    # Tenant isolation (reference pattern): scoped only when the deployment
+    # flips DASHBOARD_MULTI_TENANT on — default installs see everything.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
     for col, val in (("severity", severity), ("status", status),
                      ("mitre_tactic", tactic), ("disposition", disposition), ("owner", owner)):
         if val:

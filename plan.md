@@ -38,13 +38,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       SOC write but not platform admin; `/auth/permissions` + `/config/roles`
       drive UI gating. Remaining: extend `require_perm` to the last
       config/connectors endpoints (still on the equivalent `require_role`).
-- [~] **Multi-tenancy / workspaces** — FOUNDATION DONE (see CHANGELOG): `orgs`
-      table + user→workspace membership (default workspace, non-breaking),
-      `/orgs` CRUD + `/orgs/current`, and a tested isolation seam
-      (`tenancy.scope_sql`) gated behind `DASHBOARD_MULTI_TENANT` (off).
-      Remaining (staged, not yet wired so `main` stays green): add `org_id` to
-      the data tables in `tenancy.TENANT_TABLES` and drop `scope_sql` into each
-      query, then flip the flag on.
+- [~] **Multi-tenancy / workspaces** — FOUNDATION + REFERENCE PATTERN DONE
+      (see CHANGELOG): org model/CRUD/membership live, and **real isolation is
+      now proven on the alerts table** — `org_id` column (defaults to the
+      bootstrap workspace, so single-tenant data is untouched) and the queue
+      read scopes by the caller's workspace only when `DASHBOARD_MULTI_TENANT`
+      is on; a test flips the flag and shows a foreign workspace's alerts
+      disappear. Remaining (mechanical, per-table repeat of the pattern): the
+      other tables in `tenancy.TENANT_TABLES` — add the defaulted `org_id`
+      migration, append the 3-line `tenancy.enforced()` clause to each list
+      query, stamp `org_of(user)` on multi-org write paths.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
       Security. Remaining: signed/immutable evidence bundles.
@@ -205,6 +208,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-12 · Tenant isolation reference pattern (Phase 0)** — the breaking
+  half of multi-tenancy now exists, demonstrated end-to-end on the alerts
+  table without touching default behaviour: `alerts.org_id` (migrated,
+  `DEFAULT 'org-default'` so every existing/seeded/engine row stays visible in
+  single-tenant installs) and the alert queue read appends an
+  `org_id = <caller's workspace>` clause **only when `DASHBOARD_MULTI_TENANT`
+  is on**. A test inserts alerts in two workspaces and proves: flag off → both
+  visible (130-test suite green, unchanged), flag on → the foreign workspace's
+  alert disappears from the queue, flag off again → restored. The remaining
+  tables are a mechanical repeat of this 3-part pattern (defaulted column
+  migration + 3-line read clause + write-path stamp), listed in
+  `tenancy.TENANT_TABLES`.
 
 - **2026-06-12 · Postgres adapter (Phase 5)** — the staged flip is now
   implemented, still opt-in and zero-impact by default. `PgConnection` adapts

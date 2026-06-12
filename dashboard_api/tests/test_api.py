@@ -2403,6 +2403,38 @@ def test_workspace_foundation(client, auth):
     assert client.post("/orgs", json={"name": "x"}, headers=viewer).status_code == 403
 
 
+def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
+    """The alerts table demonstrates real org isolation: with enforcement OFF
+    (default) everything is visible; with it ON, another workspace's alerts
+    disappear from the queue. This is the template for the remaining tables."""
+    import uuid as _uuid
+    from dashboard_api import tenancy
+    from dashboard_api.db import get_conn
+
+    marker = f"TENANT-{_uuid.uuid4().hex[:6]}"
+    with get_conn() as conn:
+        # one alert in the default workspace, one in a foreign workspace
+        for org in ("org-default", "org-other"):
+            conn.execute(
+                "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,"
+                "rule_id,rule_name,description,raw_log,event_count,ti_hits,org_id) "
+                "VALUES (?,datetime('now'),?,?,'new','undetermined','',50,'R-T','t',?,'',1,0,?)",
+                (str(_uuid.uuid4()), f"{marker} {org}", "medium", marker, org))
+        conn.commit()
+
+    # default: enforcement off → both visible (single-tenant behaviour intact)
+    both = client.get(f"/siem/alerts?q={marker}", headers=auth).json()
+    assert both["total"] == 2
+
+    # flag on → the admin (default workspace) no longer sees the foreign alert
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    scoped = client.get(f"/siem/alerts?q={marker}", headers=auth).json()
+    assert scoped["total"] == 1
+    assert scoped["items"][0]["org_id"] == "org-default"
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    assert client.get(f"/siem/alerts?q={marker}", headers=auth).json()["total"] == 2
+
+
 def test_tenancy_scope_helper_units():
     """The staged isolation seam is a no-op while enforcement is off, and emits
     a real org filter when on — so wiring it into queries later is safe."""

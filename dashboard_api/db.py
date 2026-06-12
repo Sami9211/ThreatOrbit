@@ -668,6 +668,10 @@ _MIGRATIONS = [
     ("report_schedules", "email", "TEXT"),
     ("vuln_findings", "kev", "INTEGER NOT NULL DEFAULT 0"),
     ("vuln_findings", "exploit", "INTEGER NOT NULL DEFAULT 0"),
+    # Multi-tenancy isolation (reference pattern, alerts first): the column
+    # defaults to the bootstrap workspace so single-tenant data is unchanged;
+    # reads scope by it only when DASHBOARD_MULTI_TENANT is on.
+    ("alerts", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
 ]
 
 
