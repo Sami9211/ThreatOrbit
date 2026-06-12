@@ -10,6 +10,7 @@ from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.connectors import KIND_PRESETS, run_connector
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.secretstore import encrypt
 
 router = APIRouter(prefix="/connectors", tags=["connectors"], dependencies=[Depends(current_user)])
 
@@ -91,7 +92,7 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("c
             "interval_minutes,field_map,status,builtin,created_at,created_by,org_id) "
             "VALUES (?,?,?,?,?,?,?,?,?, 'idle',0,?,?,?)",
             (cid, name, body.kind, (body.url or KIND_PRESETS[body.kind]["default_url"]) or None,
-             body.api_key or None, body.auth_header or None, 1 if body.enabled else 0,
+             encrypt(body.api_key or None), body.auth_header or None, 1 if body.enabled else 0,
              max(5, body.interval_minutes), dumps(body.field_map or {}), _now(), user["email"],
              tenancy.org_of(user)),
         )
@@ -110,7 +111,7 @@ def update_connector(connector_id: str, body: ConnectorUpdate,
         if v is not None:
             fields.append(f"{col}=?"); values.append(v)
     if body.api_key is not None:
-        fields.append("api_key=?"); values.append(body.api_key or None)
+        fields.append("api_key=?"); values.append(encrypt(body.api_key or None))
     if body.field_map is not None:
         fields.append("field_map=?"); values.append(dumps(body.field_map))
     if body.enabled is not None:

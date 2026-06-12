@@ -103,9 +103,11 @@ def notify_slack_users(*, severity: str, title: str,
             text += f"\n{detail}"
         if link:
             text += f"\n{link}"
+        from dashboard_api.secretstore import decrypt
         for r in rows:
             if rank >= _SEV_RANK.get(r["slack_min_severity"] or "high", 3):
-                if not deliver_slack(r["slack_webhook"], text):
+                url = decrypt(r["slack_webhook"])
+                if url and not deliver_slack(url, text):
                     logger.warning("Slack notification delivery failed for %s", r["email"])
 
     if SYNC_DELIVERY:

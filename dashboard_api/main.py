@@ -109,6 +109,15 @@ def startup():
             "value before exposing this service (e.g. `openssl rand -hex 32`)."
         )
     init_db()
+    # Secrets-at-rest migration: encrypt any legacy plaintext credentials.
+    try:
+        from dashboard_api.db import get_conn
+        from dashboard_api.secretstore import encrypt_existing
+        with get_conn() as conn:
+            encrypt_existing(conn)
+            conn.commit()
+    except Exception:
+        logger.exception("Secret encryption migration failed")
     if DATA_MODE == "live":
         from dashboard_api.seed import bootstrap_live
         from dashboard_api.connectors import seed_builtin_connectors

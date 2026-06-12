@@ -67,8 +67,9 @@ def run_action(conn, integration: dict, action: str, params: dict, actor: str) -
     """Execute a response action against an integration and record it. Performs
     the real HTTP call when credentialled; otherwise records `not-configured`."""
     category = _category(integration)
+    from dashboard_api.secretstore import decrypt
     base_url = (integration.get("base_url") or "").rstrip("/")
-    api_key = integration.get("api_key") or ""
+    api_key = decrypt(integration.get("api_key")) or ""
     target = (params or {}).get("target") or (params or {}).get("ip") or \
         (params or {}).get("host") or (params or {}).get("user") or ""
 

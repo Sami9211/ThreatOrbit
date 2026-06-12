@@ -259,9 +259,12 @@ that buying companies require. Realistic positioning today:
 
 ### Tier 1 — required before ANY paying deployment (small scale)
 
-- [ ] **Secrets encryption at rest** — connector/integration API keys, the
-      SMTP password and per-user Slack webhooks are stored plaintext in the
-      DB. Encrypt with a deployment master key (env/KMS), rotate-able.
+- [x] **Secrets encryption at rest** — DONE (see CHANGELOG): connector +
+      integration API keys and per-user Slack webhooks are Fernet-encrypted
+      (`enc:v1:` envelope) under `DASHBOARD_ENCRYPTION_KEY` (JWT-secret
+      fallback, caveat documented); decrypt happens only at the point of use,
+      legacy plaintext rows are upgraded on boot, and a rotated key degrades
+      honestly to not-configured. SMTP credentials were already env-only.
 - [ ] **Real MFA (TOTP)** — `mfa_enabled` is a stored flag with no
       enrolment/verification behind it. Implement TOTP enrol + login step-up,
       or remove the toggle until it exists (data-honesty rule).
@@ -352,6 +355,19 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Secrets at rest (Tier 1)** — `dashboard_api/secretstore.py`
+  Fernet-encrypts every DB-stored credential (connectors.api_key,
+  integrations.api_key, users.slack_webhook) as `enc:v1:<token>` under
+  `DASHBOARD_ENCRYPTION_KEY` (falls back to the JWT secret; the
+  rotate-without-pinning caveat is documented and a failed decrypt reads
+  back empty so features degrade to not-configured, never sending corrupt
+  credentials). Encryption happens on every write path; decryption only at
+  the four points of use (connector runner, integration action runner, Slack
+  fan-out, owner's GET /auth/me/slack). `encrypt_existing` upgrades legacy
+  plaintext rows on boot. `cryptography` pinned in requirements. Tests cover
+  round-trip/idempotence/legacy passthrough, encrypted-at-rest assertions
+  for all three stores, plaintext at the choke points, the boot migration,
+  and the rotated-key degrade path (139 passed).
 - **2026-06-12 · Frontend virtualisation (Phase 5)** — a dependency-free
   `useWindowedRows` hook (rAF-coalesced scroll tracking, overscan, spacer
   padding) windows long uniform tables; wired into the SIEM alert queue with

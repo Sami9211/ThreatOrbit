@@ -159,12 +159,14 @@ class SlackPrefs(BaseModel):
 @router.get("/me/slack")
 def my_slack_routing(user: dict = Depends(current_user)):
     """The caller's personal Slack routing (the URL is only ever shown to its
-    owner — it is scrubbed from every other user payload)."""
+    owner — it is scrubbed from every other user payload and encrypted at rest)."""
+    from dashboard_api.secretstore import decrypt
     with get_conn() as conn:
         row = conn.execute("SELECT slack_webhook, slack_min_severity FROM users WHERE id=?",
                            (user["id"],)).fetchone()
-    return {"configured": bool(row["slack_webhook"]),
-            "webhookUrl": row["slack_webhook"],
+    url = decrypt(row["slack_webhook"])
+    return {"configured": bool(url),
+            "webhookUrl": url,
             "minSeverity": row["slack_min_severity"] or "high"}
 
 
@@ -177,9 +179,10 @@ def set_slack_routing(body: SlackPrefs, user: dict = Depends(current_user)):
     url = (body.webhook_url or "").strip() or None
     if url and not url.startswith(("https://", "http://")):
         raise HTTPException(status_code=400, detail="webhook_url must be an http(s) URL")
+    from dashboard_api.secretstore import encrypt
     with get_conn() as conn:
         conn.execute("UPDATE users SET slack_webhook=?, slack_min_severity=? WHERE id=?",
-                     (url, body.min_severity, user["id"]))
+                     (encrypt(url), body.min_severity, user["id"]))
         audit(conn, user["email"], "auth.slack_routing",
               user["id"], "configured" if url else "cleared")
         conn.commit()
@@ -190,12 +193,14 @@ def set_slack_routing(body: SlackPrefs, user: dict = Depends(current_user)):
 def test_slack_routing(user: dict = Depends(current_user)):
     """Send a test message to the caller's configured Slack webhook and report
     the real outcome (no pretend success)."""
+    from dashboard_api.secretstore import decrypt
     from dashboard_api.webhooks import deliver_slack
     with get_conn() as conn:
         row = conn.execute("SELECT slack_webhook FROM users WHERE id=?", (user["id"],)).fetchone()
-    if not row["slack_webhook"]:
+    url = decrypt(row["slack_webhook"])
+    if not url:
         raise HTTPException(status_code=400, detail="No Slack webhook configured")
-    ok = deliver_slack(row["slack_webhook"],
+    ok = deliver_slack(url,
                        f"ThreatOrbit test notification for {user['email']} — routing works.")
     return {"delivered": ok}
 

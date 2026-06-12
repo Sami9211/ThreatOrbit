@@ -396,6 +396,9 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
     """Fetch + normalise + import one connector. Updates its status and records
     a job. Returns the import tally (or an {error} dict on failure)."""
     cid = connector["id"]
+    # Stored credentials are encrypted at rest; fetchers need the plaintext.
+    from dashboard_api.secretstore import decrypt
+    connector = {**connector, "api_key": decrypt(connector.get("api_key"))}
     fetch = _FETCHERS.get(connector["kind"])
     if fetch is None:
         return {"error": f"unknown connector kind: {connector['kind']}"}

@@ -686,6 +686,74 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
 
 
+def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
+    """Tier-1 hardening: connector/integration API keys and Slack webhooks are
+    Fernet-encrypted in the DB, decrypted only at the point of use; legacy
+    plaintext rows are upgraded by the boot migration; a rotated key degrades
+    honestly to not-configured instead of sending garbage credentials."""
+    from dashboard_api import secretstore as ss
+    from dashboard_api.db import get_conn
+
+    # — unit: round trip, idempotence, legacy passthrough —
+    tok = ss.encrypt("super-secret")
+    assert ss.is_encrypted(tok) and tok != "super-secret"
+    assert ss.encrypt(tok) == tok                      # double-encrypt is a no-op
+    assert ss.decrypt(tok) == "super-secret"
+    assert ss.decrypt("legacy-plaintext") == "legacy-plaintext"
+    assert ss.encrypt(None) is None and ss.decrypt("") == ""
+
+    # — connector keys land encrypted; the runner sees plaintext —
+    c = client.post("/connectors", json={"name": "Enc OTX", "kind": "otx",
+                                         "api_key": "otx-key-123"}, headers=auth).json()
+    with get_conn() as conn:
+        stored = conn.execute("SELECT api_key FROM connectors WHERE id=?", (c["id"],)).fetchone()[0]
+    assert ss.is_encrypted(stored) and "otx-key-123" not in stored
+    seen = {}
+    import dashboard_api.connectors as conn_mod
+    def fake_fetch(connector):
+        seen["key"] = connector.get("api_key")
+        return []
+    monkeypatch.setitem(conn_mod._FETCHERS, "otx", fake_fetch)
+    client.post(f"/connectors/{c['id']}/run", headers=auth)
+    assert seen["key"] == "otx-key-123"               # decrypted at the choke point
+
+    # — integration keys land encrypted (create + patch) —
+    i = client.post("/soar/integrations", json={"name": "Enc Jira", "category": "Ticketing",
+                                                "base_url": "https://jira.example",
+                                                "api_key": "jira-key-1"}, headers=auth).json()
+    client.patch(f"/soar/integrations/{i['id']}", json={"api_key": "jira-key-2"}, headers=auth)
+    with get_conn() as conn:
+        stored = conn.execute("SELECT api_key FROM integrations WHERE id=?", (i["id"],)).fetchone()[0]
+    assert ss.is_encrypted(stored) and "jira-key" not in stored
+
+    # — Slack webhook: encrypted at rest, owner round-trips plaintext —
+    client.put("/auth/me/slack", json={"webhook_url": "https://hooks.slack.com/services/E/N/C",
+                                       "min_severity": "critical"}, headers=auth)
+    me = client.get("/auth/me", headers=auth).json()
+    with get_conn() as conn:
+        stored = conn.execute("SELECT slack_webhook FROM users WHERE email=?",
+                              (me["email"],)).fetchone()[0]
+    assert ss.is_encrypted(stored)
+    assert client.get("/auth/me/slack", headers=auth).json()["webhookUrl"] == \
+        "https://hooks.slack.com/services/E/N/C"
+    client.put("/auth/me/slack", json={"webhook_url": "", "min_severity": "high"}, headers=auth)
+
+    # — boot migration upgrades legacy plaintext rows in place —
+    with get_conn() as conn:
+        conn.execute("UPDATE connectors SET api_key='legacy-plain-key' WHERE id=?", (c["id"],))
+        conn.commit()
+        n = ss.encrypt_existing(conn)
+        conn.commit()
+        upgraded = conn.execute("SELECT api_key FROM connectors WHERE id=?", (c["id"],)).fetchone()[0]
+    assert n >= 1 and ss.is_encrypted(upgraded) and ss.decrypt(upgraded) == "legacy-plain-key"
+
+    # — rotated key: decrypt degrades to '' (honest not-configured) —
+    monkeypatch.setenv("DASHBOARD_ENCRYPTION_KEY", "a-completely-different-key")
+    assert ss.decrypt(tok) == ""
+    monkeypatch.delenv("DASHBOARD_ENCRYPTION_KEY")
+    client.delete(f"/connectors/{c['id']}", headers=auth)
+
+
 def test_per_user_slack_routing(client, auth, monkeypatch):
     """Personal Slack routing: a user registers a webhook + severity floor and
     platform notifications at/above it are mirrored there; below-floor ones

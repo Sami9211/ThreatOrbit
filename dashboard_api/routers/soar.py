@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, dumps, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.secretstore import encrypt
 from dashboard_api.webhooks import dispatch
 
 router = APIRouter(prefix="/soar", tags=["soar"], dependencies=[Depends(current_user)])
@@ -802,7 +803,8 @@ def create_integration(body: IntegrationCreate, user: dict = Depends(require_per
             "VALUES (?,?,?,?,'pending',NULL,0,0,?,?,1,?,?)",
             (iid, name, body.vendor or name, body.category or "Custom",
              body.description or f"{name} connector.", dumps(body.actions),
-             (body.base_url or "").strip() or None, (body.api_key or "").strip() or None),
+             (body.base_url or "").strip() or None,
+             encrypt((body.api_key or "").strip() or None)),
         )
         audit(conn, user["email"], "integration.create", iid,
               f"name={name} credentialed={bool(body.base_url and body.api_key)}")
@@ -827,7 +829,7 @@ def update_integration(integration_id: str, body: IntegrationUpdate,
     if body.base_url is not None:
         fields.append("base_url=?"); values.append(body.base_url.strip() or None)
     if body.api_key is not None:
-        fields.append("api_key=?"); values.append(body.api_key.strip() or None)
+        fields.append("api_key=?"); values.append(encrypt(body.api_key.strip() or None))
     if body.enabled is not None:
         fields.append("enabled=?"); values.append(1 if body.enabled else 0)
     if not fields:
