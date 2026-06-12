@@ -7,12 +7,12 @@ import {
   FileText, MessageSquare, ChevronDown, Search, Play, RefreshCw,
   BarChart2, ArrowRight, Terminal, Paperclip, Flag, Eye,
   GitBranch, Activity, TrendingUp, TrendingDown, Database,
-  ChevronRight, MoreHorizontal, Circle,
+  ChevronRight, MoreHorizontal, Circle, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, type SoarMetrics, type CaseRelated } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -46,7 +46,9 @@ type CaseRecord = {
   entities: { type: string; value: string }[]
   warRoom: { ts: string; actor: string; type: 'auto' | 'manual' | 'system'; content: string }[]
   tasks: { id: string; phase: string; name: string; status: 'pending' | 'in-progress' | 'done' | 'skipped'; assignee: string | null; notes: string }[]
-  evidence: { name: string; type: string; added: string; by: string }[]
+  // Static seeds carry added/by; live API items carry ts/addedBy (+sha256).
+  evidence: { name: string; type: string; added?: string; by?: string;
+              ts?: string; addedBy?: string; sha256?: string }[]
 }
 
 type Playbook = {
@@ -402,6 +404,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   const [tab, setTab] = useState<'overview' | 'warroom' | 'tasks' | 'evidence'>('overview')
   const [tasks, setTasks] = useState(c.tasks)
   const [warRoom, setWarRoom] = useState(c.warRoom)
+  const [evidence, setEvidence] = useState(c.evidence)
   const [note, setNote] = useState('')
   const [related, setRelated] = useState<CaseRelated | null>(null)
   useEffect(() => {
@@ -658,27 +661,64 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 
         {tab === 'evidence' && (
           <div>
-            {c.evidence.length === 0 ? (
+            {evidence.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-ink-600 text-xs">
                 <Paperclip className="w-5 h-5 mb-2 opacity-30" />
                 No evidence collected yet
               </div>
             ) : (
               <div className="space-y-2">
-                {c.evidence.map((e, i) => (
+                {evidence.map((e, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-2/40 border border-white/5">
                     <FileText className="w-4 h-4 text-ink-500 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-mono text-ink-200 truncate">{e.name}</p>
-                      <p className="text-[10px] text-ink-600 mt-0.5">{e.type} · Added {e.added} by {e.by}</p>
+                      <p className="text-[10px] text-ink-600 mt-0.5">
+                        {e.type} · Added {e.added ?? (e.ts ? new Date(e.ts).toLocaleString() : '—')} by {e.by ?? e.addedBy ?? '—'}
+                      </p>
+                      {e.sha256 && (
+                        <p className="text-[10px] font-mono text-ink-700 mt-0.5 truncate" title={`SHA-256 ${e.sha256}`}>
+                          sha256:{e.sha256.slice(0, 16)}…
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <button className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-white/15 text-xs text-ink-500 hover:text-ink-200 hover:border-white/25 transition-colors">
-              <Paperclip className="w-3.5 h-3.5" /> Add evidence
-            </button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => {
+                  const name = window.prompt('Evidence name (e.g. "pcap extract", "memory dump ref"):')
+                  if (!name?.trim()) return
+                  const content = window.prompt('Content / reference (hashed for chain-of-custody):') ?? ''
+                  addCaseEvidence(c.id, { name: name.trim(), type: 'file', content })
+                    .then((updated) => {
+                      const ev = (updated as unknown as CaseRecord)?.evidence
+                      if (ev) setEvidence(ev)
+                    })
+                    .catch(() => {})
+                }}
+                className="flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-white/15 text-xs text-ink-500 hover:text-ink-200 hover:border-white/25 transition-colors">
+                <Paperclip className="w-3.5 h-3.5" /> Add evidence
+              </button>
+              <button
+                onClick={() => {
+                  exportEvidenceBundle(c.id).then((signed) => {
+                    const blob = new Blob([JSON.stringify(signed, null, 2)], { type: 'application/json' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `evidence-bundle-${c.id}.json`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }).catch(() => {})
+                }}
+                title="Download the case's full record as an HMAC-signed, tamper-evident JSON bundle"
+                className="flex items-center justify-center gap-2 py-2 rounded-lg border border-safe/25 bg-safe/5 text-xs text-safe hover:bg-safe/10 transition-colors">
+                <Lock className="w-3.5 h-3.5" /> Export signed bundle
+              </button>
+            </div>
           </div>
         )}
       </div>

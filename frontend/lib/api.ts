@@ -869,6 +869,14 @@ export const revertPlaybook = (id: string, version: number) =>
 // Case depth: evidence chain-of-custody, linking, merge/split.
 export const addCaseEvidence = (caseId: string, body: { type?: string; name: string; content?: string }) =>
   api<Case>(`/soar/cases/${caseId}/evidence`, { method: 'POST', body: JSON.stringify(body) })
+export interface SignedEvidenceBundle {
+  bundle: Record<string, unknown>
+  signature: { alg: string; value: string; contentSha256: string }
+}
+export const exportEvidenceBundle = (caseId: string) =>
+  api<SignedEvidenceBundle>(`/soar/cases/${caseId}/evidence-bundle`)
+export const verifyEvidenceBundle = (signed: SignedEvidenceBundle) =>
+  api<{ valid: boolean }>('/soar/evidence/verify', { method: 'POST', body: JSON.stringify(signed) })
 export const linkCase = (caseId: string, otherId: string, relation = 'related') =>
   api<Case>(`/soar/cases/${caseId}/link`, { method: 'POST', body: JSON.stringify({ case_id: otherId, relation }) })
 export const mergeCase = (caseId: string, sourceId: string) =>

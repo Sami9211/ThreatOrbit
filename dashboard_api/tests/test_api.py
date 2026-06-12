@@ -734,6 +734,34 @@ def test_per_user_slack_routing(client, auth, monkeypatch):
     assert all("After-clear" not in (s["json"] or {}).get("text", "") for s in sent[base:])
 
 
+def test_signed_evidence_bundle(client, auth):
+    """Audit pack: a case exports as a signed, tamper-evident bundle — intact
+    bundles verify, any byte of tampering fails, and the export is audited."""
+    import json as _json
+    case = client.post("/soar/cases", json={"title": "Bundle case", "severity": "low"},
+                       headers=auth).json()
+    client.post(f"/soar/cases/{case['id']}/evidence",
+                json={"name": "pcap-extract", "type": "file", "content": "deadbeef"}, headers=auth)
+    out = client.get(f"/soar/cases/{case['id']}/evidence-bundle", headers=auth).json()
+    assert out["bundle"]["kind"] == "threatorbit.case-evidence-bundle"
+    assert out["bundle"]["case"]["id"] == case["id"]
+    assert any(e["name"] == "pcap-extract" and e["sha256"]
+               for e in out["bundle"]["case"]["evidence"])
+    assert any(a["action"] == "case.evidence_add" for a in out["bundle"]["auditTrail"])
+    assert out["signature"]["alg"] == "HMAC-SHA256" and len(out["signature"]["value"]) == 64
+
+    # intact bundle verifies; a single edited field fails
+    assert client.post("/soar/evidence/verify", json=out, headers=auth).json()["valid"] is True
+    tampered = _json.loads(_json.dumps(out))
+    tampered["bundle"]["case"]["title"] = "Bundle case (edited)"
+    assert client.post("/soar/evidence/verify", json=tampered, headers=auth).json()["valid"] is False
+    assert client.get(f"/soar/cases/missing-id/evidence-bundle", headers=auth).status_code == 404
+
+    # the export itself lands in the audit log
+    log = client.get("/config/audit-log?action=case.evidence_export", headers=auth).json()
+    assert any(e["target"] == case["id"] for e in log)
+
+
 def test_background_jobs_recorded(client, auth):
     client.post("/assets/recompute-risk", headers=auth)
     jobs = client.get("/config/jobs", headers=auth).json()

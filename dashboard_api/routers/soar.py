@@ -339,6 +339,38 @@ def add_evidence(case_id: str, body: EvidenceAdd, user: dict = Depends(require_p
     return row_to_dict(updated)
 
 
+@router.get("/cases/{case_id}/evidence-bundle")
+def export_evidence_bundle(case_id: str, user: dict = Depends(require_perm("soar.write"))):
+    """Export the case's full investigation record as a signed, tamper-evident
+    bundle: case + evidence (per-item SHA-256 custody) + war room + tasks +
+    the case's audit-log slice, HMAC-SHA256-signed over canonical JSON. Any
+    later modification fails `/soar/evidence/verify`."""
+    from dashboard_api.evidence import build_case_bundle, sign_bundle
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Case not found")
+        doc = build_case_bundle(conn, row_to_dict(row), exported_by=user["email"])
+        audit(conn, user["email"], "case.evidence_export", case_id)
+        conn.commit()
+    return sign_bundle(doc)
+
+
+class BundleVerify(BaseModel):
+    bundle: dict
+    signature: dict
+
+
+@router.post("/evidence/verify")
+def verify_evidence_bundle(body: BundleVerify, user: dict = Depends(current_user)):
+    """Honestly verify a previously exported bundle: recompute the HMAC over
+    the canonical content and compare. valid=false means the content or the
+    signature changed since export."""
+    from dashboard_api.evidence import verify_bundle
+    sig = (body.signature or {}).get("value", "")
+    return {"valid": bool(sig) and verify_bundle(body.bundle, sig)}
+
+
 @router.post("/cases/{case_id}/link")
 def link_case(case_id: str, body: CaseLink, user: dict = Depends(require_perm("soar.write"))):
     """Relate two cases (related|duplicate) — recorded on both sides."""

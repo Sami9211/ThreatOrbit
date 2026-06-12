@@ -59,7 +59,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       get-by-id detail endpoints remain id-addressed.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
-      Security. Remaining: signed/immutable evidence bundles.
+      Security, plus **signed evidence bundles**: a case's full record
+      (evidence with per-item SHA-256 custody, war room, tasks, audit slice)
+      exports as canonical JSON signed with HMAC-SHA256
+      (`/soar/cases/{id}/evidence-bundle` + `/soar/evidence/verify`,
+      "Export signed bundle" in the case drawer) — tamper-evident end to end.
 
 ## Phase 1 — SIEM depth (detection & monitoring)
 
@@ -218,6 +222,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Signed evidence bundles (Phase 0 closed)** — the audit
+  pack's last piece: `GET /soar/cases/{id}/evidence-bundle` exports the
+  case's full investigation record (case + evidence with per-item SHA-256
+  chain-of-custody + war room + tasks + the case's audit-log slice) as
+  canonical JSON signed with HMAC-SHA256 (key pinnable via
+  `DASHBOARD_EVIDENCE_SECRET`); `POST /soar/evidence/verify` honestly
+  re-verifies — one edited byte fails. Case drawer gains "Export signed
+  bundle" (downloads the JSON) and the previously dead "Add evidence" button
+  now works; live evidence rows show real ts/addedBy/sha256 instead of
+  undefined seed-only fields. Exports are audited.
 - **2026-06-12 · Per-user Slack routing (Phase 0 closed)** — each user can
   register a personal Slack incoming-webhook URL with a minimum-severity
   floor (GET/PUT `/auth/me/slack` + an honest `/test` send; panel in Config →
