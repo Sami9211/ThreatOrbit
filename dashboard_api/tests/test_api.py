@@ -1144,6 +1144,42 @@ def test_log_ingestion_parses_and_detects(client, auth):
     assert client.post("/siem/ingest", json={"lines": ["x"], "format": "bogus"}, headers=auth).status_code == 400
 
 
+def test_ecs_ingest_time_normalization(client, auth):
+    """An ECS-shaped document (nested Beats style AND dotted keys) lands fully
+    normalised in the events store — source.ip→src_ip, user.name→username,
+    destination.port→dest_port, host.name→hostname — at ingest time, not just
+    through the read-time alias layer."""
+    import json as _json
+    import uuid as _uuid
+    from dashboard_api.db import get_conn
+
+    marker_ip = "203.0.113.207"
+    nested = _json.dumps({  # how Beats/Logstash emit ECS
+        "event": {"action": "user-login-failed", "category": "authentication"},
+        "source": {"ip": marker_ip, "geo": {"country_name": "Iceland"}},
+        "destination": {"port": 22},
+        "user": {"name": f"ecs-{_uuid.uuid4().hex[:6]}"},
+        "host": {"name": "ecs-host-01"},
+        "message": "Failed password for invalid user",
+    })
+    dotted = _json.dumps({"source.ip": "198.51.100.99", "user.name": "ecs-dotted",
+                          "host.name": "ecs-host-02", "message": "session opened ok"})
+    r = client.post("/siem/ingest", json={"lines": [nested, dotted], "format": "json"}, headers=auth)
+    assert r.status_code == 200 and r.json()["parsed"] == 2
+
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM events WHERE src_ip=? ORDER BY ts DESC", (marker_ip,)).fetchone()
+        dot = conn.execute("SELECT * FROM events WHERE src_ip='198.51.100.99'").fetchone()
+    assert row is not None and dot is not None
+    assert row["hostname"] == "ecs-host-01" and row["dest_port"] == 22
+    assert row["username"].startswith("ecs-")
+    assert row["country"] == "Iceland"
+    assert row["action"] == "user-login-failed"
+    # content inference still wins for event_type (failed_login from message)
+    assert row["event_type"] == "failed_login"
+    assert dot["hostname"] == "ecs-host-02" and dot["username"] == "ecs-dotted"
+
+
 def test_attack_coverage(client, auth):
     cov = client.get("/siem/attack-coverage", headers=auth).json()
     assert "tactics" in cov and "summary" in cov

@@ -66,6 +66,52 @@ def _base_event(raw: str) -> dict:
     }
 
 
+def _flatten(obj: dict, prefix: str = "") -> dict:
+    """Flatten nested JSON to dotted keys: {"source": {"ip": x}} → {"source.ip": x}.
+    This is how ECS documents arrive (Beats/Logstash emit nested objects)."""
+    out: dict = {}
+    for k, v in obj.items():
+        key = f"{prefix}{k}"
+        if isinstance(v, dict):
+            out.update(_flatten(v, f"{key}."))
+        else:
+            out[key] = v
+    return out
+
+
+# Native integer fields (everything else stores as text).
+_INT_FIELDS = {"dest_port", "bytes_out"}
+
+
+def _apply_ecs(ev: dict, obj: dict, weak: set[str]) -> None:
+    """ECS ingest-time normalisation: resolve Elastic Common Schema names —
+    nested ({"source": {"ip": …}}) or dotted ("source.ip") — into the stored
+    native fields using the same alias map the rule/query layer uses, so an
+    ECS-shaped document lands fully normalised instead of relying on the
+    read-time alias layer.
+
+    Precedence: explicit flat JSON keys > ECS fields > raw-line regex
+    heuristics (`weak` holds fields whose value is only a heuristic guess —
+    the producer's ECS metadata is authoritative over those). Content-derived
+    event classification (event_type/severity/MITRE from signatures) is kept
+    unless it's the generic default."""
+    from dashboard_api.rule_engine import ECS_ALIASES
+    flat = _flatten(obj)
+    for ecs, native in ECS_ALIASES.items():
+        v = flat.get(ecs)
+        if v in (None, "") or native == "raw":  # raw always keeps the original line
+            continue
+        if native in _INT_FIELDS:
+            try:
+                v = int(v)
+            except (ValueError, TypeError):
+                continue
+        else:
+            v = str(v)
+        if native in weak or not ev.get(native) or ev[native] in ("log", "generic"):
+            ev[native] = v
+
+
 def _parse_json(line: str) -> dict | None:
     try:
         obj = json.loads(line)
@@ -73,12 +119,15 @@ def _parse_json(line: str) -> dict | None:
         return None
     if not isinstance(obj, dict):
         return None
-    ev = _base_event(line)
-    # Map common JSON keys onto the normalised shape.
+    base = _base_event(line)
+    ev = dict(base)
+    # Map common JSON keys onto the normalised shape (scalars only — nested
+    # objects like ECS {"host": {"name": …}} are handled by _apply_ecs below).
     def pick(*keys):
         for k in keys:
-            if obj.get(k) not in (None, ""):
-                return obj[k]
+            v = obj.get(k)
+            if v not in (None, "") and isinstance(v, (str, int, float)):
+                return v
         return None
     ev["src_ip"] = pick("src_ip", "source_ip", "srcip", "client_ip", "ip") or ev["src_ip"]
     ev["dest_ip"] = pick("dest_ip", "destination_ip", "dstip") or ev["dest_ip"]
@@ -99,6 +148,12 @@ def _parse_json(line: str) -> dict | None:
             pass
     if obj.get("event_type"):
         ev["event_type"] = str(obj["event_type"])
+    # ECS documents (nested or dotted keys) normalise at ingest time too.
+    # Entity fields still holding only the raw-line regex guess are "weak" —
+    # the producer's ECS values are authoritative over them.
+    weak = {k for k in ("src_ip", "dest_ip", "username", "hostname")
+            if ev.get(k) is not None and ev[k] == base.get(k)}
+    _apply_ecs(ev, obj, weak)
     return ev
 
 

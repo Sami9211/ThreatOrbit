@@ -80,9 +80,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       resolves Elastic Common Schema names (`source.ip`, `user.name`,
       `destination.port`, `event.action`, …) to native event fields at match
       time, so detection rules and event searches authored in vendor-neutral ECS
-      work unchanged; `/siem/rule-schema` advertises the alias map. Remaining:
-      full ECS ingest-time normalization of stored events (alias layer covers
-      read/query today).
+      work unchanged; `/siem/rule-schema` advertises the alias map. **And
+      ingest-time normalization**: ECS-shaped JSON (nested Beats style or
+      dotted keys) lands fully normalised in the events store via the same
+      alias map, with ECS values authoritative over raw-line regex guesses.
 - [x] **UEBA** — DONE (see CHANGELOG): per-entity (user/host/ip) risk scoring
       (severity-weighted volume + technique diversity), an Entity Risk page with
       ranking + drill-down, **and** a learned behavioural baseline — each
@@ -222,6 +223,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · ECS ingest-time normalization (Phase 1 closed)** — the JSON
+  ingest parser now resolves Elastic Common Schema documents — nested Beats
+  style (`{"source": {"ip": …}}`) and dotted keys (`"source.ip"`) — into the
+  native event columns through the same alias map the query layer uses, so
+  ECS logs land fully normalised at write time. Precedence is explicit flat
+  keys > ECS fields > raw-line regex heuristics (ECS is authoritative over
+  regex guesses; confident content signatures like `failed_login` are kept).
+  Also hardened the flat-key mapper to scalars so nested objects can't bind
+  as SQL params. Test ingests nested + dotted ECS docs and asserts the
+  stored row (src_ip, hostname, dest_port, username, country, action).
 - **2026-06-12 · Signed evidence bundles (Phase 0 closed)** — the audit
   pack's last piece: `GET /soar/cases/{id}/evidence-bundle` exports the
   case's full investigation record (case + evidence with per-item SHA-256
