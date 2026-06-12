@@ -21,8 +21,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       detail drawer / the ATT&CK navigator. (Extend to other sections as needed.)
 - [x] **Global search + command palette** — DONE: `/search` across alerts,
       IOCs, assets, cases, actors, dark-web; wired into ⌘K with deep links.
-- [x] **Saved views / filters** — DONE (backend `/saved-views` per user +
-      section). Remaining: per-section "save this view" buttons in each page UI.
+- [x] **Saved views / filters** — DONE: backend `/saved-views` per user +
+      section, and a shared `SavedViewsButton` (save current filters / apply /
+      delete) wired into the SIEM queue, assets, dark web and feeds headers.
 - [x] **Real-time push** — DONE (see CHANGELOG): an in-process pub/sub broker +
       `GET /stream` SSE endpoint; the engine tick, `notify()`, and webhook
       dispatch publish events; a `useLiveStream` hook updates the notification
@@ -214,6 +215,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Saved views in the page UIs (Phase 0 closed)** — a shared
+  `SavedViewsButton` component (list / save-current-filters / apply / delete,
+  backed by the per-user `/saved-views` API) now sits in the SIEM queue
+  header (q + severity + status + tactic), assets (q + type + criticality),
+  dark web (q + category) and feeds (severity). Defaults are stripped before
+  saving; applying a view restores the page's filter state.
 - **2026-06-12 · RBAC: capability checks everywhere (Phase 0 closed)** — the
   last `require_role` call sites are gone: config → `config.manage`,
   connectors → `connectors.manage`, services → `services.run`, report

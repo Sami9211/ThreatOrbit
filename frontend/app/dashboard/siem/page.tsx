@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
+import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
@@ -1303,6 +1304,17 @@ export default function SIEMPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <SavedViewsButton
+              section="siem"
+              filters={{ q: search, severity: filterSev, status: filterStatus, tactic: filterTactic }}
+              onApply={(f) => {
+                setSearch(f.q ?? '')
+                setFilterSev((f.severity as Severity) ?? 'all')
+                setFilterStatus((f.status as AlertStatus) ?? 'all')
+                setFilterTactic(f.tactic ?? 'All')
+                setTab('queue')
+              }}
+            />
             <ReportButton kind="siem" label="SIEM Detection" />
             <button onClick={loadSiem}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-white/20 bg-surface-2 transition-colors">

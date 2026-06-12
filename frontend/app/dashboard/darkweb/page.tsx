@@ -12,6 +12,7 @@ import {
   type DarkWebFinding, type DarkWebSummary,
 } from '@/lib/api'
 import ReportButton from '@/components/dashboard/ReportButton'
+import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   'credential-leak': { label: 'Credential Leak',  icon: KeyRound,      color: '#FF2E97' },
@@ -100,6 +101,11 @@ export default function DarkWebPage() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search entity or title…"
               className="w-56 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40" />
           </div>
+          <SavedViewsButton
+            section="darkweb"
+            filters={{ q: search, category: catFilter }}
+            onApply={(f) => { setSearch(f.q ?? ''); setCatFilter(f.category ?? 'all') }}
+          />
           <ReportButton kind="darkweb" label="Dark Web Exposure" />
         </div>
       </div>

@@ -667,7 +667,7 @@ export const runReportSchedule = (id: string) =>
 export const deleteReportSchedule = (id: string) =>
   api<void>(`/report-schedules/${id}`, { method: 'DELETE' })
 
-export interface SavedView { id: string; section: string; name: string; filters: Record<string, string>; createdAt: string }
+export interface SavedView { id: string; section: string; name: string; filters: Record<string, string>; created_at: string }
 export const fetchSavedViews = (section: string) => api<SavedView[]>(`/saved-views?section=${section}`)
 export const createSavedView = (section: string, name: string, filters: Record<string, string>) =>
   api<SavedView>('/saved-views', { method: 'POST', body: JSON.stringify({ section, name, filters }) })

@@ -9,6 +9,7 @@ import {
   TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
 
 /* Classify a raw IOC string for the CTI store; returns null for values that
@@ -724,6 +725,13 @@ export default function FeedsPage() {
             {sev === 'all' ? 'All Severities' : sev}
           </button>
         ))}
+        <div className="ml-auto">
+          <SavedViewsButton
+            section="feeds"
+            filters={{ severity: severityFilter }}
+            onApply={(f) => setSeverityFilter(f.severity ?? 'all')}
+          />
+        </div>
       </div>
 
       {/* Split columns */}

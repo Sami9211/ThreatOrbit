@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
+import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
@@ -310,6 +311,15 @@ export default function AssetsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <SavedViewsButton
+              section="assets"
+              filters={{ q: search, type: typeFilter, criticality: critFilter }}
+              onApply={(f) => {
+                setSearch(f.q ?? '')
+                setTypeFilter((f.type as AssetType) ?? 'all')
+                setCritFilter((f.criticality as Criticality) ?? 'all')
+              }}
+            />
             <ReportButton kind="assets" label="Asset Risk & Exposure" />
             <button onClick={scanAll}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-ink-400 hover:text-white hover:border-violet/40 transition-colors">
