@@ -110,6 +110,32 @@ def database_backend(_: dict = Depends(require_perm("config.manage"))):
     return backend_info()
 
 
+@router.get("/backup")
+def download_backup(user: dict = Depends(require_perm("config.manage"))):
+    """Download a transactionally consistent snapshot of the platform DB
+    (SQLite online-backup API — safe while the service is running). Restore
+    is an offline operation: see docs/OPERATIONS.md. Postgres deployments
+    should use pg_dump instead; this endpoint refuses there."""
+    import tempfile
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+    from dashboard_api.db_backend import is_postgres
+    from dashboard_api.ops import backup_sqlite, default_backup_name, verify_backup
+    if is_postgres():  # pragma: no cover - opt-in backend
+        raise HTTPException(status_code=400,
+                            detail="Postgres backend: use pg_dump (see docs/OPERATIONS.md)")
+    name = default_backup_name()
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    backup_sqlite(tmp.name)
+    verify_backup(tmp.name)  # never hand out a corrupt snapshot
+    with get_conn() as conn:
+        audit(conn, user["email"], "config.backup", None, f"file={name}")
+        conn.commit()
+    return FileResponse(tmp.name, media_type="application/vnd.sqlite3", filename=name,
+                        background=BackgroundTask(lambda: os.unlink(tmp.name)))
+
+
 @router.get("/license")
 def license_status(_: dict = Depends(current_user)):
     """The active license: plan, limits, current usage, validity."""

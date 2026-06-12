@@ -688,6 +688,35 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
 
 
+def test_backup_snapshot(client, auth, tmp_path):
+    """Tier-1 ops: the backup endpoint streams a consistent, integrity-checked
+    SQLite snapshot; the CLI helpers verify it; viewers are denied."""
+    import sqlite3 as _sq
+    from dashboard_api.ops import backup_sqlite, verify_backup
+
+    r = client.get("/config/backup", headers=auth)
+    assert r.status_code == 200, r.text
+    assert "threatorbit-backup-" in r.headers.get("content-disposition", "")
+    snap = tmp_path / "snap.db"
+    snap.write_bytes(r.content)
+    summary = verify_backup(snap)
+    assert summary["integrity"] == "ok" and summary["counts"]["users"] >= 1
+    # the snapshot is a real, openable DB with the live schema
+    conn = _sq.connect(f"file:{snap}?mode=ro", uri=True)
+    assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] >= 0
+    conn.close()
+
+    # CLI path produces the same kind of snapshot
+    p2 = backup_sqlite(tmp_path / "cli.db")
+    assert verify_backup(p2)["integrity"] == "ok"
+
+    # backups are audited; viewers can't take them
+    log = client.get("/config/audit-log?action=config.backup", headers=auth).json()
+    assert log
+    viewer = _token(client, "tom.okafor@threatorbit.space")
+    assert client.get("/config/backup", headers=viewer).status_code == 403
+
+
 def test_totp_mfa_lifecycle(client, auth):
     """Real TOTP MFA: enrol → verify → login requires a valid code →
     disable requires possession proof. Secrets stay encrypted server-side."""

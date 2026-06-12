@@ -274,10 +274,12 @@ that buying companies require. Realistic positioning today:
 - [x] **Honest auth-method selector** — DONE: the OIDC/SAML options are
       removed from Config → Security until Tier 2 implements SSO (a roadmap
       note marks where they return).
-- [ ] **Backup / restore / upgrade path** — documented + scripted SQLite/
-      Postgres backup, restore drill, and a versioned upgrade procedure
-      (schema migrations are additive-only today; that's fine, but say so and
-      test downgrade/restore).
+- [x] **Backup / restore / upgrade path** — DONE (see CHANGELOG): consistent
+      SQLite snapshots via the online-backup API (`GET /config/backup`
+      download, audited + integrity-checked; `python -m dashboard_api.ops
+      backup|verify` for cron), Postgres `pg_dump` guidance, an offline
+      restore drill, the additive-only upgrade/rollback contract, and a key-
+      management table — all in `docs/OPERATIONS.md`.
 - [ ] **Deployment hardening guide** — TLS termination + reverse-proxy
       reference config, secure cookie/headers/CSP on the frontend, non-root
       containers, resource limits in compose; pin image digests.
@@ -358,6 +360,17 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Backup/restore/upgrade (Tier 1)** — `dashboard_api/ops.py`
+  takes transactionally consistent SQLite snapshots with the online-backup
+  API (never a raw file copy under WAL) and integrity-verifies them
+  (PRAGMA integrity_check + core-table counts). `GET /config/backup`
+  (admin, audited) streams a verified snapshot; the CLI
+  (`python -m dashboard_api.ops backup|verify`) is cron-able; Postgres
+  deployments are pointed at pg_dump and the endpoint refuses there.
+  `docs/OPERATIONS.md` documents the offline restore drill, the
+  additive-only upgrade/rollback contract, and key management — including
+  that backups carry `enc:v1:` credentials and are only complete together
+  with `DASHBOARD_ENCRYPTION_KEY`. 141 passed.
 - **2026-06-12 · Real TOTP MFA (Tier 1)** — `dashboard_api/mfa.py` implements
   RFC 6238 with the stdlib (proven against the RFC's SHA-1 test vectors).
   Flow: `/auth/mfa/enroll` generates a 160-bit secret (returned once with
