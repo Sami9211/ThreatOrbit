@@ -44,11 +44,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       bootstrap workspace, so single-tenant data is untouched) and the queue
       read scopes by the caller's workspace only when `DASHBOARD_MULTI_TENANT`
       is on; tests flip the flag and show a foreign workspace's data
-      disappear. **Rolled out so far: alerts, cases, iocs, assets,
-      dark_web_findings, detection_rules** (all six primary stores).
-      Remaining (mechanical repeat): the secondary tables in
-      `tenancy.TENANT_TABLES`, plus `org_of(user)` stamping on multi-org write
-      paths.
+      disappear. **Read isolation is now rolled out to every table in
+      `tenancy.TENANT_TABLES`** — all six primary stores (alerts, cases, iocs,
+      assets, dark_web_findings, detection_rules) plus the secondary ones
+      (feeds, actors, connectors, playbooks, runs, hunts, scans, suppressions,
+      log sources, notifications, saved views, report schedules; events carry
+      the column). Remaining for a true multi-org rollout: `org_of(user)`
+      stamping on write paths so new rows land in the creator's workspace, and
+      scoping the aggregate/summary endpoints the same way.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
       Security. Remaining: signed/immutable evidence bundles.
@@ -210,6 +213,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Tenant read isolation: all TENANT_TABLES (Phase 0)** — the
+  rollout completes the read side: defaulted `org_id` migrations on the 13
+  remaining tables (events, threat_actors, log_sources, feeds, connectors,
+  playbooks, playbook_runs, saved_hunts, scans, suppressions, notifications,
+  saved_views, report_schedules) and the workspace clause on every list
+  endpoint that serves them (12 endpoints across siem/cti/soar/feeds/
+  connectors/platform). The isolation test adds playbooks as the secondary-
+  store representative; tenancy.py docs updated from "staged" to "wired, off
+  by default". Defaults unchanged (130-test suite green with the flag off).
 - **2026-06-12 · Tenant isolation: assets + dark web + rules (Phase 0)** — the
   rollout reaches all six primary stores: defaulted `org_id` migrations on
   `assets`, `dark_web_findings` and `detection_rules`, and the 3-line

@@ -231,9 +231,15 @@ class SuppressionCreate(BaseModel):
 
 
 @router.get("/suppressions")
-def list_suppressions():
+def list_suppressions(user: dict = Depends(current_user)):
+    where, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        where, params = "WHERE org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM suppressions ORDER BY created_at DESC").fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM suppressions {where} ORDER BY created_at DESC", params).fetchall()
     return rows_to_dicts(rows)
 
 
@@ -678,9 +684,15 @@ def delete_rule(rule_id: str, user: dict = Depends(require_perm("siem.write"))):
 # ── Log sources ───────────────────────────────────────────────────────────────
 
 @router.get("/sources")
-def list_sources():
+def list_sources(user: dict = Depends(current_user)):
+    where, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        where, params = "WHERE org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM log_sources ORDER BY eps_avg DESC").fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM log_sources {where} ORDER BY eps_avg DESC", params).fetchall()
     return rows_to_dicts(rows)
 
 
@@ -755,13 +767,18 @@ def correlations(min_alerts: int = Query(2, ge=2, le=50)):
 # ── Saved hunts ───────────────────────────────────────────────────────────────
 
 @router.get("/hunts")
-def list_hunts():
+def list_hunts(user: dict = Depends(current_user)):
+    extra, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        extra, params = " AND org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id, name, description AS hypothesis, author AS analyst, "
             "query, technique, last_run, hit_count AS artifacts, "
             "status, progress, domain "
-            "FROM saved_hunts WHERE domain='siem' ORDER BY last_run DESC"
+            f"FROM saved_hunts WHERE domain='siem'{extra} ORDER BY last_run DESC", params
         ).fetchall()
     return rows_to_dicts(rows)
 

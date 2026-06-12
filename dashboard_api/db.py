@@ -677,6 +677,20 @@ _MIGRATIONS = [
     ("assets", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("dark_web_findings", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("detection_rules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    # …and the secondary stores (completes tenancy.TENANT_TABLES coverage).
+    ("events", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("threat_actors", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("log_sources", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("feeds", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("connectors", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("playbooks", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("playbook_runs", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("saved_hunts", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("scans", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("suppressions", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("notifications", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("saved_views", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    ("report_schedules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
 ]
 
 

@@ -27,8 +27,13 @@ class FeedCreate(BaseModel):
 
 
 @router.get("")
-def list_feeds(type: str | None = None, status: str | None = None):
+def list_feeds(type: str | None = None, status: str | None = None,
+               user: dict = Depends(current_user)):
     clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
     if type:
         clauses.append("type=?"); params.append(type)
     if status:

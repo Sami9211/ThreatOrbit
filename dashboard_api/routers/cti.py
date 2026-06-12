@@ -48,10 +48,18 @@ class ScanRecord(BaseModel):
 
 
 @router.get("/actors")
-def list_actors(active: bool | None = None):
-    where = "WHERE active=1" if active else ""
+def list_actors(active: bool | None = None, user: dict = Depends(current_user)):
+    clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
+    if active:
+        clauses.append("active=1")
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_conn() as conn:
-        rows = conn.execute(f"SELECT * FROM threat_actors {where} ORDER BY sophistication DESC, name").fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM threat_actors {where} ORDER BY sophistication DESC, name", params).fetchall()
     return rows_to_dicts(rows)
 
 
@@ -590,13 +598,18 @@ def run_decay(user: dict = Depends(require_role("admin", "manager"))):
 
 
 @router.get("/hunts")
-def list_hunts():
+def list_hunts(user: dict = Depends(current_user)):
+    extra, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        extra, params = " AND org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id, name, description AS hypothesis, author AS analyst, "
             "query, technique, last_run, hit_count AS artifacts, "
             "status, progress, domain "
-            "FROM saved_hunts WHERE domain='cti' ORDER BY last_run DESC"
+            f"FROM saved_hunts WHERE domain='cti'{extra} ORDER BY last_run DESC", params
         ).fetchall()
     return rows_to_dicts(rows)
 
@@ -678,11 +691,18 @@ def record_scan(body: ScanRecord, user: dict = Depends(require_perm("cti.write")
 
 
 @router.get("/scans")
-def list_scans(limit: int = Query(20, le=100)):
+def list_scans(limit: int = Query(20, le=100), user: dict = Depends(current_user)):
     """Recent scans plus aggregate stats for the scanner header."""
+    where, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        where, params = "WHERE org_id=?", [tenancy.org_of(user)]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM scans ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM scans {where} ORDER BY ts DESC LIMIT ?",
+            params + [limit]).fetchall()
         today_count = conn.execute(
             "SELECT COUNT(*) AS n FROM scans WHERE ts >= ?", (today,)
         ).fetchone()["n"]

@@ -2473,6 +2473,23 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
     monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
     assert client.get(f"/assets?q={marker}", headers=auth).json()["total"] == 2
 
+    # …and on the secondary stores (playbooks as the representative — the same
+    # clause shipped on feeds/actors/connectors/runs/hunts/scans/suppressions/
+    # sources/notifications/saved-views/report-schedules)
+    with get_conn() as conn:
+        for org in ("org-default", "org-other"):
+            conn.execute(
+                "INSERT INTO playbooks (id,name,category,trigger,description,org_id) "
+                "VALUES (?,?,?,?,?,?)",
+                (str(_uuid.uuid4()), f"{marker} pb {org}", "test", "manual", marker, org))
+        conn.commit()
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    pbs = [p for p in client.get("/soar/playbooks", headers=auth).json() if marker in p["name"]]
+    assert len(pbs) == 1 and pbs[0]["org_id"] == "org-default"
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    pbs = [p for p in client.get("/soar/playbooks", headers=auth).json() if marker in p["name"]]
+    assert len(pbs) == 2
+
 
 def test_tenancy_scope_helper_units():
     """The staged isolation seam is a no-op while enforcement is off, and emits

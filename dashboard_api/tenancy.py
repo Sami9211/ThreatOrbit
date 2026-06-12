@@ -8,13 +8,14 @@ This ships the **foundation** of multi-tenancy in a fully non-breaking way:
   * org CRUD so an MSSP can create workspaces.
 
 The second half of multi-tenancy — *isolating every data table by org_id* — is
-the large, breaking migration (org_id columns on alerts/iocs/cases/assets/… and
-an org filter on every query). That is **staged but NOT yet enforced**: the
-helpers below (`scope_sql`, `enforced()`) are pure and unit-tested, and
-enforcement is gated behind `DASHBOARD_MULTI_TENANT` (default off). Wiring them
-into the data routers is a follow-up that can land table-by-table without
-touching this foundation. Keeping it here, inert and documented, means `main`
-stays green while the path forward is explicit.
+now **wired but off by default**: every table in TENANT_TABLES carries a
+defaulted `org_id` column, and each one's list endpoint scopes reads to the
+caller's workspace when `DASHBOARD_MULTI_TENANT` is on (default off, so
+single-tenant deployments behave exactly as before — proven by the test suite
+running with the flag off). Remaining for a true multi-org rollout:
+`org_of(user)` stamping on the write paths so new rows land in the creator's
+workspace rather than the default one, and scoping the aggregate/summary
+endpoints (KPIs, summaries) the same way.
 """
 import os
 import uuid
@@ -28,7 +29,8 @@ DEFAULT_ORG_NAME = "Acme Security Corp"
 # table carries org_id and every query is scoped (the staged follow-up).
 MULTI_TENANT = os.environ.get("DASHBOARD_MULTI_TENANT", "false").lower() == "true"
 
-# Tables that the per-tenant migration will need to scope (the work checklist).
+# Tables scoped by the per-tenant migration: each carries a defaulted org_id
+# column and its list endpoint filters by workspace when enforcement is on.
 TENANT_TABLES = (
     "alerts", "iocs", "cases", "assets", "detection_rules", "events",
     "dark_web_findings", "threat_actors", "log_sources", "feeds", "connectors",
@@ -71,7 +73,7 @@ def org_of(user: dict) -> str:
     return user.get("org_id") or DEFAULT_ORG_ID
 
 
-# ── Staged data-isolation helpers (pure; NOT wired into queries yet) ──────────────
+# ── Data-isolation helpers (wired into every TENANT_TABLES list endpoint) ─────────
 
 def enforced() -> bool:
     """Whether per-tenant data isolation is switched on for this deployment."""

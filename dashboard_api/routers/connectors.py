@@ -55,11 +55,16 @@ def list_kinds():
 
 
 @router.get("")
-def list_connectors():
+def list_connectors(user: dict = Depends(current_user)):
+    where, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        where, params = "WHERE org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT {_PUBLIC}, (api_key IS NOT NULL AND api_key != '') AS has_key "
-            "FROM connectors ORDER BY builtin DESC, name"
+            f"FROM connectors {where} ORDER BY builtin DESC, name", params
         ).fetchall()
     return rows_to_dicts(rows)
 

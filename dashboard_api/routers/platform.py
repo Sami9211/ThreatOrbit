@@ -42,11 +42,19 @@ def notify(conn, *, type: str, title: str, severity: str = "info",
 
 
 @router.get("/notifications")
-def list_notifications(limit: int = Query(30, le=100), unread_only: bool = False):
-    where = "WHERE read=0" if unread_only else ""
+def list_notifications(limit: int = Query(30, le=100), unread_only: bool = False,
+                       user: dict = Depends(current_user)):
+    clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
+    if unread_only:
+        clauses.append("read=0")
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_conn() as conn:
         rows = conn.execute(
-            f"SELECT * FROM notifications {where} ORDER BY ts DESC LIMIT ?", (limit,)
+            f"SELECT * FROM notifications {where} ORDER BY ts DESC LIMIT ?", params + [limit]
         ).fetchall()
         unread = conn.execute("SELECT COUNT(*) AS n FROM notifications WHERE read=0").fetchone()["n"]
     return {"items": rows_to_dicts(rows), "unread": unread}
@@ -110,9 +118,15 @@ class ScheduleCreate(BaseModel):
 
 
 @router.get("/report-schedules")
-def list_schedules(_: dict = Depends(require_role("admin", "manager"))):
+def list_schedules(user: dict = Depends(require_role("admin", "manager"))):
+    where, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        where, params = "WHERE org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM report_schedules ORDER BY created_at DESC").fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM report_schedules {where} ORDER BY created_at DESC", params).fetchall()
     return rows_to_dicts(rows)
 
 
@@ -234,6 +248,10 @@ class ViewCreate(BaseModel):
 @router.get("/saved-views")
 def list_views(section: str | None = None, user: dict = Depends(current_user)):
     clause, params = "WHERE owner=?", [user["email"]]
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clause += " AND org_id=?"; params.append(tenancy.org_of(user))
     if section:
         clause += " AND section=?"; params.append(section)
     with get_conn() as conn:

@@ -501,9 +501,14 @@ def step_kinds():
 
 
 @router.get("/playbooks")
-def list_playbooks():
+def list_playbooks(user: dict = Depends(current_user)):
+    where, params = "", []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        where, params = "WHERE org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM playbooks ORDER BY runs DESC").fetchall()
+        rows = conn.execute(f"SELECT * FROM playbooks {where} ORDER BY runs DESC", params).fetchall()
     return rows_to_dicts(rows)
 
 
@@ -666,8 +671,13 @@ def list_playbook_runs(playbook_id: str, limit: int = 20):
 
 
 @router.get("/runs")
-def list_runs(status: str | None = None, limit: int = 30):
+def list_runs(status: str | None = None, limit: int = 30,
+              user: dict = Depends(current_user)):
     clauses, params = [], []
+    # Tenant isolation (same pattern as alerts): active only when flipped on.
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
     if status:
         clauses.append("status=?"); params.append(status)
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
