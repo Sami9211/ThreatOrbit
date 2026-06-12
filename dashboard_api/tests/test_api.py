@@ -911,6 +911,59 @@ def test_connector_nvd_engine(client, auth, monkeypatch):
     assert items and items[0]["type"] == "cve" and items[0]["severity"] == "critical"
 
 
+def test_nvd_catalogue_sync_drives_scanning(client, auth, monkeypatch):
+    """The NVD connector syncs CPE version ranges into the CVE catalogue, and
+    the vulnerability scanner matches assets against the synced rows."""
+    import uuid as _uuid
+    import dashboard_api.connectors as conn_mod
+    from dashboard_api.db import get_conn
+    from dashboard_api.vuln_scanner import nvd_to_catalogue
+
+    nvd_record = {
+        "cve": {
+            "id": "CVE-2026-12345",
+            "descriptions": [{"lang": "en", "value": "RCE in ExampleServer before 3.4.2"}],
+            "metrics": {"cvssMetricV31": [{"cvssData": {"baseSeverity": "CRITICAL", "baseScore": 9.8}}]},
+            "configurations": [{"nodes": [{"cpeMatch": [{
+                "vulnerable": True,
+                "criteria": "cpe:2.3:a:example:exampleserver:*:*:*:*:*:*:*:*",
+                "versionStartIncluding": "3.0.0",
+                "versionEndExcluding": "3.4.2",
+            }]}]}],
+        }
+    }
+    # — pure parse: bounds, fixed-in, severity —
+    rows = nvd_to_catalogue([nvd_record])
+    assert rows == [{"cve": "CVE-2026-12345", "product": "exampleserver", "cvss": 9.8,
+                     "severity": "critical", "vstart": "3.0.0", "vstart_incl": True,
+                     "vend": "3.4.2", "vend_incl": False, "fixed": "3.4.2",
+                     "summary": "RCE in ExampleServer before 3.4.2"}]
+
+    # — connector run upserts the catalogue —
+    class FakeResp:
+        def json(self):
+            return {"vulnerabilities": [nvd_record]}
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp())
+    c = client.post("/connectors", json={"name": "NVD Catalogue", "kind": "nvd"}, headers=auth)
+    client.post(f"/connectors/{c.json()['id']}/run", headers=auth)
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM cve_catalogue WHERE cve='CVE-2026-12345'").fetchone()
+    assert row and row["product"] == "exampleserver" and row["vend"] == "3.4.2"
+
+    # — scanning an asset running an affected version finds the synced CVE;
+    #   the fixed version does not match —
+    aid = client.post("/assets", json={
+        "name": f"nvd-sync-{_uuid.uuid4().hex[:6]}", "type": "server", "value": "10.9.8.7",
+        "software": [{"product": "exampleserver", "version": "3.2.1"}]}, headers=auth).json()["id"]
+    scan = client.post(f"/assets/{aid}/scan", headers=auth).json()
+    assert any(f["cve"] == "CVE-2026-12345" for f in scan["findings"])
+    fixed_aid = client.post("/assets", json={
+        "name": f"nvd-fixed-{_uuid.uuid4().hex[:6]}", "type": "server", "value": "10.9.8.8",
+        "software": [{"product": "exampleserver", "version": "3.4.2"}]}, headers=auth).json()["id"]
+    fixed_scan = client.post(f"/assets/{fixed_aid}/scan", headers=auth).json()
+    assert not any(f["cve"] == "CVE-2026-12345" for f in fixed_scan["findings"])
+
+
 def test_connector_run_records_failure(client, auth, monkeypatch):
     """A network failure is recorded on the connector, never crashes the API."""
     import dashboard_api.connectors as conn_mod

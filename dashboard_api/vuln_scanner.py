@@ -3,9 +3,10 @@
 Rather than fabricate CVE counts, this matches each asset's software inventory
 (`[{product, version}]`) against a catalogue of real, well-known CVEs with their
 affected version ranges and CVSS, producing concrete findings (CVE id, CVSS,
-severity, fixed-in) per asset. The catalogue is real CVE data and is augmented
-at scan time with any `cve`-type indicators already in the IOC store, so NVD
-feed imports (the NVD connector) flow straight into scanning.
+severity, fixed-in) per asset. The built-in catalogue is real CVE data, and the
+NVD connector syncs live feed records (CPE product/version ranges) into the
+`cve_catalogue` table, which is merged in at scan time — so NVD imports flow
+straight into scanning.
 
 Version comparison is a simple dotted-numeric compare — enough for the common
 `affected: <fixed_version` and inclusive-range checks these CVEs use.
@@ -71,12 +72,26 @@ def _matches(entry: dict, version: str) -> bool:
         return _lt(version, entry["lt"])
     if "range" in entry:
         return _in_range(version, *entry["range"])
+    if "bounds" in entry:  # NVD CPE ranges: (start, start_incl, end, end_incl)
+        lo, lo_inc, hi, hi_inc = entry["bounds"]
+        if lo is None and hi is None:
+            return False  # unbounded "every version" rows are too noisy to honour
+        vt = _ver_tuple(version)
+        if lo is not None and (vt < _ver_tuple(lo) or (not lo_inc and vt == _ver_tuple(lo))):
+            return False
+        if hi is not None and (vt > _ver_tuple(hi) or (not hi_inc and vt == _ver_tuple(hi))):
+            return False
+        return True
     return False
 
 
 def scan_software(software: list[dict], extra_catalogue: dict | None = None) -> list[dict]:
-    """Match an installed-software list against the CVE catalogue → findings."""
-    cat = CVE_CATALOGUE if not extra_catalogue else {**CVE_CATALOGUE, **extra_catalogue}
+    """Match an installed-software list against the CVE catalogue → findings.
+    `extra_catalogue` entries (e.g. NVD-synced rows) extend the built-ins —
+    per-product lists are concatenated, not replaced."""
+    cat: dict[str, list[dict]] = {k: list(v) for k, v in CVE_CATALOGUE.items()}
+    for prod, entries in (extra_catalogue or {}).items():
+        cat[prod] = cat.get(prod, []) + list(entries)
     findings = []
     for item in software or []:
         product = str(item.get("product", "")).strip().lower()
@@ -98,6 +113,100 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+# ── NVD catalogue sync (live feed → cve_catalogue table) ─────────────────────────
+
+_NVD_SEV = {"CRITICAL": "critical", "HIGH": "high", "MEDIUM": "medium", "LOW": "low"}
+
+
+def nvd_to_catalogue(vulnerabilities: list[dict]) -> list[dict]:
+    """Parse NVD CVE 2.0 records into catalogue rows: one row per vulnerable
+    CPE product with its affected version bounds. Records without a vulnerable
+    application CPE produce nothing (no version logic to scan against)."""
+    rows = []
+    for item in vulnerabilities or []:
+        cve = item.get("cve", {})
+        cid = cve.get("id")
+        if not cid:
+            continue
+        cvss, severity = 0.0, "medium"
+        metrics = cve.get("metrics", {})
+        for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+            if metrics.get(key):
+                data = metrics[key][0].get("cvssData", {})
+                cvss = float(data.get("baseScore") or 0)
+                sev = data.get("baseSeverity") or metrics[key][0].get("baseSeverity", "")
+                severity = _NVD_SEV.get((sev or "").upper(), "medium")
+                break
+        summary = ""
+        for d in cve.get("descriptions", []):
+            if d.get("lang") == "en":
+                summary = d.get("value", "")[:300]
+                break
+        seen: set[str] = set()
+        for conf in cve.get("configurations", []) or []:
+            for node in conf.get("nodes", []) or []:
+                for m in node.get("cpeMatch", []) or []:
+                    if not m.get("vulnerable"):
+                        continue
+                    parts = str(m.get("criteria", "")).split(":")
+                    if len(parts) < 6 or parts[2] != "a":  # applications only
+                        continue
+                    product = parts[4].replace("_", " ").strip().lower()
+                    if not product or product in seen:
+                        continue
+                    seen.add(product)
+                    vstart = m.get("versionStartIncluding") or m.get("versionStartExcluding")
+                    vstart_incl = "versionStartExcluding" not in m
+                    vend = m.get("versionEndIncluding") or m.get("versionEndExcluding")
+                    vend_incl = "versionEndIncluding" in m
+                    # an exact-version CPE (no range fields) pins both bounds
+                    if not vstart and not vend and parts[5] not in ("*", "-", ""):
+                        vstart = vend = parts[5]
+                        vstart_incl = vend_incl = True
+                    if not vstart and not vend:
+                        continue  # unbounded — nothing scannable
+                    rows.append({
+                        "cve": cid, "product": product, "cvss": cvss, "severity": severity,
+                        "vstart": vstart, "vstart_incl": vstart_incl,
+                        "vend": vend, "vend_incl": vend_incl,
+                        "fixed": m.get("versionEndExcluding"), "summary": summary,
+                    })
+    return rows
+
+
+def upsert_catalogue(conn, rows: list[dict], source: str = "nvd") -> int:
+    """Idempotently merge catalogue rows (keyed cve+product). Returns count."""
+    now = _now()
+    for r in rows:
+        conn.execute(
+            "INSERT INTO cve_catalogue (cve,product,cvss,severity,vstart,vstart_incl,"
+            "vend,vend_incl,fixed,summary,kev,exploit,source,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?) "
+            "ON CONFLICT(cve,product) DO UPDATE SET cvss=excluded.cvss, "
+            "severity=excluded.severity, vstart=excluded.vstart, "
+            "vstart_incl=excluded.vstart_incl, vend=excluded.vend, "
+            "vend_incl=excluded.vend_incl, fixed=excluded.fixed, "
+            "summary=excluded.summary, updated_at=excluded.updated_at",
+            (r["cve"], r["product"], r.get("cvss", 0), r.get("severity", "medium"),
+             r.get("vstart"), 1 if r.get("vstart_incl", True) else 0,
+             r.get("vend"), 1 if r.get("vend_incl") else 0,
+             r.get("fixed"), r.get("summary", ""), source, now))
+    return len(rows)
+
+
+def load_db_catalogue(conn) -> dict[str, list[dict]]:
+    """The synced catalogue in the scanner's shape: {product: [entries]}."""
+    out: dict[str, list[dict]] = {}
+    for r in conn.execute("SELECT * FROM cve_catalogue").fetchall():
+        out.setdefault(r["product"], []).append({
+            "cve": r["cve"], "cvss": r["cvss"], "severity": r["severity"],
+            "bounds": (r["vstart"], bool(r["vstart_incl"]), r["vend"], bool(r["vend_incl"])),
+            "fixed": r["fixed"], "summary": r["summary"] or "",
+            "kev": bool(r["kev"]), "exploit": bool(r["exploit"]),
+        })
+    return out
+
+
 def scan_asset(conn, asset_id: str) -> dict | None:
     """Scan one asset: match its software, replace its open findings, and roll
     the result into the asset's CVE severity counts. Returns a summary or None
@@ -111,7 +220,9 @@ def scan_asset(conn, asset_id: str) -> dict | None:
             software = json.loads(software)
         except (ValueError, TypeError):
             software = []
-    findings = scan_software(software or [])
+    # NVD-synced catalogue rows extend the built-ins, so feed imports flow
+    # straight into scanning.
+    findings = scan_software(software or [], extra_catalogue=load_db_catalogue(conn))
 
     # Replace prior open findings with the fresh scan (idempotent re-scans).
     conn.execute("DELETE FROM vuln_findings WHERE asset_id=? AND status='open'", (asset_id,))

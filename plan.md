@@ -176,12 +176,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ## Phase 4 — Asset, Vuln & Dark Web depth
 
-- [~] **Real vulnerability scanning** — DONE (see CHANGELOG): per-asset software
+- [x] **Real vulnerability scanning** — DONE (see CHANGELOG): per-asset software
       inventory matched against a real CVE catalogue (Log4Shell, Heartbleed,
       regreSSHion, …) with version-range logic → genuine CVE findings (CVSS,
       fixed-in) that drive asset risk. `/assets/{id}/scan`, `/assets/scan-all`,
-      `/assets/{id}/vulns`. Remaining: live NVD feed sync into the catalogue +
-      a findings UI panel (API + clients shipped).
+      `/assets/{id}/vulns`. **NVD feed sync is live**: the NVD connector
+      parses CPE product/version ranges into the `cve_catalogue` table and the
+      scanner merges it with the built-ins at scan time; the fleet findings UI
+      (assets → vulns) ships real grouped findings.
 - [~] **Attack-surface discovery** — DONE (see CHANGELOG): passive discovery of
       unmanaged hosts from real telemetry (+ one-call promotion into the
       inventory) and transparent factor-based exposure scoring with an
@@ -236,6 +238,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · NVD catalogue sync (Phase 4)** — the NVD connector now feeds
+  the vulnerability scanner: `nvd_to_catalogue` parses NVD 2.0
+  `configurations` CPE matches (versionStart/End incl/excl + exact-version
+  CPEs; applications only; unbounded rows skipped as unscannable) into a new
+  `cve_catalogue` table (upsert keyed cve+product), and `scan_asset` merges
+  the synced rows with the built-in catalogue (per-product lists concatenate)
+  — so live NVD imports flow straight into asset scanning. The scanner gains
+  a `bounds` matcher for NVD's inclusive/exclusive range semantics. Also
+  corrected the module docstring, which previously claimed an IOC-store
+  augmentation that was never wired. End-to-end test: connector run → synced
+  row → affected version flags CVE-2026-12345, fixed version doesn't.
 - **2026-06-12 · Intel report authoring panel (Phase 3 closed)** — the CTI
   hub gains an IntelReportsPanel over the existing `/cti/reports` store:
   draft authoring (title, TLP marking, executive summary, full body, tags),

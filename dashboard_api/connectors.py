@@ -241,6 +241,14 @@ def _fetch_nvd(c: dict) -> list[dict]:
     base = (c.get("url") or "https://services.nvd.nist.gov/rest/json/cves/2.0")
     headers = {"apiKey": c["api_key"]} if c.get("api_key") else {}
     data = _http_get(base, headers=headers, params={"resultsPerPage": 100}).json()
+    # Live feed → scanner catalogue: parse CPE product/version ranges so the
+    # vulnerability scanner can match assets against fresh NVD records too.
+    from dashboard_api.vuln_scanner import nvd_to_catalogue, upsert_catalogue
+    cat_rows = nvd_to_catalogue(data.get("vulnerabilities", []))
+    if cat_rows:
+        with get_conn() as conn:
+            upsert_catalogue(conn, cat_rows)
+            conn.commit()
     out = []
     for item in data.get("vulnerabilities", []):
         cve = item.get("cve", {})

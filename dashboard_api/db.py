@@ -121,6 +121,26 @@ CREATE TABLE IF NOT EXISTS assets (
     software     TEXT NOT NULL DEFAULT '[]'        -- installed [{product,version}] for vuln scanning
 );
 
+-- CVE catalogue rows synced from the NVD connector (configurations → CPE
+-- product/version ranges); merged with the built-in catalogue at scan time.
+CREATE TABLE IF NOT EXISTS cve_catalogue (
+    cve         TEXT NOT NULL,
+    product     TEXT NOT NULL,
+    cvss        REAL NOT NULL DEFAULT 0,
+    severity    TEXT NOT NULL DEFAULT 'medium',
+    vstart      TEXT,                              -- affected-from (NULL = no lower bound)
+    vstart_incl INTEGER NOT NULL DEFAULT 1,
+    vend        TEXT,                              -- affected-to (NULL = no upper bound)
+    vend_incl   INTEGER NOT NULL DEFAULT 0,
+    fixed       TEXT,
+    summary     TEXT,
+    kev         INTEGER NOT NULL DEFAULT 0,
+    exploit     INTEGER NOT NULL DEFAULT 0,
+    source      TEXT NOT NULL DEFAULT 'nvd',
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (cve, product)
+);
+
 -- Genuine per-asset CVE findings from the vulnerability scanner.
 CREATE TABLE IF NOT EXISTS vuln_findings (
     id         TEXT PRIMARY KEY,
