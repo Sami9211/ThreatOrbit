@@ -14,10 +14,14 @@ caller's workspace when `DASHBOARD_MULTI_TENANT` is on (default off, so
 single-tenant deployments behave exactly as before — proven by the test suite
 running with the flag off). User-driven create endpoints stamp `org_of(user)`
 so rows land in the creator's workspace (the single-tenant value IS the
-default org, so nothing changes there either). Engine/seed/background writers
-deliberately stay in the default workspace — they run as the deployment, not
-a user; a per-org engine context is a deployment-level concern. Remaining:
-scoping the aggregate/summary endpoints (KPIs, summaries) the same way.
+default org, so nothing changes there either), and the aggregate/summary
+endpoints (overview rollups, section KPIs) apply the same scope via
+`scope_sql`. Engine/seed/background writers deliberately stay in the default
+workspace — they run as the deployment, not a user; a per-org engine context
+is a deployment-level concern. Known limits of the current isolation:
+get-by-id detail endpoints are id-addressed (UUIDs are unguessable, but a
+strict deployment may want them to 404 cross-org), and global search spans
+the deployment.
 """
 import os
 import uuid

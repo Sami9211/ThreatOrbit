@@ -51,10 +51,14 @@ def list_findings(category: str | None = None, severity: str | None = None,
 
 
 @router.get("/summary")
-def summary():
+def summary(user: dict = Depends(current_user)):
+    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    from dashboard_api import tenancy
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT category, severity, status, matched_user FROM dark_web_findings").fetchall()
+            f"SELECT category, severity, status, matched_user FROM dark_web_findings WHERE 1=1 {sc}",
+            sp).fetchall()
     total = len(rows)
     by_cat = {c: 0 for c in _CATEGORIES}
     for r in rows:

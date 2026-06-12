@@ -8,33 +8,43 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 
+from dashboard_api import tenancy
 from dashboard_api.auth import current_user
 from dashboard_api.db import get_conn, rows_to_dicts
 
 router = APIRouter(prefix="/overview", tags=["overview"], dependencies=[Depends(current_user)])
 
 
+def _scope(user: dict) -> tuple[str, list]:
+    """Workspace clause for the rollup queries — a no-op until multi-tenancy
+    is switched on, then the same isolation the list endpoints enforce."""
+    return tenancy.scope_sql(tenancy.org_of(user))
+
+
 @router.get("/kpis")
-def kpis():
+def kpis(user: dict = Depends(current_user)):
     from dashboard_api.scoring import org_risk
+    sc, sp = _scope(user)
     with get_conn() as conn:
-        iocs = conn.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
-        feeds = conn.execute("SELECT COUNT(*) FROM feeds WHERE status='active'").fetchone()[0]
+        iocs = conn.execute(f"SELECT COUNT(*) FROM iocs WHERE 1=1 {sc}", sp).fetchone()[0]
+        feeds = conn.execute(f"SELECT COUNT(*) FROM feeds WHERE status='active' {sc}", sp).fetchone()[0]
         threats = conn.execute(
             "SELECT COUNT(*) FROM alerts WHERE severity IN ('critical','high') "
-            "AND status NOT IN ('resolved','closed')"
+            f"AND status NOT IN ('resolved','closed') {sc}", sp
         ).fetchone()[0]
-        assets = conn.execute("SELECT risk_score, criticality FROM assets").fetchall()
+        assets = conn.execute(f"SELECT risk_score, criticality FROM assets WHERE 1=1 {sc}", sp).fetchall()
     # Criticality-weighted org risk — crown jewels move the needle more than endpoints.
     return {"threats": threats, "iocs": iocs, "sources": feeds, "score": org_risk(assets)}
 
 
 @router.get("/threat-vectors")
-def threat_vectors():
+def threat_vectors(user: dict = Depends(current_user)):
     from dashboard_api.seed import TACTIC_COLOR
+    sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT mitre_tactic AS label, COUNT(*) AS n FROM alerts GROUP BY mitre_tactic"
+            f"SELECT mitre_tactic AS label, COUNT(*) AS n FROM alerts WHERE 1=1 {sc} "
+            "GROUP BY mitre_tactic", sp
         ).fetchall()
     total = sum(r["n"] for r in rows) or 1
     vectors = [{"label": r["label"], "pct": round(r["n"] / total * 100),
@@ -44,12 +54,13 @@ def threat_vectors():
 
 
 @router.get("/hourly-volume")
-def hourly_volume():
+def hourly_volume(user: dict = Depends(current_user)):
     """24-bucket alert volume for the last 24h based on alert timestamps."""
     now = datetime.now(timezone.utc)
     buckets = [0] * 24
+    sc, sp = _scope(user)
     with get_conn() as conn:
-        rows = conn.execute("SELECT ts FROM alerts").fetchall()
+        rows = conn.execute(f"SELECT ts FROM alerts WHERE 1=1 {sc}", sp).fetchall()
     for r in rows:
         try:
             ts = datetime.fromisoformat(r["ts"])
@@ -62,12 +73,14 @@ def hourly_volume():
 
 
 @router.get("/mitre-heatmap")
-def mitre_heatmap():
+def mitre_heatmap(user: dict = Depends(current_user)):
     """Tactic x 6-time-bucket heatmap of alert counts."""
     now = datetime.now(timezone.utc)
     grid = defaultdict(lambda: [0] * 6)
+    sc, sp = _scope(user)
     with get_conn() as conn:
-        rows = conn.execute("SELECT mitre_tactic, ts FROM alerts WHERE mitre_tactic IS NOT NULL").fetchall()
+        rows = conn.execute(
+            f"SELECT mitre_tactic, ts FROM alerts WHERE mitre_tactic IS NOT NULL {sc}", sp).fetchall()
     for r in rows:
         try:
             ts = datetime.fromisoformat(r["ts"])
@@ -80,31 +93,34 @@ def mitre_heatmap():
 
 
 @router.get("/recent-alerts")
-def recent_alerts(limit: int = 8):
+def recent_alerts(limit: int = 8, user: dict = Depends(current_user)):
+    sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, title, severity, ts AS time, rule_name AS src FROM alerts "
-            "ORDER BY ts DESC LIMIT ?", (limit,)
+            f"SELECT id, title, severity, ts AS time, rule_name AS src FROM alerts WHERE 1=1 {sc} "
+            "ORDER BY ts DESC LIMIT ?", sp + [limit]
         ).fetchall()
     return rows_to_dicts(rows)
 
 
 @router.get("/recent-incidents")
-def recent_incidents(limit: int = 6):
+def recent_incidents(limit: int = 6, user: dict = Depends(current_user)):
+    sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id, title, severity, status, type AS category, owner AS assigned, updated AS age "
-            "FROM cases ORDER BY updated DESC LIMIT ?", (limit,)
+            f"FROM cases WHERE 1=1 {sc} ORDER BY updated DESC LIMIT ?", sp + [limit]
         ).fetchall()
     return rows_to_dicts(rows)
 
 
 @router.get("/top-actors")
-def top_actors(limit: int = 5):
+def top_actors(limit: int = 5, user: dict = Depends(current_user)):
+    sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT name, origin, sophistication AS score, ioc_count AS attacks, threat_level "
-            "FROM threat_actors ORDER BY ioc_count DESC LIMIT ?", (limit,)
+            f"FROM threat_actors WHERE 1=1 {sc} ORDER BY ioc_count DESC LIMIT ?", sp + [limit]
         ).fetchall()
     return rows_to_dicts(rows)
 
@@ -121,21 +137,23 @@ _CC = {"RU": "Russia", "CN": "China", "KP": "North Korea", "IR": "Iran",
 
 
 @router.get("/geo")
-def geo_distribution(limit: int = 20):
+def geo_distribution(limit: int = 20, user: dict = Depends(current_user)):
     """Observed attack origins, by country, from the platform's OWN alert
     store (src_country on alerts) — real measurement, not global statistics.
     Includes per-country severity mix and the latest observation time."""
+    sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT src_country AS country, COUNT(*) AS observed, "
             "SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) AS critical, "
             "SUM(CASE WHEN severity='high' THEN 1 ELSE 0 END) AS high, "
             "MAX(ts) AS last_seen "
-            "FROM alerts WHERE src_country IS NOT NULL AND src_country != '' "
-            "GROUP BY src_country", ()
+            f"FROM alerts WHERE src_country IS NOT NULL AND src_country != '' {sc} "
+            "GROUP BY src_country", sp
         ).fetchall()
         total = conn.execute(
-            "SELECT COUNT(*) AS n FROM alerts WHERE src_country IS NOT NULL AND src_country != ''"
+            f"SELECT COUNT(*) AS n FROM alerts WHERE src_country IS NOT NULL AND src_country != '' {sc}",
+            sp
         ).fetchone()["n"]
     merged: dict[str, dict] = {}
     for r in rows_to_dicts(rows):
@@ -153,11 +171,12 @@ def geo_distribution(limit: int = 20):
 
 
 @router.get("/live-feed")
-def live_feed(limit: int = 10):
+def live_feed(limit: int = 10, user: dict = Depends(current_user)):
     """Latest IOCs presented as a live threat feed."""
+    sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id, type, severity, value AS ip, threat_type AS detail, source AS region "
-            "FROM iocs ORDER BY last_seen DESC LIMIT ?", (limit,)
+            f"FROM iocs WHERE 1=1 {sc} ORDER BY last_seen DESC LIMIT ?", sp + [limit]
         ).fetchall()
     return rows_to_dicts(rows)

@@ -38,22 +38,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       SOC write but not platform admin; `/auth/permissions` + `/config/roles`
       drive UI gating. Remaining: extend `require_perm` to the last
       config/connectors endpoints (still on the equivalent `require_role`).
-- [~] **Multi-tenancy / workspaces** — FOUNDATION + REFERENCE PATTERN DONE
-      (see CHANGELOG): org model/CRUD/membership live, and **real isolation is
-      now proven on the alerts table** — `org_id` column (defaults to the
-      bootstrap workspace, so single-tenant data is untouched) and the queue
-      read scopes by the caller's workspace only when `DASHBOARD_MULTI_TENANT`
-      is on; tests flip the flag and show a foreign workspace's data
-      disappear. **Read isolation is now rolled out to every table in
-      `tenancy.TENANT_TABLES`** — all six primary stores (alerts, cases, iocs,
-      assets, dark_web_findings, detection_rules) plus the secondary ones
-      (feeds, actors, connectors, playbooks, runs, hunts, scans, suppressions,
-      log sources, notifications, saved views, report schedules; events carry
-      the column). **Write stamping is live too**: every user-driven create
-      endpoint stamps `org_of(user)` so rows land in the creator's workspace
-      (engine/seed writers stay in the deployment's default workspace by
-      design). Remaining: scoping the aggregate/summary endpoints (KPIs,
-      summaries) the same way.
+- [x] **Multi-tenancy / workspaces** — DONE (see CHANGELOG): org model/CRUD/
+      membership, then real data isolation behind `DASHBOARD_MULTI_TENANT`
+      (default off, single-tenant behaviour byte-for-byte unchanged):
+      defaulted `org_id` on every table in `tenancy.TENANT_TABLES`, workspace
+      scoping on every list endpoint AND every aggregate/rollup (overview
+      KPIs/charts/geo, SIEM KPIs, SOAR metrics, CTI/assets/darkweb/feeds
+      summaries), and `org_of(user)` stamping on every user-driven create so
+      rows land in the creator's workspace. Proven by tests that flip the
+      flag: foreign-workspace rows vanish from lists and KPI totals, and a
+      foreign-org analyst's IOC/case are invisible to the default admin.
+      Documented limits: engine/seed writers stay in the deployment
+      workspace (per-org engine context is a deployment concern), and
+      get-by-id detail endpoints remain id-addressed.
 - [x] **Audit & compliance pack** — DONE: CSV audit export + retention
       enforcement (purge past `data_retention_days`) with UI in Config →
       Security. Remaining: signed/immutable evidence bundles.
@@ -215,6 +212,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Tenant scoping on aggregates — multi-tenancy complete
+  (Phase 0)** — the last seam: every overview rollup (KPIs, threat vectors,
+  hourly volume, MITRE heatmap, recent alerts/incidents, top actors, geo,
+  live feed) and every section summary (SIEM KPIs, SOAR metrics, CTI summary,
+  assets summary + risk distribution, dark web summary, feeds summary) now
+  applies the workspace scope via the tested `tenancy.scope_sql` helper. The
+  isolation test proves flag-on KPI totals exclude exactly the foreign-org
+  rows. With reads, writes and aggregates wired, the multi-tenancy roadmap
+  item is closed (131-test suite green, flag off by default).
 - **2026-06-12 · Tenant write stamping (Phase 0)** — every user-driven create
   endpoint now stamps `org_of(user)` so new rows land in the creator's
   workspace: IOC import + MISP import, scans, cases (create + split),

@@ -289,15 +289,18 @@ def delete_suppression(suppression_id: str, user: dict = Depends(require_perm("s
 # ── KPIs ──────────────────────────────────────────────────────────────────────
 
 @router.get("/kpis")
-def siem_kpis():
+def siem_kpis(user: dict = Depends(current_user)):
+    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        rows = conn.execute("SELECT severity, status, risk_score, disposition FROM alerts").fetchall()
-        sources = conn.execute("SELECT eps_avg, status FROM log_sources").fetchall()
+        rows = conn.execute(
+            f"SELECT severity, status, risk_score, disposition FROM alerts WHERE 1=1 {sc}", sp).fetchall()
+        sources = conn.execute(f"SELECT eps_avg, status FROM log_sources WHERE 1=1 {sc}", sp).fetchall()
         retention = conn.execute("SELECT value FROM settings WHERE key='data_retention_days'").fetchone()
         # SOC response metrics, in minutes, from per-alert latency telemetry.
         lat = conn.execute(
             "SELECT AVG(detect_latency_sec) AS d, AVG(ack_latency_sec) AS a, "
-            "AVG(respond_latency_sec) AS r FROM alerts"
+            f"AVG(respond_latency_sec) AS r FROM alerts WHERE 1=1 {sc}", sp
         ).fetchone()
     total = len(rows)
     by_sev = {s: 0 for s in ("critical", "high", "medium", "low", "info")}

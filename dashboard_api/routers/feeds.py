@@ -46,9 +46,12 @@ def list_feeds(type: str | None = None, status: str | None = None,
 
 
 @router.get("/summary")
-def feeds_summary():
+def feeds_summary(user: dict = Depends(current_user)):
+    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        rows = conn.execute("SELECT status, enabled, indicators, type FROM feeds").fetchall()
+        rows = conn.execute(
+            f"SELECT status, enabled, indicators, type FROM feeds WHERE 1=1 {sc}", sp).fetchall()
     return {
         "totalFeeds": len(rows),
         "active": sum(1 for r in rows if r["status"] == "active"),

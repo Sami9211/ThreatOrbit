@@ -2490,6 +2490,19 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
     pbs = [p for p in client.get("/soar/playbooks", headers=auth).json() if marker in p["name"]]
     assert len(pbs) == 2
 
+    # …and the aggregates honour the same scope: flag-on KPI totals exclude
+    # exactly the foreign-workspace rows (overview + section summaries share
+    # the scope_sql seam)
+    with get_conn() as conn:
+        foreign = conn.execute(
+            "SELECT COUNT(*) AS n FROM alerts WHERE org_id != 'org-default'").fetchone()["n"]
+    assert foreign >= 1  # this test inserted one
+    all_total = client.get("/siem/kpis", headers=auth).json()["totalAlerts"]
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    assert client.get("/siem/kpis", headers=auth).json()["totalAlerts"] == all_total - foreign
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    assert client.get("/siem/kpis", headers=auth).json()["totalAlerts"] == all_total
+
 
 def test_tenant_write_stamping(client, auth, monkeypatch):
     """Create endpoints stamp the caller's workspace: rows made by a user in a

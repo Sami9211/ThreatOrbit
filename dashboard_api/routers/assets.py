@@ -81,9 +81,13 @@ def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
 
 
 @router.get("/summary")
-def assets_summary():
+def assets_summary(user: dict = Depends(current_user)):
+    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        rows = conn.execute("SELECT criticality, status, risk_score, cves, alerts FROM assets").fetchall()
+        rows = conn.execute(
+            f"SELECT criticality, status, risk_score, cves, alerts FROM assets WHERE 1=1 {sc}",
+            sp).fetchall()
     import json
     total = len(rows)
     crit = sum(1 for r in rows if r["criticality"] == "critical")
@@ -102,11 +106,13 @@ def assets_summary():
 
 
 @router.get("/risk-distribution")
-def risk_distribution():
+def risk_distribution(user: dict = Depends(current_user)):
     """Fleet-wide risk: band counts plus mean per-axis contribution (top driver)."""
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT criticality, patch_age, cves, open_ports, tags, alerts FROM assets"
+            f"SELECT criticality, patch_age, cves, open_ports, tags, alerts FROM assets WHERE 1=1 {sc}",
+            sp
         ).fetchall()
     return fleet_risk_distribution(rows_to_dicts(rows))
 

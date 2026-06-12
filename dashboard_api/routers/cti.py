@@ -193,13 +193,16 @@ def ioc_types():
 
 
 @router.get("/summary")
-def cti_summary():
+def cti_summary(user: dict = Depends(current_user)):
     """Top-line CTI counts: actors by type, active actors/campaigns, IOC total."""
+    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        actors = conn.execute("SELECT type, active, campaign_count FROM threat_actors").fetchall()
-        total_iocs = conn.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
+        actors = conn.execute(
+            f"SELECT type, active, campaign_count FROM threat_actors WHERE 1=1 {sc}", sp).fetchall()
+        total_iocs = conn.execute(f"SELECT COUNT(*) FROM iocs WHERE 1=1 {sc}", sp).fetchone()[0]
         life = {r["status"]: r["n"] for r in conn.execute(
-            "SELECT status, COUNT(*) AS n FROM iocs GROUP BY status").fetchall()}
+            f"SELECT status, COUNT(*) AS n FROM iocs WHERE 1=1 {sc} GROUP BY status", sp).fetchall()}
     by_type: dict[str, int] = {}
     active = active_campaigns = 0
     for a in actors:

@@ -834,14 +834,19 @@ def integration_action_trail(integration_id: str, limit: int = 50):
 
 
 @router.get("/metrics")
-def soar_metrics():
+def soar_metrics(user: dict = Depends(current_user)):
+    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         cases = conn.execute(
-            "SELECT status, severity, playbook, created, updated, sla_hours FROM cases").fetchall()
-        pbs = conn.execute("SELECT runs, success_rate, avg_time, last_run FROM playbooks").fetchall()
+            f"SELECT status, severity, playbook, created, updated, sla_hours FROM cases WHERE 1=1 {sc}",
+            sp).fetchall()
+        pbs = conn.execute(
+            f"SELECT runs, success_rate, avg_time, last_run FROM playbooks WHERE 1=1 {sc}", sp).fetchall()
         # MTTR in minutes from per-alert response latency (consistent with SIEM KPIs).
         mttr_row = conn.execute(
-            "SELECT AVG(respond_latency_sec) / 60.0 AS v FROM alerts WHERE respond_latency_sec IS NOT NULL"
+            "SELECT AVG(respond_latency_sec) / 60.0 AS v FROM alerts "
+            f"WHERE respond_latency_sec IS NOT NULL {sc}", sp
         ).fetchone()
     open_cases = sum(1 for c in cases if c["status"] not in ("resolved", "closed"))
     crit_open = sum(1 for c in cases if c["status"] not in ("resolved", "closed") and c["severity"] == "critical")
