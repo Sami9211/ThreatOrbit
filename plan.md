@@ -294,9 +294,15 @@ that buying companies require. Realistic positioning today:
       gating via `DASHBOARD_METRICS_TOKEN`), structured JSON logs
       (`DASHBOARD_LOG_FORMAT=json`), and a Sentry hook (`SENTRY_DSN`,
       honest about a missing SDK). Documented in docs/OPERATIONS.md.
-- [ ] **Security pass** — dependency audit in CI (pip-audit / npm audit),
-      a third-party pentest before first sale, and a documented
-      vulnerability-disclosure + patch-release process for the product itself.
+- [~] **Security pass** — audits + disclosure DONE (see CHANGELOG):
+      dependency audits in CI (pip-audit + an npm audit gate with an
+      **expiring allowlist**, weekly schedule), backend deps bumped to
+      patched versions (fastapi 0.129/starlette 0.52/python-multipart
+      0.0.27+/cryptography 46 — 143 tests green on the new set), SECURITY.md
+      disclosure policy with honest triage table. Remaining (env-gated /
+      follow-up): a third-party pentest before first sale, the next@16 major
+      upgrade (clears the triaged static-export-only Next server advisories),
+      and re-checking PYSEC-2026-161 when FastAPI's starlette ceiling moves.
 - [ ] **Pilot validation with real logs** — deploy against a live
       environment, forward real syslog/files, and tune parsers + built-in
       rules on actual data (the generated event stream only proves the
@@ -368,6 +374,21 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Security pass: audits in CI + patched deps + disclosure
+  (Tier 1)** — `.github/workflows/security.yml` runs pip-audit (strict) and
+  a frontend audit gate on every change plus weekly. The npm gate
+  (`frontend/scripts/audit-gate.mjs`) implements triage-with-expiry: any
+  untriaged high/critical fails, and so does any allowlist entry past its
+  expiry — the 14 Next.js *server* advisories are consciously accepted until
+  2026-09-30 because production deploys the static export (no Next server);
+  the real fix is the tracked next@16 major. Running the audit for real
+  found and fixed backend exposure: python-multipart 0.0.9 → ≥0.0.27 (upload
+  parsing DoS — this API accepts uploads), fastapi 0.115 → 0.129 +
+  starlette 0.52, cryptography ≥46.0.7, with the full 143-test suite green
+  on the new set; starlette's PYSEC-2026-161 (fix needs starlette 1.x, no
+  FastAPI supports it yet) is triaged in-workflow with the mitigation
+  documented. SECURITY.md ships the disclosure policy + honest triage table,
+  explicitly stating the pentest has NOT happened yet.
 - **2026-06-12 · Deployment hardening (Tier 1)** — a
   SecurityHeadersMiddleware stamps nosniff / DENY-framing / no-referrer /
   no-store on every API response including errors (tested); the API
