@@ -221,11 +221,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       migrations introspect `information_schema` instead of PRAGMA. SQLite
       default untouched (full suite proves it). Remaining: validate against a
       live Postgres (not reachable from this environment) before cutover.
-- [~] **Performance** — DONE for the data layer (see CHANGELOG): hot-path
-      indexes on every dashboard-refresh query (verified with EXPLAIN QUERY
-      PLAN) with a safe upgrade path for migrated columns; server-side
-      pagination/filtering already exists on alerts/IOCs/assets/findings.
-      Remaining: frontend virtualisation for very large tables.
+- [x] **Performance** — DONE (see CHANGELOG): hot-path indexes on every
+      dashboard-refresh query (verified with EXPLAIN QUERY PLAN) with a safe
+      upgrade path for migrated columns; server-side pagination/filtering on
+      alerts/IOCs/assets/findings; and **frontend virtualisation** — a
+      dependency-free `useWindowedRows` hook windows the SIEM queue above
+      150 rows (spacer padding preserves scrollbar geometry; a no-op below
+      the threshold, so small queues render exactly as before).
 - [~] **E2E test suite** (Playwright) — DONE (see CHANGELOG): a 36-test suite
       (auth, every section's critical workflow, responsive) across desktop +
       mobile projects, parse-validated, with a CI workflow that boots the real
@@ -241,6 +243,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Frontend virtualisation (Phase 5)** — a dependency-free
+  `useWindowedRows` hook (rAF-coalesced scroll tracking, overscan, spacer
+  padding) windows long uniform tables; wired into the SIEM alert queue with
+  a 150-row activation threshold so huge queues scroll smoothly while small
+  ones render byte-for-byte as before (row stagger animation disabled only
+  when windowed). Remaining Phase 5 items are environment-gated and
+  documented as such: Stripe self-serve purchase (needs a processor
+  account), live-Postgres validation, and the CI-executed E2E/mobile runs.
 - **2026-06-12 · Attack-surface panel (Phase 4 closed)** — the assets page
   gains an AttackSurfacePanel over the live `/assets/exposure` +
   `/assets/discovered` APIs: the internet-facing inventory with per-asset

@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
 
@@ -1275,6 +1276,9 @@ export default function SIEMPage() {
     })
   }, [alerts, search, filterSev, filterStatus, filterTactic, isNormal, alertSort])
 
+  // Windowing for very large queues (no-op under 150 rows; row ≈ 57px).
+  const alertWindow = useWindowedRows(filteredAlerts, { rowHeight: 57 })
+
   const filteredRules = useMemo(() => RULES.filter((r) =>
     !ruleSearch || r.name.toLowerCase().includes(ruleSearch.toLowerCase()) || r.id.toLowerCase().includes(ruleSearch.toLowerCase())
   ), [ruleSearch])
@@ -1422,17 +1426,24 @@ export default function SIEMPage() {
                 </button>
               </div>
 
-              {/* Rows */}
-              <div className="flex-1 overflow-y-auto">
+              {/* Rows — windowed above 150 alerts so huge queues stay smooth
+                  (spacer padding preserves the scrollbar; no-op below that) */}
+              <div className="flex-1 overflow-y-auto" {...alertWindow.containerProps}>
                 {filteredAlerts.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
                     No alerts match the current filters
                   </div>
                 ) : (
-                  filteredAlerts.map((alert, i) => (
-                    <AlertRow key={alert.id} alert={alert} idx={i} selected={selectedId === alert.id}
-                      onClick={() => setSelectedId((id) => id === alert.id ? null : alert.id)} />
-                  ))
+                  <>
+                    {alertWindow.topPad > 0 && <div style={{ height: alertWindow.topPad }} />}
+                    {alertWindow.visible.map(({ item: alert, index: i }) => (
+                      <AlertRow key={alert.id} alert={alert}
+                        idx={alertWindow.virtualized ? 0 : i}
+                        selected={selectedId === alert.id}
+                        onClick={() => setSelectedId((id) => id === alert.id ? null : alert.id)} />
+                    ))}
+                    {alertWindow.bottomPad > 0 && <div style={{ height: alertWindow.bottomPad }} />}
+                  </>
                 )}
               </div>
             </div>
