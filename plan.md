@@ -163,10 +163,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       sighting tracking (events/connectors/manual), known-good whitelisting,
       and expiry — wired into TI matching, with an IOC database + lifecycle
       drawer on the CTI hub.
-- [~] **Campaign & report management** — DONE (see CHANGELOG): analyst-authored
+- [x] **Campaign & report management** — DONE (see CHANGELOG): analyst-authored
       intel reports (CRUD, TLP, draft/publish, actor/IOC refs) + MISP Event
-      import/export (store, per-report, and ingest). Remaining: a dedicated
-      report-authoring UI panel (API + clients shipped).
+      import/export (store, per-report, and ingest), **with a dedicated
+      authoring panel on the CTI hub**: draft (title/TLP/summary/body/tags),
+      filter by status, publish/unpublish, expand to read, per-report MISP
+      download, delete.
 - [x] **Attribution scoring** — DONE (see CHANGELOG): evidence-weighted actor
       attribution (`/cti/attribution` + per-case) ranking tracked actors by
       shared IOCs/malware/TTPs/sectors/origin with transparent weighted evidence
@@ -234,6 +236,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Intel report authoring panel (Phase 3 closed)** — the CTI
+  hub gains an IntelReportsPanel over the existing `/cti/reports` store:
+  draft authoring (title, TLP marking, executive summary, full body, tags),
+  status filtering, one-click publish/unpublish, expandable reading view
+  with author/actor/IOC metadata, per-report MISP-event download (new
+  `exportIntelReportMisp` client), and delete with optimistic rollback.
 - **2026-06-12 · Live enrichment providers (Phase 3)** — with an API key in
   the environment, the external enrichers now perform the real lookup:
   VirusTotal v3 (`last_analysis_stats` → X/N engines verdict, URL ids

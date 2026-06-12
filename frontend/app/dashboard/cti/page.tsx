@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import IocLifecyclePanel from '@/components/dashboard/IocLifecyclePanel'
+import IntelReportsPanel from '@/components/dashboard/IntelReportsPanel'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
 import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, fetchCtiSummary, type SavedHunt as ApiSavedHunt, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
@@ -753,6 +754,9 @@ export default function CTIPage() {
 
       {/* IOC database with lifecycle (decay / sightings / known-good) */}
       <IocLifecyclePanel />
+
+      {/* Campaign & report management: author, publish, share as MISP */}
+      <IntelReportsPanel />
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Actor list */}

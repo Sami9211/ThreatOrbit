@@ -969,6 +969,8 @@ export const updateIntelReport = (id: string, body: Partial<{
 }>) => api<IntelReport>(`/cti/reports/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const deleteIntelReport = (id: string) =>
   api<void>(`/cti/reports/${id}`, { method: 'DELETE' })
+export const exportIntelReportMisp = (id: string) =>
+  api<{ Event: Record<string, unknown> }>(`/cti/reports/${id}/misp`)
 export const exportMispEvent = (severity?: string) =>
   api<{ Event: Record<string, unknown> }>(`/cti/misp/export${severity ? `?severity=${severity}` : ''}`)
 export const importMispEvent = (event: Record<string, unknown>) =>
