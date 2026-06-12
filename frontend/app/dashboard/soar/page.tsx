@@ -926,46 +926,41 @@ export default function SOARPage() {
 
   useEffect(() => { if (isNormal && tab !== 'cases') setTab('cases') }, [isNormal, tab])
 
-  const FAKE_DURATIONS = ['1s', '2s', '3s', '4s', '5s', '8s', '10s', '12s', '15s', '20s']
-
   function simulateRun(id: string) {
     const pb = playbooks.find((p) => p.id === id)
     if (!pb || pb.status === 'running') return
     setSelectedPBId(id)
-    // Execute the real run server-side (bumps runs / last_run, audited);
-    // the step timeline below animates while it completes.
-    apiRunPlaybook(id)
-      .then((updated) => {
-        setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
-          ...p, runs: updated.runs ?? p.runs,
-        }))
-      })
-      .catch(() => {})  // demo entry or API offline — the animation still runs
-    // Reset all steps to idle and mark playbook as running
+    // Reset steps and mark running while the REAL server-side execution runs.
     setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
       ...p, status: 'running',
-      steps: p.steps.map((s) => ({ ...s, status: 'idle' as StepStatus, duration: undefined })),
+      steps: p.steps.map((s) => ({ ...s, status: 'running' as StepStatus, duration: undefined })),
     }))
-    const totalSteps = pb.steps.length
-    pb.steps.forEach((_s, i) => {
-      // Mark step as running
-      setTimeout(() => {
+    // Execute for real; the timeline then shows each step's ACTUAL outcome
+    // from the run record (success/failed/skipped/awaiting approval) — no
+    // fabricated durations.
+    apiRunPlaybook(id)
+      .then((updated) => {
+        const run = (updated as { run?: { status: string; steps: Array<{ idx: number; status: string }> } }).run
+        const mapStatus = (s?: string): StepStatus =>
+          s === 'success' ? 'completed' : s === 'failed' ? 'failed'
+          : s === 'skipped' ? 'skipped' : s === 'pending-approval' ? 'running' : 'completed'
         setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
           ...p,
-          steps: p.steps.map((s, j) => j === i ? { ...s, status: 'running' as StepStatus } : s),
+          runs: updated.runs ?? p.runs,
+          status: run?.status === 'awaiting-approval' ? 'running' : 'completed',
+          steps: p.steps.map((s, j) => ({
+            ...s,
+            status: mapStatus(run?.steps?.find((r) => r.idx === j)?.status),
+          })),
         }))
-      }, i * 900)
-      // Mark step as completed
-      setTimeout(() => {
+      })
+      .catch(() => {
+        // API unreachable — reflect failure honestly instead of pretending success.
         setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
-          ...p,
-          status: i === totalSteps - 1 ? 'completed' : 'running',
-          steps: p.steps.map((s, j) =>
-            j === i ? { ...s, status: 'completed' as StepStatus, duration: FAKE_DURATIONS[i % FAKE_DURATIONS.length] } : s
-          ),
+          ...p, status: 'failed',
+          steps: p.steps.map((s) => ({ ...s, status: 'failed' as StepStatus })),
         }))
-      }, i * 900 + 700)
-    })
+      })
   }
 
   if (isNormal) return <NormalSOAR cases={cases} />
@@ -1177,14 +1172,14 @@ export default function SOARPage() {
                 </div>
 
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
-                  <p className="text-xs font-semibold text-white mb-4">Automation Metrics (30 days)</p>
+                  <p className="text-xs font-semibold text-white mb-4">Automation Metrics</p>
                   <div className="space-y-4">
                     {[
-                      { label: 'Actions Automated',   value: '34,821', sub: '73% of all response actions', color: 'text-safe'   },
-                      { label: 'Manual Actions',       value: '12,894', sub: '27% required analyst input',  color: 'text-amber'  },
-                      { label: 'Analyst Hours Saved',  value: '847h',   sub: '≈ $127K at $150/hr',         color: 'text-violet' },
-                      { label: 'Playbook Executions',  value: '38,217', sub: 'Across 23 active playbooks',  color: 'text-white'  },
-                      { label: 'Top Integration',      value: 'VirusTotal', sub: '12,847 API calls',        color: 'text-ink-300'},
+                      { label: 'Playbook Executions', value: playbooks.reduce((s, p) => s + (p.runs || 0), 0).toLocaleString(), sub: `Across ${playbooks.length} playbooks`, color: 'text-white' },
+                      { label: 'Automation Rate',     value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '—', sub: 'of closed cases playbook-driven', color: 'text-safe' },
+                      { label: 'Analyst Hours Saved', value: soarApi ? `${Math.round(soarApi.timeSavedMonth)}h` : '—', sub: 'this month, from run volume', color: 'text-violet' },
+                      { label: 'Cases Closed (week)', value: soarApi ? String(soarApi.casesClosedWeek) : '—', sub: `${soarApi?.openCases ?? 0} still open`, color: 'text-amber' },
+                      { label: 'Playbooks Run Today', value: soarApi ? String(soarApi.playbooksToday) : '—', sub: 'with a recorded run', color: 'text-ink-300' },
                     ].map((m) => (
                       <div key={m.label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
                         <p className="text-[11px] text-ink-500">{m.label}</p>
@@ -1198,23 +1193,31 @@ export default function SOARPage() {
                 </div>
               </div>
 
-              {/* KPI table */}
+              {/* KPI table — every row computed from the live API/case data */}
               <div className="bg-surface-2/40 rounded-xl border border-white/5">
                 <div className="px-4 py-3 border-b border-white/5">
-                  <p className="text-xs font-semibold text-white">SOAR KPI Summary (Last 30 days)</p>
+                  <p className="text-xs font-semibold text-white">SOAR KPI Summary</p>
                 </div>
                 <div className="divide-y divide-white/5">
-                  {[
-                    { metric: 'Mean Time to Respond (MTTR)',         value: '2h 17m',  target: '< 4h',  status: 'good' },
-                    { metric: 'Cases Created',                        value: '624',     target: '—',     status: 'good' },
-                    { metric: 'Cases Resolved',                       value: '618',     target: '—',     status: 'good' },
-                    { metric: 'Cases Escalated to IR Team',           value: '12',      target: '< 20',  status: 'good' },
-                    { metric: 'SLA Compliance (P1)',                  value: '94.2%',   target: '> 95%', status: 'warn' },
-                    { metric: 'Automation Rate',                      value: '73%',     target: '> 60%', status: 'good' },
-                    { metric: 'Playbook Success Rate',                value: '96.4%',   target: '> 90%', status: 'good' },
-                    { metric: 'False Positive Case Rate',             value: '18%',     target: '< 25%', status: 'good' },
-                    { metric: 'Avg Playbook Execution Time',          value: '3m 08s',  target: '< 10m', status: 'good' },
-                  ].map((row) => (
+                  {(() => {
+                    const resolved = cases.filter((c) => ['resolved', 'closed'].includes(c.status)).length
+                    const sla = soarApi && soarApi.openCases > 0
+                      ? Math.round((1 - (soarApi.slaBreached ?? 0) / soarApi.openCases) * 100)
+                      : soarApi ? 100 : null
+                    const pbSuccess = playbooks.length
+                      ? Math.round(playbooks.reduce((s, p) => s + (p.successRate <= 1 ? p.successRate * 100 : p.successRate), 0) / playbooks.length)
+                      : null
+                    const fmtMin = (m?: number) => m == null ? '—'
+                      : m >= 60 ? `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m` : `${m.toFixed(1)}m`
+                    return [
+                    { metric: 'Mean Time to Respond (MTTR)', value: fmtMin(soarApi?.mttr), target: '< 4h',  status: soarApi && soarApi.mttr < 240 ? 'good' : 'warn' },
+                    { metric: 'Cases Created',               value: String(cases.length),   target: '—',     status: 'good' },
+                    { metric: 'Cases Resolved',              value: String(resolved),       target: '—',     status: 'good' },
+                    { metric: 'SLA Compliance',              value: sla == null ? '—' : `${sla}%`, target: '> 95%', status: sla != null && sla >= 95 ? 'good' : 'warn' },
+                    { metric: 'Automation Rate',             value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '—', target: '> 60%', status: soarApi && soarApi.automationRate > 60 ? 'good' : 'warn' },
+                    { metric: 'Playbook Success Rate',       value: pbSuccess == null ? '—' : `${pbSuccess}%`, target: '> 90%', status: pbSuccess != null && pbSuccess >= 90 ? 'good' : 'warn' },
+                    { metric: 'Avg Playbook Execution Time', value: soarApi ? `${soarApi.avgPlaybookTime}s` : '—', target: '< 10m', status: 'good' },
+                  ]})().map((row) => (
                     <div key={row.metric} className="grid grid-cols-3 px-4 py-2.5 text-xs">
                       <span className="text-ink-300">{row.metric}</span>
                       <span className={cn('font-mono', row.status === 'good' ? 'text-safe' : 'text-amber')}>{row.value}</span>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchFeeds, toggleFeed as apiToggleFeed, createFeed, type Feed as ApiFeed } from '@/lib/api'
+import { fetchFeeds, toggleFeed as apiToggleFeed, createFeed, fetchFeedsSummary, type Feed as ApiFeed, type FeedsSummary } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import IngestionEnginePanel from '@/components/dashboard/IngestionEnginePanel'
 import ConnectorsPanel from '@/components/dashboard/ConnectorsPanel'
@@ -108,6 +108,7 @@ export default function FeedSourcesPage() {
     fetchFeeds().then((data: ApiFeed[]) => {
       if (data.length > 0) setFeeds(data.map(apiFeedToRow))
     }).catch(() => {})
+    fetchFeedsSummary().then(setSummary).catch(() => {})
   }, [])
 
   const toggleFeed = (id: string) => {
@@ -131,6 +132,7 @@ export default function FeedSourcesPage() {
 
   const selectedFeed = feeds.find(f => f.id === selected) ?? null
 
+  const [summary, setSummary] = useState<FeedsSummary | null>(null)
   const activeFeeds = feeds.filter(f => f.enabled).length
   const iocsToday = feeds.filter(f => f.enabled).reduce((acc, f) => acc + f.iocsPerDay, 0)
 
@@ -156,10 +158,10 @@ export default function FeedSourcesPage() {
       {/* KPI strip */}
       <div className="grid grid-cols-4 divide-x divide-white/5 border-b border-white/5 shrink-0">
         {[
-          { label: 'Active Feeds', value: activeFeeds,                            color: 'text-safe'    },
-          { label: 'IOCs Today',   value: `${(iocsToday / 1000).toFixed(1)}k`,    color: 'text-magenta' },
-          { label: 'Avg Latency',  value: '1.2s',                                 color: 'text-violet'  },
-          { label: 'Dedup Rate',   value: '34%',                                  color: 'text-amber'   },
+          { label: 'Active Feeds',     value: activeFeeds,                          color: 'text-safe'    },
+          { label: 'IOCs Today',       value: `${(iocsToday / 1000).toFixed(1)}k`,  color: 'text-magenta' },
+          { label: 'Total Indicators', value: summary ? summary.totalIndicators.toLocaleString() : '—', color: 'text-violet' },
+          { label: 'Feeds Errored',    value: summary ? String(summary.errored) : '—', color: 'text-amber' },
         ].map(({ label, value, color }) => (
           <div key={label} className="px-5 py-3">
             <div className={cn('text-xl font-bold font-mono', color)}>{value}</div>
