@@ -184,12 +184,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       parses CPE product/version ranges into the `cve_catalogue` table and the
       scanner merges it with the built-ins at scan time; the fleet findings UI
       (assets → vulns) ships real grouped findings.
-- [~] **Attack-surface discovery** — DONE (see CHANGELOG): passive discovery of
+- [x] **Attack-surface discovery** — DONE (see CHANGELOG): passive discovery of
       unmanaged hosts from real telemetry (+ one-call promotion into the
       inventory) and transparent factor-based exposure scoring with an
-      internet-facing inventory (`/assets/exposure`, `/assets/discovered`).
-      Remaining: an attack-surface UI panel (API + clients shipped) + active
-      probing.
+      internet-facing inventory (`/assets/exposure`, `/assets/discovered`),
+      **surfaced in an AttackSurfacePanel** on the assets page (exposure
+      bands/factors + discovered-host promotion). Active probing (network
+      scans from the platform) stays deliberately out of scope for the core
+      product — passive discovery only; integrate an external scanner via
+      connectors if needed.
 - [x] **Asset ↔ alert ↔ case linkage** — DONE (see CHANGELOG):
       `/assets/{id}/activity` ties an asset to its alerts, cases, events, CVE
       findings and responding playbook runs; “Linked activity” section in the
@@ -238,6 +241,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Attack-surface panel (Phase 4 closed)** — the assets page
+  gains an AttackSurfacePanel over the live `/assets/exposure` +
+  `/assets/discovered` APIs: the internet-facing inventory with per-asset
+  exposure bands and contributing factors (hover for weights) and summary
+  KPIs (facing/critical/avg/top driver), plus passively discovered unmanaged
+  hosts (events/alerts/last-seen from real telemetry) with one-click
+  promotion into the managed inventory (refreshing the asset list). Active
+  probing is documented as deliberately out of scope (passive only).
 - **2026-06-12 · NVD catalogue sync (Phase 4)** — the NVD connector now feeds
   the vulnerability scanner: `nvd_to_catalogue` parses NVD 2.0
   `configurations` CPE matches (versionStart/End incl/excl + exact-version

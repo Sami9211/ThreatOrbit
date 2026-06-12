@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import AttackSurfacePanel from '@/components/dashboard/AttackSurfacePanel'
 import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
@@ -179,11 +180,12 @@ export default function AssetsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // Load from API
-  useEffect(() => {
+  const loadAssets = () => {
     fetchAssets({ limit: '200' })
       .then(({ items }) => { if (items.length > 0) setAssets(items as unknown as Asset[]) })
       .catch(() => {})
-  }, [])
+  }
+  useEffect(() => { loadAssets() }, [])
 
   // Add-asset form
   const [name, setName] = useState('')
@@ -648,6 +650,11 @@ export default function AssetsPage() {
               })}
             </div>
           )}
+
+          {/* Attack surface: exposure inventory + discovered-host promotion */}
+          <div className="p-4">
+            <AttackSurfacePanel onPromoted={loadAssets} />
+          </div>
         </div>
       </div>
 
