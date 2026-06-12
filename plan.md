@@ -101,8 +101,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 - [x] **Search/hunt language** — DONE: a real field-operator query language over
       the raw event stream (`POST /siem/search`) + `| stats count by`, **plus**
       scheduled hunts — a saved hunt put on an interval runs the event search on
-      the engine tick and raises a SIEM alert on hits (detection over time).
-      Remaining (minor): joins across sources.
+      the engine tick and raises a SIEM alert on hits (detection over time) —
+      **and cross-source joins**: `| join <field> <subquery>` keeps rows whose
+      field value also matches the subquery (brute-force-then-success style
+      correlation), composing with stats and ECS field names.
 - [x] **Threat-intel matching** — DONE: ingested/generated events whose IP
       matches a known malicious IOC raise an enriched intel alert (R-TIMATCH).
 
@@ -226,6 +228,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Search joins across sources (Phase 1 fully closed)** — the
+  hunt language gains `| join <field> <subquery>`: keep left-side rows whose
+  field value also appears in the subquery's matches over the same window
+  (e.g. `event_type=login_success | join src_ip event_type=failed_login` —
+  successful logins from IPs that also brute-forced). Pipes compose (join
+  first, then `| stats count by`), ECS aliases work as the join field, and
+  the response's `interpreted.join` reports rightHits/keyCount so the UI can
+  show what the correlation did. Example added to the search panel.
 - **2026-06-12 · Time-boxed suppression windows (Phase 1 closed)** —
   suppressions can now carry an absolute expiry (`expires_hours` → stamped
   `expires_at`) and/or a recurring daily HH:MM–HH:MM UTC window (overnight

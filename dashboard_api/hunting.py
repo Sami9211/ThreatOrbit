@@ -182,6 +182,10 @@ def run_saved_hunt(domain: str, hunt_id: str, actor: str) -> dict | None:
 #   host:web                                         contains (substring)
 #   powershell                                       bare token → full-text over raw
 #   event_type=beacon | stats count by dest_ip      group-by aggregation
+#   event_type=login_success | join src_ip event_type=failed_login
+#                                                    correlate across sources:
+#                                                    keep left rows whose field
+#                                                    value also matches the right
 #
 # Each term compiles to the SAME condition shape the detection rule engine
 # evaluates (rule_engine.matches_event), so search and detection stay consistent.
@@ -195,20 +199,29 @@ _SYM_OP = {">=": "gte", "<=": "lte", "!=": "not_equals", "=": "equals",
            ">": "gt", "<": "lt", "~": "regex", ":": "contains"}
 _IN_RE = re.compile(r"\b([a-z_.]+)\s+in\s+([^\s|]+)", re.I)
 _STATS_RE = re.compile(r"stats\s+count\s+by\s+([a-z_.]+)", re.I)
+_JOIN_RE = re.compile(r"^join\s+([a-z_.]+)\s+(.+)$", re.I)
 
 
 def parse_query(q: str) -> dict:
-    """Parse a search string into {conditions, freetext, stats}.
+    """Parse a search string into {conditions, freetext, stats, join}.
 
     `conditions` use the rule-engine field/op/value shape; `freetext` are bare
     tokens matched as substrings of the raw line; `stats` is an optional
-    {"by": field} group-by.
+    {"by": field} group-by; `join` is an optional cross-source correlation —
+    `| join <field> <subquery>` keeps left-side rows whose <field> value also
+    appears in the subquery's matches (e.g. successful logins from IPs that
+    also produced failed logins). Pipes compose: join runs first, stats after.
     """
     stats = None
-    search = q or ""
-    if "|" in search:
-        search, _, tail = search.partition("|")
-        m = _STATS_RE.search(tail)
+    join = None
+    segments = [s.strip() for s in (q or "").split("|")]
+    search = segments[0]
+    for seg in segments[1:]:
+        jm = _JOIN_RE.match(seg)
+        if jm and jm.group(1).lower() in _RECOGNISED:
+            join = {"field": canonical_field(jm.group(1).lower()), "query": jm.group(2).strip()}
+            continue
+        m = _STATS_RE.search(seg)
         if m and m.group(1).lower() in _RECOGNISED:
             # group on the native field even when an ECS alias was used
             stats = {"by": canonical_field(m.group(1).lower())}
@@ -234,7 +247,7 @@ def parse_query(q: str) -> dict:
             conditions.append({"field": m.group(1).lower(), "op": _SYM_OP[m.group(2)], "value": m.group(3)})
         elif tok.strip():
             freetext.append(tok)
-    return {"conditions": conditions, "freetext": freetext, "stats": stats}
+    return {"conditions": conditions, "freetext": freetext, "stats": stats, "join": join}
 
 
 def event_search(query: str, time_range: str = "24h", limit: int = 200) -> dict:
@@ -255,7 +268,26 @@ def event_search(query: str, time_range: str = "24h", limit: int = 200) -> dict:
         ).fetchall()
     events = [dict(e) for e in rows]
     matched = [e for e in events if (not conds) or matches_event(e, definition)]
-    interpreted = {"conditions": parsed["conditions"], "freetext": parsed["freetext"], "stats": parsed["stats"]}
+
+    # Cross-source join: keep left rows whose join-field value also appears in
+    # the right-hand subquery's matches over the same window. The subquery is
+    # conditions/freetext only (no nested pipes).
+    join_meta = None
+    if parsed.get("join"):
+        jfield, jquery = parsed["join"]["field"], parsed["join"]["query"]
+        sub = parse_query(jquery)
+        sub_conds = list(sub["conditions"]) + [
+            {"field": "raw", "op": "contains", "value": ft} for ft in sub["freetext"]]
+        sub_def = {"conditions": sub_conds, "logic": "and"}
+        right = [e for e in events if sub_conds and matches_event(e, sub_def)]
+        keys = {str(e.get(jfield)) for e in right if e.get(jfield) not in (None, "")}
+        matched = [e for e in matched
+                   if e.get(jfield) not in (None, "") and str(e.get(jfield)) in keys]
+        join_meta = {"field": jfield, "query": jquery,
+                     "rightHits": len(right), "keyCount": len(keys)}
+
+    interpreted = {"conditions": parsed["conditions"], "freetext": parsed["freetext"],
+                   "stats": parsed["stats"], "join": join_meta}
     elapsed = round((time.perf_counter() - started) * 1000, 1)
 
     if parsed["stats"]:

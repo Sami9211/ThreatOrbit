@@ -3143,6 +3143,51 @@ def test_event_search_language(client, auth):
     assert client.post("/siem/search", json={"query": "x", "time_range": "1y"}, headers=auth).status_code == 400
 
 
+def test_search_join_across_sources(client, auth):
+    """`| join <field> <subquery>` correlates across sources: keep left rows
+    whose field value also matches the right — e.g. successful logins from IPs
+    that also produced failed logins (brute-force-then-success)."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    attacker, benign = "198.51.100.180", "198.51.100.181"
+    lines = [
+        f"Jan 10 07:00:00 web01 sshd[1]: Failed password for root from {attacker} port 5000",
+        f"Jan 10 07:00:05 web01 sshd[2]: Accepted password for deploy from {attacker} port 5001",
+        f"Jan 10 07:00:09 web01 sshd[3]: Accepted password for alice from {benign} port 5002",
+    ]
+    client.post("/siem/ingest", json={"lines": lines, "format": "auto"}, headers=auth)
+
+    q = f"event_type=login_success src_ip in {attacker},{benign} | join src_ip event_type=failed_login"
+    r = client.post("/siem/search", json={"query": q, "time_range": "24h"}, headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # only the attacker's success row survives the join; the benign login drops
+    assert body["hits"] >= 1
+    assert all(x["src_ip"] == attacker for x in body["results"])
+    assert not any(x["src_ip"] == benign for x in body["results"])
+    j = body["interpreted"]["join"]
+    assert j["field"] == "src_ip" and j["rightHits"] >= 1 and j["keyCount"] >= 1
+
+    # join composes with stats (join first, then group)
+    agg = client.post("/siem/search", json={
+        "query": f"event_type=login_success src_ip in {attacker},{benign} "
+                 f"| join src_ip event_type=failed_login | stats count by src_ip"},
+        headers=auth).json()
+    vals = {g["value"] for g in agg["stats"]["groups"]}
+    assert attacker in vals and benign not in vals
+
+    # ECS alias works as the join field too
+    ecs = client.post("/siem/search", json={
+        "query": f"event_type=login_success src_ip={attacker} | join source.ip event_type=failed_login"},
+        headers=auth).json()
+    assert ecs["hits"] >= 1 and ecs["interpreted"]["join"]["field"] == "src_ip"
+
+    # a join whose right side matches nothing honestly returns zero rows
+    none = client.post("/siem/search", json={
+        "query": f"event_type=login_success | join src_ip event_type=no_such_type"}, headers=auth).json()
+    assert none["hits"] == 0 and none["results"] == []
+
+
 def test_ecs_field_normalization():
     """ECS aliases resolve to native fields so rules/searches are vendor-neutral."""
     from dashboard_api.rule_engine import matches_event, canonical_field

@@ -14,6 +14,8 @@ const EXAMPLES = [
   'username in svc-backup,svc-deploy',
   'source.ip=10.0.0.5',          // ECS field names resolve too
   'raw~"OR 1=1"',
+  // cross-source join: successful logins from IPs that also failed
+  'event_type=login_success | join src_ip event_type=failed_login',
 ]
 
 function relTime(iso: string | null): string {
@@ -28,8 +30,10 @@ function relTime(iso: string | null): string {
  * Event-stream search — a real field-operator query language over the raw
  * telemetry the SIEM ingests (engine + native log collector). Supports
  * `field=value`, `!= > < >= <=`, `~regex`, `:contains`, `field in a,b,c`,
- * bare full-text tokens, and `| stats count by <field>`. This is what hunting
- * actually is: searching raw events, not just stored alerts.
+ * bare full-text tokens, `| stats count by <field>`, and cross-source
+ * correlation with `| join <field> <subquery>` (keep rows whose field value
+ * also matches the subquery). This is what hunting actually is: searching
+ * raw events, not just stored alerts.
  */
 export default function EventSearchPanel() {
   const [query, setQuery] = useState('')
