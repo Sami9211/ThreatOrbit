@@ -686,6 +686,54 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
 
 
+def test_per_user_slack_routing(client, auth, monkeypatch):
+    """Personal Slack routing: a user registers a webhook + severity floor and
+    platform notifications at/above it are mirrored there; below-floor ones
+    are filtered; clearing stops delivery; the URL never leaks to /auth/me."""
+    import dashboard_api.webhooks as wh
+    monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
+    sent = []
+
+    class _R:
+        status_code = 200
+
+    monkeypatch.setattr(wh.httpx, "post",
+                        lambda url, json=None, timeout=None: (sent.append({"url": url, "json": json}), _R())[1])
+
+    # the webhook URL is a quasi-secret: scrubbed from the principal payload
+    assert "slack_webhook" not in client.get("/auth/me", headers=auth).json()
+
+    # configure routing (high floor), round-trip it, and test-send for real
+    r = client.put("/auth/me/slack", json={"webhook_url": "https://hooks.slack.com/services/T/B/X",
+                                           "min_severity": "high"}, headers=auth).json()
+    assert r["configured"] is True
+    assert client.get("/auth/me/slack", headers=auth).json()["minSeverity"] == "high"
+    assert client.post("/auth/me/slack/test", headers=auth).json()["delivered"] is True
+    assert sent and sent[-1]["url"].startswith("https://hooks.slack.com/")
+    assert client.put("/auth/me/slack", json={"webhook_url": "https://h.example/x",
+                                              "min_severity": "bogus"}, headers=auth).status_code == 400
+
+    # a critical notification reaches the webhook; a low one is filtered out
+    from dashboard_api.db import get_conn
+    from dashboard_api.routers.platform import notify
+    base = len(sent)
+    with get_conn() as conn:
+        notify(conn, type="alert", severity="critical", title="Slack route critical probe")
+        notify(conn, type="alert", severity="low", title="Slack route low probe")
+        conn.commit()
+    texts = [s["json"]["text"] for s in sent[base:]]
+    assert any("critical probe" in t for t in texts)
+    assert not any("low probe" in t for t in texts)
+
+    # clearing the webhook stops delivery
+    client.put("/auth/me/slack", json={"webhook_url": "", "min_severity": "high"}, headers=auth)
+    base = len(sent)
+    with get_conn() as conn:
+        notify(conn, type="alert", severity="critical", title="After-clear probe")
+        conn.commit()
+    assert all("After-clear" not in (s["json"] or {}).get("text", "") for s in sent[base:])
+
+
 def test_background_jobs_recorded(client, auth):
     client.post("/assets/recompute-risk", headers=auth)
     jobs = client.get("/config/jobs", headers=auth).json()

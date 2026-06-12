@@ -40,6 +40,11 @@ def notify(conn, *, type: str, title: str, severity: str = "info",
         publish("notification", {"type": type, "severity": severity, "title": title, "link": link})
     except Exception:  # streaming must never break a write path
         pass
+    try:  # per-user Slack routing (fire-and-forget; same guarantee)
+        from dashboard_api.webhooks import notify_slack_users
+        notify_slack_users(severity=severity, title=title, detail=detail, link=link)
+    except Exception:
+        pass
 
 
 @router.get("/notifications")

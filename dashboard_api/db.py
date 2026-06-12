@@ -691,6 +691,10 @@ _MIGRATIONS = [
     ("notifications", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("saved_views", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("report_schedules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    # Per-user Slack notification routing (personal incoming-webhook URL +
+    # the minimum severity that should reach it).
+    ("users", "slack_webhook", "TEXT"),
+    ("users", "slack_min_severity", "TEXT NOT NULL DEFAULT 'high'"),
 ]
 
 

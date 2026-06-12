@@ -65,6 +65,55 @@ def _deliver(event: str, payload: dict, subs: list[dict]):
             logger.warning("Webhook delivery failed: %s -> %s", event, sub["url"])
 
 
+# ── Per-user Slack routing ────────────────────────────────────────────────────────
+# Users register a personal Slack incoming-webhook URL (+ a minimum severity);
+# every platform notification at-or-above that severity is mirrored to it.
+
+_SEV_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+def deliver_slack(url: str, text: str) -> bool:
+    """POST a Slack-format message ({"text": ...}); True on 2xx/3xx."""
+    try:
+        r = httpx.post(url, json={"text": text}, timeout=_TIMEOUT)
+        return r.status_code < 400
+    except httpx.HTTPError:
+        return False
+
+
+def notify_slack_users(*, severity: str, title: str,
+                       detail: str | None = None, link: str | None = None):
+    """Fan a platform notification out to every active user whose personal
+    Slack webhook is configured and whose threshold the severity meets.
+    Fire-and-forget (same model as dispatch); never raises."""
+    def _fan():
+        try:
+            with get_conn() as conn:
+                rows = conn.execute(
+                    "SELECT email, slack_webhook, slack_min_severity FROM users "
+                    "WHERE slack_webhook IS NOT NULL AND slack_webhook != '' "
+                    "AND status='active'"
+                ).fetchall()
+        except Exception:
+            logger.exception("Slack subscriber lookup failed")
+            return
+        rank = _SEV_RANK.get(severity, 0)
+        text = f"*[{severity.upper()}] {title}*"
+        if detail:
+            text += f"\n{detail}"
+        if link:
+            text += f"\n{link}"
+        for r in rows:
+            if rank >= _SEV_RANK.get(r["slack_min_severity"] or "high", 3):
+                if not deliver_slack(r["slack_webhook"], text):
+                    logger.warning("Slack notification delivery failed for %s", r["email"])
+
+    if SYNC_DELIVERY:
+        _fan()
+    else:
+        threading.Thread(target=_fan, daemon=True).start()
+
+
 def dispatch(event: str, payload: dict):
     """Deliver `event` to every active subscriber. Never raises."""
     # Mirror to live SSE clients (in-process, independent of external webhooks).

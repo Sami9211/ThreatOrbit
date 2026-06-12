@@ -667,6 +667,12 @@ export const runReportSchedule = (id: string) =>
 export const deleteReportSchedule = (id: string) =>
   api<void>(`/report-schedules/${id}`, { method: 'DELETE' })
 
+export interface SlackRouting { configured: boolean; webhookUrl: string | null; minSeverity: string }
+export const fetchMySlackRouting = () => api<SlackRouting>('/auth/me/slack')
+export const setMySlackRouting = (webhook_url: string | null, min_severity: string) =>
+  api<SlackRouting>('/auth/me/slack', { method: 'PUT', body: JSON.stringify({ webhook_url, min_severity }) })
+export const testMySlackRouting = () => api<{ delivered: boolean }>('/auth/me/slack/test', { method: 'POST' })
+
 export interface SavedView { id: string; section: string; name: string; filters: Record<string, string>; created_at: string }
 export const fetchSavedViews = (section: string) => api<SavedView[]>(`/saved-views?section=${section}`)
 export const createSavedView = (section: string, name: string, filters: Record<string, string>) =>

@@ -31,8 +31,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 - [x] **Notifications centre** — DONE: live notification bell (real
       `/notifications` feed from critical alerts, escalated cases, credential
       leaks, scheduled reports), mark-read, deep-link on click. An SMTP email
-      channel now backs report delivery (see Scheduled reports); per-user
-      Slack routing remains a thin add on the webhook engine.
+      channel backs report delivery (see Scheduled reports), and **per-user
+      Slack routing is live**: each user registers a personal incoming-webhook
+      URL + severity floor (`/auth/me/slack`, UI in Config → Notifications);
+      `notify()` mirrors qualifying notifications there, with an honest
+      test-send.
 - [x] **RBAC depth** — DONE (see CHANGELOG): a capability matrix (roles →
       named per-section/per-action permissions), a `require_perm` dependency
       that audits denials, applied so viewers are read-only and analysts hold
@@ -215,6 +218,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Per-user Slack routing (Phase 0 closed)** — each user can
+  register a personal Slack incoming-webhook URL with a minimum-severity
+  floor (GET/PUT `/auth/me/slack` + an honest `/test` send; panel in Config →
+  Notifications). Every platform notification at/above the floor is mirrored
+  to the user's Slack on the webhook engine's fire-and-forget thread. The URL
+  is treated as a quasi-secret — scrubbed from `/auth/me` and all user
+  payloads, visible only to its owner via the dedicated endpoint. Tests cover
+  the round-trip, threshold filtering, clearing, and the no-leak guarantee.
 - **2026-06-12 · Saved views in the page UIs (Phase 0 closed)** — a shared
   `SavedViewsButton` component (list / save-current-filters / apply / delete,
   backed by the per-user `/saved-views` API) now sits in the SIEM queue

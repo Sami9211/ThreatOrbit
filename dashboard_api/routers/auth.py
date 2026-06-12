@@ -149,6 +149,57 @@ def me(user: dict = Depends(current_user)):
     return user
 
 
+# ── Per-user Slack notification routing ─────────────────────────────────────────
+
+class SlackPrefs(BaseModel):
+    webhook_url: str | None = None  # null/empty clears the routing
+    min_severity: str = "high"
+
+
+@router.get("/me/slack")
+def my_slack_routing(user: dict = Depends(current_user)):
+    """The caller's personal Slack routing (the URL is only ever shown to its
+    owner — it is scrubbed from every other user payload)."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT slack_webhook, slack_min_severity FROM users WHERE id=?",
+                           (user["id"],)).fetchone()
+    return {"configured": bool(row["slack_webhook"]),
+            "webhookUrl": row["slack_webhook"],
+            "minSeverity": row["slack_min_severity"] or "high"}
+
+
+@router.put("/me/slack")
+def set_slack_routing(body: SlackPrefs, user: dict = Depends(current_user)):
+    from dashboard_api.webhooks import _SEV_RANK
+    if body.min_severity not in _SEV_RANK:
+        raise HTTPException(status_code=400,
+                            detail=f"min_severity must be one of {sorted(_SEV_RANK)}")
+    url = (body.webhook_url or "").strip() or None
+    if url and not url.startswith(("https://", "http://")):
+        raise HTTPException(status_code=400, detail="webhook_url must be an http(s) URL")
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET slack_webhook=?, slack_min_severity=? WHERE id=?",
+                     (url, body.min_severity, user["id"]))
+        audit(conn, user["email"], "auth.slack_routing",
+              user["id"], "configured" if url else "cleared")
+        conn.commit()
+    return {"configured": bool(url), "webhookUrl": url, "minSeverity": body.min_severity}
+
+
+@router.post("/me/slack/test")
+def test_slack_routing(user: dict = Depends(current_user)):
+    """Send a test message to the caller's configured Slack webhook and report
+    the real outcome (no pretend success)."""
+    from dashboard_api.webhooks import deliver_slack
+    with get_conn() as conn:
+        row = conn.execute("SELECT slack_webhook FROM users WHERE id=?", (user["id"],)).fetchone()
+    if not row["slack_webhook"]:
+        raise HTTPException(status_code=400, detail="No Slack webhook configured")
+    ok = deliver_slack(row["slack_webhook"],
+                       f"ThreatOrbit test notification for {user['email']} — routing works.")
+    return {"delivered": ok}
+
+
 @router.get("/permissions")
 def my_permissions(user: dict = Depends(current_user)):
     """The caller's effective capabilities — the UI uses this to hide controls

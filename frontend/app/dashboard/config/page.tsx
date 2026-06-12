@@ -17,12 +17,78 @@ import {
   fetchCurrentOrg, type Org,
   fetchLicense, activateLicense, type LicenseStatus,
   fetchDatabaseInfo, type DatabaseInfo,
+  fetchMySlackRouting, setMySlackRouting, testMySlackRouting,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useDashboardTheme, THEMES } from '@/lib/useDashboardTheme'
 import { useCursorEffect } from '@/lib/useCursorEffect'
+
+/* ── Personal Slack routing (per-user, backed by /auth/me/slack) ── */
+function MySlackRouting() {
+  const [url, setUrl] = useState('')
+  const [minSev, setMinSev] = useState('high')
+  const [configured, setConfigured] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    fetchMySlackRouting()
+      .then((r) => { setUrl(r.webhookUrl ?? ''); setMinSev(r.minSeverity); setConfigured(r.configured) })
+      .catch(() => {})
+  }, [])
+
+  function save() {
+    setBusy(true); setMsg(null)
+    setMySlackRouting(url.trim() || null, minSev)
+      .then((r) => { setConfigured(r.configured); setMsg(r.configured ? 'Saved — notifications will be mirrored to your Slack.' : 'Cleared — no Slack routing for your account.') })
+      .catch(() => setMsg('Could not save (is the URL a valid http(s) webhook?).'))
+      .finally(() => setBusy(false))
+  }
+
+  function testSend() {
+    setBusy(true); setMsg(null)
+    testMySlackRouting()
+      .then((r) => setMsg(r.delivered ? 'Test message delivered ✓' : 'Delivery failed — check the webhook URL.'))
+      .catch(() => setMsg('No webhook configured yet — save one first.'))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="mb-5 p-4 rounded-xl border border-violet/20 bg-violet/5">
+      <p className="text-xs font-semibold text-white">My Slack routing</p>
+      <p className="text-[10px] text-ink-600 mt-0.5 mb-3">
+        Personal to your account: platform notifications at or above your severity floor are
+        mirrored to this incoming-webhook URL. Other users configure their own.
+      </p>
+      <div className="grid sm:grid-cols-[1fr_140px_auto_auto] gap-2 items-end">
+        <div>
+          <label className="block text-[10px] font-medium text-ink-400 mb-1">Incoming webhook URL</label>
+          <input value={url} onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://hooks.slack.com/services/…"
+            className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-violet/40 placeholder-ink-600" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-medium text-ink-400 mb-1">Minimum severity</label>
+          <select value={minSev} onChange={(e) => setMinSev(e.target.value)}
+            className="w-full px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-violet/40">
+            {['info', 'low', 'medium', 'high', 'critical'].map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <button onClick={save} disabled={busy}
+          className="px-3 py-2 rounded-lg text-xs font-medium bg-violet/15 border border-violet/30 text-violet hover:bg-violet/20 disabled:opacity-50 transition-colors">
+          Save
+        </button>
+        <button onClick={testSend} disabled={busy || !configured}
+          className="px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white disabled:opacity-40 transition-colors">
+          Send test
+        </button>
+      </div>
+      {msg && <p className="text-[11px] text-ink-400 mt-2">{msg}</p>}
+    </div>
+  )
+}
 
 /* ── Shared input ────────────────────────────────────────────────── */
 function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
@@ -1105,6 +1171,7 @@ export default function ConfigPage() {
 
           {tab === 'alerts' && (
             <Section title="Notification Settings" icon={Bell} color="#FF4D6D">
+              <MySlackRouting />
               <div className="space-y-4 mb-5">
                 <Field label="Alert Email" type="email" value={settings.alert_email ?? ''} onChange={setSetting('alert_email')} placeholder="soc-team@yourcompany.com" />
                 <Field label="Slack Webhook URL" value={settings.slack_webhook_url ?? ''} onChange={setSetting('slack_webhook_url')} placeholder="https://hooks.slack.com/services/…" hint="Receives critical and high severity alerts" />
