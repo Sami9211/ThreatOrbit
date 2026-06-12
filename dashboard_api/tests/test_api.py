@@ -2472,6 +2472,26 @@ def test_rbac_viewer_is_read_only(client, auth):
     client.delete(f"/users/{analyst.json()['id']}", headers=auth)
 
 
+def test_geo_distribution_is_observed(client, auth):
+    """/overview/geo counts come from the platform's own alert store (engine
+    telemetry carries source country → alerts.src_country), not constants."""
+    from dashboard_api.engine import seed_builtin_rules
+    seed_builtin_rules()
+    client.post("/config/engine", json={"generate": 15}, headers=auth)
+    geo = client.get("/overview/geo", headers=auth).json()
+    assert geo["totalGeolocated"] > 0
+    assert geo["countries"], "engine brute-force/web events carry a country"
+    top = geo["countries"][0]
+    assert {"country", "observed", "critical", "high", "last_seen"} <= set(top)
+    # ordered by observed desc, and the rows sum into the total
+    obs = [c["observed"] for c in geo["countries"]]
+    assert obs == sorted(obs, reverse=True)
+    assert sum(obs) <= geo["totalGeolocated"]
+    # the engine-produced alerts genuinely carry src_country
+    rows = client.get("/siem/alerts?limit=200", headers=auth).json()["items"]
+    assert any(a.get("src_country") for a in rows)
+
+
 def test_event_stream_broker_units():
     """The pub/sub broker fans messages to every subscriber and drops dead ones."""
     import queue

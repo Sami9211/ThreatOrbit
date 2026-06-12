@@ -41,7 +41,7 @@ def _now() -> str:
 def _insert_alert(conn, *, title, severity, risk, rule_name, src_ip=None, username=None,
                   hostname=None, mitre_tech_id=None, mitre_tech=None, mitre_tactic=None,
                   mitre_tactic_id=None, description=None, raw_log=None, event_count=1,
-                  ti_hits=0) -> str:
+                  ti_hits=0, src_country=None) -> str:
     aid = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,rule_id,"
@@ -49,11 +49,11 @@ def _insert_alert(conn, *, title, severity, risk, rule_name, src_ip=None, userna
         "src_port,src_hostname,src_asn,dest_ip,dest_port,dest_service,username,hostname,"
         "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,bytes_out,"
         "detect_latency_sec,ack_latency_sec,respond_latency_sec) "
-        "VALUES (?,?,?,?,'new','undetermined','',?,'R-ENGINE',?,?,?,?,?,?,NULL,NULL,NULL,NULL,"
-        "NULL,NULL,NULL,?,NULL,NULL,NULL,NULL,?,?,?,?,0,?,NULL,NULL)",
+        "VALUES (?,?,?,?,'new','undetermined','',?,'R-ENGINE',?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,"
+        "NULL,NULL,?,?,NULL,NULL,NULL,?,?,?,?,0,?,NULL,NULL)",
         (aid, _now(), title, severity, risk, rule_name,
-         mitre_tactic, mitre_tactic_id, mitre_tech, mitre_tech_id, src_ip, username,
-         description, raw_log, event_count, ti_hits, max(0, 60)),
+         mitre_tactic, mitre_tactic_id, mitre_tech, mitre_tech_id, src_ip, src_country,
+         username, hostname, description, raw_log, event_count, ti_hits, max(0, 60)),
     )
     return aid
 

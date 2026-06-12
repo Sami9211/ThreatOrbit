@@ -2,7 +2,17 @@
 
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { fetchLiveFeed, type LiveFeedItem } from '@/lib/api'
+import { fetchLiveFeed, fetchGeo, type LiveFeedItem, type GeoCountry } from '@/lib/api'
+
+/* Country → continent-region id, for rolling OBSERVED alert origins (from the
+   platform's own /overview/geo measurement) up into the region hover stats. */
+const COUNTRY_REGION: Record<string, string> = {
+  'Russia': 'eu', 'China': 'as', 'North Korea': 'as', 'Vietnam': 'as', 'Japan': 'as',
+  'South Korea': 'as', 'India': 'as', 'Singapore': 'as', 'Iran': 'me', 'UAE': 'me',
+  'United States': 'na', 'Brazil': 'sa', 'Netherlands': 'eu', 'Romania': 'eu',
+  'United Kingdom': 'eu', 'Germany': 'eu', 'Ukraine': 'eu', 'Nigeria': 'af',
+  'Egypt': 'af', 'Australia': 'oc',
+}
 
 const W = 360
 const H = 180
@@ -187,6 +197,7 @@ function CountryTooltip({
   containerH,
   pinned,
   onClose,
+  observed,
 }: {
   city: string
   screenX: number
@@ -195,6 +206,7 @@ function CountryTooltip({
   containerH: number
   pinned?: boolean
   onClose?: () => void
+  observed?: number | null
 }) {
   const data = COUNTRY_STATS[city]
   if (!data) return null
@@ -227,7 +239,10 @@ function CountryTooltip({
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-white">{data.country}</p>
             <p style={{ color: data.color }} className="text-[10px] font-mono font-bold">
-              {data.attacks.toLocaleString()} attacks · origin
+              {observed != null
+                ? (observed > 0 ? `${observed.toLocaleString()} observed alerts · origin`
+                                : 'no activity observed from here')
+                : 'threat landscape reference'}
             </p>
           </div>
           {pinned && (
@@ -243,7 +258,7 @@ function CountryTooltip({
 
         {/* Top attack types */}
         <div className="mb-2">
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Top Attack Types</p>
+          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Typical Attack Types · reference</p>
           <div className="flex flex-wrap gap-1">
             {data.topTypes.slice(0, 3).map(t => (
               <span key={t} className="text-[9px] px-1.5 py-0.5 rounded"
@@ -256,13 +271,13 @@ function CountryTooltip({
 
         {/* Primary targets */}
         <div className="mb-2">
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Primary Targets</p>
+          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Primary Targets · reference</p>
           <p className="text-[10px] text-slate-300">{data.topTargets.join(', ')}</p>
         </div>
 
         {/* Known actors */}
         <div>
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Known Actors</p>
+          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Known Actors · reference</p>
           <p className="text-[10px] text-slate-300">{data.knownActors.join(' · ')}</p>
         </div>
       </div>
@@ -282,7 +297,6 @@ const TOP_COUNTRIES = (() => {
   }
   return list.sort((a, b) => b.attacks - a.attacks).slice(0, 8)
 })()
-const TOP_MAX = Math.max(...TOP_COUNTRIES.map((c) => c.attacks))
 
 export default function WorldMap() {
   const [view, setView] = useState<'continents' | 'countries'>('continents')
@@ -306,7 +320,35 @@ export default function WorldMap() {
 
   useEffect(() => {
     fetchLiveFeed(20).then(setFeed).catch(() => {})
+    fetchGeo(20).then((g) => setGeo(g.countries)).catch(() => {})
   }, [])
+
+  /* ── Real observed origins (the platform's own measurement) ────────
+     /overview/geo aggregates alerts.src_country. When present these REPLACE
+     the static reference tallies: leaderboard, region hover counts, and the
+     country tooltip's count all show what THIS deployment actually observed. */
+  const [geo, setGeo] = useState<GeoCountry[]>([])
+  const geoByCountry = useMemo(
+    () => Object.fromEntries(geo.map((g) => [g.country, g])), [geo])
+  const regionObserved = useMemo(() => {
+    if (geo.length === 0) return null
+    const acc: Record<string, number> = {}
+    for (const g of geo) {
+      const rid = COUNTRY_REGION[g.country]
+      if (rid) acc[rid] = (acc[rid] ?? 0) + g.observed
+    }
+    return acc
+  }, [geo])
+  const topCountries = useMemo(() => {
+    if (geo.length === 0) return TOP_COUNTRIES.map((c) => ({ ...c, live: false }))
+    return geo.slice(0, 8).map((g) => {
+      const ref = Object.values(COUNTRY_STATS).find((c) => c.country === g.country)
+      return { country: g.country, flag: ref?.flag ?? '🌐', attacks: g.observed,
+               color: ref?.color ?? '#7A3CFF', live: true }
+    })
+  }, [geo])
+  const topMax = Math.max(1, ...topCountries.map((c) => c.attacks))
+  const fmtCount = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 
   useEffect(() => {
     const launch = () => {
@@ -558,8 +600,15 @@ export default function WorldMap() {
           const cy = 90 - (hoveredRegion.latRange[0] + hoveredRegion.latRange[1]) / 2
           const tx = Math.max(60, Math.min(W - 60, cx))
           const ty = Math.max(24, Math.min(H - 22, cy - 18))
-          const barW = 92 * (hoveredRegion.count / MAX_COUNT)
-          const rank = SORTED_BY_COUNT.findIndex((r) => r.id === hoveredRegion.id) + 1
+          // Prefer the real observed roll-up; static reference only when no data.
+          const liveRegion = regionObserved !== null
+          const count = liveRegion ? (regionObserved[hoveredRegion.id] ?? 0) : hoveredRegion.count
+          const liveMax = liveRegion ? Math.max(1, ...Object.values(regionObserved)) : MAX_COUNT
+          const barW = 92 * (count / liveMax)
+          const rank = liveRegion
+            ? [...REGION_STATS].sort((a, b) => (regionObserved[b.id] ?? 0) - (regionObserved[a.id] ?? 0))
+                .findIndex((r) => r.id === hoveredRegion.id) + 1
+            : SORTED_BY_COUNT.findIndex((r) => r.id === hoveredRegion.id) + 1
           return (
             <g style={{ pointerEvents: 'none' }}>
               <rect x={tx - 59} y={ty - 19} width={118} height={44} rx={5} fill="#000" opacity={0.4} />
@@ -571,7 +620,9 @@ export default function WorldMap() {
               </text>
               <text x={tx} y={ty + 4} textAnchor="middle" fill={hoveredRegion.color}
                 fontSize={5.5} fontFamily="system-ui,sans-serif">
-                {hoveredRegion.count.toLocaleString()} attacks · #{rank} most targeted
+                {liveRegion
+                  ? `${count.toLocaleString()} observed alerts · #${rank} origin`
+                  : `${count.toLocaleString()} attacks · #${rank} most targeted`}
               </text>
               <rect x={tx - 46} y={ty + 9.5} width={92} height={2.5} rx={1.25} fill="rgba(255,255,255,0.1)" />
               <rect x={tx - 46} y={ty + 9.5} width={barW} height={2.5} rx={1.25}
@@ -591,6 +642,9 @@ export default function WorldMap() {
           containerH={containerRef.current?.clientHeight ?? 220}
           pinned={!!pinnedCity}
           onClose={() => { setPinnedCity(null); setHoveredCity(null) }}
+          observed={geo.length
+            ? (geoByCountry[COUNTRY_STATS[(pinnedCity ?? hoveredCity)!].country]?.observed ?? 0)
+            : null}
         />
       )}
 
@@ -651,9 +705,11 @@ export default function WorldMap() {
       {/* Top-countries leaderboard */}
       {view === 'countries' && (
         <div className="absolute top-12 right-2.5 w-52 max-w-[60%] rounded-xl border border-white/10 bg-surface/95 backdrop-blur-md p-3 z-10 shadow-2xl">
-          <p className="text-[9px] uppercase tracking-widest text-ink-500 font-semibold mb-2">Top attack origins</p>
+          <p className="text-[9px] uppercase tracking-widest text-ink-500 font-semibold mb-2">
+            {geo.length > 0 ? 'Observed attack origins' : 'Top attack origins'}
+          </p>
           <div className="space-y-2">
-            {TOP_COUNTRIES.map((c, i) => (
+            {topCountries.map((c, i) => (
               <div key={c.country} className="flex items-center gap-2">
                 <span className="text-[10px] text-ink-600 w-3 shrink-0">{i + 1}</span>
                 <span className="text-sm shrink-0">{c.flag}</span>
@@ -661,16 +717,19 @@ export default function WorldMap() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-ink-200 truncate">{c.country}</span>
                     <span className="text-[10px] font-mono shrink-0" style={{ color: c.color }}>
-                      {(c.attacks / 1000).toFixed(1)}k
+                      {fmtCount(c.attacks)}
                     </span>
                   </div>
                   <div className="h-1 mt-0.5 rounded-full bg-white/8 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${(c.attacks / TOP_MAX) * 100}%`, background: c.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${(c.attacks / topMax) * 100}%`, background: c.color }} />
                   </div>
                 </div>
               </div>
             ))}
           </div>
+          {geo.length > 0 && (
+            <p className="text-[8px] text-ink-700 mt-2">From this deployment&apos;s alert telemetry</p>
+          )}
         </div>
       )}
 

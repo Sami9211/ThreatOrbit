@@ -109,6 +109,26 @@ def top_actors(limit: int = 5):
     return rows_to_dicts(rows)
 
 
+@router.get("/geo")
+def geo_distribution(limit: int = 20):
+    """Observed attack origins, by country, from the platform's OWN alert
+    store (src_country on alerts) — real measurement, not global statistics.
+    Includes per-country severity mix and the latest observation time."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT src_country AS country, COUNT(*) AS observed, "
+            "SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) AS critical, "
+            "SUM(CASE WHEN severity='high' THEN 1 ELSE 0 END) AS high, "
+            "MAX(ts) AS last_seen "
+            "FROM alerts WHERE src_country IS NOT NULL AND src_country != '' "
+            "GROUP BY src_country ORDER BY observed DESC LIMIT ?", (limit,)
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM alerts WHERE src_country IS NOT NULL AND src_country != ''"
+        ).fetchone()["n"]
+    return {"countries": rows_to_dicts(rows), "totalGeolocated": total}
+
+
 @router.get("/live-feed")
 def live_feed(limit: int = 10):
     """Latest IOCs presented as a live threat feed."""

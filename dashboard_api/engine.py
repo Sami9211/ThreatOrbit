@@ -87,6 +87,7 @@ def _scn_brute_force(rng):
     return ({
         "category": "auth", "event_type": "failed_login", "src_ip": src,
         "username": user, "hostname": host, "action": "auth_fail",
+        "country": rng.choice(_COUNTRIES),
         "severity_hint": "high", "mitre_tech_id": "T1110",
         "raw": f"sshd[{rng.randint(1000,9999)}]: Failed password for {user} from {src} port {rng.randint(1024,65535)}",
     }, [{"type": "ip", "value": src, "threat_type": "brute-force-source", "confidence": 75}])
@@ -119,7 +120,8 @@ def _scn_web_attack(rng):
     action = rng.choice(["sqli", "lfi", "webshell"])
     return ({
         "category": "web", "event_type": "web_request", "src_ip": src, "hostname": host,
-        "action": action, "severity_hint": "medium", "mitre_tech_id": "T1190",
+        "action": action, "country": rng.choice(_COUNTRIES),
+        "severity_hint": "medium", "mitre_tech_id": "T1190",
         "raw": f'nginx: {src} "GET /index.php?id=1\' OR 1=1-- HTTP/1.1" 200 ({action})',
     }, [{"type": "ip", "value": src, "threat_type": "web-attack", "confidence": 65}])
 
@@ -311,7 +313,8 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -
             _insert_alert(
                 conn, title=title, severity=sev, risk=_RISK.get(sev, 50),
                 rule_name=rule["name"], src_ip=ev.get("src_ip"), username=ev.get("username"),
-                hostname=ev.get("hostname"), mitre_tech_id=rule.get("mitre_tech_id"),
+                hostname=ev.get("hostname"), src_country=ev.get("country"),
+                mitre_tech_id=rule.get("mitre_tech_id"),
                 mitre_tech=rule.get("mitre_tech"), mitre_tactic=rule.get("mitre_tactic"),
                 mitre_tactic_id=rule.get("mitre_tactic_id"),
                 description=f"Rule '{rule['name']}' matched. {ev.get('raw', '')}",
