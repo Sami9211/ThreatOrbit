@@ -75,6 +75,20 @@ columns), applied automatically at boot. That gives a simple contract:
 - Run the test suite against a copy when in doubt:
   `python -m pytest dashboard_api/tests -q`.
 
+## Observability
+
+- **Metrics:** `GET /metrics` (Prometheus text format) — request
+  rate/latency by route template + status, domain counters (engine ticks &
+  failures, engine/ingested events, alerts, unhandled errors), and core-table
+  row-count gauges. Open by default for private-network scrapers; set
+  `DASHBOARD_METRICS_TOKEN` to require `Authorization: Bearer <token>`.
+- **Structured logs:** `DASHBOARD_LOG_FORMAT=json` switches all API logs to
+  one-line JSON (ts/level/logger/message/exception) for Loki/CloudWatch/
+  Datadog shipping. Unset = human-readable.
+- **Error tracking:** set `SENTRY_DSN` and `pip install sentry-sdk` to
+  forward unhandled exceptions to Sentry. With the DSN set but the SDK
+  missing, the platform logs that tracking is off — it never pretends.
+
 ## Key management
 
 | Env var | Purpose | Rotation effect |

@@ -283,9 +283,12 @@ that buying companies require. Realistic positioning today:
 - [ ] **Deployment hardening guide** — TLS termination + reverse-proxy
       reference config, secure cookie/headers/CSP on the frontend, non-root
       containers, resource limits in compose; pin image digests.
-- [ ] **Observability baseline** — structured JSON logs, a Prometheus
-      `/metrics` endpoint (request rates/latency, engine tick health, ingest
-      EPS, queue depths), and an error-tracking hook (e.g. Sentry DSN env).
+- [x] **Observability baseline** — DONE (see CHANGELOG): Prometheus
+      `/metrics` (request rate/latency by route template, engine tick
+      health/failures, ingest counters, table-row gauges; optional bearer
+      gating via `DASHBOARD_METRICS_TOKEN`), structured JSON logs
+      (`DASHBOARD_LOG_FORMAT=json`), and a Sentry hook (`SENTRY_DSN`,
+      honest about a missing SDK). Documented in docs/OPERATIONS.md.
 - [ ] **Security pass** — dependency audit in CI (pip-audit / npm audit),
       a third-party pentest before first sale, and a documented
       vulnerability-disclosure + patch-release process for the product itself.
@@ -360,6 +363,19 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-12 · Observability baseline (Tier 1)** —
+  `dashboard_api/observability.py`, stdlib-only: a pure-ASGI middleware
+  records every request under its resolved route TEMPLATE (so
+  `/siem/alerts/{alert_id}` is one series, ids never leak into label
+  cardinality) with latency sums; engine loop and ingest feed domain
+  counters (ticks, tick failures, events, alerts, unhandled errors);
+  `/metrics` renders Prometheus text exposition plus on-scrape row-count
+  gauges for core tables, optionally gated by `DASHBOARD_METRICS_TOKEN`.
+  `DASHBOARD_LOG_FORMAT=json` flips root logging to one-line JSON records;
+  `SENTRY_DSN` initialises sentry-sdk when installed and says so when it
+  isn't. Documented in docs/OPERATIONS.md; tests cover the exposition
+  content, template aggregation, token gating, and the JSON formatter
+  (142 passed).
 - **2026-06-12 · Backup/restore/upgrade (Tier 1)** — `dashboard_api/ops.py`
   takes transactionally consistent SQLite snapshots with the online-backup
   API (never a raw file copy under WAL) and integrity-verifies them

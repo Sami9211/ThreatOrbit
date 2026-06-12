@@ -688,6 +688,50 @@ def test_webhook_failure_marks_failing(client, auth, monkeypatch):
     client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
 
 
+def test_observability_metrics(client, auth, monkeypatch):
+    """Tier-1 observability: /metrics renders Prometheus text exposition with
+    request series under route TEMPLATES (not per-id paths), domain counters,
+    and live row-count gauges; a token gates it when configured; the JSON log
+    formatter emits parseable one-line records."""
+    import json as _json
+    import logging as _logging
+    from dashboard_api import observability as obs
+
+    # generate request traffic incl. a parameterised route
+    client.get("/siem/alerts?limit=1", headers=auth)
+    aid = client.get("/siem/alerts?limit=1", headers=auth).json()["items"][0]["id"]
+    client.get(f"/siem/alerts/{aid}", headers=auth)
+
+    body = client.get("/metrics").text
+    assert "threatorbit_uptime_seconds" in body
+    assert 'threatorbit_requests_total{method="GET",path="/siem/alerts",status="200"}' in body
+    # the detail request aggregates under its template, not the raw id path
+    assert 'path="/siem/alerts/{alert_id}"' in body
+    assert aid not in body
+    assert 'threatorbit_table_rows{table="alerts"}' in body
+    assert "threatorbit_request_seconds_sum" in body
+
+    # domain counters surface once bumped
+    obs.inc("engine_ticks")
+    assert 'threatorbit_domain_total{counter="engine_ticks"}' in client.get("/metrics").text
+
+    # optional bearer gating
+    monkeypatch.setenv("DASHBOARD_METRICS_TOKEN", "scrape-secret")
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"Authorization": "Bearer scrape-secret"}).status_code == 200
+    monkeypatch.delenv("DASHBOARD_METRICS_TOKEN")
+
+    # structured log formatter: one parseable JSON object per record
+    rec = _logging.LogRecord("dashboard_api.test", _logging.WARNING, __file__, 1,
+                             "engine tick %s", ("ok",), None)
+    line = obs.JsonFormatter().format(rec)
+    parsed = _json.loads(line)
+    from datetime import datetime as _dt
+    assert parsed["level"] == "WARNING" and parsed["message"] == "engine tick ok"
+    assert parsed["logger"] == "dashboard_api.test"
+    assert _dt.fromisoformat(parsed["ts"])  # a real, parseable UTC timestamp
+
+
 def test_backup_snapshot(client, auth, tmp_path):
     """Tier-1 ops: the backup endpoint streams a consistent, integrity-checked
     SQLite snapshot; the CLI helpers verify it; viewers are denied."""

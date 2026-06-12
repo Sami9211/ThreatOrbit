@@ -236,6 +236,12 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector")
         # threat-intel matching over the just-ingested events
         ti = match_threat_intel(conn)
         conn.commit()
+    try:  # observability counters (never block ingest)
+        from dashboard_api import observability
+        observability.inc("ingested_events", parsed)
+        observability.inc("ingest_alerts", det["alerts"] + ti)
+    except Exception:
+        pass
     return {"ingested": len(lines), "parsed": parsed,
             "alerts": det["alerts"] + ti, "tiMatches": ti, "source": source}
 

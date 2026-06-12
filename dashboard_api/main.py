@@ -24,8 +24,14 @@ from dashboard_api.routers import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("dashboard_api")
 
+from dashboard_api import observability  # noqa: E402 (needs logging configured first)
+
+observability.configure_logging()
+observability.init_error_tracking()
+
 app = FastAPI(title="ThreatOrbit Dashboard API", version="1.0.0")
 
+app.add_middleware(observability.MetricsMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in CORS_ORIGINS.split(",")],
@@ -48,7 +54,23 @@ async def validation_exc(request: Request, exc: RequestValidationError):
 @app.exception_handler(Exception)
 async def global_exc(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    observability.inc("errors")
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics(request: Request):
+    """Prometheus text exposition. Open by default (scrapers live on private
+    networks); set DASHBOARD_METRICS_TOKEN to require a bearer token."""
+    import os
+    from fastapi.responses import PlainTextResponse
+    token = os.environ.get("DASHBOARD_METRICS_TOKEN", "")
+    if token:
+        supplied = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+        if supplied != token:
+            return JSONResponse(status_code=401, content={"error": "metrics token required"})
+    return PlainTextResponse(observability.render_metrics(),
+                             media_type="text/plain; version=0.0.4")
 
 
 def _connector_scheduler():
@@ -94,8 +116,12 @@ def _engine_loop():
                 s = process_tick(max_events=ENGINE_EVENTS_PER_TICK)
                 logger.info("Engine tick: %d events → %d alerts, %d IOCs, %d dark-web, %d cases",
                             s["events"], s["alerts"], s["iocs"], s["darkWeb"], s["casesEscalated"])
+                observability.inc("engine_ticks")
+                observability.inc("engine_events", s["events"])
+                observability.inc("engine_alerts", s["alerts"])
         except Exception:
             logger.exception("Engine tick failed")
+            observability.inc("engine_tick_failures")
         time.sleep(ENGINE_TICK_SECONDS)
 
 
