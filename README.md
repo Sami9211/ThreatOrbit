@@ -1,8 +1,46 @@
 # ThreatOrbit
 
-**Threat Intelligence Ingestion + Log Anomaly Detection + SOC Dashboard + STIX / OpenCTI Integration**
+**A unified Super-SOC: SIEM + SOAR + CTI + Asset/Vuln + Dark-Web monitoring, with STIX / OpenCTI integration.**
 
-ThreatOrbit is a cybersecurity platform made of three backend services and a Next.js frontend (marketing site + full operator dashboard):
+ThreatOrbit takes the four disciplines a security team normally runs in four
+separate tools - threat intelligence, log/anomaly detection, incident response,
+and exposure management - and converges them into one operation that shares a
+single data pipeline, one audit trail, and one operator console. It is built to
+run anywhere from a single analyst's laptop to a containerized deployment for a
+mid-size team, with the same code path either way.
+
+### What's in the box
+
+* A working **detection → correlation → response** pipeline (not a mock UI):
+  events become SIEM alerts, alerts that share a pivot auto-escalate into SOAR
+  cases, cases drive playbooks, and indicators flow back into CTI.
+* **Real OSINT** ingestion (abuse.ch, NVD, RSS, OTX, TAXII, custom connectors)
+  with trust scoring, dedup, VirusTotal enrichment, and STIX 2.1 / OpenCTI.
+* A full **operator dashboard** (26 pages) - SIEM, SOAR, CTI, Assets, Dark Web,
+  plus a security-bounded **AI assistant**, an 11-theme customizable
+  **Appearance** system, per-user **TOTP MFA**, optional **multi-tenancy**,
+  Prometheus **observability**, and a complete **audit trail**.
+* Honest data: every number traces back to the API. The only synthesized input
+  is the raw environment event stream a SIEM can't see until your own systems
+  forward logs to it - and genuine logs flow through the identical pipeline.
+
+### Who it's for
+
+Individual analysts, blue teams, and small-to-mid SOCs that want a deployable,
+inspectable CTI + detection + response workflow - and a clean console on top of
+it - without standing up a heavyweight SIEM and a separate SOAR and a separate
+TIP. The three backend services run independently or together, locally or in
+containers. See [§13 Intended users](#13-intended-users) for the honest scope.
+
+### Table of contents
+
+| Getting started | Using it | Reference | Direction |
+| --- | --- | --- | --- |
+| [Architecture](#1-architecture-at-a-glance) · [Structure](#2-project-structure) · [Requirements](#3-requirements) · [Quick start](#4-quick-start--pick-the-path-for-your-machine) | [How the engine works](#2a-how-the-threatorbit-engine-works-the-real-data-pipeline) · [By role & task](#2b-using-the-dashboard--by-role-and-by-task) · [Real vs demo data](#4a-real-data-vs-demo-mode) | [Auth](#5-authentication-two-tier-api-keys) · [API reference](#10-api-reference) · [Testing](#11-testing) · [Troubleshooting](#12-troubleshooting) | [Roadmap & direction](#14-roadmap--direction) · [Limitations](#15-limitations--honest-caveats) · [Contributing](#16-contributing--extending) · [FAQ](#faq) |
+
+---
+
+ThreatOrbit is made of three backend services and a Next.js frontend (marketing site + full operator dashboard):
 
 * **Threat API** (`threat_api`, Flask, port 8000)
   Ingests external threat feeds (OTX, abuse.ch, RSS, dark-web OSINT, social OSINT) in parallel, normalizes and trust-scores indicators, enriches with VirusTotal, exports STIX 2.1, and reads from / pushes to OpenCTI.
@@ -11,7 +49,7 @@ ThreatOrbit is a cybersecurity platform made of three backend services and a Nex
 * **Dashboard API** (`dashboard_api`, FastAPI, port 8002)
   The unified backend powering the operator dashboard: JWT auth (login + self-service registration with brute-force throttling) and role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR), a correlation engine and a live hunt-query engine, SOAR case lifecycle (create, war-room notes, task workflow), CTI actors/IOCs with lookup + bulk import + scanner history, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, webhooks, a full audit trail — and a **service bridge** that proxies the Threat API and Log API server-side so the browser never handles their API keys. See [`dashboard_api/README.md`](dashboard_api/README.md).
 * **Frontend** (`frontend`, Next.js 14 + TypeScript)
-  Marketing site **and** the operator dashboard (`/dashboard/**`, 23 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Deployable on Vercel.
+  Marketing site **and** the operator dashboard (`/dashboard/**`, 26 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Deployable on Vercel (static export) or any Node host.
 
 All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion APIs use an async job model and a two-tier API key scheme; the Dashboard API uses JWT bearer auth.
 
@@ -107,36 +145,64 @@ ThreatOrbit-V2/
 │   ├── Dockerfile
 │   ├── main.py                  # app wiring, CORS, error handlers, startup seed
 │   ├── auth.py                  # PBKDF2 passwords + stdlib HS256 JWT, role deps
-│   ├── config.py                # env-driven config
-│   ├── db.py                    # WAL SQLite, schema, migrations, audit helper
-│   ├── scoring.py               # CVSS-style asset risk model + org rollups
+│   ├── mfa.py                   # per-user TOTP (RFC 6238, stdlib)
+│   ├── permissions.py           # capability matrix (roles → capabilities)
+│   ├── tenancy.py               # optional multi-tenant org scoping
+│   ├── secretstore.py           # Fernet encryption-at-rest for secrets
+│   ├── observability.py         # Prometheus /metrics, JSON logs, security headers
+│   ├── ops.py                   # SQLite online-backup endpoint
+│   ├── config.py / db.py        # env config; WAL SQLite, schema, migrations, audit
+│   ├── db_backend.py            # SQLite default + staged Postgres backend
+│   ├── engine.py                # the live processing engine (telemetry→alerts→cases)
+│   ├── rule_engine.py / detections.py / hunting.py   # detection + KQL-style hunt
+│   ├── playbook_engine.py / integration_actions.py   # SOAR runner + real actions
+│   ├── scoring.py / attack_surface.py / vuln_scanner.py   # asset risk + vuln model
+│   ├── attribution.py / cti_graph.py / ioc_lifecycle.py   # CTI attribution + graph
+│   ├── threat_actor_library.py  # curated real CTI actor library
+│   ├── darkweb_logic.py         # dark-web finding generation + triage
+│   ├── assistant.py             # security-bounded read-only AI assistant
+│   ├── stix.py / taxii.py / misp.py / sigma.py   # interchange formats
+│   ├── licensing.py / webhooks.py / mailer.py / enrichment.py
+│   ├── log_listeners.py / events_stream.py / ingest.py   # log intake + SSE
 │   ├── seed.py                  # deterministic, internally-consistent demo data
-│   ├── routers/                 # auth, users, overview, siem, soar, cti, assets,
-│   │                            #   feeds, config — 59 routes total
-│   └── tests/                   # 29 behaviour tests (pytest + TestClient)
+│   ├── routers/                 # 18 routers, 200+ routes: auth, users, orgs,
+│   │                            #   overview, siem, soar, cti, assets, feeds,
+│   │                            #   connectors, darkweb, platform, reports,
+│   │                            #   services, stream, taxii, assistant, config
+│   └── tests/                   # behaviour tests (pytest + TestClient)
 │
 └── frontend/                    # Next.js 14 — marketing site + operator dashboard
     ├── app/
     │   ├── page.tsx             # marketing landing
-    │   └── dashboard/           # operator dashboard (23 pages, all API-wired):
-    │                            #   overview, siem(+rules/sources/hunt),
-    │                            #   soar(+playbooks/integrations/metrics),
+    │   └── dashboard/           # operator dashboard (26 pages, all API-wired):
+    │                            #   overview, siem(+rules/sources/hunt/entities/
+    │                            #   attack), soar(+playbooks/integrations/metrics),
     │                            #   cti(+actors/hunt), assets(+network/vulns),
-    │                            #   feeds(+sources/import), scanner,
+    │                            #   darkweb, feeds(+sources/import), scanner,
     │                            #   config(+api/users/sources)
     ├── components/
-    │   ├── dashboard/           # AuthGuard (JWT route protection)
-    │   ├── effects/             # ParticleNetwork, CursorGlow, SmoothScroll
+    │   ├── dashboard/           # AuthGuard, Sidebar, TopBar, CommandPalette,
+    │   │                        #   AssistantWidget, ThemeScope, WorldMap,
+    │   │                        #   RuleEditor, PlaybookBuilder, EntityGraph, …
+    │   ├── effects/             # HeroScene/OrbitalScene (R3F), CursorParticles
     │   ├── layout/              # Navbar, Footer
     │   ├── sections/            # Hero, Features, ExpandingShowcase, etc.
-    │   └── ui/                  # Logo, Reveal, MagneticButton, CountUp, ScrollProgress
+    │   └── ui/                  # Logo (faceted 3D gem), Reveal, MagneticButton, …
     ├── lib/
     │   ├── api.ts               # typed Dashboard API client (snake→camel mapping)
+    │   ├── useDashboardTheme.ts # 11 themes + per-user Appearance prefs
+    │   ├── usePermissions.ts    # client-side capability gating
+    │   ├── useLiveStream.ts     # SSE live updates
     │   └── auth-context.tsx     # login/session state backed by /auth
     ├── tailwind.config.ts
     ├── next.config.mjs
     └── package.json
 ```
+
+`docs/` ships deeper references: `architecture.md`, `opencti_integration.md`,
+`api_examples.md`, **`DEPLOYMENT.md`** (proxy/TLS topology, nginx + Caddy
+configs, env checklist) and **`OPERATIONS.md`** (backup/restore, retention,
+runbook).
 
 ---
 
@@ -278,6 +344,96 @@ every section**, each a distinct stage of the SOC workflow.
 4. Want *external* intelligence too? **Feeds → Sources → Sync now** on the
    ThreatOrbit OSINT and NVD connectors (needs internet). Want real detections
    from your own logs? **SIEM → Sources → upload a log**.
+
+## 2b. Using the dashboard — by role and by task
+
+The dashboard is one console, but different people use different slices of it.
+Two ways to find your path: **by who you are** (role walkthroughs) and **by
+what you need to do right now** (task recipes). The dashboard also has two
+**experience modes** - *Normal* (analyst-first, pre-triaged) and *Power User*
+(dense data, raw controls) - switchable in **Config → General → Experience
+Mode**. And there is an in-dashboard **AI assistant** (bottom-right) that can
+answer, recommend, and redirect across these workflows for you.
+
+### By role
+
+**L1 analyst / on-call — triage the queue.**
+Start on **Overview** for the at-a-glance picture (open alerts, risk score,
+MTTD). Go to **SIEM** → work the alert queue top-down by severity; open an
+alert to see its MITRE technique, evidence, and the source IP/user/host. If
+several alerts share a pivot, **SIEM → Correlations** clusters them. Hand off
+anything real by clicking **Create Case** (this moves it to SOAR). Use *Normal*
+experience mode.
+
+**Threat hunter — go looking.**
+Use **SIEM → Hunt** (KQL-style query console) to pivot across events, and
+**CTI → Hunt** to pivot across indicators. **SIEM → Entities** gives you the
+UEBA view (per user/host/ip risk and timeline). **SIEM → ATT&CK** shows your
+coverage heatmap so you can hunt the gaps. Save useful queries as views. Use
+*Power User* mode.
+
+**IR lead — run the incident.**
+Live in **SOAR**. Each case has an IR task list (Triage → Containment →
+Eradication → Recovery), a war room for notes, an evidence chain, and an SLA
+timer. Run **Playbooks** for response actions and watch the live step timeline;
+`approval` steps pause for sign-off. Close-out generates a case-scoped
+post-incident report (the **Report** button on a case). **SOAR → Metrics**
+shows MTTR and the real automation rate.
+
+**CTI analyst — manage intelligence.**
+**CTI → Overview** for the indicator/actor picture; **CTI → Actors** for
+attributed profiles backed by the curated actor library. **Feeds → Sources**
+to enable/sync connectors (OSINT, NVD, custom); **Feeds → Import** for bulk
+IOC upload. Use the **Scanner** (IntelScope) to check any value against the
+store. Push enriched intel to OpenCTI from the Threat API.
+
+**Exposure owner — reduce risk.**
+**Assets** lists your inventory with a transparent 0-100 risk per asset
+(four-axis model: vulnerability, exposure, patch, alert-pressure). **Assets →
+Vulns** rolls up CVEs; **Assets → Network** is the interactive map. Triaging
+SIEM alerts lowers the alert-pressure axis, so risk drops as you work.
+**Dark Web** shows what's being said about *you* outside the perimeter
+(leaked creds, data-for-sale, brand mentions) with its own triage lifecycle.
+
+**SOC manager / admin — run the platform.**
+**Config** is home: workspace/licensing, the live engine controls, users &
+RBAC (**Config → Users**), API keys, feed sources, notifications, security
+(MFA, session, IP ranges), the **audit trail** (every state change, CSV
+export), and **Appearance**. See the admin task recipes below.
+
+### Common task recipes
+
+| I want to… | Where | Notes |
+| --- | --- | --- |
+| Feed real logs in | SIEM → Sources → Log Collector (or `POST :8001/analyse`) | Apache/syslog/Windows/generic; also syslog listener + file-watcher |
+| Sync external intel | Feeds → Sources → Sync now | OSINT + NVD need internet; custom connectors are pluggable |
+| Bulk-import IOCs | Feeds → Import | CSV/line-delimited; deduped + trust-scored on ingest |
+| Turn an alert into a case | SIEM → open alert → Create Case | Or let correlation auto-escalate (≥3 critical/high on a pivot) |
+| Tune a noisy rule | SIEM → Rules (editor + suppressions) | False-positive feedback feeds the tuning workflow |
+| Run / build a playbook | SOAR → Playbooks (+ visual builder) | Live step timeline; `approval` steps pause for sign-off |
+| Check a value (IP/hash/domain) | Scanner (IntelScope) | Backed by the live IOC store |
+| Add a user / set a role | Config → Users | Capability-matrix RBAC (see permissions.py) |
+| Turn on 2FA | Config → Security → Two-factor | Real TOTP (RFC 6238); secret shown once, stored encrypted |
+| Mirror alerts to Slack | Config → Notifications → My Slack routing | Per-user webhook + severity floor |
+| Create an API key | Config → API Keys | Read / Read+Write / Admin scopes; shown once |
+| Export the audit trail | Config → Security → Audit Trail → Export CSV | Every state change, with actor + target |
+| Customize the look | Config → General → Appearance | 11 themes, custom accent, UI scale, motion, density |
+| Ask for help in-context | Assistant (bottom-right bubble) | Read-only, runs as you; answers / recommends / redirects |
+| Switch detail level | Config → General → Experience Mode | Normal (simplified) ↔ Power User (raw) |
+| Run the live engine | Config → General → Live Processing Engine | Pause, resume, or **Generate burst now** |
+
+### The in-dashboard AI assistant
+
+The floating assistant can **answer** ("what's my security posture?"),
+**review** ("summarize open critical cases"), **recommend** ("what should I
+look at first?"), and **redirect** ("take me to the noisy rule"). It is
+deliberately constrained: it runs a fixed registry of **read-only** tools
+**as you** (so it can never see data you can't), it never selects secrets,
+it treats tool output as untrusted (prompt-injection contained), and it
+**proposes** navigation rather than performing actions. With an API key
+configured it reasons over those tools; with no key it honest-degrades to a
+deterministic intent router over the same tools. See
+[§16](#16-contributing--extending) for how to point it at a cheaper/free model.
 
 ## 3. Requirements
 
@@ -661,8 +817,9 @@ You can also export STIX bundles from both services and import them through the 
 ### Dashboard API (`:8002`)
 
 JWT bearer auth (`POST /auth/login`, self-service `POST /auth/register`).
-80+ routes across auth, users, overview, SIEM, SOAR, CTI, assets, feeds,
-config, and the `/services/*` bridge — including computed SOC metrics, an
+200+ routes across 18 routers (auth, users, orgs, overview, SIEM, SOAR, CTI,
+assets, feeds, connectors, darkweb, platform, reports, services, stream, taxii,
+assistant, config) — including computed SOC metrics, an
 alert-correlation engine, a live hunt-query engine, SOAR case lifecycle
 (notes/tasks), a transparent asset risk model with per-axis breakdowns, IOC
 lookup/bulk-import/scanner history, webhooks, and a full audit trail. The
@@ -680,7 +837,7 @@ complete endpoint map and algorithm notes live in
 Or run any suite directly (works on every OS — run each line separately):
 
 ```bash
-python -m pytest dashboard_api/tests -q   # from the repo root (48 tests)
+python -m pytest dashboard_api/tests -q   # from the repo root (147 tests)
 cd threat_api
 python -m pytest -q
 cd ../log_api
@@ -731,7 +888,124 @@ Tests set their own API keys and use an isolated temp database via
 
 ## 13. Intended users
 
-ThreatOrbit suits individual analysts and small-to-mid security teams who want a deployable CTI plus anomaly-detection workflow that integrates with OpenCTI — topped with a lightweight SOC dashboard (SIEM triage, SOAR cases/playbooks, asset risk, audit trail) — without standing up a heavy SIEM. The three services can run independently or together, locally or in containers.
+ThreatOrbit suits individual analysts and small-to-mid security teams who want a deployable CTI plus anomaly-detection workflow that integrates with OpenCTI — topped with a full SOC dashboard (SIEM triage, SOAR cases/playbooks, asset risk, dark-web monitoring, an AI assistant, and a complete audit trail) — without standing up a heavy SIEM. The three services can run independently or together, locally or in containers.
+
+**Scaling honestly:** the default single-node SQLite stack comfortably serves a
+small team and is the right starting point. Larger teams should run the staged
+Postgres backend, put the APIs behind a TLS proxy (see `docs/DEPLOYMENT.md`),
+and turn on multi-tenancy. The remaining work before a *large-enterprise*
+go-live is tracked honestly in [§14](#14-roadmap--direction) and
+[§15](#15-limitations--honest-caveats) — read those before you pitch this to a
+big SOC.
+
+## 14. Roadmap & direction
+
+**Where it is.** The full product roadmap (Phases 0–5: cross-cutting platform,
+SIEM depth, SOAR depth, CTI depth, asset/vuln/dark-web depth, and product
+polish) is **implemented** and recorded — see [`plan.md`](plan.md), which keeps
+a dated CHANGELOG so the roadmap stays honest. That includes real-time push
+(SSE), RBAC depth, multi-tenancy, MFA, an ATT&CK navigator, a visual playbook
+builder, STIX/TAXII, an enrichment pipeline, IOC lifecycle, and the security
+pass (audits in CI, patched deps, security headers, encryption-at-rest).
+
+**Where it's going (direction).** The guiding idea is *convergence done
+honestly*: one pipeline, one audit trail, one console — and never a number on
+screen that doesn't trace back to the API. Near-term direction:
+
+* **Production hardening to enterprise scale** — validate the Postgres backend
+  under load, wire E2E (Playwright) into CI, complete an external pentest, and
+  run a real-log pilot. These are the Tier-1 items in `plan.md` under
+  *Production readiness*.
+* **Identity** — SSO (OIDC/SAML) and SCIM provisioning for larger orgs.
+* **Billing** — Stripe-backed plans/seats on top of the existing licensing.
+* **Connectors** — broaden first-class connectors (EDR/cloud/identity) beyond
+  the current OSINT/NVD/TAXII set.
+* **Assistant** — pluggable model backends (OpenAI-compatible, local) so the
+  in-dashboard AI runs cheaply or fully offline (see [§16](#16-contributing--extending)).
+
+If you want to influence priority, open an issue describing the workflow you
+need — the roadmap is deliberately demand-driven.
+
+## 15. Limitations & honest caveats
+
+In the spirit of "no invented data", here is what ThreatOrbit does **not** do
+yet, or only does under specific conditions:
+
+* **One synthesized input.** In demo mode the raw *environment event stream*
+  (auth/network/endpoint logs) is generated, because a SIEM cannot have that be
+  "real" before your systems forward logs to it. Everything downstream
+  (detection, correlation, response, enrichment, attribution, reporting) is
+  real code on that data, and genuine logs flow through the identical pipeline.
+  Run `DASHBOARD_DATA_MODE=live` and forward logs for a fully real stream.
+* **Single-node by default.** The default store is WAL-mode SQLite — excellent
+  for a laptop or small team, not for a high-write multi-node cluster. A
+  Postgres backend is staged (`db_backend.py`) but not yet load-validated at
+  scale.
+* **No external pentest yet.** The code ships a security pass (dependency
+  audits in CI, security headers, encryption-at-rest, MFA, rate limiting, an
+  audit trail), and `SECURITY.md` states plainly that a third-party
+  penetration test has **not** been performed. Treat it accordingly before
+  exposing it to untrusted networks.
+* **Auth scope.** Email+password (JWT) with optional TOTP MFA today. SSO
+  (OIDC/SAML) and SCIM are on the roadmap, not shipped.
+* **Billing.** Licensing/seat limits exist; payment (Stripe) does not.
+* **Appearance prefs are per-browser.** Theme, accent, scale, motion and
+  density are stored in `localStorage` and sync across your open tabs — they
+  are not yet a server-side per-user profile, so they don't follow you to a new
+  device.
+* **Assistant needs a model key for full reasoning.** Without one it still
+  works via a deterministic intent router over the same read-only tools, but
+  the free-form "reason about my data" path needs an API key (and any
+  OpenAI-compatible/local backend needs the small adapter noted in §16).
+* **Some integrations are reference-grade.** Slack/PagerDuty/webhook routing
+  is real; the broader connector catalog on the marketing site describes the
+  direction, not a guarantee that every named vendor is wired.
+
+## 16. Contributing & extending
+
+**Repo workflow.**
+
+* Develop on a feature branch; keep commits small and descriptive (one logical
+  unit each). Run the gates below before you push.
+* **Safety rule we follow:** if a change might break the build or a workflow,
+  don't ship it half-done — keep what's needed and comment the rest (or move it
+  to a separate file) rather than leaving the tree broken.
+* The full stack must stay installable in one shot: the three services share
+  pinned dependency ranges so the Windows bats' combined `pip install`
+  resolves (a past divergence broke it — see the CHANGELOG).
+
+**The gates (run before pushing).**
+
+```bash
+python -m pytest dashboard_api/tests -q     # backend behaviour tests
+cd threat_api && python -m pytest -q && cd ..
+cd log_api   && python -m pytest -q && cd ..
+cd frontend  && npx tsc --noEmit && npm run build   # type-check + production build
+```
+
+`windows-test.bat` (Windows) and `make test` (Mac/Linux) run all of this.
+
+**Extending — where things plug in.**
+
+* **A new API surface:** add a router in `dashboard_api/routers/`, include it in
+  `main.py`, and add behaviour tests under `dashboard_api/tests/`. Stamp state
+  changes into the audit trail (see `db.py`'s audit helper) and respect the
+  capability matrix in `permissions.py`.
+* **A new dashboard page:** add a route under `frontend/app/dashboard/`, call the
+  typed client in `lib/api.ts`, and gate it with `usePermissions`. Anything
+  visual reads from the API — no hardcoded numbers.
+* **A new detection rule:** extend `rule_engine.py` / `detections.py`; new
+  alerts automatically feed correlation → SOAR.
+* **A new intel connector:** follow the connector pattern (the README's
+  "Add your own connector" section and `routers/connectors.py`); indicators land
+  in the same store as OSINT.
+* **A cheaper/free assistant backend:** `assistant.py` calls the Anthropic
+  Messages API over `httpx` and reads `DASHBOARD_ASSISTANT_MODEL` +
+  `ANTHROPIC_API_KEY`. To use an OpenAI-compatible endpoint (Azure OpenAI,
+  OpenRouter, Groq, a local Ollama/LM Studio server, etc.) add a small adapter
+  that maps the request/response shape — the tool registry and security model
+  stay identical. With **no** key it already works via the deterministic
+  router, so the dashboard is never blocked on a paid API.
 
 ## FAQ
 
@@ -766,3 +1040,24 @@ connectors for intel, and forward your logs via one of the paths above. See
 No section should display invented numbers — the dashboard pulls from the API.
 If you spot a value that does not trace back to the API, it is a bug; please
 open an issue.
+
+**Does the AI assistant cost money to run?**
+Only if you point it at a paid model. Out of the box, with no API key, it runs
+a deterministic intent router over the same read-only tools — free and offline.
+For free-form reasoning it calls a model via `ANTHROPIC_API_KEY` /
+`DASHBOARD_ASSISTANT_MODEL`. You can instead point it at a cheaper or free
+OpenAI-compatible backend (Azure OpenAI, OpenRouter, Groq, a local Ollama / LM
+Studio server, etc.) by adding a small request/response adapter in
+`assistant.py` — the tool registry and the read-only security model stay
+identical. See [§16](#16-contributing--extending).
+
+**Can I recolour or rescale the dashboard?**
+Yes — **Config → General → Appearance**: 11 themes, a custom accent colour
+(presets or any hex), a UI-scale slider, and motion / density toggles. Choices
+are saved per-browser and sync across your open dashboard tabs; the public
+marketing site keeps its signature Plasma Noir look.
+
+**How do I turn on two-factor auth?**
+**Config → Security → Two-factor authentication.** It is real TOTP (RFC 6238) —
+scan the secret into any authenticator app, verify a code to enable, and every
+future sign-in asks for one. The secret is shown once and stored encrypted.
