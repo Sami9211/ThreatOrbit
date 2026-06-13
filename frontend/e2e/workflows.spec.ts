@@ -9,13 +9,11 @@ test.describe('Dashboard workflows', () => {
     await expect(page.locator('text=/^\\d[\\d,]*$/').first()).toBeVisible()
   })
 
-  test('SIEM alert queue loads and a row opens detail', async ({ authedPage: page }) => {
+  test('SIEM alert queue loads with triage actions', async ({ authedPage: page }) => {
     await page.goto('/dashboard/siem')
-    // the queue has alert rows; clicking one reveals triage actions
-    const firstAlert = page.locator('button, [role="button"]').filter({ hasText: /T1\d{3}|critical|high|medium/i }).first()
-    await expect(firstAlert).toBeVisible({ timeout: 20_000 })
-    await firstAlert.click()
-    await expect(page.getByText(/assign to me|suppress|create case|disposition/i).first()).toBeVisible()
+    // default (Normal) mode shows alert cards with inline triage actions
+    await expect(page.getByRole('button', { name: /acknowledge/i }).first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('button', { name: /dismiss/i }).first()).toBeVisible()
   })
 
   test('SIEM rules page lists detection rules', async ({ authedPage: page }) => {
@@ -30,10 +28,11 @@ test.describe('Dashboard workflows', () => {
     await expect(page.getByText(/run history/i)).toBeVisible()
   })
 
-  test('CTI hub shows actors + the IOC lifecycle panel', async ({ authedPage: page }) => {
+  test('CTI hub shows actors and IOC intelligence', async ({ authedPage: page }) => {
     await page.goto('/dashboard/cti')
-    await expect(page.getByText(/threat actors/i).first()).toBeVisible()
-    await expect(page.getByText(/IOC database/i)).toBeVisible()
+    // default (Normal) mode: "Tracked Actors" / "Active Threats" + IOC stats
+    await expect(page.getByText(/actor/i).first()).toBeVisible()
+    await expect(page.getByText(/ioc/i).first()).toBeVisible()
   })
 
   test('Dark web findings page loads', async ({ authedPage: page }) => {

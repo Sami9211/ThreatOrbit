@@ -8,8 +8,11 @@ export const ADMIN = {
 
 export async function login(page: Page, creds = ADMIN) {
   await page.goto('/login')
-  await page.getByPlaceholder('jane@company.com').fill(creds.email)
-  await page.getByPlaceholder('••••••••').fill(creds.password)
+  // Type key-by-key so React's controlled inputs reliably fire onChange and
+  // enable the submit button - a plain fill() raced the disabled state on
+  // WebKit/CI and left the button un-clickable.
+  await page.getByPlaceholder('jane@company.com').pressSequentially(creds.email)
+  await page.getByPlaceholder('••••••••').pressSequentially(creds.password)
   await page.getByRole('button', { name: /sign in/i }).click()
   // next.config has trailingSlash: true, so the app lands on /dashboard/ -
   // match with or without the trailing slash.

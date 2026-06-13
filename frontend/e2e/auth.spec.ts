@@ -3,8 +3,8 @@ import { test, expect, login, ADMIN } from './fixtures'
 test.describe('Authentication', () => {
   test('rejects bad credentials, accepts valid ones', async ({ page }) => {
     await page.goto('/login')
-    await page.getByPlaceholder('jane@company.com').fill(ADMIN.email)
-    await page.getByPlaceholder('••••••••').fill('definitely-wrong')
+    await page.getByPlaceholder('jane@company.com').pressSequentially(ADMIN.email)
+    await page.getByPlaceholder('••••••••').pressSequentially('definitely-wrong')
     await page.getByRole('button', { name: /sign in/i }).click()
     // stays on /login and surfaces an error
     await expect(page).toHaveURL(/\/login/)
