@@ -686,7 +686,7 @@ function NormalDashboard({ count, alerts, incidents }: {
           <p className="text-sm text-ink-400 mt-1">Your organization's security at a glance</p>
         </div>
         <div className="flex items-center gap-2">
-          <ReportButton kind="executive" label="Executive Summary" />
+          <ReportButton kind="executive" label="Overall Report" />
           <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
             <Eye className="w-3 h-3" /> Normal mode
           </span>
@@ -893,7 +893,7 @@ export default function DashboardOverview() {
           <p className="text-xs text-ink-500 mt-0.5">Real-time threat posture across all monitored assets and feeds</p>
         </div>
         <div className="flex items-center gap-2">
-          <ReportButton kind="executive" label="Executive Summary" />
+          <ReportButton kind="executive" label="Overall Report" />
           <span className={cn('flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full border shrink-0',
             isPower ? 'border-magenta/25 bg-magenta/10 text-magenta' : 'border-safe/25 bg-safe/10 text-safe')}>
             {isPower ? <Zap className="w-3 h-3" /> : <Eye className="w-3 h-3" />}

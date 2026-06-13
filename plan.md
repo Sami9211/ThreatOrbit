@@ -374,6 +374,22 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Reports: meaningful synthesis + a real "Overall" report**
+  (user-requested). The exported reports no longer dump rows "as is". (a) The
+  **Asset Risk & Vulnerability Report** now synthesises the real scanner
+  findings (`vuln_findings`): headline (assets, distinct CVEs, actively
+  exploited, avg patch age), a narrative that calls out CISA-KEV / public-
+  exploit CVEs and how many assets they hit, breakdowns (open CVEs by severity,
+  assets by criticality, most-affected assets), and a **prioritised CVE list**
+  ordered by real-world exploitability (KEV → public exploit → CVSS → blast
+  radius) with CVSS / flags / affected-assets / fix version per CVE - the same
+  "turn raw data into meaning" treatment we give IOCs. (b) The **Overall
+  Security Report** (renamed from "Executive Summary", surfaced on the
+  dashboard) is now a true cross-domain consolidation: one narrative over SIEM
+  / SOAR / CTI / vulns / dark-web, multi-domain breakdowns, the most urgent
+  findings from every area, and a single de-duplicated priority action list
+  (patch KEV first, reset leaked creds, triage criticals…). Backend-only
+  (`reports.py`); the generic renderer needed no change. 161 tests green.
 - **2026-06-13 · Security hardening pass (audit-driven)** — a full defensive
   audit (SQLi/LFI/SSRF/XSS/IDOR/authz/crypto/DoS) found and fixed real gaps,
   choosing fixes that harden production without breaking the local/demo start.
