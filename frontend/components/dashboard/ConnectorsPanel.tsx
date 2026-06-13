@@ -31,7 +31,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * Connector manager — the real-data control surface. Lists every threat-intel
+ * Connector manager - the real-data control surface. Lists every threat-intel
  * connector (built-in OSINT engine, NVD, plus any custom source you add),
  * shows live sync status + indicator counts, and lets you sync now, pause,
  * add, or remove. This is what makes the dashboard show real, live data.
@@ -68,7 +68,7 @@ export default function ConnectorsPanel() {
           ? `${c.name}: ${result.error}`
           : `${c.name}: imported ${result.imported ?? 0} new indicators (${result.duplicates ?? 0} already known)`)
       })
-      .catch(() => flash(`${c.name}: sync failed — is the dashboard API running?`))
+      .catch(() => flash(`${c.name}: sync failed - is the dashboard API running?`))
       .finally(() => setBusy(null))
   }
 
@@ -98,7 +98,7 @@ export default function ConnectorsPanel() {
     })
     setConnectors((prev) => [...(prev ?? []), created])
     setShowAdd(false)
-    flash(`Connector "${created.name}" added — press Sync to pull data now.`)
+    flash(`Connector "${created.name}" added - press Sync to pull data now.`)
   }
 
   return (
@@ -129,7 +129,7 @@ export default function ConnectorsPanel() {
           <p className="text-xs text-ink-600 py-4 text-center animate-pulse">Loading connectors…</p>
         )}
         {!unavailable && connectors?.length === 0 && (
-          <p className="text-xs text-ink-600 py-4 text-center">No connectors yet — add one to start ingesting real data.</p>
+          <p className="text-xs text-ink-600 py-4 text-center">No connectors yet - add one to start ingesting real data.</p>
         )}
         {connectors?.map((c) => {
           const st = STATUS_META[c.status] ?? STATUS_META.idle
@@ -263,7 +263,7 @@ function AddConnectorModal({ kinds, onClose, onAdd }: {
           {isCustom && (
             <div className="rounded-xl border border-white/8 bg-surface-2/40 p-3 space-y-3">
               <p className="text-[11px] text-ink-400">
-                Field mapping — tell us which {kind === 'csv' ? 'columns' : 'fields'} hold each value.
+                Field mapping - tell us which {kind === 'csv' ? 'columns' : 'fields'} hold each value.
                 Leave <span className="font-mono">type</span> blank to auto-detect (ip / domain / url / hash / cve).
               </p>
               <div className="grid grid-cols-2 gap-2">

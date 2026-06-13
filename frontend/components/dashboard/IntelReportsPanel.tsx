@@ -17,7 +17,7 @@ const TLP_CLS: Record<string, string> = {
 }
 
 function relTime(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s ago`
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
@@ -25,7 +25,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * Intel report authoring — campaign & report management over `/cti/reports`.
+ * Intel report authoring - campaign & report management over `/cti/reports`.
  * Analysts draft reports (title, TLP, summary, body, tags), publish/unpublish
  * them, and export any report as a MISP Event for sharing. Everything here is
  * the live store; drafts persist server-side.
@@ -99,7 +99,7 @@ export default function IntelReportsPanel() {
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-white">Intel reports</h3>
-          <p className="text-[10px] text-ink-500">Analyst-authored campaign reporting — draft, publish, share as MISP events</p>
+          <p className="text-[10px] text-ink-500">Analyst-authored campaign reporting - draft, publish, share as MISP events</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {(['all', 'draft', 'published'] as const).map((s) => (
@@ -125,7 +125,7 @@ export default function IntelReportsPanel() {
             <div className="p-4 space-y-2.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <input value={title} onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Report title — e.g. Q2 LockBit affiliate campaign against fintech"
+                  placeholder="Report title - e.g. Q2 LockBit affiliate campaign against fintech"
                   className="flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 focus:outline-none focus:border-violet/40 placeholder-ink-600" />
                 <select value={tlp} onChange={(e) => setTlp(e.target.value)}
                   title="Traffic Light Protocol marking"
@@ -163,7 +163,7 @@ export default function IntelReportsPanel() {
         {reports === null && <p className="text-[11px] text-ink-600 py-8 text-center animate-pulse">Loading reports…</p>}
         {reports !== null && visible.length === 0 && (
           <p className="text-[11px] text-ink-600 py-8 text-center">
-            No {statusFilter !== 'all' ? statusFilter : ''} reports yet — draft the first one above.
+            No {statusFilter !== 'all' ? statusFilter : ''} reports yet - draft the first one above.
           </p>
         )}
         {visible.map((r) => (
@@ -215,7 +215,7 @@ export default function IntelReportsPanel() {
                   exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                   <div className="mt-2 ml-4 p-3 rounded-lg bg-white/3 border border-white/6">
                     <p className="text-[11px] text-ink-300 whitespace-pre-wrap">
-                      {r.body || r.summary || 'No analysis body yet — edit via the API or re-draft.'}
+                      {r.body || r.summary || 'No analysis body yet - edit via the API or re-draft.'}
                     </p>
                     <p className="text-[10px] text-ink-600 mt-2">
                       {r.author ? `by ${r.author} · ` : ''}created {relTime(r.createdAt)}

@@ -1,4 +1,4 @@
-"""Long-running log collectors — a syslog UDP listener and a file/dir watcher.
+"""Long-running log collectors - a syslog UDP listener and a file/dir watcher.
 
 These make "production logs stream in" literal: instead of pasting lines into
 the UI, a forwarder can send syslog to a UDP port, or drop/append files into a

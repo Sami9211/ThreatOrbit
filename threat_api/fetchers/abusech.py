@@ -12,10 +12,10 @@ def fetch_abusech_iocs() -> FetchResult:
     # abuse.ch query APIs now require an Auth-Key header (free at auth.abuse.ch).
     auth_headers = {"Auth-Key": ABUSECH_AUTH_KEY} if ABUSECH_AUTH_KEY else {}
 
-    # URLHaus (URLs) — needs the Auth-Key; skipped cleanly if no key is set.
+    # URLHaus (URLs) - needs the Auth-Key; skipped cleanly if no key is set.
     try:
         if not ABUSECH_AUTH_KEY:
-            raise RuntimeError("no ABUSECH_AUTH_KEY set (free at auth.abuse.ch) — skipping URLHaus")
+            raise RuntimeError("no ABUSECH_AUTH_KEY set (free at auth.abuse.ch) - skipping URLHaus")
         r = requests.post(ABUSECH_URLHAUS_URL, headers=auth_headers, timeout=30)
         r.raise_for_status()
         data = r.json()
@@ -36,7 +36,7 @@ def fetch_abusech_iocs() -> FetchResult:
     except Exception as e:
         errors.append(f"URLHaus fetch failed: {e}")
 
-    # Feodo IP blocklist — downloadable JSON, works WITHOUT a key (real data
+    # Feodo IP blocklist - downloadable JSON, works WITHOUT a key (real data
     # out of the box). The Auth-Key is sent too when available.
     try:
         r = requests.get(ABUSECH_FEODO_URL, headers=auth_headers, timeout=30)

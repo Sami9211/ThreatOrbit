@@ -49,8 +49,8 @@ function MyMfaPanel() {
     if (code.length < 6 || busy) return
     setBusy(true); setMsg(null)
     mfaVerify(code)
-      .then(() => { setEnrolment(null); setCode(''); setMsg('Two-factor authentication is ON — your next login will ask for a code.'); load() })
-      .catch(() => setMsg('That code did not verify — check your authenticator and try again.'))
+      .then(() => { setEnrolment(null); setCode(''); setMsg('Two-factor authentication is ON - your next login will ask for a code.'); load() })
+      .catch(() => setMsg('That code did not verify - check your authenticator and try again.'))
       .finally(() => setBusy(false))
   }
 
@@ -59,7 +59,7 @@ function MyMfaPanel() {
     setBusy(true); setMsg(null)
     mfaDisable(code)
       .then(() => { setCode(''); setMsg('Two-factor authentication is OFF.'); load() })
-      .catch(() => setMsg('That code did not verify — MFA stays on.'))
+      .catch(() => setMsg('That code did not verify - MFA stays on.'))
       .finally(() => setBusy(false))
   }
 
@@ -97,7 +97,7 @@ function MyMfaPanel() {
             <p className="text-[10px] font-mono text-ink-600 mt-1 break-all">{enrolment.otpauthUri}</p>
           </div>
           <p className="text-[10px] text-amber">
-            Shown once — it is stored encrypted server-side and cannot be displayed again.
+            Shown once - it is stored encrypted server-side and cannot be displayed again.
           </p>
           <p className="text-[11px] text-ink-300">2. Enter the current code to verify and switch MFA on:</p>
         </div>
@@ -145,7 +145,7 @@ function MySlackRouting() {
   function save() {
     setBusy(true); setMsg(null)
     setMySlackRouting(url.trim() || null, minSev)
-      .then((r) => { setConfigured(r.configured); setMsg(r.configured ? 'Saved — notifications will be mirrored to your Slack.' : 'Cleared — no Slack routing for your account.') })
+      .then((r) => { setConfigured(r.configured); setMsg(r.configured ? 'Saved - notifications will be mirrored to your Slack.' : 'Cleared - no Slack routing for your account.') })
       .catch(() => setMsg('Could not save (is the URL a valid http(s) webhook?).'))
       .finally(() => setBusy(false))
   }
@@ -153,8 +153,8 @@ function MySlackRouting() {
   function testSend() {
     setBusy(true); setMsg(null)
     testMySlackRouting()
-      .then((r) => setMsg(r.delivered ? 'Test message delivered ✓' : 'Delivery failed — check the webhook URL.'))
-      .catch(() => setMsg('No webhook configured yet — save one first.'))
+      .then((r) => setMsg(r.delivered ? 'Test message delivered ✓' : 'Delivery failed - check the webhook URL.'))
+      .catch(() => setMsg('No webhook configured yet - save one first.'))
       .finally(() => setBusy(false))
   }
 
@@ -293,7 +293,7 @@ function LiveApiKeys() {
         </p>
       )}
       {!unavailable && keys !== null && keys.length === 0 && (
-        <p className="text-xs text-ink-600 py-4 text-center">No API keys yet — create the first one below.</p>
+        <p className="text-xs text-ink-600 py-4 text-center">No API keys yet - create the first one below.</p>
       )}
       {!unavailable && keys !== null && keys.length > 0 && (
         <div className="space-y-3 mb-6">
@@ -371,7 +371,7 @@ function LiveApiKeys() {
                 {copied ? <CheckCircle className="w-3.5 h-3.5 text-safe" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
-            <p className="text-[10px] text-amber mt-1.5">Copy this key now — for security it won&apos;t be shown again.</p>
+            <p className="text-[10px] text-amber mt-1.5">Copy this key now - for security it won&apos;t be shown again.</p>
           </motion.div>
         )}
       </div>
@@ -481,7 +481,7 @@ function LiveIntegrations() {
         )
       })}
       <p className="text-[10px] text-ink-700 pt-1">
-        Full connector detail — actions, response times, sync history — lives in{' '}
+        Full connector detail - actions, response times, sync history - lives in{' '}
         <a href="/dashboard/soar/integrations" className="text-magenta hover:underline">SOAR → Integrations</a>.
       </p>
     </div>
@@ -512,7 +512,7 @@ function ExperienceModeCard() {
       label: 'Power User',
       icon: Zap,
       color: '#FF2E97',
-      tagline: 'Full access — dense data, raw controls',
+      tagline: 'Full access - dense data, raw controls',
       features: [
         'Full alert queue with all 15+ fields',
         'SIEM raw log view and KQL/SPL query interface',
@@ -575,7 +575,7 @@ function ExperienceModeCard() {
                   </div>
                 )}
               </div>
-              {/* Feature list — hidden on mobile to keep cards compact */}
+              {/* Feature list - hidden on mobile to keep cards compact */}
               <ul className="hidden sm:block space-y-1.5 mt-3">
                 {m.features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2 text-[11px] text-ink-400">
@@ -612,7 +612,7 @@ function ThemeCard() {
         </div>
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white">Dashboard Theme</h2>
-          <p className="text-[11px] text-ink-500 mt-0.5">Recolour the entire dashboard — applies instantly, only here (not the public site)</p>
+          <p className="text-[11px] text-ink-500 mt-0.5">Recolour the entire dashboard - applies instantly, only here (not the public site)</p>
         </div>
         <div className="ml-auto shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-white/12 bg-white/5 text-ink-200">
           {active.label}
@@ -865,7 +865,7 @@ function AuditTrail() {
     <Section title="Audit Trail" icon={ScrollText} color="#7A3CFF">
       <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
         <p className="text-[11px] text-ink-500">
-          Every state change — alerts, cases, rules, users, keys, feeds — captured with actor and target.
+          Every state change - alerts, cases, rules, users, keys, feeds - captured with actor and target.
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <a href={`${(typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:8002'}/config/audit-export`}
@@ -1057,7 +1057,7 @@ function LiveEngineCard() {
         setMsg(g ? `Generated ${g.alerts} alerts, ${g.iocs} IOCs, ${g.darkWeb} dark-web findings, ${g.casesEscalated} cases.` : 'Done.')
         load()
       })
-      .catch(() => setMsg('Could not generate — is the dashboard API running in live mode?'))
+      .catch(() => setMsg('Could not generate - is the dashboard API running in live mode?'))
       .finally(() => { setBusy(false); setTimeout(() => setMsg(null), 8000) })
   }
 
@@ -1065,7 +1065,7 @@ function LiveEngineCard() {
     return (
       <Section title="Live Processing Engine" icon={Zap} color="#FF2E97">
         <p className="text-xs text-ink-400">
-          Running in <b className="text-ink-200">demo mode</b> — showing seeded sample data. To run the
+          Running in <b className="text-ink-200">demo mode</b> - showing seeded sample data. To run the
           live engine (continuous telemetry → real SIEM alerts, CTI indicators, SOAR cases & dark-web
           findings), start the API with <code className="font-mono text-ink-300">DASHBOARD_DATA_MODE=live</code>.
         </p>
@@ -1130,14 +1130,14 @@ function BackgroundJobs() {
   return (
     <Section title="Background Jobs" icon={Zap} color="#FFB23E">
       <p className="text-[11px] text-ink-500 mb-4">
-        Heavy operations — Threat-API IOC syncs, log analyses, fleet risk recomputes —
+        Heavy operations - Threat-API IOC syncs, log analyses, fleet risk recomputes -
         are recorded here with their outcome.
       </p>
       {error && (
         <p className="text-xs text-ink-600 py-6 text-center">Job history unavailable. Start the dashboard API to see runs.</p>
       )}
       {!error && jobs !== null && jobs.length === 0 && (
-        <p className="text-xs text-ink-600 py-6 text-center">No background jobs recorded yet — trigger a sync, analysis or recompute.</p>
+        <p className="text-xs text-ink-600 py-6 text-center">No background jobs recorded yet - trigger a sync, analysis or recompute.</p>
       )}
       {!error && jobs === null && (
         <p className="text-xs text-ink-600 py-6 text-center animate-pulse">Loading jobs…</p>
@@ -1303,7 +1303,7 @@ export default function ConfigPage() {
                     onChange={(e) => setSetting('auth_method')(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
                     <option value="jwt">Email + Password (JWT, default)</option>
-                    {/* SSO (OIDC/SAML) is on the roadmap (Tier 2) — options appear here when implemented */}
+                    {/* SSO (OIDC/SAML) is on the roadmap (Tier 2) - options appear here when implemented */}
                   </select>
                 </div>
                 <Field label="Session Timeout (minutes)" type="number" value={settings.session_timeout_minutes ?? '720'} onChange={setSetting('session_timeout_minutes')} />

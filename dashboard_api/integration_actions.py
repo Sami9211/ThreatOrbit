@@ -1,12 +1,12 @@
-"""Real SOAR response-action adapters — call EDR / firewall / ticketing APIs.
+"""Real SOAR response-action adapters - call EDR / firewall / ticketing APIs.
 
 Each adapter builds the *actual* vendor request (URL, headers, JSON body) for a
 response action and, when the integration has a `base_url` + `api_key`
 configured, performs the real outbound HTTP call (httpx, short timeout) and
 records the outcome. With no credentials it records a `not-configured` action
-rather than pretending it ran — honest, like the enrichment provider seam.
+rather than pretending it ran - honest, like the enrichment provider seam.
 
-Every attempt — live or not — is written to `integration_actions` (the action
+Every attempt - live or not - is written to `integration_actions` (the action
 audit trail), so there's a defensible record of what was done to whom.
 
 Vendor mapping (by category/vendor keyword):
@@ -75,7 +75,7 @@ def run_action(conn, integration: dict, action: str, params: dict, actor: str) -
 
     if not base_url or not api_key:
         status, mode, detail = ("not-configured", "simulated",
-                                f"{category} action '{action}' recorded — no endpoint/credential "
+                                f"{category} action '{action}' recorded - no endpoint/credential "
                                 f"configured for {integration['name']}, so no live call was made")
     else:
         method, url, headers, body = _request_spec(category, base_url, api_key, action, params)
@@ -86,7 +86,7 @@ def run_action(conn, integration: dict, action: str, params: dict, actor: str) -
             status = "success" if ok else "failed"
             mode = "live"
             detail = f"{method} {url} → HTTP {r.status_code}"
-        except Exception as e:  # network/timeout — recorded, never crashes the run
+        except Exception as e:  # network/timeout - recorded, never crashes the run
             status, mode, detail = "failed", "live", f"{category} call failed: {str(e)[:160]}"
 
     aid = str(uuid.uuid4())

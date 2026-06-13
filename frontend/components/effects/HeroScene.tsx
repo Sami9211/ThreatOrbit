@@ -115,7 +115,7 @@ export default function HeroScene({ mouseX, mouseY }: {
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
   // Generous margin so the canvas mounts just before it scrolls into view and
-  // unmounts (freeing its WebGL context) once well off-screen — keeps the page
+  // unmounts (freeing its WebGL context) once well off-screen - keeps the page
   // from holding several live GL contexts at once.
   const { ref, visible } = useInViewport<HTMLDivElement>('400px')
   const [degraded, setDegraded] = useState(false)

@@ -104,7 +104,7 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     user.pop("password_hash", None)
     user.pop("password_salt", None)
     # A personal Slack webhook URL is a quasi-secret: only its owner sees it,
-    # via GET /auth/me/slack — never on the general principal payload.
+    # via GET /auth/me/slack - never on the general principal payload.
     user.pop("slack_webhook", None)
     user.pop("mfa_secret", None)  # the TOTP secret never leaves the server
     # Workspace membership (multi-tenancy foundation): default when unset.

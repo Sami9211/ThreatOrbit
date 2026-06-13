@@ -1,11 +1,11 @@
-"""Risk scoring — a transparent, CVSS-inspired model for asset and org risk.
+"""Risk scoring - a transparent, CVSS-inspired model for asset and org risk.
 
-Asset risk (0–100) blends four bounded signals, each on its own 0–100 axis:
+Asset risk (0-100) blends four bounded signals, each on its own 0-100 axis:
 
-  • Vulnerability burden   — CVE counts weighted by severity
-  • Exposure               — internet-facing + risky service ports
-  • Patch hygiene          — risk rises with days-since-patch (saturating at 180d)
-  • Active threat pressure — unresolved alerts currently firing on the asset
+  • Vulnerability burden   - CVE counts weighted by severity
+  • Exposure               - internet-facing + risky service ports
+  • Patch hygiene          - risk rises with days-since-patch (saturating at 180d)
+  • Active threat pressure - unresolved alerts currently firing on the asset
 
 The four axes are combined with weights that sum to 1.0, then lifted by a
 business-criticality factor so a crown-jewel asset always outranks a throwaway
@@ -17,7 +17,7 @@ from __future__ import annotations
 # Severity → points per CVE. Roughly tracks CVSS bands (a critical is ~20x a low).
 CVE_WEIGHTS = {"critical": 10.0, "high": 5.0, "medium": 2.0, "low": 0.5}
 
-# Business-impact multiplier per asset criticality (0–1).
+# Business-impact multiplier per asset criticality (0-1).
 CRITICALITY_MULTIPLIER = {"critical": 1.0, "high": 0.8, "medium": 0.55, "low": 0.35}
 
 # Ports that materially raise exposure when reachable (RDP, telnet, ftp, SMB, DBs).
@@ -31,13 +31,13 @@ _ALERTS_SATURATE = 8           # this many open alerts pins the alert axis at 10
 
 
 def vuln_burden(cves: dict) -> float:
-    """0–100 from severity-weighted CVE counts (saturating)."""
+    """0-100 from severity-weighted CVE counts (saturating)."""
     raw = sum(CVE_WEIGHTS.get(sev, 0.0) * (n or 0) for sev, n in cves.items())
     return min(100.0, raw)
 
 
 def exposure_score(open_ports, tags) -> float:
-    """0–100 from internet exposure and the count of risky open ports."""
+    """0-100 from internet exposure and the count of risky open ports."""
     score = 50.0 if "internet-facing" in (tags or []) else 0.0
     risky = sum(1 for p in (open_ports or []) if p in RISKY_PORTS)
     score += min(50.0, risky * 15.0)
@@ -46,7 +46,7 @@ def exposure_score(open_ports, tags) -> float:
 
 def asset_risk(*, cves: dict, criticality: str, patch_age: int,
                open_alerts: int, open_ports=None, tags=None) -> int:
-    """Composite 0–100 risk for a single asset."""
+    """Composite 0-100 risk for a single asset."""
     vuln = vuln_burden(cves)
     exposure = exposure_score(open_ports, tags)
     patch = min(100.0, (patch_age or 0) / _PATCH_FULL_DECAY_DAYS * 100.0)
@@ -61,7 +61,7 @@ def asset_risk(*, cves: dict, criticality: str, patch_age: int,
 
 
 def risk_band(score: int) -> str:
-    """Map a 0–100 score to the asset status band used across the UI."""
+    """Map a 0-100 score to the asset status band used across the UI."""
     if score >= 75:
         return "critical"
     if score >= 45:
@@ -71,7 +71,7 @@ def risk_band(score: int) -> str:
 
 def risk_breakdown(*, cves: dict, criticality: str, patch_age: int,
                    open_alerts: int, open_ports=None, tags=None) -> dict:
-    """Explain a risk score: each axis's 0–100 value, its weight, and the points
+    """Explain a risk score: each axis's 0-100 value, its weight, and the points
     it contributes to the final (criticality-scaled) score. Lets the UI render a
     transparent "why is this risky?" panel.
     """
@@ -86,7 +86,7 @@ def risk_breakdown(*, cves: dict, criticality: str, patch_age: int,
     components = [
         {
             "axis": name,
-            "value": round(value, 1),                       # 0–100 on its own axis
+            "value": round(value, 1),                       # 0-100 on its own axis
             "weight": weight,                                # share of the base score
             "contribution": round(value * weight * scale, 1),  # points added to the total
         }
@@ -103,7 +103,7 @@ def risk_breakdown(*, cves: dict, criticality: str, patch_age: int,
 
 
 def org_risk(assets) -> int:
-    """Criticality-weighted mean asset risk — crown jewels dominate the org score.
+    """Criticality-weighted mean asset risk - crown jewels dominate the org score.
 
     ``assets`` is any iterable of mappings with ``risk_score`` and ``criticality``.
     """
@@ -156,7 +156,7 @@ def recompute_asset_risk(conn) -> int:
     the live alerts table, persisting the results. Returns the count updated.
 
     Alert pressure is the number of unresolved alerts whose ``hostname`` matches
-    the asset name — so triaging alerts visibly lowers an asset's risk.
+    the asset name - so triaging alerts visibly lowers an asset's risk.
     """
     import json
 

@@ -53,7 +53,7 @@ def _clear_failures(key: str):
 class LoginRequest(BaseModel):
     email: str
     password: str
-    code: str | None = None  # TOTP code — required only when MFA is enrolled
+    code: str | None = None  # TOTP code - required only when MFA is enrolled
 
 
 class RegisterRequest(BaseModel):
@@ -190,7 +190,7 @@ def mfa_enroll(user: dict = Depends(current_user)):
     with get_conn() as conn:
         row = conn.execute("SELECT mfa_enabled FROM users WHERE id=?", (user["id"],)).fetchone()
         if row["mfa_enabled"]:
-            raise HTTPException(status_code=400, detail="MFA is already enabled — disable it first")
+            raise HTTPException(status_code=400, detail="MFA is already enabled - disable it first")
         secret = new_secret()
         conn.execute("UPDATE users SET mfa_secret=? WHERE id=?", (encrypt(secret), user["id"]))
         audit(conn, user["email"], "auth.mfa_enroll", user["id"])
@@ -209,7 +209,7 @@ def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
                            (user["id"],)).fetchone()
         secret = decrypt(row["mfa_secret"])
         if not secret:
-            raise HTTPException(status_code=400, detail="No enrolment in progress — call /auth/mfa/enroll first")
+            raise HTTPException(status_code=400, detail="No enrolment in progress - call /auth/mfa/enroll first")
         if not verify_code(secret, body.code):
             raise HTTPException(status_code=400, detail="Invalid MFA code")
         conn.execute("UPDATE users SET mfa_enabled=1 WHERE id=?", (user["id"],))
@@ -220,7 +220,7 @@ def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
 
 @router.post("/mfa/disable")
 def mfa_disable(body: MfaCode, user: dict = Depends(current_user)):
-    """Turn MFA off — requires a valid current code (possession proof), so a
+    """Turn MFA off - requires a valid current code (possession proof), so a
     hijacked session can't silently strip the second factor."""
     from dashboard_api.mfa import verify_code
     from dashboard_api.secretstore import decrypt
@@ -247,7 +247,7 @@ class SlackPrefs(BaseModel):
 @router.get("/me/slack")
 def my_slack_routing(user: dict = Depends(current_user)):
     """The caller's personal Slack routing (the URL is only ever shown to its
-    owner — it is scrubbed from every other user payload and encrypted at rest)."""
+    owner - it is scrubbed from every other user payload and encrypted at rest)."""
     from dashboard_api.secretstore import decrypt
     with get_conn() as conn:
         row = conn.execute("SELECT slack_webhook, slack_min_severity FROM users WHERE id=?",
@@ -289,13 +289,13 @@ def test_slack_routing(user: dict = Depends(current_user)):
     if not url:
         raise HTTPException(status_code=400, detail="No Slack webhook configured")
     ok = deliver_slack(url,
-                       f"ThreatOrbit test notification for {user['email']} — routing works.")
+                       f"ThreatOrbit test notification for {user['email']} - routing works.")
     return {"delivered": ok}
 
 
 @router.get("/permissions")
 def my_permissions(user: dict = Depends(current_user)):
-    """The caller's effective capabilities — the UI uses this to hide controls
+    """The caller's effective capabilities - the UI uses this to hide controls
     the role can't use (RBAC depth)."""
     from dashboard_api.permissions import CAPABILITIES, perms_for
     granted = sorted(perms_for(user["role"]))

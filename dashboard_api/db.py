@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Workspaces / organizations (multi-tenancy foundation). Data tables are not
--- yet org-scoped — see dashboard_api/tenancy.py for the staged isolation seam.
+-- yet org-scoped - see dashboard_api/tenancy.py for the staged isolation seam.
 CREATE TABLE IF NOT EXISTS orgs (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL,
@@ -716,7 +716,7 @@ _MIGRATIONS = [
     ("users", "slack_webhook", "TEXT"),
     ("users", "slack_min_severity", "TEXT NOT NULL DEFAULT 'high'"),
     # Time-boxed / recurring suppression windows: an absolute expiry and an
-    # optional daily HH:MM–HH:MM UTC window in which the suppression applies.
+    # optional daily HH:MM-HH:MM UTC window in which the suppression applies.
     # TOTP MFA: the user's enrolled secret (encrypted at rest via secretstore).
     ("users", "mfa_secret", "TEXT"),
     ("suppressions", "expires_at", "TEXT"),
@@ -743,7 +743,7 @@ def _safe_schema(conn: sqlite3.Connection):
     try:
         conn.executescript(SCHEMA)
     except sqlite3.OperationalError:
-        # An index on a migrated column against a pre-migration table — run the
+        # An index on a migrated column against a pre-migration table - run the
         # statements individually so everything else still applies.
         for stmt in SCHEMA.split(";"):
             s = stmt.strip()

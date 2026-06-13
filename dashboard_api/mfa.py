@@ -1,4 +1,4 @@
-"""TOTP multi-factor authentication (RFC 6238) — stdlib only.
+"""TOTP multi-factor authentication (RFC 6238) - stdlib only.
 
 The standard 6-digit, 30-second, SHA-1 flavour every authenticator app
 (Google Authenticator, Authy, 1Password, …) implements. Secrets are
@@ -44,7 +44,7 @@ def verify_code(secret_b32: str, code: str, window: int = 1) -> bool:
         return any(
             hmac.compare_digest(totp_code(secret_b32, now + i * STEP_SECONDS), cleaned)
             for i in range(-window, window + 1))
-    except (ValueError, TypeError):  # malformed secret — never verifies
+    except (ValueError, TypeError):  # malformed secret - never verifies
         return False
 
 

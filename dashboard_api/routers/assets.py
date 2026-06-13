@@ -82,7 +82,7 @@ def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
 
 @router.get("/summary")
 def assets_summary(user: dict = Depends(current_user)):
-    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         rows = conn.execute(
@@ -150,7 +150,7 @@ def vuln_summary():
 @router.get("/vuln-findings")
 def fleet_vuln_findings(limit: int = Query(200, le=1000)):
     """Fleet-wide CVE findings grouped per CVE: which assets are affected,
-    KEV/exploit status, CVSS, fix version — the real Vulnerabilities list."""
+    KEV/exploit status, CVSS, fix version - the real Vulnerabilities list."""
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT v.cve, v.product, v.version, v.severity, v.cvss, v.fixed_in, v.summary, "
@@ -310,7 +310,7 @@ def asset_vuln_findings(asset_id: str):
 def asset_activity(asset_id: str):
     """Everything tied to this asset, one click away: its alerts, the cases
     whose entities reference it, recent raw events, open CVE findings, and the
-    playbook runs that responded — the asset↔alert↔case linkage."""
+    playbook runs that responded - the asset↔alert↔case linkage."""
     with get_conn() as conn:
         row = conn.execute("SELECT id, name, value FROM assets WHERE id=?", (asset_id,)).fetchone()
         if not row:

@@ -49,7 +49,7 @@ export default function Footer() {
             </Link>
             <p className="text-sm text-ink-500 leading-relaxed max-w-xs">
               Enterprise threat intelligence ingestion, log anomaly detection, and OpenCTI
-              integration — built for the modern security team.
+              integration - built for the modern security team.
             </p>
             <div className="flex items-center gap-3 mt-5">
               <a

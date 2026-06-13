@@ -64,7 +64,7 @@ export default function ScrollStory() {
     stiffness: 100, damping: 28, restDelta: 0.001,
   })
 
-  /* 0 → 360° mapped from scroll — drives the orbital group Y rotation */
+  /* 0 → 360° mapped from scroll - drives the orbital group Y rotation */
   const scrollDeg = useTransform(scrollYProgress, [0, 1], [0, 360])
 
   const handleMove = (e: React.MouseEvent) => {
@@ -87,7 +87,7 @@ export default function ScrollStory() {
         <div className="absolute inset-0 plasma-mesh opacity-50" />
         <div className="absolute inset-0 bg-grid-dim opacity-20" />
 
-        {/* Real 3D orbital — a planet circled by rings of orbiting dots.
+        {/* Real 3D orbital - a planet circled by rings of orbiting dots.
            Sized generously so the outermost orbit never reaches the canvas
            edge (which would hard-clip it into a visible box). */}
         <div className="w-[min(94vw,760px)] aspect-square relative" aria-hidden>
@@ -114,8 +114,8 @@ export default function ScrollStory() {
           <p className="text-xs tracking-[0.3em] uppercase mb-3" style={{ color: '#7A3CFF' }}>02 / SIEM</p>
           <h3 className="font-display text-3xl md:text-5xl font-bold text-white mb-3">It detects.</h3>
           <p className="text-ink-300 text-lg max-w-xl mx-auto">
-            Every log line passes through four detectors — pattern, statistical, machine learning, and
-            temporal — surfacing the anomalies that matter.
+            Every log line passes through four detectors - pattern, statistical, machine learning, and
+            temporal - surfacing the anomalies that matter.
           </p>
         </Beat>
 

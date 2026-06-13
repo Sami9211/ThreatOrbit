@@ -25,7 +25,7 @@ export default function LandingSidebar() {
   return (
     <>
       {/* Desktop hover trigger strip. (Mobile navigation is handled by the
-          Navbar's menu button, which opens the full-screen MegaMenu — a
+          Navbar's menu button, which opens the full-screen MegaMenu - a
           second hamburger here would overlap the Navbar logo on phones.) */}
       <div
         className="hidden md:block fixed left-0 top-0 bottom-0 z-50 w-4 cursor-pointer"

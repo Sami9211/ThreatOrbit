@@ -45,7 +45,7 @@ export default function LogAnalysisPanel() {
       setResult(await analyseLogFile(file, format))
     } catch (e) {
       setError(e instanceof Error && e.message.includes('unreachable')
-        ? 'Log API is offline — start it on :8001 to analyse logs.'
+        ? 'Log API is offline - start it on :8001 to analyse logs.'
         : e instanceof Error ? e.message : 'Analysis failed.')
     } finally {
       setAnalysing(false)
@@ -68,7 +68,7 @@ export default function LogAnalysisPanel() {
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-white">Log Anomaly Analysis</h3>
-          <p className="text-[10px] text-ink-500">Log API — pattern, statistical, ML & temporal detectors</p>
+          <p className="text-[10px] text-ink-500">Log API - pattern, statistical, ML & temporal detectors</p>
         </div>
         <span className={cn('flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full border font-semibold ml-auto',
           available ? 'bg-safe/10 text-safe border-safe/25' : 'bg-white/5 text-ink-500 border-white/10')}>
@@ -118,7 +118,7 @@ export default function LogAnalysisPanel() {
                 <a href="/dashboard/siem"
                   className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-magenta/10 border border-magenta/25 text-[11px] text-magenta hover:bg-magenta/15 transition-colors">
                   <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                  <span><b>{Number(result.alertsCreated)}</b> real SIEM alert{Number(result.alertsCreated) === 1 ? '' : 's'} raised from this analysis — open SIEM →</span>
+                  <span><b>{Number(result.alertsCreated)}</b> real SIEM alert{Number(result.alertsCreated) === 1 ? '' : 's'} raised from this analysis - open SIEM →</span>
                 </a>
               )}
               {/* Summary strip */}

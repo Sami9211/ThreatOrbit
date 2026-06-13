@@ -500,7 +500,7 @@ export default function PricingPage() {
         </section>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 1 — INTERACTIVE PRICING CALCULATOR
+            SECTION 1 - INTERACTIVE PRICING CALCULATOR
         ═══════════════════════════════════════════════════════════════════ */}
         <section className="px-4 sm:px-6 pb-24 max-w-[1400px] mx-auto">
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-8 xl:gap-10 items-start">
@@ -755,7 +755,7 @@ export default function PricingPage() {
         </section>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 2 — COMPARISON TIERS TABLE
+            SECTION 2 - COMPARISON TIERS TABLE
         ═══════════════════════════════════════════════════════════════════ */}
         <section id="tiers" ref={tableRef} className="px-4 sm:px-6 pb-32 max-w-[1200px] mx-auto">
 
@@ -958,7 +958,7 @@ export default function PricingPage() {
                   Need a custom quote?
                 </h3>
                 <p className="text-ink-300 text-base mb-8 max-w-lg mx-auto">
-                  Our security solutions team will map ThreatOrbit to your threat landscape, compliance requirements, and team structure — and build you a tailored proposal.
+                  Our security solutions team will map ThreatOrbit to your threat landscape, compliance requirements, and team structure - and build you a tailored proposal.
                 </p>
 
                 <div className="flex flex-wrap items-center justify-center gap-3">
@@ -1011,7 +1011,7 @@ export default function PricingPage() {
         </section>
       </main>
 
-      {/* Mobile sticky total bar — keeps price + CTA reachable without scrolling
+      {/* Mobile sticky total bar - keeps price + CTA reachable without scrolling
           past every module card (the summary panel is far down on phones). */}
       <div className="xl:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-[#0A0612]/95 backdrop-blur-xl px-4 py-3 flex items-center justify-between gap-3">
         <div className="min-w-0">

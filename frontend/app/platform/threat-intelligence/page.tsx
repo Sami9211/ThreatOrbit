@@ -15,7 +15,7 @@ const connectors = [
     types: 'IP, Domain, URL, Hash, Email',
     cadence: 'Configurable poll interval (default 15 min)',
     color: '#FF2E97',
-    desc: 'Subscribes to your OTX pulse subscriptions and fetches all indicators added since the last high-water mark. Pulse metadata — adversary, malware family, ATT&CK tags — is preserved in the indicator record.',
+    desc: 'Subscribes to your OTX pulse subscriptions and fetches all indicators added since the last high-water mark. Pulse metadata - adversary, malware family, ATT&CK tags - is preserved in the indicator record.',
   },
   {
     name: 'abuse.ch',
@@ -53,9 +53,9 @@ const connectors = [
 
 const pipelineSteps = [
   { n: '01', title: 'Fetch', body: 'Each connector runs on its own async schedule. Raw indicator records are fetched and placed into a staging queue. The connector records a high-water mark so reruns never re-fetch old data.' },
-  { n: '02', title: 'Normalise', body: 'Staging records are parsed into a canonical schema: type, value, source, source_confidence. Type inference handles edge cases — an IPv6 address is not misclassified as a domain.' },
+  { n: '02', title: 'Normalise', body: 'Staging records are parsed into a canonical schema: type, value, source, source_confidence. Type inference handles edge cases - an IPv6 address is not misclassified as a domain.' },
   { n: '03', title: 'Deduplicate', body: 'A UUIDv5 deterministic ID is derived from (type, value). If an indicator already exists, the record is merged: source list extended, last_seen updated, trust score recalculated.' },
-  { n: '04', title: 'Trust-Score', body: 'Initial trust score = source_confidence weight. After VirusTotal enrichment, the score is updated: (source_confidence × 0.6) + (vt_positives / vt_total × 0.4). Scores range 0.0–1.0.' },
+  { n: '04', title: 'Trust-Score', body: 'Initial trust score = source_confidence weight. After VirusTotal enrichment, the score is updated: (source_confidence × 0.6) + (vt_positives / vt_total × 0.4). Scores range 0.0-1.0.' },
   { n: '05', title: 'Store', body: 'Scored indicators land in the WAL-mode SQLite library. Indexes on type, trust_score, and last_seen ensure sub-millisecond lookups during real-time log analysis.' },
 ]
 
@@ -121,7 +121,7 @@ export default function ThreatIntelligencePage() {
         {/* Source Connectors */}
         <div className="mb-16">
           <h2 className="font-display text-2xl font-bold text-white mb-2">OSINT Source Connectors</h2>
-          <p className="text-sm text-ink-500 mb-8">Each connector is independently scheduled and fault-isolated — one source going down never stalls the others.</p>
+          <p className="text-sm text-ink-500 mb-8">Each connector is independently scheduled and fault-isolated - one source going down never stalls the others.</p>
           <div className="space-y-3">
             {connectors.map(({ name, endpoint, types, cadence, color, desc }) => (
               <div key={name} className="glass rounded-2xl border border-white/6 p-5">
@@ -160,12 +160,12 @@ export default function ThreatIntelligencePage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {[
-                  ['id', 'UUIDv5', 'Deterministic — derived from (type, value)'],
+                  ['id', 'UUIDv5', 'Deterministic - derived from (type, value)'],
                   ['type', 'enum', 'ip · domain · url · hash · email'],
-                  ['value', 'string', 'Canonical form — IP normalised, domain lowercased'],
+                  ['value', 'string', 'Canonical form - IP normalised, domain lowercased'],
                   ['source', 'string[]', 'All feeds that have reported this indicator'],
-                  ['source_confidence', 'float 0–1', 'Weighted average of originating source weights'],
-                  ['trust_score', 'float 0–1', 'Composite: source_confidence + VT enrichment'],
+                  ['source_confidence', 'float 0-1', 'Weighted average of originating source weights'],
+                  ['trust_score', 'float 0-1', 'Composite: source_confidence + VT enrichment'],
                   ['vt_positives', 'integer', 'VirusTotal positive detection count'],
                   ['vt_total', 'integer', 'Total VT scanner count for normalisation'],
                   ['first_seen', 'ISO 8601', 'Timestamp of first ingestion'],

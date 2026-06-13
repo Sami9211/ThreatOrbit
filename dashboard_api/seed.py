@@ -100,8 +100,8 @@ def _seed_assets(conn, rng):
         ("web-prod-02", "server", "10.0.1.21", "critical", "Ubuntu 22.04 LTS"),
         ("db-prod-primary", "database", "10.0.2.10", "critical", "PostgreSQL 15 / RHEL 9"),
         ("db-prod-replica", "database", "10.0.2.11", "high", "PostgreSQL 15 / RHEL 9"),
-        ("threatorbit.space", "domain", "threatorbit.space", "critical", "—"),
-        ("api.threatorbit.space", "domain", "api.threatorbit.space", "high", "—"),
+        ("threatorbit.space", "domain", "threatorbit.space", "critical", "-"),
+        ("api.threatorbit.space", "domain", "api.threatorbit.space", "high", "-"),
         ("k8s-node-01", "cloud", "10.0.4.5", "high", "AKS / Ubuntu 20.04"),
         ("k8s-node-02", "cloud", "10.0.4.6", "high", "AKS / Ubuntu 20.04"),
         ("vpn-gateway", "server", "203.0.113.7", "critical", "pfSense 2.7"),
@@ -115,7 +115,7 @@ def _seed_assets(conn, rng):
     ]
     owners = ["sarah.chen", "marcus.webb", "priya.nair", "diego.ramos", "lena.fischer"]
     port_pool = [22, 80, 443, 3306, 5432, 3389, 8080, 8443, 53, 25, 6379, 9200]
-    # Installed software per asset — some deliberately vulnerable versions so the
+    # Installed software per asset - some deliberately vulnerable versions so the
     # vuln scanner produces genuine CVE findings; others patched (no findings).
     software_map = {
         "web-prod-01": [{"product": "nginx", "version": "1.17.6"}, {"product": "openssl", "version": "3.0.5"}],
@@ -216,7 +216,7 @@ def _seed_alerts(conn, rng, rule_refs, assets, analysts):
         # acknowledged/responded to faster (analysts prioritise it). Only the
         # stages the alert has actually reached are populated.
         sev_factor = {"critical": 0.6, "high": 0.8, "medium": 1.0, "low": 1.3, "info": 1.5}[sev]
-        detect_lat = int(rng.randint(45, 540) * sev_factor)  # ~1–9 min before scaling
+        detect_lat = int(rng.randint(45, 540) * sev_factor)  # ~1-9 min before scaling
         ack_lat = int(rng.randint(120, 1500) * sev_factor) if status != "new" else None
         respond_lat = int(rng.randint(600, 2700) * sev_factor) if status in (
             "resolved", "closed", "pending") else None
@@ -515,7 +515,7 @@ def seed(force: bool = False):
 
 def bootstrap_live():
     """Live-mode bootstrap: create the admin user, default settings, and the
-    real feed catalogue — but NO demo alerts/actors/assets. Indicators arrive
+    real feed catalogue - but NO demo alerts/actors/assets. Indicators arrive
     from the connector engine. Idempotent (no-op once a user exists)."""
     from dashboard_api.auth import hash_password
     from dashboard_api.threat_actor_library import seed_actor_library, recompute_actor_activity
@@ -532,7 +532,7 @@ def bootstrap_live():
             _seed_settings(conn)
             from dashboard_api.tenancy import ensure_default_org
             ensure_default_org(conn)
-        # Reference actor knowledge base + real attributed activity — every boot
+        # Reference actor knowledge base + real attributed activity - every boot
         # (idempotent), so existing live deployments get backfilled too.
         seed_actor_library(conn)
         recompute_actor_activity(conn)

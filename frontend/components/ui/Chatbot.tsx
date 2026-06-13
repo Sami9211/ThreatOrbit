@@ -47,7 +47,7 @@ const KB: { keys: string[]; reply: string }[] = [
   {
     keys: ['deploy', 'docker', 'install', 'setup', 'self-host'],
     reply:
-      'Deployment is a single command: `docker compose up -d` brings up both APIs (ports 8000 and 8001). The frontend is a static Next.js export, so it hosts on any static platform — Netlify, Cloudflare Pages, Vercel, or your own CDN.',
+      'Deployment is a single command: `docker compose up -d` brings up both APIs (ports 8000 and 8001). The frontend is a static Next.js export, so it hosts on any static platform - Netlify, Cloudflare Pages, Vercel, or your own CDN.',
   },
   {
     keys: ['api', 'key', 'auth', 'token'],

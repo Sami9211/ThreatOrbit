@@ -52,7 +52,7 @@ const SAVED_HUNTS: SavedHunt[] = [
   {
     id: 'sh-001',
     name: 'Beaconing: Low & Slow C2',
-    description: 'Detect endpoints making periodic outbound connections at regular intervals — consistent with C2 beacon heartbeat traffic.',
+    description: 'Detect endpoints making periodic outbound connections at regular intervals - consistent with C2 beacon heartbeat traffic.',
     query: `network where event.type == "connection"
   and network.direction == "outbound"
   and not destination.ip: ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16")
@@ -62,7 +62,7 @@ const SAVED_HUNTS: SavedHunt[] = [
     avg_interval = avg(diff(@timestamp)) by source.ip, destination.ip, destination.port, host.name
     window       = 6h
 | where conn_count between 10 and 200
-  and avg_interval between 30 and 300          -- 30s–5min beacon window
+  and avg_interval between 30 and 300          -- 30s-5min beacon window
   and stddev(diff(@timestamp)) < avg_interval * 0.15   -- low jitter`,
     technique: 'T1071.001',
     lastRun: '14m ago',
@@ -72,7 +72,7 @@ const SAVED_HUNTS: SavedHunt[] = [
   {
     id: 'sh-002',
     name: 'Pass-the-Hash Indicators',
-    description: 'Look for NTLM authentication from non-domain controllers — typical of credential relay / pass-the-hash lateral movement.',
+    description: 'Look for NTLM authentication from non-domain controllers - typical of credential relay / pass-the-hash lateral movement.',
     query: `event.dataset: "windows.security"
   AND event.code: "4624"
   AND winlog.event_data.LogonType: "3"
@@ -93,7 +93,7 @@ const SAVED_HUNTS: SavedHunt[] = [
   {
     id: 'sh-003',
     name: 'Kerberoasting Attempt',
-    description: 'Service ticket requests for accounts with SPNs — attackers request TGS tickets offline to crack service account passwords.',
+    description: 'Service ticket requests for accounts with SPNs - attackers request TGS tickets offline to crack service account passwords.',
     query: `event.dataset: "windows.security"
   AND event.code: "4769"
   AND winlog.event_data.TicketEncryptionType: "0x17"   -- RC4 = weak, preferred by kerberoasting tools
@@ -112,7 +112,7 @@ const SAVED_HUNTS: SavedHunt[] = [
   {
     id: 'sh-004',
     name: 'LOLBAS Execution Chain',
-    description: 'Living-off-the-land binaries spawning suspicious child processes — abuse of trusted Windows binaries to evade detection.',
+    description: 'Living-off-the-land binaries spawning suspicious child processes - abuse of trusted Windows binaries to evade detection.',
     query: `process where event.type == "start"
   and process.parent.name: (
     "mshta.exe","wscript.exe","cscript.exe","regsvr32.exe",
@@ -133,7 +133,7 @@ const SAVED_HUNTS: SavedHunt[] = [
   {
     id: 'sh-005',
     name: 'Cloud API Abuse',
-    description: 'High-rate API calls from service accounts outside business hours — may indicate compromised credentials or automated exfiltration.',
+    description: 'High-rate API calls from service accounts outside business hours - may indicate compromised credentials or automated exfiltration.',
     query: `event.dataset: "aws.cloudtrail"
   AND user.name: "svc-*" OR user.name: "*-service" OR user.name: "*-bot"
   AND NOT event.action: ("AssumeRole","GetCallerIdentity","Describe*","List*","Get*")
@@ -143,7 +143,7 @@ const SAVED_HUNTS: SavedHunt[] = [
     write_calls = countif(event.action: ("Put*","Create*","Delete*","Update*","Attach*"))
   by user.name, source.ip, bucket(@timestamp, 1h)
 | where (
-    @timestamp.hour < 7 OR @timestamp.hour > 21   -- outside 07:00–21:00 UTC
+    @timestamp.hour < 7 OR @timestamp.hour > 21   -- outside 07:00-21:00 UTC
   )
   AND api_calls > 200
   AND write_calls > 50`,
@@ -261,8 +261,8 @@ export default function ThreatHuntPage() {
     id: h.id,
     name: h.name,
     description: h.hypothesis,
-    query: h.query || `// ${h.name}\n// (no stored query — write one and Save Hunt)`,
-    technique: h.technique || '—',
+    query: h.query || `// ${h.name}\n// (no stored query - write one and Save Hunt)`,
+    technique: h.technique || '-',
     lastRun: h.lastRun ?? 'Never',
     hitCount: h.artifacts,
     author: h.analyst,
@@ -355,7 +355,7 @@ export default function ThreatHuntPage() {
         setSavePanelOpen(false)
         setSaveName('')
       })
-      .catch(() => setSavedMsg('Could not save — is the dashboard API running?'))
+      .catch(() => setSavedMsg('Could not save - is the dashboard API running?'))
     setTimeout(() => setSavedMsg(null), 2500)
   }
 
@@ -726,7 +726,7 @@ export default function ThreatHuntPage() {
                       <p className="text-[10px] text-ink-500 mt-0.5 leading-relaxed">
                         {runResult.hits} endpoints exhibit low-jitter periodic outbound connections consistent with C2 beacon heartbeat.
                         Average interval: ~77s · Average payload: ~822 B · Confidence: <span className="text-magenta font-semibold">High (87%)</span>.
-                        Correlate with EDR process tree and DNS logs. Consider isolating DESKTOP-FIN-087 (interval 58s — closest match to known Cobalt Strike default).
+                        Correlate with EDR process tree and DNS logs. Consider isolating DESKTOP-FIN-087 (interval 58s - closest match to known Cobalt Strike default).
                       </p>
                     </div>
                   </div>

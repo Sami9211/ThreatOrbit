@@ -1,4 +1,4 @@
-"""Native log-source ingestion — the collector side of the SIEM.
+"""Native log-source ingestion - the collector side of the SIEM.
 
 Accepts raw log lines (syslog, Apache/Nginx, JSON, key=value, or generic),
 parses them into normalised `events` rows, and lets the detection rule engine
@@ -84,14 +84,14 @@ _INT_FIELDS = {"dest_port", "bytes_out"}
 
 
 def _apply_ecs(ev: dict, obj: dict, weak: set[str]) -> None:
-    """ECS ingest-time normalisation: resolve Elastic Common Schema names —
-    nested ({"source": {"ip": …}}) or dotted ("source.ip") — into the stored
+    """ECS ingest-time normalisation: resolve Elastic Common Schema names -
+    nested ({"source": {"ip": …}}) or dotted ("source.ip") - into the stored
     native fields using the same alias map the rule/query layer uses, so an
     ECS-shaped document lands fully normalised instead of relying on the
     read-time alias layer.
 
     Precedence: explicit flat JSON keys > ECS fields > raw-line regex
-    heuristics (`weak` holds fields whose value is only a heuristic guess —
+    heuristics (`weak` holds fields whose value is only a heuristic guess -
     the producer's ECS metadata is authoritative over those). Content-derived
     event classification (event_type/severity/MITRE from signatures) is kept
     unless it's the generic default."""
@@ -121,7 +121,7 @@ def _parse_json(line: str) -> dict | None:
         return None
     base = _base_event(line)
     ev = dict(base)
-    # Map common JSON keys onto the normalised shape (scalars only — nested
+    # Map common JSON keys onto the normalised shape (scalars only - nested
     # objects like ECS {"host": {"name": …}} are handled by _apply_ecs below).
     def pick(*keys):
         for k in keys:
@@ -149,7 +149,7 @@ def _parse_json(line: str) -> dict | None:
     if obj.get("event_type"):
         ev["event_type"] = str(obj["event_type"])
     # ECS documents (nested or dotted keys) normalise at ingest time too.
-    # Entity fields still holding only the raw-line regex guess are "weak" —
+    # Entity fields still holding only the raw-line regex guess are "weak" -
     # the producer's ECS values are authoritative over them.
     weak = {k for k in ("src_ip", "dest_ip", "username", "hostname")
             if ev.get(k) is not None and ev[k] == base.get(k)}
@@ -266,7 +266,7 @@ def match_threat_intel(conn) -> int:
             ).fetchone()
             if not ioc:
                 continue
-            # the event observing this indicator IS a sighting — record it.
+            # the event observing this indicator IS a sighting - record it.
             from dashboard_api.ioc_lifecycle import record_sighting
             record_sighting(conn, ioc_id=ioc["id"], source="siem:event",
                             context=f"event {e['id']} matched {val}")

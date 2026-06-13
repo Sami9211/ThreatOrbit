@@ -374,7 +374,7 @@ def verify_evidence_bundle(body: BundleVerify, user: dict = Depends(current_user
 
 @router.post("/cases/{case_id}/link")
 def link_case(case_id: str, body: CaseLink, user: dict = Depends(require_perm("soar.write"))):
-    """Relate two cases (related|duplicate) — recorded on both sides."""
+    """Relate two cases (related|duplicate) - recorded on both sides."""
     if body.relation not in ("related", "duplicate"):
         raise HTTPException(status_code=400, detail="relation must be related|duplicate")
     if body.case_id == case_id:
@@ -823,7 +823,7 @@ class IntegrationUpdate(BaseModel):
 def update_integration(integration_id: str, body: IntegrationUpdate,
                        user: dict = Depends(require_perm("soar.write"))):
     """Credential entry for an action integration: set/clear the vendor base
-    URL + API key (the key is stored, never returned — list/detail expose only
+    URL + API key (the key is stored, never returned - list/detail expose only
     `credentialed`) and toggle enablement."""
     fields, values = [], []
     if body.base_url is not None:
@@ -889,7 +889,7 @@ def run_integration_action(integration_id: str, body: ActionRun, user: dict = De
 
 @router.get("/integrations/{integration_id}/actions")
 def integration_action_trail(integration_id: str, limit: int = 50):
-    """The action audit trail for one integration — what was done, to whom, and
+    """The action audit trail for one integration - what was done, to whom, and
     whether it was a live vendor call or recorded-only."""
     with get_conn() as conn:
         if not conn.execute("SELECT 1 FROM integrations WHERE id=?", (integration_id,)).fetchone():
@@ -902,7 +902,7 @@ def integration_action_trail(integration_id: str, limit: int = 50):
 
 @router.get("/metrics")
 def soar_metrics(user: dict = Depends(current_user)):
-    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     now = datetime.now(timezone.utc)
     week = (now - timedelta(days=7)).replace(microsecond=0).isoformat()
@@ -919,7 +919,7 @@ def soar_metrics(user: dict = Depends(current_user)):
             f"WHERE respond_latency_sec IS NOT NULL {sc}", sp
         ).fetchone()
         # Real week-over-week MTTR movement: this week's average response
-        # latency vs the prior week's. Null when a window has no data — the UI
+        # latency vs the prior week's. Null when a window has no data - the UI
         # shows "no baseline" instead of a made-up arrow.
         wow = conn.execute(
             "SELECT AVG(CASE WHEN ts >= ? THEN respond_latency_sec END) AS cur, "

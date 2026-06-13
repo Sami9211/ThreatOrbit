@@ -47,7 +47,7 @@ const COUNTRY: Record<string, { lat: number; lon: number; flag: string }> = {
   'Poland': { lat: 52, lon: 19, flag: '🇵🇱' }, 'Belarus': { lat: 53, lon: 28, flag: '🇧🇾' },
 }
 
-/* A point representing the monitored environment — arcs converge here so the
+/* A point representing the monitored environment - arcs converge here so the
    map reads as "origins -> what we observed", not a claim about geography. */
 const HOME = project(15, 30)
 

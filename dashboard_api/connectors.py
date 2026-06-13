@@ -1,7 +1,7 @@
 """Threat-intel connector engine.
 
 Connectors pull indicators from real sources and normalise them into the
-single CTI IOC store the whole dashboard reads from — the same model OpenCTI
+single CTI IOC store the whole dashboard reads from - the same model OpenCTI
 uses. Supported kinds:
 
   threatorbit  the bundled OSINT engine (threat_api: abuse.ch, RSS, OTX, …)
@@ -43,7 +43,7 @@ KIND_PRESETS = {
     },
     "nvd": {
         "label": "NVD CVE Feed",
-        "description": "National Vulnerability Database — recent CVEs with CVSS severity. Free, no key (a NVD key raises rate limits).",
+        "description": "National Vulnerability Database - recent CVEs with CVSS severity. Free, no key (a NVD key raises rate limits).",
         "needs_key": False,
         "default_url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
         "default_interval": 720,
@@ -438,7 +438,7 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             conn.commit()
         result["connectorTotal"] = total_count
         return result
-    except Exception as e:  # network/parse/auth failure — record, never crash
+    except Exception as e:  # network/parse/auth failure - record, never crash
         msg = str(e)[:300]
         with get_conn() as conn:
             conn.execute("UPDATE connectors SET status='error', last_run=?, last_error=? WHERE id=?",

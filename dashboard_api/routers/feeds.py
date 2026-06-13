@@ -47,7 +47,7 @@ def list_feeds(type: str | None = None, status: str | None = None,
 
 @router.get("/summary")
 def feeds_summary(user: dict = Depends(current_user)):
-    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         rows = conn.execute(

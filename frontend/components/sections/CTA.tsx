@@ -108,7 +108,7 @@ function AnimatedTerminal({ inView }: { inView: boolean }) {
         <span className="w-2.5 h-2.5 rounded-full bg-threat/80" />
         <span className="w-2.5 h-2.5 rounded-full bg-amber/80" />
         <span className="w-2.5 h-2.5 rounded-full bg-safe/80" />
-        <span className="ml-2 text-ink-500 text-[10px]">bash — threatorbit</span>
+        <span className="ml-2 text-ink-500 text-[10px]">bash - threatorbit</span>
       </div>
       {COMMAND_STEPS.slice(0, visible).map((step, i) => (
         <motion.div
@@ -194,7 +194,7 @@ export default function CTA() {
                 className="text-ink-300 text-base max-w-md mx-auto lg:mx-0 mb-8"
               >
                 Deploy ThreatOrbit in minutes with Docker. Connect your OSINT sources, point it at
-                your logs, and push to OpenCTI — all with a single API key.
+                your logs, and push to OpenCTI - all with a single API key.
               </motion.p>
 
               <motion.div

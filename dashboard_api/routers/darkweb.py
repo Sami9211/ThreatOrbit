@@ -52,7 +52,7 @@ def list_findings(category: str | None = None, severity: str | None = None,
 
 @router.get("/summary")
 def summary(user: dict = Depends(current_user)):
-    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     from dashboard_api import tenancy
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:

@@ -1,4 +1,4 @@
-"""Sigma rule import/export — vendor-neutral detection content.
+"""Sigma rule import/export - vendor-neutral detection content.
 
 Import maps a Sigma YAML rule onto ThreatOrbit's evaluable definition
 (conditions + AND/OR logic over the raw event stream):
@@ -149,7 +149,7 @@ def sigma_to_rule(text: str) -> dict:
                     conditions.extend(_conditions_from_selection(entry, notes))
             if logic == "and" and len(sel) > 1:
                 logic = "or"
-                notes.append(f"selection '{name}' is a list — evaluated as OR")
+                notes.append(f"selection '{name}' is a list - evaluated as OR")
         elif isinstance(sel, dict):
             conditions.extend(_conditions_from_selection(sel, notes))
         else:

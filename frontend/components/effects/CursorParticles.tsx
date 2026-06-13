@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useCursorEffect } from '@/lib/useCursorEffect'
 
-// Brand palette — blobs cycle through these
+// Brand palette - blobs cycle through these
 const BRAND_RGB = [
   [255, 46,  151],  // #FF2E97 magenta
   [122, 60,  255],  // #7A3CFF violet
@@ -45,7 +45,7 @@ export default function CursorParticles() {
     resize()
     window.addEventListener('resize', resize)
 
-    // Place blobs off-screen initially — they flow to cursor on first move
+    // Place blobs off-screen initially - they flow to cursor on first move
     const startX = -500, startY = -500
     // Speeds deliberately different so blobs stretch into a trail on fast movement
     const speeds  = [0.10, 0.065, 0.042, 0.028, 0.018]
@@ -67,7 +67,7 @@ export default function CursorParticles() {
     }
 
     function burst(x: number, y: number) {
-      // On tap/touchstart — scatter blobs outward then let them flow back
+      // On tap/touchstart - scatter blobs outward then let them flow back
       blobsRef.current.forEach((b, i) => {
         const angle = (i / blobsRef.current.length) * Math.PI * 2
         const d = 55 + i * 12
@@ -89,7 +89,7 @@ export default function CursorParticles() {
     function frame() {
       ctx.clearRect(0, 0, canvas!.width, canvas!.height)
 
-      // 'lighter' makes overlapping blobs brighten — the plasma core effect
+      // 'lighter' makes overlapping blobs brighten - the plasma core effect
       ctx.globalCompositeOperation = 'lighter'
 
       for (const blob of blobsRef.current) {
@@ -99,7 +99,7 @@ export default function CursorParticles() {
         blob.x += (blob.tx - blob.x) * blob.speed
         blob.y += (blob.ty - blob.y) * blob.speed
 
-        // Gentle idle oscillation — blobs breathe when clustered
+        // Gentle idle oscillation - blobs breathe when clustered
         const settled = Math.sqrt((blob.tx - blob.x) ** 2 + (blob.ty - blob.y) ** 2)
         const drift   = Math.max(0, 1 - settled / 80) * 7
         const px = blob.x + Math.sin(blob.phase)          * drift

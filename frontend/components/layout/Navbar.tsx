@@ -91,7 +91,7 @@ export default function Navbar() {
           </nav>
 
           <div className="flex items-center gap-2.5">
-            {/* Dashboard — always visible (incl. mobile), prominent gradient */}
+            {/* Dashboard - always visible (incl. mobile), prominent gradient */}
             <a
               href="/dashboard"
               className="group flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-lg bg-plasma text-white font-semibold text-sm shadow-magenta-sm transition-all duration-300 hover:shadow-magenta hover:scale-[1.03]"

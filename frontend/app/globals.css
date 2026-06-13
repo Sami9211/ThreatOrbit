@@ -37,7 +37,7 @@
   color-scheme: dark;
 }
 
-/* ── Monochrome — "black & white" graphite ─────────────────────────── */
+/* ── Monochrome - "black & white" graphite ─────────────────────────── */
 [data-theme='mono'] {
   --bg: 10 10 11;
   --surface: 19 19 21;
@@ -59,7 +59,7 @@
   --ink-800: 39 39 42;
 }
 
-/* ── Arctic — cool sky/indigo on deep navy ─────────────────────────── */
+/* ── Arctic - cool sky/indigo on deep navy ─────────────────────────── */
 [data-theme='arctic'] {
   --bg: 6 11 18;
   --surface: 10 17 28;
@@ -81,7 +81,7 @@
   --ink-800: 30 41 59;
 }
 
-/* ── Matrix — terminal green on near-black ─────────────────────────── */
+/* ── Matrix - terminal green on near-black ─────────────────────────── */
 [data-theme='matrix'] {
   --bg: 5 10 5;
   --surface: 8 17 8;
@@ -103,7 +103,7 @@
   --ink-800: 26 34 26;
 }
 
-/* ── Solar Flare — amber/orange on warm dark ───────────────────────── */
+/* ── Solar Flare - amber/orange on warm dark ───────────────────────── */
 [data-theme='solar'] {
   --bg: 18 11 5;
   --surface: 26 16 8;
@@ -125,7 +125,7 @@
   --ink-800: 38 31 24;
 }
 
-/* ── Crimson — rose/red threat aesthetic ───────────────────────────── */
+/* ── Crimson - rose/red threat aesthetic ───────────────────────────── */
 [data-theme='crimson'] {
   --bg: 15 6 8;
   --surface: 23 10 13;
@@ -176,7 +176,7 @@ body {
 /* Selection */
 ::selection { background: rgba(255,46,151,0.25); color: #fff; }
 
-/* Keyboard focus — visible ring only for keyboard users */
+/* Keyboard focus - visible ring only for keyboard users */
 :focus-visible {
   outline: 2px solid rgba(255,46,151,0.7);
   outline-offset: 2px;
@@ -201,7 +201,7 @@ body {
 }
 .skip-link:focus { transform: translate(-50%, 0); }
 
-/* Film-grain overlay — adds subtle texture, zero GPU cost */
+/* Film-grain overlay - adds subtle texture, zero GPU cost */
 .grain-overlay {
   position: fixed;
   inset: 0;
@@ -456,7 +456,7 @@ body {
 /* ── Dashboard page density ─────────────────────────────────────────
  * The Overview page is authored at a dense, laptop-friendly scale. The other
  * dashboard routes were built a touch larger, so on laptop/desktop they read as
- * "zoomed in". We scale their content down to match Overview — but only from the
+ * "zoomed in". We scale their content down to match Overview - but only from the
  * md breakpoint up, since mobile layouts already stack and shrinking them further
  * would hurt legibility. The TopBar/Sidebar live outside this wrapper, so the
  * app chrome stays one consistent size on every page. */

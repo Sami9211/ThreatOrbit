@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'ThreatOrbit · Enterprise Threat Intelligence Platform',
     short_name: 'ThreatOrbit',
     description:
-      'Threat intelligence ingestion, ML log anomaly detection, and OpenCTI integration — one unified API.',
+      'Threat intelligence ingestion, ML log anomaly detection, and OpenCTI integration - one unified API.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0A0612',

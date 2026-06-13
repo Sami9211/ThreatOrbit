@@ -1,14 +1,14 @@
-"""Vulnerability scanner — genuine CVE findings from installed software.
+"""Vulnerability scanner - genuine CVE findings from installed software.
 
 Rather than fabricate CVE counts, this matches each asset's software inventory
 (`[{product, version}]`) against a catalogue of real, well-known CVEs with their
 affected version ranges and CVSS, producing concrete findings (CVE id, CVSS,
 severity, fixed-in) per asset. The built-in catalogue is real CVE data, and the
 NVD connector syncs live feed records (CPE product/version ranges) into the
-`cve_catalogue` table, which is merged in at scan time — so NVD imports flow
+`cve_catalogue` table, which is merged in at scan time - so NVD imports flow
 straight into scanning.
 
-Version comparison is a simple dotted-numeric compare — enough for the common
+Version comparison is a simple dotted-numeric compare - enough for the common
 `affected: <fixed_version` and inclusive-range checks these CVEs use.
 """
 import json
@@ -23,11 +23,11 @@ from datetime import datetime, timezone
 CVE_CATALOGUE: dict[str, list[dict]] = {
     "log4j": [{"cve": "CVE-2021-44228", "cvss": 10.0, "severity": "critical",
                "lt": "2.15.0", "fixed": "2.15.0", "kev": True, "exploit": True,
-               "summary": "Log4Shell — JNDI RCE in Apache Log4j 2"}],
+               "summary": "Log4Shell - JNDI RCE in Apache Log4j 2"}],
     "openssl": [
         {"cve": "CVE-2014-0160", "cvss": 7.5, "severity": "high", "range": ("1.0.1", "1.0.1f"),
          "fixed": "1.0.1g", "kev": True, "exploit": True,
-         "summary": "Heartbleed — TLS heartbeat memory disclosure"},
+         "summary": "Heartbleed - TLS heartbeat memory disclosure"},
         {"cve": "CVE-2022-3602", "cvss": 7.5, "severity": "high", "range": ("3.0.0", "3.0.6"),
          "fixed": "3.0.7", "kev": False, "exploit": False,
          "summary": "X.509 email address buffer overflow"}],
@@ -42,16 +42,16 @@ CVE_CATALOGUE: dict[str, list[dict]] = {
                "summary": "HTTP request smuggling via error_page"}],
     "openssh": [{"cve": "CVE-2024-6387", "cvss": 8.1, "severity": "high",
                  "range": ("8.5", "9.7"), "fixed": "9.8", "kev": False, "exploit": True,
-                 "summary": "regreSSHion — unauthenticated RCE in OpenSSH server"}],
+                 "summary": "regreSSHion - unauthenticated RCE in OpenSSH server"}],
     "sudo": [{"cve": "CVE-2021-3156", "cvss": 7.8, "severity": "high", "lt": "1.9.5p2",
               "fixed": "1.9.5p2", "kev": True, "exploit": True,
-              "summary": "Baron Samedit — heap overflow privilege escalation"}],
+              "summary": "Baron Samedit - heap overflow privilege escalation"}],
     "exim": [{"cve": "CVE-2019-10149", "cvss": 9.8, "severity": "critical", "range": ("4.87", "4.91"),
               "fixed": "4.92", "kev": True, "exploit": True,
               "summary": "RCE in Exim deliver_message()"}],
     "windows": [{"cve": "CVE-2020-0796", "cvss": 10.0, "severity": "critical",
                  "range": ("10.0", "10.0"), "fixed": "patched", "kev": True, "exploit": True,
-                 "summary": "SMBGhost — SMBv3 compression RCE"}],
+                 "summary": "SMBGhost - SMBv3 compression RCE"}],
 }
 
 
@@ -87,7 +87,7 @@ def _matches(entry: dict, version: str) -> bool:
 
 def scan_software(software: list[dict], extra_catalogue: dict | None = None) -> list[dict]:
     """Match an installed-software list against the CVE catalogue → findings.
-    `extra_catalogue` entries (e.g. NVD-synced rows) extend the built-ins —
+    `extra_catalogue` entries (e.g. NVD-synced rows) extend the built-ins -
     per-product lists are concatenated, not replaced."""
     cat: dict[str, list[dict]] = {k: list(v) for k, v in CVE_CATALOGUE.items()}
     for prod, entries in (extra_catalogue or {}).items():
@@ -164,7 +164,7 @@ def nvd_to_catalogue(vulnerabilities: list[dict]) -> list[dict]:
                         vstart = vend = parts[5]
                         vstart_incl = vend_incl = True
                     if not vstart and not vend:
-                        continue  # unbounded — nothing scannable
+                        continue  # unbounded - nothing scannable
                     rows.append({
                         "cve": cid, "product": product, "cvss": cvss, "severity": severity,
                         "vstart": vstart, "vstart_incl": vstart_incl,

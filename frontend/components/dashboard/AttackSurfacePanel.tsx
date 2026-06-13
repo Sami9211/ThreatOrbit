@@ -15,7 +15,7 @@ const BAND_CLS: Record<string, string> = {
 }
 
 function relTime(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s ago`
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
@@ -23,7 +23,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * Attack surface — the live exposure inventory (factor-based scoring over the
+ * Attack surface - the live exposure inventory (factor-based scoring over the
  * managed fleet, internet-facing flagged) plus passive discovery: unmanaged
  * hostnames observed in real telemetry, promotable into the inventory in one
  * click. All data comes from `/assets/exposure` and `/assets/discovered`.
@@ -120,7 +120,7 @@ export default function AttackSurfacePanel({ onPromoted }: { onPromoted?: () => 
             <p className="text-[11px] text-ink-600 py-4 animate-pulse">Scanning telemetry…</p>
           ) : discovered.length === 0 ? (
             <p className="text-[11px] text-ink-600 py-4">
-              No unmanaged hosts observed — every hostname in the event stream is already inventoried.
+              No unmanaged hosts observed - every hostname in the event stream is already inventoried.
             </p>
           ) : (
             <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">

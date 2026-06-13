@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useLiveStream } from '@/lib/useLiveStream'
 
-/* Compact segmented Normal/Power toggle — surfaces the experience mode so the
+/* Compact segmented Normal/Power toggle - surfaces the experience mode so the
    difference is one tap away (it was previously buried in Configuration). */
 function ModeToggle() {
   const [mode, setMode] = useExperienceMode()
@@ -70,7 +70,7 @@ function relTime(iso: string): string {
 
 export default function TopBar() {
   const raw = usePathname() ?? '/dashboard'
-  // trailingSlash:true means usePathname() can return "/dashboard/siem/" —
+  // trailingSlash:true means usePathname() can return "/dashboard/siem/" -
   // normalise so the label lookup matches regardless of trailing slash.
   const pathname = raw.length > 1 ? raw.replace(/\/$/, '') : raw
   const label = LABELS[pathname] ?? LABELS['/dashboard']
@@ -125,7 +125,7 @@ export default function TopBar() {
   return (
     <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/60 backdrop-blur-sm sticky top-0 z-30">
       <div className="flex items-center gap-2 text-sm min-w-0">
-        {/* Mobile hamburger — dispatches event to Sidebar */}
+        {/* Mobile hamburger - dispatches event to Sidebar */}
         <button
           className="md:hidden p-1.5 -ml-1 mr-0.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors shrink-0"
           onClick={() => window.dispatchEvent(new CustomEvent('sidebar-mobile-toggle'))}
@@ -242,7 +242,7 @@ export default function TopBar() {
           </AnimatePresence>
         </div>
 
-        {/* Refresh — hidden on mobile to save space */}
+        {/* Refresh - hidden on mobile to save space */}
         <button
           aria-label="Refresh data"
           onClick={handleRefresh}

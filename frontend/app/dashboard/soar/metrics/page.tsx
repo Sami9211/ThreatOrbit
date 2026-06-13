@@ -134,7 +134,7 @@ const ANALYSTS = [
   { name: 'a.patel',     full: 'Aryan Patel',      alerts: 198, mttr: '18.9m', fp: '7.4%',  sla: '96.9%', streak: 8,  rank: 2 },
   { name: 'm.rodriguez', full: 'Maya Rodriguez',   alerts: 156, mttr: '21.4m', fp: '9.2%',  sla: '95.5%', streak: 4,  rank: 3 },
   { name: 's.kim',       full: 'Sam Kim',          alerts: 89,  mttr: '28.1m', fp: '11.8%', sla: '91.0%', streak: 1,  rank: 4 },
-  { name: '—',           full: 'Unassigned Queue', alerts: 594, mttr: '—',     fp: '—',     sla: '—',     streak: 0,  rank: 0 },
+  { name: '-',           full: 'Unassigned Queue', alerts: 594, mttr: '-',     fp: '-',     sla: '-',     streak: 0,  rank: 0 },
 ]
 
 // Playbook effectiveness
@@ -320,7 +320,7 @@ function DonutChart({
           className="w-full h-full rounded-full"
           style={{ background: gradient }}
         />
-        {/* Hole — centred via a single translate technique (no conflicting insets).
+        {/* Hole - centred via a single translate technique (no conflicting insets).
             A larger hole keeps the ring slim and elegant rather than a thick wedge. */}
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface flex flex-col items-center justify-center"
@@ -509,8 +509,8 @@ export default function SOCMetricsPage() {
             <div className="flex items-center gap-3 text-[10px]">
               {[
                 { label: '≥80%',  color: '#34F5C5' },
-                { label: '60–80%',color: '#7A3CFF' },
-                { label: '40–60%',color: '#FFB23E' },
+                { label: '60-80%',color: '#7A3CFF' },
+                { label: '40-60%',color: '#FFB23E' },
                 { label: '<40%',  color: '#FF4D6D' },
               ].map((l) => (
                 <span key={l.label} className="flex items-center gap-1 text-ink-500">
@@ -622,7 +622,7 @@ export default function SOCMetricsPage() {
                   a.rank === 3 ? 'text-safe' :
                   'text-ink-600',
                 )}>
-                  {a.rank > 0 ? a.rank : '—'}
+                  {a.rank > 0 ? a.rank : '-'}
                 </span>
 
                 {/* Name */}
@@ -642,7 +642,7 @@ export default function SOCMetricsPage() {
                 {/* MTTR */}
                 <span className={cn(
                   'text-[11px] font-mono text-right',
-                  a.mttr === '—' ? 'text-ink-700' :
+                  a.mttr === '-' ? 'text-ink-700' :
                   parseFloat(a.mttr) < 18 ? 'text-safe' :
                   parseFloat(a.mttr) < 25 ? 'text-amber' : 'text-threat',
                 )}>
@@ -652,7 +652,7 @@ export default function SOCMetricsPage() {
                 {/* FP Rate */}
                 <span className={cn(
                   'text-[11px] font-mono text-right',
-                  a.fp === '—' ? 'text-ink-700' :
+                  a.fp === '-' ? 'text-ink-700' :
                   parseFloat(a.fp) < 8 ? 'text-safe' :
                   parseFloat(a.fp) < 12 ? 'text-amber' : 'text-threat',
                 )}>
@@ -662,7 +662,7 @@ export default function SOCMetricsPage() {
                 {/* SLA */}
                 <span className={cn(
                   'text-[11px] font-mono text-right',
-                  a.sla === '—' ? 'text-ink-700' :
+                  a.sla === '-' ? 'text-ink-700' :
                   parseFloat(a.sla) >= 97 ? 'text-safe' :
                   parseFloat(a.sla) >= 93 ? 'text-amber' : 'text-threat',
                 )}>
@@ -677,7 +677,7 @@ export default function SOCMetricsPage() {
                       <span className="text-[10px] font-mono text-amber">{a.streak}d</span>
                     </>
                   ) : (
-                    <span className="text-[10px] text-ink-700">—</span>
+                    <span className="text-[10px] text-ink-700">-</span>
                   )}
                 </div>
               </motion.div>

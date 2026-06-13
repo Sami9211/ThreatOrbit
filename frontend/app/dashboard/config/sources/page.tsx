@@ -71,7 +71,7 @@ const CUSTOM_SOURCES: CustomSourceType[] = [
   { id: 'webhook', name: 'Webhook',  description: 'Inbound HTTP POST with JSON payloads',  icon: AppWindow },
   { id: 's3',      name: 'Amazon S3', description: 'Pull log files from an S3 bucket',     icon: Cloud },
   { id: 'kafka',   name: 'Kafka',    description: 'Consume events from a Kafka topic',      icon: Network },
-  { id: 'custom',  name: 'Custom / Other', description: 'Any source — name it and set the type yourself', icon: Plus },
+  { id: 'custom',  name: 'Custom / Other', description: 'Any source - name it and set the type yourself', icon: Plus },
 ]
 
 const CATEGORIES: { id: ConnCategory; icon: React.ElementType; color: string }[] = [
@@ -102,7 +102,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
         if (cfg.endpoint) setEndpoint(cfg.endpoint)
         if (cfg.auth) setAuthMethod(cfg.auth)
         if (cfg.interval) setIntervalSel(cfg.interval)
-      } catch { /* malformed stored value — keep defaults */ }
+      } catch { /* malformed stored value - keep defaults */ }
     }).catch(() => {})
   }, [connector.id])
 
@@ -224,7 +224,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
 
           {saveError && (
             <p className="px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert">
-              Could not save — check the dashboard API is running and you have admin access.
+              Could not save - check the dashboard API is running and you have admin access.
             </p>
           )}
 
@@ -342,7 +342,7 @@ export default function DataSourcesPage() {
             return [...prev, ...stored.filter((c) => !known.has(c.id)).map(customToConnector)]
           })
         }
-      } catch { /* malformed stored value — ignore */ }
+      } catch { /* malformed stored value - ignore */ }
     }).catch(() => {})
   }, [])
 

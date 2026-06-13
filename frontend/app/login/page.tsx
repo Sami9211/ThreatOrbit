@@ -36,7 +36,7 @@ export default function LoginPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed'
       if (msg === 'MFA code required') {
-        // password verified — ask for the authenticator code
+        // password verified - ask for the authenticator code
         setMfaRequired(true)
         setError(null)
       } else {
@@ -123,7 +123,7 @@ export default function LoginPage() {
                       className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-2 border border-safe/25 text-sm font-mono tracking-[0.3em] text-ink-100 focus:outline-none focus:border-safe/50 focus:ring-1 focus:ring-safe/15 transition-colors placeholder-ink-600" />
                   </div>
                   <p className="text-[10px] text-ink-600 mt-1">
-                    This account has two-factor authentication — enter the code from your authenticator app.
+                    This account has two-factor authentication - enter the code from your authenticator app.
                   </p>
                 </div>
               )}

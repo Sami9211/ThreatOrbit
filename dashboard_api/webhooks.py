@@ -126,7 +126,7 @@ def dispatch(event: str, payload: dict):
         pass
     try:
         subs = _subscribers(event)
-    except Exception:  # storage unavailable — never break the request path
+    except Exception:  # storage unavailable - never break the request path
         logger.exception("Webhook subscriber lookup failed for %s", event)
         return
     if not subs:

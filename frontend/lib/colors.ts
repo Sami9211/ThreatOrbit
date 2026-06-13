@@ -1,5 +1,5 @@
 /**
- * Semantic color mappings — the single source of truth for severity, status,
+ * Semantic color mappings - the single source of truth for severity, status,
  * and categorical chart colors across the dashboard. Values mirror the token
  * palette in tailwind.config.ts / globals.css.
  *

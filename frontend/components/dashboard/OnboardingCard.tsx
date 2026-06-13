@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { fetchOnboarding, dismissOnboarding, type OnboardingStatus } from '@/lib/api'
 
 /**
- * First-run checklist — computed server-side from REAL platform state (a step
+ * First-run checklist - computed server-side from REAL platform state (a step
  * is done only when the thing actually exists), so it can never drift from
  * reality. Hidden once complete or dismissed.
  */
@@ -36,7 +36,7 @@ export default function OnboardingCard() {
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-white">Get fully operational</h3>
-            <p className="text-[10px] text-ink-500">{ob.done} of {ob.total} setup steps complete — each verified against live platform state</p>
+            <p className="text-[10px] text-ink-500">{ob.done} of {ob.total} setup steps complete - each verified against live platform state</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <div className="w-28 hidden sm:block">
@@ -61,7 +61,7 @@ export default function OnboardingCard() {
           ))}
           {ob.steps.filter((s) => !s.done).length === 0 && (
             <div className="flex items-center gap-2 px-4 py-3 text-[11px] text-safe">
-              <CheckCircle2 className="w-3.5 h-3.5" /> All set — you’re fully operational.
+              <CheckCircle2 className="w-3.5 h-3.5" /> All set - you’re fully operational.
             </div>
           )}
         </div>

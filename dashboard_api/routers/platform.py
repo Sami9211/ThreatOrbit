@@ -1,7 +1,7 @@
 """Cross-cutting platform features: notifications centre, global search,
 scheduled reports, saved views, and audit/compliance export + retention.
 
-These are the foundations every section leans on — one search box, one
+These are the foundations every section leans on - one search box, one
 notification bell, deliverable reports, persisted filters, and exportable
 audit evidence with retention enforcement.
 """
@@ -190,7 +190,7 @@ def _email_report(email: str | None, report: dict) -> dict:
             f"<h3>Findings ({len(report['findings'])})</h3><ul>"
             + "".join(f"<li>{f.get('severity', '')}: {f.get('title', '')}</li>"
                       for f in report["findings"][:25]) + "</ul>")
-    return send_email(email, f"[ThreatOrbit] {m['title']} — {m['period']}", html)
+    return send_email(email, f"[ThreatOrbit] {m['title']} - {m['period']}", html)
 
 
 @router.delete("/report-schedules/{schedule_id}", status_code=204)
@@ -297,7 +297,7 @@ def delete_view(view_id: str, user: dict = Depends(current_user)):
 
 @router.get("/config/audit-export")
 def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_perm("config.manage"))):
-    """Download the audit trail as CSV — tamper-evident evidence for compliance."""
+    """Download the audit trail as CSV - tamper-evident evidence for compliance."""
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id, ts, actor, action, target, detail FROM audit_log ORDER BY id DESC LIMIT ?",

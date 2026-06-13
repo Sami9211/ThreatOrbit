@@ -69,7 +69,7 @@ type Playbook = {
 const CASES: CaseRecord[] = [
   {
     id: 'CASE-0441',
-    title: 'Ransomware incident — DESKTOP-FIN-087 (msmith)',
+    title: 'Ransomware incident - DESKTOP-FIN-087 (msmith)',
     type: 'Ransomware', severity: 'critical', status: 'in-progress',
     owner: 'j.chen', playbook: 'Endpoint Ransomware Containment',
     slaHours: 4, created: '2024-11-12T14:22:00Z', updated: '2024-11-12T14:35:00Z',
@@ -87,14 +87,14 @@ const CASES: CaseRecord[] = [
       { ts: '14:22:04', actor: 'CrowdStrike',  type: 'auto',   content: 'Host DESKTOP-FIN-087 isolated from network via EDR API. Isolation status: CONFIRMED.' },
       { ts: '14:22:09', actor: 'VirusTotal',   type: 'auto',   content: 'Hash 7a8b9c0d: Detection ratio 58/72. Identified as LockBit 3.0 variant. TI confidence: HIGH.' },
       { ts: '14:23:11', actor: 'SOAR Engine',  type: 'auto',   content: 'Memory snapshot initiated on DESKTOP-FIN-087. Estimated completion: 4 minutes. Evidence collection in progress.' },
-      { ts: '14:25:18', actor: 'j.chen',       type: 'manual', content: 'Confirmed ransomware — LockBit 3.0. Notified IR team lead and CISO. Checking for lateral spread indicators.' },
+      { ts: '14:25:18', actor: 'j.chen',       type: 'manual', content: 'Confirmed ransomware - LockBit 3.0. Notified IR team lead and CISO. Checking for lateral spread indicators.' },
       { ts: '14:27:00', actor: 'Jira',         type: 'auto',   content: 'Incident ticket INC-20241112-0441 created in Jira ServiceDesk. Priority: P1. Assigned to IR team.' },
       { ts: '14:29:12', actor: 'j.chen',       type: 'manual', content: 'No lateral movement detected in last 2h based on EDR telemetry. Attack appears contained to single host.' },
       { ts: '14:35:00', actor: 'SOAR Engine',  type: 'auto',   content: 'Memory snapshot complete. Evidence archived to S3://soc-evidence/CASE-0441/. SHA256 hash logged for chain of custody.' },
     ],
     tasks: [
       { id: 't1', phase: 'Containment',  name: 'Isolate affected host from network',         status: 'done',       assignee: 'SOAR (automated)', notes: 'CrowdStrike API call successful' },
-      { id: 't2', phase: 'Containment',  name: 'Verify no lateral movement in last 24h',     status: 'done',       assignee: 'j.chen', notes: 'Checked EDR telemetry — clean' },
+      { id: 't2', phase: 'Containment',  name: 'Verify no lateral movement in last 24h',     status: 'done',       assignee: 'j.chen', notes: 'Checked EDR telemetry - clean' },
       { id: 't3', phase: 'Evidence',     name: 'Collect memory snapshot and disk image',     status: 'done',       assignee: 'SOAR (automated)', notes: 'Archived to S3' },
       { id: 't4', phase: 'Evidence',     name: 'Identify patient zero and initial vector',   status: 'in-progress',assignee: 'j.chen', notes: 'Reviewing process tree' },
       { id: 't5', phase: 'Eradication',  name: 'Scan environment for additional IOCs',       status: 'pending',    assignee: null, notes: '' },
@@ -129,8 +129,8 @@ const CASES: CaseRecord[] = [
       { ts: '12:30:12', actor: 'Exchange',    type: 'auto',   content: 'Quarantine executed: 11 of 14 emails quarantined across Exchange Online. 3 emails already opened.' },
       { ts: '12:30:44', actor: 'VirusTotal',  type: 'auto',   content: 'Attachment SHA256 abc123def: 54/72 engines detected. Identified as Cobalt Strike stager (MalwareBytes: "CobaltStrikeStager.xlsm").' },
       { ts: '12:32:10', actor: 'CrowdStrike', type: 'auto',   content: 'Macro execution detected on HOST-EXEC-01 (CEO workstation). Process tree: EXCEL.EXE → cmd.exe → powershell.exe. Host quarantined.' },
-      { ts: '12:40:00', actor: 'a.patel',     type: 'manual', content: 'Notified all 14 recipients via secure out-of-band communication. 3 confirmed opening file — conducting interviews.' },
-      { ts: '14:10:00', actor: 'a.patel',     type: 'manual', content: 'Two hosts confirmed clean (Cobalt Strike payload blocked by EDR). Third host (CEO) shows C2 beacon — escalating to CASE-0441 investigation scope.' },
+      { ts: '12:40:00', actor: 'a.patel',     type: 'manual', content: 'Notified all 14 recipients via secure out-of-band communication. 3 confirmed opening file - conducting interviews.' },
+      { ts: '14:10:00', actor: 'a.patel',     type: 'manual', content: 'Two hosts confirmed clean (Cobalt Strike payload blocked by EDR). Third host (CEO) shows C2 beacon - escalating to CASE-0441 investigation scope.' },
     ],
     tasks: [
       { id: 't1', phase: 'Triage',        name: 'Quarantine malicious emails',              status: 'done',       assignee: 'SOAR (automated)', notes: '11/14 quarantined; 3 opened' },
@@ -148,7 +148,7 @@ const CASES: CaseRecord[] = [
   },
   {
     id: 'CASE-0439',
-    title: 'Credential compromise — alice (impossible travel + MFA fatigue)',
+    title: 'Credential compromise - alice (impossible travel + MFA fatigue)',
     type: 'Account Compromise', severity: 'high', status: 'pending',
     owner: 'r.osei', playbook: 'Account Compromise Response',
     slaHours: 12, created: '2024-11-12T12:40:00Z', updated: '2024-11-12T13:45:00Z',
@@ -164,7 +164,7 @@ const CASES: CaseRecord[] = [
       { ts: '12:41:00', actor: 'Okta',        type: 'auto',   content: 'User alice active session from SG IP terminated. Forced re-authentication required.' },
       { ts: '12:45:10', actor: 'r.osei',      type: 'manual', content: 'Contacted alice via phone. She confirms she is in New York. No knowledge of Singapore login. Account compromise confirmed.' },
       { ts: '13:00:00', actor: 'SOAR Engine', type: 'auto',   content: 'Emergency password reset token sent to alice recovery email (verified OOB). All active sessions revoked.' },
-      { ts: '13:45:00', actor: 'r.osei',      type: 'manual', content: 'Password reset completed. MFA devices re-enrolled. Investigating how credential was obtained — checking for prior phishing.' },
+      { ts: '13:45:00', actor: 'r.osei',      type: 'manual', content: 'Password reset completed. MFA devices re-enrolled. Investigating how credential was obtained - checking for prior phishing.' },
     ],
     tasks: [
       { id: 't1', phase: 'Containment', name: 'Terminate active sessions',      status: 'done',       assignee: 'SOAR (automated)', notes: 'Okta API' },
@@ -177,7 +177,7 @@ const CASES: CaseRecord[] = [
   },
   {
     id: 'CASE-0438',
-    title: 'IAM privilege escalation — lambda-svc (AWS AdministratorAccess)',
+    title: 'IAM privilege escalation - lambda-svc (AWS AdministratorAccess)',
     type: 'Cloud Security', severity: 'high', status: 'resolved',
     owner: 'j.chen', playbook: 'Cloud Privilege Escalation',
     slaHours: 8, created: '2024-11-12T14:10:00Z', updated: '2024-11-12T15:20:00Z',
@@ -191,7 +191,7 @@ const CASES: CaseRecord[] = [
       { ts: '14:10:05', actor: 'SOAR Engine', type: 'system', content: 'Case CASE-0438 created from CloudTrail alert. Policy escalation detected.' },
       { ts: '14:10:11', actor: 'AWS',         type: 'auto',   content: 'AdministratorAccess policy detached from lambda-svc via IAM API. Role permissions reverted to previous state.' },
       { ts: '14:15:00', actor: 'j.chen',      type: 'manual', content: 'Root cause: trust policy allowed lambda-svc to assume any role in account. Fix: restrict assume-role to specific target roles only.' },
-      { ts: '15:20:00', actor: 'j.chen',      type: 'manual', content: 'Least-privilege policy applied. Terraform PR raised for permanent fix. Case resolved — no data access occurred during elevated period.' },
+      { ts: '15:20:00', actor: 'j.chen',      type: 'manual', content: 'Least-privilege policy applied. Terraform PR raised for permanent fix. Case resolved - no data access occurred during elevated period.' },
     ],
     tasks: [
       { id: 't1', phase: 'Containment',  name: 'Detach escalated policy',       status: 'done', assignee: 'SOAR (automated)', notes: 'Auto-remediated via API' },
@@ -204,7 +204,7 @@ const CASES: CaseRecord[] = [
   },
   {
     id: 'CASE-0437',
-    title: 'SQL injection campaign — 847 attempts, 15 bypass events',
+    title: 'SQL injection campaign - 847 attempts, 15 bypass events',
     type: 'Web Attack', severity: 'high', status: 'new',
     owner: null, playbook: 'Web Attack Triage',
     slaHours: 12, created: '2024-11-12T13:10:00Z', updated: '2024-11-12T13:10:00Z',
@@ -533,7 +533,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
               </div>
             </div>
 
-            {/* Linked evidence — real cross-store linkage via the case entities */}
+            {/* Linked evidence - real cross-store linkage via the case entities */}
             {related && (related.alerts.length > 0 || related.runs.length > 0) && (
               <div>
                 <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-2">
@@ -674,7 +674,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-mono text-ink-200 truncate">{e.name}</p>
                       <p className="text-[10px] text-ink-600 mt-0.5">
-                        {e.type} · Added {e.added ?? (e.ts ? new Date(e.ts).toLocaleString() : '—')} by {e.by ?? e.addedBy ?? '—'}
+                        {e.type} · Added {e.added ?? (e.ts ? new Date(e.ts).toLocaleString() : '-')} by {e.by ?? e.addedBy ?? '-'}
                       </p>
                       {e.sha256 && (
                         <p className="text-[10px] font-mono text-ink-700 mt-0.5 truncate" title={`SHA-256 ${e.sha256}`}>
@@ -980,7 +980,7 @@ export default function SOARPage() {
       steps: p.steps.map((s) => ({ ...s, status: 'running' as StepStatus, duration: undefined })),
     }))
     // Execute for real; the timeline then shows each step's ACTUAL outcome
-    // from the run record (success/failed/skipped/awaiting approval) — no
+    // from the run record (success/failed/skipped/awaiting approval) - no
     // fabricated durations.
     apiRunPlaybook(id)
       .then((updated) => {
@@ -999,7 +999,7 @@ export default function SOARPage() {
         }))
       })
       .catch(() => {
-        // API unreachable — reflect failure honestly instead of pretending success.
+        // API unreachable - reflect failure honestly instead of pretending success.
         setPlaybooks((prev) => prev.map((p) => p.id !== id ? p : {
           ...p, status: 'failed',
           steps: p.steps.map((s) => ({ ...s, status: 'failed' as StepStatus })),
@@ -1225,10 +1225,10 @@ export default function SOARPage() {
                   <div className="space-y-4">
                     {[
                       { label: 'Playbook Executions', value: playbooks.reduce((s, p) => s + (p.runs || 0), 0).toLocaleString(), sub: `Across ${playbooks.length} playbooks`, color: 'text-white' },
-                      { label: 'Automation Rate',     value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '—', sub: 'of closed cases playbook-driven', color: 'text-safe' },
-                      { label: 'Analyst Hours Saved', value: soarApi ? `${Math.round(soarApi.timeSavedMonth)}h` : '—', sub: 'this month, from run volume', color: 'text-violet' },
-                      { label: 'Cases Closed (week)', value: soarApi ? String(soarApi.casesClosedWeek) : '—', sub: `${soarApi?.openCases ?? 0} still open`, color: 'text-amber' },
-                      { label: 'Playbooks Run Today', value: soarApi ? String(soarApi.playbooksToday) : '—', sub: 'with a recorded run', color: 'text-ink-300' },
+                      { label: 'Automation Rate',     value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '-', sub: 'of closed cases playbook-driven', color: 'text-safe' },
+                      { label: 'Analyst Hours Saved', value: soarApi ? `${Math.round(soarApi.timeSavedMonth)}h` : '-', sub: 'this month, from run volume', color: 'text-violet' },
+                      { label: 'Cases Closed (week)', value: soarApi ? String(soarApi.casesClosedWeek) : '-', sub: `${soarApi?.openCases ?? 0} still open`, color: 'text-amber' },
+                      { label: 'Playbooks Run Today', value: soarApi ? String(soarApi.playbooksToday) : '-', sub: 'with a recorded run', color: 'text-ink-300' },
                     ].map((m) => (
                       <div key={m.label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
                         <p className="text-[11px] text-ink-500">{m.label}</p>
@@ -1242,7 +1242,7 @@ export default function SOARPage() {
                 </div>
               </div>
 
-              {/* KPI table — every row computed from the live API/case data */}
+              {/* KPI table - every row computed from the live API/case data */}
               <div className="bg-surface-2/40 rounded-xl border border-white/5">
                 <div className="px-4 py-3 border-b border-white/5">
                   <p className="text-xs font-semibold text-white">SOAR KPI Summary</p>
@@ -1256,16 +1256,16 @@ export default function SOARPage() {
                     const pbSuccess = playbooks.length
                       ? Math.round(playbooks.reduce((s, p) => s + (p.successRate <= 1 ? p.successRate * 100 : p.successRate), 0) / playbooks.length)
                       : null
-                    const fmtMin = (m?: number) => m == null ? '—'
+                    const fmtMin = (m?: number) => m == null ? '-'
                       : m >= 60 ? `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m` : `${m.toFixed(1)}m`
                     return [
                     { metric: 'Mean Time to Respond (MTTR)', value: fmtMin(soarApi?.mttr), target: '< 4h',  status: soarApi && soarApi.mttr < 240 ? 'good' : 'warn' },
-                    { metric: 'Cases Created',               value: String(cases.length),   target: '—',     status: 'good' },
-                    { metric: 'Cases Resolved',              value: String(resolved),       target: '—',     status: 'good' },
-                    { metric: 'SLA Compliance',              value: sla == null ? '—' : `${sla}%`, target: '> 95%', status: sla != null && sla >= 95 ? 'good' : 'warn' },
-                    { metric: 'Automation Rate',             value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '—', target: '> 60%', status: soarApi && soarApi.automationRate > 60 ? 'good' : 'warn' },
-                    { metric: 'Playbook Success Rate',       value: pbSuccess == null ? '—' : `${pbSuccess}%`, target: '> 90%', status: pbSuccess != null && pbSuccess >= 90 ? 'good' : 'warn' },
-                    { metric: 'Avg Playbook Execution Time', value: soarApi ? `${soarApi.avgPlaybookTime}s` : '—', target: '< 10m', status: 'good' },
+                    { metric: 'Cases Created',               value: String(cases.length),   target: '-',     status: 'good' },
+                    { metric: 'Cases Resolved',              value: String(resolved),       target: '-',     status: 'good' },
+                    { metric: 'SLA Compliance',              value: sla == null ? '-' : `${sla}%`, target: '> 95%', status: sla != null && sla >= 95 ? 'good' : 'warn' },
+                    { metric: 'Automation Rate',             value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '-', target: '> 60%', status: soarApi && soarApi.automationRate > 60 ? 'good' : 'warn' },
+                    { metric: 'Playbook Success Rate',       value: pbSuccess == null ? '-' : `${pbSuccess}%`, target: '> 90%', status: pbSuccess != null && pbSuccess >= 90 ? 'good' : 'warn' },
+                    { metric: 'Avg Playbook Execution Time', value: soarApi ? `${soarApi.avgPlaybookTime}s` : '-', target: '< 10m', status: 'good' },
                   ]})().map((row) => (
                     <div key={row.metric} className="grid grid-cols-3 px-4 py-2.5 text-xs">
                       <span className="text-ink-300">{row.metric}</span>

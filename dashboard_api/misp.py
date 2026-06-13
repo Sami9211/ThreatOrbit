@@ -1,4 +1,4 @@
-"""MISP event import/export — interoperate with the wider CTI community.
+"""MISP event import/export - interoperate with the wider CTI community.
 
 MISP (misp-project.org) is the de-facto open threat-sharing format. This maps
 between ThreatOrbit's IOC store / intel reports and a MISP **Event**:
@@ -81,7 +81,7 @@ def to_misp_event(iocs: list[dict], *, info: str, tlp: str = "amber",
 
 def parse_misp_event(payload: dict) -> list[dict]:
     """Extract importable indicators from a MISP Event. Returns a list of
-    {type, value, comment, to_ids, skipped?} — caller does the inserting."""
+    {type, value, comment, to_ids, skipped?} - caller does the inserting."""
     event = payload.get("Event", payload) if isinstance(payload, dict) else {}
     attrs = event.get("Attribute") or []
     # Attributes can also live inside Objects.

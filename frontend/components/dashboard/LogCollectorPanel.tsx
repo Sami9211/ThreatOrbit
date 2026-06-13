@@ -12,7 +12,7 @@ Jan 10 03:22:03 web01 sshd[2452]: Failed password for root from 45.9.1.2 port 51
 {"event_type":"beacon","src_ip":"10.0.0.9","dest_ip":"185.2.3.4","dest_port":443}`
 
 /**
- * Native log collector — paste raw log lines (syslog / Apache / JSON / key=value)
+ * Native log collector - paste raw log lines (syslog / Apache / JSON / key=value)
  * and the SIEM parses them into events, runs detection rules + threat-intel
  * matching, and raises real alerts. This is the "production logs stream in" path
  * (an agent/forwarder POSTs the same way to /siem/ingest).
@@ -32,7 +32,7 @@ export default function LogCollectorPanel() {
     setResult(null)
     ingestLogs(lines, format)
       .then((r) => setResult(r))
-      .catch(() => setError('Ingestion failed — is the dashboard API running?'))
+      .catch(() => setError('Ingestion failed - is the dashboard API running?'))
       .finally(() => setBusy(false))
   }
 

@@ -25,7 +25,7 @@ export default function QuickStartPage() {
 cd ThreatOrbit-V2`}</CodeBlock>
 
       <h2>2. Configure environment variables</h2>
-      <p>Copy the example file — the defaults work for a local evaluation:</p>
+      <p>Copy the example file - the defaults work for a local evaluation:</p>
       <CodeBlock>{`cp .env.example .env`}</CodeBlock>
       <p>For anything beyond a local trial, open <code>.env</code> and set:</p>
       <CodeBlock>{`APP_API_KEY=your_read_key_here

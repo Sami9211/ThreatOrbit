@@ -147,7 +147,7 @@ const ACTORS: ThreatActor[] = [
     sectors: ['Critical Infrastructure', 'Energy', 'Water', 'Communications', 'Transportation'],
     campaignCount: 23,
     firstSeen: '2021',
-    malware: ['(LOTL — no custom malware)', 'Earthworm', 'Fast Reverse Proxy'],
+    malware: ['(LOTL - no custom malware)', 'Earthworm', 'Fast Reverse Proxy'],
     ttps: ['T1059', 'T1218', 'T1070', 'T1078', 'T1090'],
     recentActivity: 'Pre-positioning within US critical-infrastructure OT networks via living-off-the-land and compromised SOHO routers.',
     description: 'Chinese state-sponsored group focused on pre-positioning for potential disruptive or destructive attacks against US critical infrastructure. Relies almost entirely on living-off-the-land techniques to evade detection.',

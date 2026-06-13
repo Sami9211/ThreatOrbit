@@ -74,7 +74,7 @@ function KPICard({
   )
 }
 
-/* ── Trending CVEs (static — no CVE endpoint yet) ────────────────── */
+/* ── Trending CVEs (static - no CVE endpoint yet) ────────────────── */
 const TRENDING_CVES = [
   { id: 'CVE-2024-6387', name: 'OpenSSH regreSSHion', cvss: 8.1,  affected: 'OpenSSH < 9.8p1', patched: false, color: '#FF2E97', tag: 'RCE' },
   { id: 'CVE-2024-3094', name: 'XZ Utils backdoor',   cvss: 10.0, affected: 'XZ Utils 5.6.x',  patched: true,  color: '#FF2E97', tag: 'Supply Chain' },
@@ -128,7 +128,7 @@ function TrendingCVEs() {
 
 /* ── Intel Brief ─────────────────────────────────────────────────── */
 const BRIEF_ITEMS_FALLBACK = [
-  { headline: 'Lazarus Group activity surge — 3 new C2 IPs blocked', severity: 'critical', age: '2h ago', src: 'ThreatFox / MISP' },
+  { headline: 'Lazarus Group activity surge - 3 new C2 IPs blocked', severity: 'critical', age: '2h ago', src: 'ThreatFox / MISP' },
   { headline: 'CISA KEV updated with 2 new FortiOS exploits',        severity: 'high',     age: '5h ago', src: 'CISA KEV' },
   { headline: 'Novel MFA-bypass technique targeting Azure AD',       severity: 'high',     age: '8h ago', src: 'Microsoft TI' },
   { headline: 'Ransomware campaign targets EU healthcare sector',    severity: 'critical', age: '11h ago',src: 'Europol' },
@@ -231,7 +231,7 @@ function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
               ))}
             </div>
             <div className="flex justify-between px-5 pt-1 pb-3 text-[9px] text-ink-600">
-              <span>{crit} critical</span><span>{high} high</span><span>{med} med</span><span>—</span>
+              <span>{crit} critical</span><span>{high} high</span><span>{med} med</span><span>-</span>
             </div>
           </>
         )
@@ -396,7 +396,7 @@ const RISK_AXIS_META: Record<string, { label: string; color: string }> = {
 function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
   if (!dist) return null
   const maxContrib = Math.max(...dist.axisContribution.map((a) => a.avgContribution), 1)
-  const driverLabel = dist.topDriver ? (RISK_AXIS_META[dist.topDriver]?.label ?? dist.topDriver) : '—'
+  const driverLabel = dist.topDriver ? (RISK_AXIS_META[dist.topDriver]?.label ?? dist.topDriver) : '-'
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -668,7 +668,7 @@ function NormalDashboard({ count, alerts, incidents }: {
   count: { threats: number; iocs: number; sources: number; score: number }
   alerts: OverviewAlert[]; incidents: Incident[]
 }) {
-  // Real, actionable alerts (highest severity first) — no hardcoded data.
+  // Real, actionable alerts (highest severity first) - no hardcoded data.
   const sevRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
   const topAlerts = [...alerts]
     .sort((a, b) => (sevRank[b.severity] ?? 0) - (sevRank[a.severity] ?? 0))
@@ -914,17 +914,17 @@ export default function DashboardOverview() {
       {isPower && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 glass border border-white/5 rounded-xl overflow-hidden">
           {(() => {
-            const fmtMin = (m?: number) => m == null ? '—'
+            const fmtMin = (m?: number) => m == null ? '-'
               : m < 1 ? `${Math.round(m * 60)}s` : `${Math.floor(m)}m ${String(Math.round((m % 1) * 60)).padStart(2, '0')}s`
             const slaComp = soarMetrics && soarMetrics.openCases > 0
               ? `${Math.round((1 - (soarMetrics.slaBreached ?? 0) / soarMetrics.openCases) * 100)}%`
-              : soarMetrics ? '100%' : '—'
+              : soarMetrics ? '100%' : '-'
             return [
             { label: 'MTTD',            value: fmtMin(siemKpis?.mttd), sub: '< 10m target', color: 'text-safe' },
             { label: 'MTTA',            value: fmtMin(siemKpis?.mtta), sub: '< 15m target', color: 'text-safe' },
             { label: 'MTTR',            value: fmtMin(siemKpis?.mttr), sub: '< 30m target', color: 'text-amber' },
             { label: 'Open Incidents',  value: String(incidents.filter(i => !['resolved','closed'].includes(i.status)).length), sub: `${incidents.filter(i => i.severity === 'critical' && !['resolved','closed'].includes(i.status)).length} critical`, color: 'text-magenta' },
-            { label: 'Automation Rate', value: soarMetrics ? `${Math.round(soarMetrics.automationRate)}%` : '—', sub: 'SOAR-handled', color: 'text-violet' },
+            { label: 'Automation Rate', value: soarMetrics ? `${Math.round(soarMetrics.automationRate)}%` : '-', sub: 'SOAR-handled', color: 'text-violet' },
             { label: 'SLA Compliance',  value: slaComp, sub: `${soarMetrics?.slaBreached ?? 0} breached`, color: 'text-amber' },
           ]})().map((m) => (
             <div key={m.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">

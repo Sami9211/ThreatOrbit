@@ -26,7 +26,7 @@ const STEP_ICON: Record<PlaybookRunStep['status'], { icon: React.ElementType; co
 }
 
 function relTime(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s ago`
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
@@ -34,7 +34,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * Live playbook run history — every execution (manual or auto-triggered by the
+ * Live playbook run history - every execution (manual or auto-triggered by the
  * engine) with its per-step audit trail, plus inline approve/reject for runs
  * paused at a human-approval gate.
  */
@@ -75,7 +75,7 @@ export default function PlaybookRunsPanel() {
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-white">Run history</h3>
-          <p className="text-[10px] text-ink-500">Every execution with its per-step audit trail — manual and auto-triggered</p>
+          <p className="text-[10px] text-ink-500">Every execution with its per-step audit trail - manual and auto-triggered</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {awaiting > 0 && (
@@ -91,7 +91,7 @@ export default function PlaybookRunsPanel() {
         {loading && <p className="text-[11px] text-ink-600 py-8 text-center animate-pulse">Loading runs…</p>}
         {!loading && runs.length === 0 && (
           <p className="text-[11px] text-ink-600 py-8 text-center">
-            No runs yet — hit <b className="text-ink-400">Run</b> on a playbook, or let the engine auto-trigger one.
+            No runs yet - hit <b className="text-ink-400">Run</b> on a playbook, or let the engine auto-trigger one.
           </p>
         )}
         {runs.map((r) => {
@@ -116,7 +116,7 @@ export default function PlaybookRunsPanel() {
                       style={{ color: st.color, background: `${st.color}15` }}>{st.label}</span>
                   </div>
                   <p className="text-[10px] text-ink-600 mt-0.5 truncate">
-                    {relTime(r.ts)} · {r.actor ?? '—'}
+                    {relTime(r.ts)} · {r.actor ?? '-'}
                     {entity ? <> · <span className="font-mono text-ink-400">{entity.type}={entity.value}</span></> : null}
                   </p>
                 </div>

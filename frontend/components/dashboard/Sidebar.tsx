@@ -124,7 +124,7 @@ export default function Sidebar() {
   // Manually expanded sections (in addition to auto-expand for active)
   const [manualExpanded, setManualExpanded] = useState<Set<string>>(new Set())
 
-  // Track viewport. The collapse-to-icon (width) behaviour is desktop-only —
+  // Track viewport. The collapse-to-icon (width) behaviour is desktop-only -
   // on mobile the sidebar is always full width and visibility is controlled
   // purely by the slide (translate) on the wrapper. This prevents the width
   // from collapsing while the drawer slides away (the "flicker" on close).

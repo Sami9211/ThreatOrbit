@@ -13,7 +13,7 @@ const FIELDS = [
 ]
 
 function relTime(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s ago`
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
@@ -21,7 +21,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * Alert-tuning workbench — suppressions & allow-lists. A suppression matches an
+ * Alert-tuning workbench - suppressions & allow-lists. A suppression matches an
  * entity (src_ip / username / hostname) and drops future detections for it,
  * retro-closing any open alerts it covers; the hit counter shows how many alerts
  * it has prevented. "Allow" marks the entity known-good. This is the real
@@ -78,7 +78,7 @@ export default function SuppressionsPanel() {
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-white">Suppressions &amp; allow-lists</h3>
-          <p className="text-[10px] text-ink-500">Drop noisy detections per entity — retro-closes open alerts, blocks future ones</p>
+          <p className="text-[10px] text-ink-500">Drop noisy detections per entity - retro-closes open alerts, blocks future ones</p>
         </div>
         <div className="ml-auto flex items-center gap-3 text-[10px]">
           <span className="text-ink-500"><b className="text-white font-mono">{items.length}</b> rules</span>
@@ -113,17 +113,17 @@ export default function SuppressionsPanel() {
         <div className="flex items-center gap-2 flex-wrap">
           <input value={reason} onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}
-            placeholder="reason (optional) — e.g. known vuln scanner"
+            placeholder="reason (optional) - e.g. known vuln scanner"
             className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
           {/* Time-boxing: expiry in hours and/or a daily UTC window */}
           <input value={expiresHours} onChange={(e) => setExpiresHours(e.target.value.replace(/\D/g, ''))}
             placeholder="expires (h)" title="Auto-expire after this many hours (blank = permanent)"
             className="w-20 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
-          <div className="flex items-center gap-1" title="Recurring daily window (UTC) in which this rule applies — e.g. a 02:00–04:00 maintenance window">
+          <div className="flex items-center gap-1" title="Recurring daily window (UTC) in which this rule applies - e.g. a 02:00-04:00 maintenance window">
             <input value={windowStart} onChange={(e) => setWindowStart(e.target.value)}
               placeholder="HH:MM"
               className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
-            <span className="text-[10px] text-ink-600">–</span>
+            <span className="text-[10px] text-ink-600">-</span>
             <input value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)}
               placeholder="HH:MM"
               className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
@@ -176,7 +176,7 @@ export default function SuppressionsPanel() {
                 </div>
                 <p className="text-[10px] text-ink-600 mt-0.5 truncate">
                   {s.reason ? `${s.reason} · ` : ''}{relTime(s.createdAt)}{s.createdBy ? ` · ${s.createdBy}` : ''}
-                  {s.windowStart && s.windowEnd ? ` · daily ${s.windowStart}–${s.windowEnd} UTC` : ''}
+                  {s.windowStart && s.windowEnd ? ` · daily ${s.windowStart}-${s.windowEnd} UTC` : ''}
                   {s.expiresAt ? ` · expires ${new Date(s.expiresAt).toLocaleString()}` : ''}
                 </p>
               </div>

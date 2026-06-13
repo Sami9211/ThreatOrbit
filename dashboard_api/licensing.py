@@ -1,4 +1,4 @@
-"""Licensing — signed license keys + plan limits, enforced server-side.
+"""Licensing - signed license keys + plan limits, enforced server-side.
 
 The pricing tiers the site sells become real:
 
@@ -7,7 +7,7 @@ The pricing tiers the site sells become real:
     keys can't be forged or tampered with;
   * `current_license()` resolves the active license (activated key, else the
     built-in enterprise default so existing installs lose nothing);
-  * enforcement points call `check_limit()` — adding a user/connector beyond
+  * enforcement points call `check_limit()` - adding a user/connector beyond
     the plan's seats fails with 402, naming the limit.
 
 Issuing keys is the vendor side (`generate_key`), exposed admin-only so a
@@ -116,5 +116,5 @@ def check_limit(conn, kind: str) -> str | None:
     if used + 1 > int(limit):
         noun = "users" if kind == "seats" else "connectors"
         return (f"{PLANS[lic['plan']]['label']} plan allows {limit} {noun} "
-                f"({used} in use) — upgrade the license to add more")
+                f"({used} in use) - upgrade the license to add more")
     return None

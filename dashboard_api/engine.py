@@ -8,10 +8,10 @@ pipeline, stage by stage:
                →  extract IOCs (→ CTI)  →  correlate  →  escalate (→ SOAR cases)
                →  dark-web monitoring (→ findings)  →  asset risk recompute
 
-The *source* is simulated environment telemetry — the standard way a SIEM is
+The *source* is simulated environment telemetry - the standard way a SIEM is
 exercised when it is not wired to a production log pipeline. It is NOT static
 seed data: every tick produces brand-new events that flow through the real
-detection/correlation/escalation stages. The source is swappable — real log
+detection/correlation/escalation stages. The source is swappable - real log
 uploads (Log API detectors) and connector feeds write into the very same
 stores, so nothing here is throwaway.
 
@@ -80,7 +80,7 @@ def _sha256(rng) -> str:
 
 # ── Telemetry scenarios ─────────────────────────────────────────────────────────
 # Each scenario emits a RAW EVENT (normalised fields) plus any IOCs it carries.
-# Severity / MITRE / titles come from the DETECTION RULES that match the event —
+# Severity / MITRE / titles come from the DETECTION RULES that match the event -
 # exactly like a real SIEM, where the rule defines the detection.
 
 def _scn_brute_force(rng):
@@ -173,7 +173,7 @@ def _pick_scenario(rng):
 
 # ── Built-in detection rules (definitions that match the events above) ───────────
 # Each maps an event_type to an alert with severity, MITRE, and a title template.
-# These are real rules — they evaluate via rule_engine.evaluate(), exactly like
+# These are real rules - they evaluate via rule_engine.evaluate(), exactly like
 # any rule an analyst authors in the editor.
 BUILTIN_RULES = [
     {"id": "R-BRUTEFORCE", "name": "Brute-force authentication", "category": "Identity",
@@ -307,7 +307,7 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -
             tmpl = next((br["title_tmpl"] for br in BUILTIN_RULES if br["id"] == rule["id"]), None)
             if tmpl:
                 try:
-                    title = tmpl.format(**{k: ev.get(k, "—") for k in
+                    title = tmpl.format(**{k: ev.get(k, "-") for k in
                                            ("username", "hostname", "dest_ip", "src_ip", "action")})
                 except (KeyError, IndexError):
                     pass
@@ -442,7 +442,7 @@ def process_tick(max_events: int = 6) -> dict:
     """One pass of the live engine: generate telemetry → run detection rules →
     alerts, extract IOCs, monitor dark web, correlate/escalate."""
     import uuid as _uuid
-    seed_builtin_rules()  # idempotent — guarantees detection rules exist
+    seed_builtin_rules()  # idempotent - guarantees detection rules exist
     rng = _rng()
     n = rng.randint(2, max(2, max_events))
     iocs = dark = 0

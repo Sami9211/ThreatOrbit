@@ -1,20 +1,20 @@
-"""IOC lifecycle — confidence decay, sightings, known-good, expiry.
+"""IOC lifecycle - confidence decay, sightings, known-good, expiry.
 
 Threat indicators are not static: a malicious IP this week is often reassigned
 next month, while a malware hash stays bad for years. This module models that:
 
-  * **Decay** — the *effective* confidence of an indicator falls off from its
+  * **Decay** - the *effective* confidence of an indicator falls off from its
     asserted confidence as it ages since it was last seen, at a per-type
     half-life (IPs decay fast, hashes slowly). `confidence` stays the asserted
     value; `effective_confidence()` is the decayed, presentational figure.
-  * **Expiry** — when effective confidence drops below a floor (or age exceeds
+  * **Expiry** - when effective confidence drops below a floor (or age exceeds
     a hard ceiling), the indicator is marked `expired` and stops matching, so
     stale intel can't raise alerts.
-  * **Sightings** — every fresh observation (a SIEM event matching the IOC, a
+  * **Sightings** - every fresh observation (a SIEM event matching the IOC, a
     connector re-import, a manual confirmation) is recorded in `ioc_sightings`,
     bumps the sighting count, refreshes `last_seen`, nudges asserted confidence
     back up, and reactivates an expired indicator.
-  * **Known-good** — an analyst can whitelist an indicator; it never matches
+  * **Known-good** - an analyst can whitelist an indicator; it never matches
     and reads back as benign, regardless of confidence.
 """
 import uuid

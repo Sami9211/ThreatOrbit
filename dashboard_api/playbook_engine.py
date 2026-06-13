@@ -44,7 +44,7 @@ STEP_KINDS = {
     "approval": "human",
 }
 
-# Canonical playbook definitions — shared by the demo seeder and the live-mode
+# Canonical playbook definitions - shared by the demo seeder and the live-mode
 # bootstrap so both modes run the same real automation content.
 PLAYBOOK_DEFS = [
     {"name": "Phishing Email Triage", "category": "Email",
@@ -133,7 +133,7 @@ PLAYBOOK_DEFS = [
      "steps": [
          {"kind": "enrich", "name": "Profile egress destination"},
          {"kind": "approval", "name": "Approve egress block",
-          "params": {"message": "Blocking may impact a business integration — approve?"}},
+          "params": {"message": "Blocking may impact a business integration - approve?"}},
          {"kind": "block_ip", "name": "Block egress destination"},
          {"kind": "create_case", "name": "Open exfiltration case"},
          {"kind": "notify", "name": "Notify data-protection officer"},
@@ -205,7 +205,7 @@ def _integration_action(conn, keywords: tuple, action: str, dry_run: bool) -> st
             target = r
             break
     if target is None:
-        return " (no connected integration — recorded locally)"
+        return " (no connected integration - recorded locally)"
     if not dry_run:
         conn.execute("UPDATE integrations SET actions_run=actions_run+1, last_sync=? WHERE id=?",
                      (_now(), target["id"]))
@@ -241,7 +241,7 @@ def _step_condition(conn, ctx, params, dry_run):
     have = (alert or {}).get(cond["field"])
     if ok:
         return "success", f"Condition met: {cond['field']}={have}"
-    return "gate", f"Condition not met ({cond['field']}={have}, wanted {cond['op']} {cond['value']}) — run gated"
+    return "gate", f"Condition not met ({cond['field']}={have}, wanted {cond['op']} {cond['value']}) - run gated"
 
 
 def _step_block_ip(conn, ctx, params, dry_run):

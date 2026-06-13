@@ -132,7 +132,7 @@ def startup():
     from dashboard_api.config import JWT_SECRET
     if JWT_SECRET == "dev-insecure-secret-change-me":
         logger.warning(
-            "DASHBOARD_JWT_SECRET is the development default — set a long random "
+            "DASHBOARD_JWT_SECRET is the development default - set a long random "
             "value before exposing this service (e.g. `openssl rand -hex 32`)."
         )
     init_db()
@@ -158,7 +158,7 @@ def startup():
         seed_builtin_playbooks()
         if first_boot:
             logger.info("Live mode: bootstrapped admin + settings (no demo data)")
-            # Prime the stores so the first login isn't an empty screen — these
+            # Prime the stores so the first login isn't an empty screen - these
             # are live engine ticks (real pipeline), not static seed data.
             try:
                 from dashboard_api.engine import process_tick

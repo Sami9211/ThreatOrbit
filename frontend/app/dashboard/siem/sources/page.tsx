@@ -34,7 +34,7 @@ interface LogSource {
 
 const SOURCES: LogSource[] = [
   { id: 's01', name: 'Windows Domain Controllers (6 hosts)', type: 'Windows Event', host: 'dc-prod-01..06', status: 'healthy',  epsAvg: 1240, epsPeak: 4800, lastEvent: '2s ago',   totalEvents24h: '107M', latencyMs: 140,  parseSuccess: 99.8, format: 'WEF/WinRM',      tags: ['AD', 'Identity', 'Critical'] },
-  { id: 's02', name: 'Linux Fleet — Endpoint Syslog',        type: 'Syslog',        host: '10.0.0.0/16',  status: 'healthy',  epsAvg: 2840, epsPeak: 6200, lastEvent: '1s ago',   totalEvents24h: '245M', latencyMs: 88,   parseSuccess: 98.4, format: 'RFC 5424',       tags: ['Linux', 'Endpoint'] },
+  { id: 's02', name: 'Linux Fleet - Endpoint Syslog',        type: 'Syslog',        host: '10.0.0.0/16',  status: 'healthy',  epsAvg: 2840, epsPeak: 6200, lastEvent: '1s ago',   totalEvents24h: '245M', latencyMs: 88,   parseSuccess: 98.4, format: 'RFC 5424',       tags: ['Linux', 'Endpoint'] },
   { id: 's03', name: 'AWS CloudTrail (us-east-1)',            type: 'S3 Bucket',     host: 's3://ct-logs', status: 'healthy',  epsAvg: 380,  epsPeak: 1100, lastEvent: '12s ago',  totalEvents24h: '33M',  latencyMs: 2800, parseSuccess: 100,  format: 'JSON CloudTrail', tags: ['Cloud', 'AWS', 'IAM'] },
   { id: 's04', name: 'Palo Alto NGFW',                       type: 'Syslog',        host: '10.0.1.254',   status: 'healthy',  epsAvg: 3200, epsPeak: 8400, lastEvent: '<1s ago',  totalEvents24h: '277M', latencyMs: 55,   parseSuccess: 99.6, format: 'PAN-OS Syslog',   tags: ['Network', 'Firewall', 'Critical'] },
   { id: 's05', name: 'CrowdStrike EDR',                      type: 'API Pull',      host: 'api.crowdstrike.com', status: 'healthy', epsAvg: 920, epsPeak: 2400, lastEvent: '4s ago', totalEvents24h: '80M', latencyMs: 320, parseSuccess: 100, format: 'CS JSON',         tags: ['EDR', 'Endpoint', 'Critical'] },
@@ -97,7 +97,7 @@ export default function SiemSourcesPage() {
             <Database className="w-4 h-4 text-violet" />
             <h1 className="text-lg font-display font-semibold text-white">Log Sources</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Data ingestion pipeline — {SOURCES_ACTIVE.length} sources configured</p>
+          <p className="text-xs text-ink-500 mt-0.5">Data ingestion pipeline - {SOURCES_ACTIVE.length} sources configured</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
@@ -190,13 +190,13 @@ export default function SiemSourcesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 font-mono text-violet text-right">
-                    {src.epsAvg > 0 ? src.epsAvg.toLocaleString() : '—'}
+                    {src.epsAvg > 0 ? src.epsAvg.toLocaleString() : '-'}
                   </td>
                   <td className={cn('px-4 py-3 font-mono text-right', src.latencyMs > 5000 ? 'text-amber' : src.latencyMs > 0 ? 'text-safe' : 'text-ink-600')}>
-                    {src.latencyMs > 0 ? `${src.latencyMs}ms` : '—'}
+                    {src.latencyMs > 0 ? `${src.latencyMs}ms` : '-'}
                   </td>
                   <td className={cn('px-4 py-3 font-mono text-right', src.parseSuccess >= 99 ? 'text-safe' : src.parseSuccess >= 95 ? 'text-amber' : 'text-threat')}>
-                    {src.parseSuccess > 0 ? `${src.parseSuccess}%` : '—'}
+                    {src.parseSuccess > 0 ? `${src.parseSuccess}%` : '-'}
                   </td>
                   <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{src.lastEvent}</td>
                   <td className="px-4 py-3">

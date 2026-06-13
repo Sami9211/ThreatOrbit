@@ -11,7 +11,7 @@ import Logo from '@/components/ui/Logo'
 export default function Preloader() {
   const [show, setShow] = useState(false)
 
-  // Decide whether to show (idempotent — safe under StrictMode double-invoke)
+  // Decide whether to show (idempotent - safe under StrictMode double-invoke)
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const seen = sessionStorage.getItem('to-intro')

@@ -25,7 +25,7 @@ const GROUPS: MenuGroup[] = [
       { label: 'CTI Library', href: '/products/cti-library', desc: 'Threat intelligence ingestion' },
       { label: 'SIEM + SOAR', href: '/products/siem-soar',   desc: 'Detection and automated response' },
       { label: 'Pricing',     href: '/pricing',              desc: 'Build your plan, pay only for what you need' },
-      { label: 'IntelScope',  href: '/dashboard/scanner',   desc: 'Free threat scanner — IPs, URLs, hashes' },
+      { label: 'IntelScope',  href: '/dashboard/scanner',   desc: 'Free threat scanner - IPs, URLs, hashes' },
     ],
   },
   {

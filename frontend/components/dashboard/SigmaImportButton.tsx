@@ -86,7 +86,7 @@ export default function SigmaImportButton({ onImported }: { onImported?: () => v
                   <div className="flex items-start gap-2 text-xs text-safe bg-safe/10 border border-safe/20 rounded-lg px-3 py-2">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     <div>
-                      <p>Imported “{result.name}” — enabled and evaluating the event stream now.</p>
+                      <p>Imported “{result.name}” - enabled and evaluating the event stream now.</p>
                       {result.notes.length > 0 && (
                         <p className="text-[10px] text-ink-400 mt-1">Mapping notes: {result.notes.join('; ')}</p>
                       )}

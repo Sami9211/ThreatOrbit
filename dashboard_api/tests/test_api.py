@@ -118,7 +118,7 @@ def test_soar(client, auth):
     m = client.get("/soar/metrics", headers=auth).json()
     assert "openCases" in m
     assert 0 <= m["automationRate"] <= 100  # a real ratio, not a saturating proxy
-    # trends are real week-over-week numbers (or null without a baseline) —
+    # trends are real week-over-week numbers (or null without a baseline) -
     # never fabricated arrow strings
     for k in ("mttrTrendPct", "automationTrendPp"):
         assert k in m and (m[k] is None or isinstance(m[k], (int, float)))
@@ -659,7 +659,7 @@ def test_webhook_delivery_engine(client, auth, monkeypatch):
         assert any(m["event"] == "incident.resolved" and m["data"]["id"] == case["id"] for m in received)
         n = len(received)
         client.patch(f"/soar/cases/{case['id']}", json={"status": "closed"}, headers=auth)
-        assert len(received) == n  # already resolved — no duplicate event
+        assert len(received) == n  # already resolved - no duplicate event
 
         # successful deliveries stamp last_delivery and stay active
         listed = client.get("/config/webhooks", headers=auth).json()
@@ -781,7 +781,7 @@ def test_totp_mfa_lifecycle(client, auth):
     from dashboard_api.db import get_conn
     from dashboard_api.mfa import totp_code, verify_code, new_secret, otpauth_uri
 
-    # — pure TOTP units: RFC 6238 SHA-1 test vector (secret "12345678901234567890") —
+    # - pure TOTP units: RFC 6238 SHA-1 test vector (secret "12345678901234567890") -
     rfc_secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
     assert totp_code(rfc_secret, at=59) == "287082"
     assert totp_code(rfc_secret, at=1111111109) == "081804"
@@ -789,7 +789,7 @@ def test_totp_mfa_lifecycle(client, auth):
     assert verify_code(new_secret(), "") is False
     assert otpauth_uri("ABC234", "a@b.c").startswith("otpauth://totp/ThreatOrbit:a%40b.c?secret=ABC234")
 
-    # — enrol a fresh analyst —
+    # - enrol a fresh analyst -
     email = f"mfa-{_uuid.uuid4().hex[:6]}@threatorbit.space"
     u = client.post("/users", json={"email": email, "name": "MFA User", "role": "analyst",
                                     "password": "Password123!"}, headers=auth).json()
@@ -812,7 +812,7 @@ def test_totp_mfa_lifecycle(client, auth):
     assert client.post("/auth/mfa/verify", json={"code": totp_code(secret)},
                        headers=hdr).json()["enabled"] is True
 
-    # — login step-up: password alone is no longer enough —
+    # - login step-up: password alone is no longer enough -
     def _err(resp):
         j = resp.json()
         return j.get("detail") or j.get("error") or ""
@@ -825,13 +825,13 @@ def test_totp_mfa_lifecycle(client, auth):
     assert ok.status_code == 200 and ok.json()["token"]
     assert "mfa_secret" not in ok.json()["user"] and "slack_webhook" not in ok.json()["user"]
 
-    # — disable needs possession proof; then login is password-only again —
+    # - disable needs possession proof; then login is password-only again -
     assert client.post("/auth/mfa/disable", json={"code": "000000"}, headers=hdr).status_code == 400
     assert client.post("/auth/mfa/disable", json={"code": totp_code(secret)},
                        headers=hdr).json()["enabled"] is False
     assert client.post("/auth/login", json={"email": email, "password": "Password123!"}).status_code == 200
 
-    # — admins cannot switch MFA on for someone; reset-off is the recovery —
+    # - admins cannot switch MFA on for someone; reset-off is the recovery -
     assert client.patch(f"/users/{u['id']}", json={"mfa_enabled": True}, headers=auth).status_code == 400
     assert client.patch(f"/users/{u['id']}", json={"mfa_enabled": False}, headers=auth).status_code == 200
     client.delete(f"/users/{u['id']}", headers=auth)
@@ -845,7 +845,7 @@ def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
     from dashboard_api import secretstore as ss
     from dashboard_api.db import get_conn
 
-    # — unit: round trip, idempotence, legacy passthrough —
+    # - unit: round trip, idempotence, legacy passthrough -
     tok = ss.encrypt("super-secret")
     assert ss.is_encrypted(tok) and tok != "super-secret"
     assert ss.encrypt(tok) == tok                      # double-encrypt is a no-op
@@ -853,7 +853,7 @@ def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
     assert ss.decrypt("legacy-plaintext") == "legacy-plaintext"
     assert ss.encrypt(None) is None and ss.decrypt("") == ""
 
-    # — connector keys land encrypted; the runner sees plaintext —
+    # - connector keys land encrypted; the runner sees plaintext -
     c = client.post("/connectors", json={"name": "Enc OTX", "kind": "otx",
                                          "api_key": "otx-key-123"}, headers=auth).json()
     with get_conn() as conn:
@@ -868,7 +868,7 @@ def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
     client.post(f"/connectors/{c['id']}/run", headers=auth)
     assert seen["key"] == "otx-key-123"               # decrypted at the choke point
 
-    # — integration keys land encrypted (create + patch) —
+    # - integration keys land encrypted (create + patch) -
     i = client.post("/soar/integrations", json={"name": "Enc Jira", "category": "Ticketing",
                                                 "base_url": "https://jira.example",
                                                 "api_key": "jira-key-1"}, headers=auth).json()
@@ -877,7 +877,7 @@ def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
         stored = conn.execute("SELECT api_key FROM integrations WHERE id=?", (i["id"],)).fetchone()[0]
     assert ss.is_encrypted(stored) and "jira-key" not in stored
 
-    # — Slack webhook: encrypted at rest, owner round-trips plaintext —
+    # - Slack webhook: encrypted at rest, owner round-trips plaintext -
     client.put("/auth/me/slack", json={"webhook_url": "https://hooks.slack.com/services/E/N/C",
                                        "min_severity": "critical"}, headers=auth)
     me = client.get("/auth/me", headers=auth).json()
@@ -889,7 +889,7 @@ def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
         "https://hooks.slack.com/services/E/N/C"
     client.put("/auth/me/slack", json={"webhook_url": "", "min_severity": "high"}, headers=auth)
 
-    # — boot migration upgrades legacy plaintext rows in place —
+    # - boot migration upgrades legacy plaintext rows in place -
     with get_conn() as conn:
         conn.execute("UPDATE connectors SET api_key='legacy-plain-key' WHERE id=?", (c["id"],))
         conn.commit()
@@ -898,7 +898,7 @@ def test_secrets_encrypted_at_rest(client, auth, monkeypatch):
         upgraded = conn.execute("SELECT api_key FROM connectors WHERE id=?", (c["id"],)).fetchone()[0]
     assert n >= 1 and ss.is_encrypted(upgraded) and ss.decrypt(upgraded) == "legacy-plain-key"
 
-    # — rotated key: decrypt degrades to '' (honest not-configured) —
+    # - rotated key: decrypt degrades to '' (honest not-configured) -
     monkeypatch.setenv("DASHBOARD_ENCRYPTION_KEY", "a-completely-different-key")
     assert ss.decrypt(tok) == ""
     monkeypatch.delenv("DASHBOARD_ENCRYPTION_KEY")
@@ -954,7 +954,7 @@ def test_per_user_slack_routing(client, auth, monkeypatch):
 
 
 def test_signed_evidence_bundle(client, auth):
-    """Audit pack: a case exports as a signed, tamper-evident bundle — intact
+    """Audit pack: a case exports as a signed, tamper-evident bundle - intact
     bundles verify, any byte of tampering fails, and the export is audited."""
     import json as _json
     case = client.post("/soar/cases", json={"title": "Bundle case", "severity": "low"},
@@ -1032,7 +1032,7 @@ def test_integration_lifecycle(client, auth):
                        json={"action": "x"}, headers=auth).status_code == 404
 
     # credential entry: PATCH stores base_url + key; the key never leaves the
-    # server — every payload (patch/test/list) exposes only `credentialed`
+    # server - every payload (patch/test/list) exposes only `credentialed`
     upd = client.patch(f"/soar/integrations/{iid}",
                        json={"base_url": "https://api.pagerduty.example", "api_key": "pd-secret-1"},
                        headers=auth).json()
@@ -1151,14 +1151,14 @@ def test_nvd_catalogue_sync_drives_scanning(client, auth, monkeypatch):
             }]}]}],
         }
     }
-    # — pure parse: bounds, fixed-in, severity —
+    # - pure parse: bounds, fixed-in, severity -
     rows = nvd_to_catalogue([nvd_record])
     assert rows == [{"cve": "CVE-2026-12345", "product": "exampleserver", "cvss": 9.8,
                      "severity": "critical", "vstart": "3.0.0", "vstart_incl": True,
                      "vend": "3.4.2", "vend_incl": False, "fixed": "3.4.2",
                      "summary": "RCE in ExampleServer before 3.4.2"}]
 
-    # — connector run upserts the catalogue —
+    # - connector run upserts the catalogue -
     class FakeResp:
         def json(self):
             return {"vulnerabilities": [nvd_record]}
@@ -1169,8 +1169,8 @@ def test_nvd_catalogue_sync_drives_scanning(client, auth, monkeypatch):
         row = conn.execute("SELECT * FROM cve_catalogue WHERE cve='CVE-2026-12345'").fetchone()
     assert row and row["product"] == "exampleserver" and row["vend"] == "3.4.2"
 
-    # — scanning an asset running an affected version finds the synced CVE;
-    #   the fixed version does not match —
+    # - scanning an asset running an affected version finds the synced CVE;
+    #   the fixed version does not match -
     aid = client.post("/assets", json={
         "name": f"nvd-sync-{_uuid.uuid4().hex[:6]}", "type": "server", "value": "10.9.8.7",
         "software": [{"product": "exampleserver", "version": "3.2.1"}]}, headers=auth).json()["id"]
@@ -1255,7 +1255,7 @@ def test_connector_critical_ioc_raises_siem_alert(client, auth, monkeypatch):
 
 def test_live_engine_produces_cross_section_data(client, auth):
     """The engine generates telemetry → SIEM alerts, CTI IOCs, dark-web findings,
-    and auto-escalated SOAR cases — all queryable."""
+    and auto-escalated SOAR cases - all queryable."""
     before = client.get("/siem/alerts", headers=auth).json()["total"]
     r = client.post("/config/engine", json={"generate": 10}, headers=auth)
     assert r.status_code == 200, r.text
@@ -1435,8 +1435,8 @@ def test_log_ingestion_parses_and_detects(client, auth):
 
 def test_ecs_ingest_time_normalization(client, auth):
     """An ECS-shaped document (nested Beats style AND dotted keys) lands fully
-    normalised in the events store — source.ip→src_ip, user.name→username,
-    destination.port→dest_port, host.name→hostname — at ingest time, not just
+    normalised in the events store - source.ip→src_ip, user.name→username,
+    destination.port→dest_port, host.name→hostname - at ingest time, not just
     through the read-time alias layer."""
     import json as _json
     import uuid as _uuid
@@ -2444,7 +2444,7 @@ def test_fleet_vuln_findings_grouped(client, auth):
     rows = client.get("/assets/vuln-findings", headers=auth).json()
     assert rows, "seeded vulnerable software should produce findings"
     bycve = {r["cve"]: r for r in rows}
-    # Log4Shell from legacy-app-01's seeded log4j 2.14.1 — a KEV fact
+    # Log4Shell from legacy-app-01's seeded log4j 2.14.1 - a KEV fact
     assert "CVE-2021-44228" in bycve
     log4 = bycve["CVE-2021-44228"]
     assert log4["kev"] is True and log4["exploit"] is True and log4["cvss"] == 10.0
@@ -2734,7 +2734,7 @@ def test_enrichment_live_providers(monkeypatch):
     assert sh["verdict"] == "suspicious" and "1 known vulns" in sh["summary"]
     who = en._enrich_external("whois", "fresh-phish.example", "domain")
     assert who["verdict"] == "suspicious" and "registered" in who["summary"]  # <30d old
-    # type gating: GreyNoise/Shodan only cover IPs — honestly not applicable
+    # type gating: GreyNoise/Shodan only cover IPs - honestly not applicable
     assert en._enrich_external("greynoise", "x.example", "domain")["available"] is False
     # VT URL ids are base64url-encoded
     en._enrich_external("virustotal", "http://evil.example/p", "url")
@@ -2942,7 +2942,7 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
     monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
     assert client.get(f"/assets?q={marker}", headers=auth).json()["total"] == 2
 
-    # …and on the secondary stores (playbooks as the representative — the same
+    # …and on the secondary stores (playbooks as the representative - the same
     # clause shipped on feeds/actors/connectors/runs/hunts/scans/suppressions/
     # sources/notifications/saved-views/report-schedules)
     with get_conn() as conn:
@@ -2976,7 +2976,7 @@ def test_tenant_isolation_reference_pattern(client, auth, monkeypatch):
 def test_tenant_write_stamping(client, auth, monkeypatch):
     """Create endpoints stamp the caller's workspace: rows made by a user in a
     foreign org land there (not in the default), so flag-on isolation works
-    end-to-end — the foreign analyst sees their row, the default admin doesn't."""
+    end-to-end - the foreign analyst sees their row, the default admin doesn't."""
     import uuid as _uuid
     from dashboard_api import tenancy
     from dashboard_api.db import get_conn
@@ -3017,7 +3017,7 @@ def test_tenant_write_stamping(client, auth, monkeypatch):
 
 def test_tenancy_scope_helper_units():
     """The staged isolation seam is a no-op while enforcement is off, and emits
-    a real org filter when on — so wiring it into queries later is safe."""
+    a real org filter when on - so wiring it into queries later is safe."""
     import importlib
     from dashboard_api import tenancy
     # default (enforcement off) → no-op clause
@@ -3095,7 +3095,7 @@ def test_rbac_viewer_is_read_only(client, auth):
     assert client.post("/siem/rules", json={"name": "Analyst rule", "severity": "medium"},
                        headers=at).status_code == 201
     # but an analyst cannot do platform admin (manage users / api keys /
-    # connectors / settings — all capability-gated now, no role lists left)
+    # connectors / settings - all capability-gated now, no role lists left)
     assert client.post("/users", json={"email": "z@z.com", "name": "Z", "role": "viewer",
                                        "password": "Password123!"}, headers=at).status_code == 403
     assert client.get("/config/api-keys", headers=at).status_code == 403
@@ -3197,7 +3197,7 @@ def test_stream_auth_and_live_publish(client, auth, admin_token):
     """The SSE endpoint requires a valid token; notify()/dispatch() push to the
     broker so live clients update without polling."""
     from dashboard_api import events_stream as es
-    # auth guard: no token / bad token rejected (don't open the stream itself —
+    # auth guard: no token / bad token rejected (don't open the stream itself -
     # it would block; the guard runs before streaming begins)
     assert client.get("/stream").status_code == 401
     assert client.get("/stream?token=not-a-jwt").status_code == 401
@@ -3234,7 +3234,7 @@ def test_stix_serialization_units():
     # CVE → vulnerability SDO, not an indicator
     cve = stix.ioc_to_stix({"type": "cve", "value": "CVE-2024-1234", "first_seen": "2025-01-01T00:00:00"})
     assert cve["type"] == "vulnerability" and cve["external_references"][0]["external_id"] == "CVE-2024-1234"
-    # deterministic ids — re-serializing the same value is stable
+    # deterministic ids - re-serializing the same value is stable
     assert ip["id"] == stix.ioc_to_stix({"type": "ip", "value": "203.0.113.9"})["id"]
     # actor + relationship wiring
     objs = stix.build_objects(
@@ -3432,7 +3432,7 @@ def test_suppression_time_windows(client, auth):
     from dashboard_api.rule_engine import suppression_active
     seed_builtin_rules()
 
-    # — pure window/expiry math —
+    # - pure window/expiry math -
     now = datetime(2026, 6, 12, 3, 0, tzinfo=timezone.utc)
     assert suppression_active({}, now) is True  # permanent
     assert suppression_active({"expires_at": "2026-06-12T02:59:00+00:00"}, now) is False
@@ -3442,7 +3442,7 @@ def test_suppression_time_windows(client, auth):
     assert suppression_active({"window_start": "22:00", "window_end": "06:00"}, now) is True  # overnight
     assert suppression_active({"window_start": "22:00", "window_end": "02:00"}, now) is False
 
-    # — API behaviour —
+    # - API behaviour -
     ip = "203.0.113.222"
     bf = f"Jan 10 04:30:00 web01 sshd[112]: Failed password for root from {ip} port 51110"
     utcnow = datetime.now(timezone.utc)
@@ -3536,7 +3536,7 @@ def test_event_search_language(client, auth):
 
 def test_search_join_across_sources(client, auth):
     """`| join <field> <subquery>` correlates across sources: keep left rows
-    whose field value also matches the right — e.g. successful logins from IPs
+    whose field value also matches the right - e.g. successful logins from IPs
     that also produced failed logins (brute-force-then-success)."""
     from dashboard_api.engine import seed_builtin_rules
     seed_builtin_rules()

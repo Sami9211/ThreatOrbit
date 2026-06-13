@@ -88,7 +88,7 @@ const SEED: Vuln[] = [
     references: ['https://nvd.nist.gov/vuln/detail/CVE-2024-3094'],
   },
   {
-    id: 'CVE-2024-6387', cvss: 8.1, title: 'regreSSHion — OpenSSH Signal Handler RCE',
+    id: 'CVE-2024-6387', cvss: 8.1, title: 'regreSSHion - OpenSSH Signal Handler RCE',
     description: 'A signal handler race condition in OpenSSH server (sshd) allows unauthenticated remote code execution as root on glibc-based Linux systems. If a client does not authenticate within LoginGraceTime, sshd\'s SIGALRM handler is called asynchronously, invoking functions that are not async-signal-safe, leading to memory corruption.',
     severity: 'high', status: 'open', exploit: 'weaponized', kev: false, exploitAvailable: true,
     affectedAssets: ['PROD-API-04', 'jenkins-ci-01', 'bastion-01'], ageDays: 11, assignee: 'r.osei',
@@ -179,7 +179,7 @@ const SEED: Vuln[] = [
   },
   {
     id: 'CVE-2023-34362', cvss: 9.8, title: 'MOVEit Transfer SQL Injection (Cl0p)',
-    description: 'A SQL injection vulnerability in Progress MOVEit Transfer allows unauthenticated attackers to access the database, infer its structure, and execute SQL statements that alter or delete database elements — widely exploited by the Cl0p ransomware group for mass data theft.',
+    description: 'A SQL injection vulnerability in Progress MOVEit Transfer allows unauthenticated attackers to access the database, infer its structure, and execute SQL statements that alter or delete database elements - widely exploited by the Cl0p ransomware group for mass data theft.',
     severity: 'critical', status: 'patched', exploit: 'kev', kev: true, exploitAvailable: true,
     affectedAssets: ['moveit-transfer-01'], ageDays: 64, assignee: 'r.osei',
     cvssVector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
@@ -193,7 +193,7 @@ const SEED: Vuln[] = [
     references: ['https://nvd.nist.gov/vuln/detail/CVE-2023-34362'],
   },
   {
-    id: 'CVE-2021-44228', cvss: 10.0, title: 'Log4Shell — Apache Log4j2 JNDI RCE',
+    id: 'CVE-2021-44228', cvss: 10.0, title: 'Log4Shell - Apache Log4j2 JNDI RCE',
     description: 'Apache Log4j2 JNDI features used in configuration, log messages, and parameters do not protect against attacker-controlled LDAP and other JNDI related endpoints. An attacker who can control log messages can execute arbitrary code loaded from remote servers when message lookup substitution is enabled.',
     severity: 'critical', status: 'patched', exploit: 'kev', kev: true, exploitAvailable: true,
     affectedAssets: ['PROD-API-04', 'search-cluster-02', 'jenkins-ci-01'], ageDays: 120, assignee: 'a.patel',
@@ -224,7 +224,7 @@ const SEED: Vuln[] = [
   },
   {
     id: 'CVE-2024-20353', cvss: 8.6, title: 'Cisco ASA / FTD Web Services DoS',
-    description: 'A vulnerability in the management and VPN web servers of Cisco ASA and FTD software could allow an unauthenticated remote attacker to cause the device to reload unexpectedly, resulting in a denial of service — part of the ArcaneDoor campaign.',
+    description: 'A vulnerability in the management and VPN web servers of Cisco ASA and FTD software could allow an unauthenticated remote attacker to cause the device to reload unexpectedly, resulting in a denial of service - part of the ArcaneDoor campaign.',
     severity: 'high', status: 'open', exploit: 'kev', kev: true, exploitAvailable: true,
     affectedAssets: ['fw-asa-dc-01', 'fw-asa-dc-02'], ageDays: 8, assignee: null,
     cvssVector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H',
@@ -238,7 +238,7 @@ const SEED: Vuln[] = [
     references: ['https://nvd.nist.gov/vuln/detail/CVE-2024-20353'],
   },
   {
-    id: 'CVE-2024-49113', cvss: 7.5, title: 'LDAP Nightmare — Windows LDAP DoS',
+    id: 'CVE-2024-49113', cvss: 7.5, title: 'LDAP Nightmare - Windows LDAP DoS',
     description: 'A vulnerability in the Windows Lightweight Directory Access Protocol (LDAP) implementation allows an unauthenticated attacker to crash the Local Security Authority Subsystem Service (LSASS) and reboot Domain Controllers via a crafted CLDAP referral response, causing denial of service.',
     severity: 'high', status: 'accepted', exploit: 'poc', kev: false, exploitAvailable: true,
     affectedAssets: ['dc-prod-01', 'dc-prod-02'], ageDays: 31, assignee: 'r.osei',
@@ -366,11 +366,11 @@ export default function VulnsPage() {
   ), [vulns, sevFilter, statusFilter, kevOnly, exploitOnly, search])
 
   const kpis = [
-    { label: 'Total CVEs',         value: vsum ? vsum.distinctCves.toLocaleString() : '—', color: 'text-white'  },
-    { label: 'Critical',           value: vsum ? String(vsum.bySeverity.critical) : '—',   color: 'text-magenta' },
-    { label: 'Actively Exploited', value: vsum ? String(vsum.activelyExploited) : '—',     color: 'text-threat' },
-    { label: 'Avg Patch Age',      value: vsum ? `${vsum.avgPatchAge}d` : '—',             color: 'text-amber'  },
-    { label: 'Exposure Score',     value: vsum ? `${Math.round(vsum.exposureScore)}/100` : '—', color: 'text-threat' },
+    { label: 'Total CVEs',         value: vsum ? vsum.distinctCves.toLocaleString() : '-', color: 'text-white'  },
+    { label: 'Critical',           value: vsum ? String(vsum.bySeverity.critical) : '-',   color: 'text-magenta' },
+    { label: 'Actively Exploited', value: vsum ? String(vsum.activelyExploited) : '-',     color: 'text-threat' },
+    { label: 'Avg Patch Age',      value: vsum ? `${vsum.avgPatchAge}d` : '-',             color: 'text-amber'  },
+    { label: 'Exposure Score',     value: vsum ? `${Math.round(vsum.exposureScore)}/100` : '-', color: 'text-threat' },
   ]
 
   return (

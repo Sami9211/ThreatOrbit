@@ -538,7 +538,7 @@ export default function ThreatHuntPage() {
           : h))
       })
       .catch(() => {
-        // demo entry or API offline — show completion locally so the action still responds
+        // demo entry or API offline - show completion locally so the action still responds
         setHunts((prev) => prev.map((h) => (h.id === id ? { ...h, status: 'completed' as HuntStatus, progress: 100 } : h)))
       })
   }
@@ -574,7 +574,7 @@ export default function ThreatHuntPage() {
     { label: 'Active Hunts',    value: String(hunts.filter((h) => h.status === 'active').length), icon: Crosshair,   color: '#FF2E97', sub: 'in progress' },
     { label: 'Saved Hunts',     value: String(hunts.length), icon: FlaskConical, color: '#7A3CFF', sub: 'hypotheses tracked' },
     { label: 'Completed',       value: String(hunts.filter((h) => h.status === 'completed').length), icon: ShieldCheck, color: '#34F5C5', sub: 'hunts run' },
-    { label: 'ATT&CK Coverage', value: coverage == null ? '—' : `${coverage}%`, icon: Layers, color: '#FFB23E', sub: 'techniques mapped' },
+    { label: 'ATT&CK Coverage', value: coverage == null ? '-' : `${coverage}%`, icon: Layers, color: '#FFB23E', sub: 'techniques mapped' },
   ]
 
   return (

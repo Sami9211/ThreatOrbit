@@ -1,6 +1,6 @@
 """Curated threat-actor reference library.
 
-This is real, public CTI reference data — the well-known tracked actors any
+This is real, public CTI reference data - the well-known tracked actors any
 platform ships as a baseline knowledge base (like the CVE catalogue or the
 ATT&CK matrix), NOT fabricated activity. Names, origins, aliases,
 sophistication, motivations, targeted sectors, malware and ATT&CK technique
@@ -12,14 +12,14 @@ It is the single source of truth for actor identity:
   * the live engine attributes indicators to these exact names, so
     attribution always lands on a real actor row;
   * per-actor *activity* (indicator counts) is derived from REAL indicators
-    attributed in the store via `recompute_actor_activity()` — it starts at
+    attributed in the store via `recompute_actor_activity()` - it starts at
     zero and grows truthfully as the engine/connectors attribute IOCs.
 """
 import json
 import uuid
 
 # (name, aliases, origin, flag, type, motivations, sophistication, threat_level,
-#  sectors, malware, ttps) — all publicly documented.
+#  sectors, malware, ttps) - all publicly documented.
 ACTOR_LIBRARY = [
     ("APT29", ["Cozy Bear", "Nobelium", "Midnight Blizzard"], "RU", "🇷🇺", "Nation-State",
      ["Espionage"], 5, "critical", ["Government", "Defense", "Think Tanks"],
@@ -95,7 +95,7 @@ def seed_actor_library(conn) -> int:
 
 def recompute_actor_activity(conn) -> int:
     """Set each actor's ioc_count + last_seen from indicators REALLY attributed
-    to its name in the IOC store. Honest, dynamic activity — zero until the
+    to its name in the IOC store. Honest, dynamic activity - zero until the
     engine/connectors attribute something. Returns the number of actors updated."""
     rows = conn.execute(
         "SELECT actor, COUNT(*) AS n, MAX(last_seen) AS seen FROM iocs "

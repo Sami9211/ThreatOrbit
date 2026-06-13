@@ -35,7 +35,7 @@ export default function IngestionEnginePanel() {
         const failures = Number(o.consecutiveFailures ?? o.consecutive_failures ?? 0)
         const ok = (o.status ? String(o.status) === 'healthy' : failures === 0)
         const last = String(o.lastSuccess ?? o.last_success ?? o.lastError ?? o.last_error ?? '')
-        return { name, ok, detail: last ? new Date(last).toLocaleString() : '—' }
+        return { name, ok, detail: last ? new Date(last).toLocaleString() : '-' }
       }))
     }).catch(() => {})
   }, [])
@@ -53,7 +53,7 @@ export default function IngestionEnginePanel() {
     triggerThreatFetch()
       .then((out) => flash(`Ingestion job started (${out.jobId ?? out.job_id ?? 'queued'})`))
       .catch((e) => flash(e instanceof Error && e.message.includes('unreachable')
-        ? 'Threat API is offline — start it on :8000 to ingest feeds.'
+        ? 'Threat API is offline - start it on :8000 to ingest feeds.'
         : 'Could not start ingestion (admin role required).'))
       .finally(() => setFetching(false))
   }
@@ -64,7 +64,7 @@ export default function IngestionEnginePanel() {
     syncThreatIocs()
       .then((out) => flash(`Synced ${out.imported} new indicators into CTI (${out.duplicates} already known)`))
       .catch((e) => flash(e instanceof Error && e.message.includes('unreachable')
-        ? 'Threat API is offline — start it on :8000 to sync indicators.'
+        ? 'Threat API is offline - start it on :8000 to sync indicators.'
         : 'Sync failed (admin role required).'))
       .finally(() => setSyncing(false))
   }
@@ -78,7 +78,7 @@ export default function IngestionEnginePanel() {
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-white">Ingestion Engine</h3>
-          <p className="text-[10px] text-ink-500">Threat API — OTX, abuse.ch, RSS, dark-web & social OSINT</p>
+          <p className="text-[10px] text-ink-500">Threat API - OTX, abuse.ch, RSS, dark-web & social OSINT</p>
         </div>
         <span className={cn('flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full border font-semibold ml-auto',
           available ? 'bg-safe/10 text-safe border-safe/25' : 'bg-white/5 text-ink-500 border-white/10')}>
@@ -118,7 +118,7 @@ export default function IngestionEnginePanel() {
           </p>
         )}
         {available && sources.length === 0 && (
-          <p className="text-xs text-ink-600 py-3 text-center">Connected — no fetch runs recorded yet. Trigger a fetch to populate source health.</p>
+          <p className="text-xs text-ink-600 py-3 text-center">Connected - no fetch runs recorded yet. Trigger a fetch to populate source health.</p>
         )}
         {available && sources.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">

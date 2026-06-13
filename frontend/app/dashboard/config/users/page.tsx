@@ -224,7 +224,7 @@ function InviteModal({ onClose, onInvite }: {
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Temporary password</label>
             <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters"
               className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 font-mono focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
-            <p className="text-[10px] text-ink-600 mt-1">Share this with the user — they can change it after first sign-in.</p>
+            <p className="text-[10px] text-ink-600 mt-1">Share this with the user - they can change it after first sign-in.</p>
           </div>
 
           {error && (

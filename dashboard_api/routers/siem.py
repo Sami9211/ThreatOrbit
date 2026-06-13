@@ -130,7 +130,7 @@ def list_alerts(
         raise HTTPException(status_code=400, detail=f"sort must be one of {sorted(_ALERT_SORTS)}")
     clauses, params = [], []
     # Tenant isolation (reference pattern): scoped only when the deployment
-    # flips DASHBOARD_MULTI_TENANT on — default installs see everything.
+    # flips DASHBOARD_MULTI_TENANT on - default installs see everything.
     from dashboard_api import tenancy
     if tenancy.enforced():
         clauses.append("org_id=?"); params.append(tenancy.org_of(user))
@@ -230,7 +230,7 @@ class SuppressionCreate(BaseModel):
     mode: str = "suppress"
     reason: str | None = None
     # Time-boxing (both optional): an absolute lifetime in hours, and/or a
-    # recurring daily HH:MM–HH:MM UTC window (e.g. a maintenance window).
+    # recurring daily HH:MM-HH:MM UTC window (e.g. a maintenance window).
     expires_hours: int | None = None
     window_start: str | None = None
     window_end: str | None = None
@@ -269,7 +269,7 @@ def create_suppression(body: SuppressionCreate, user: dict = Depends(require_per
     expires_at = None
     if body.expires_hours is not None:
         if not 1 <= body.expires_hours <= 8760:
-            raise HTTPException(status_code=400, detail="expires_hours must be 1–8760")
+            raise HTTPException(status_code=400, detail="expires_hours must be 1-8760")
         expires_at = (datetime.now(timezone.utc) + timedelta(hours=body.expires_hours)
                       ).replace(microsecond=0).isoformat()
     if bool(body.window_start) != bool(body.window_end):
@@ -286,7 +286,7 @@ def create_suppression(body: SuppressionCreate, user: dict = Depends(require_per
              _now_iso(), user["email"], tenancy.org_of(user),
              expires_at, body.window_start, body.window_end),
         )
-        # retro-close any currently-open alerts this suppression covers — but
+        # retro-close any currently-open alerts this suppression covers - but
         # only if it applies right now (a future-window entry shouldn't close
         # today's alerts before its window ever opens).
         from dashboard_api.rule_engine import suppression_active
@@ -320,7 +320,7 @@ def delete_suppression(suppression_id: str, user: dict = Depends(require_perm("s
 
 @router.get("/kpis")
 def siem_kpis(user: dict = Depends(current_user)):
-    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         rows = conn.execute(
@@ -366,7 +366,7 @@ _ENTITY_FIELD = {"user": "username", "host": "hostname", "ip": "src_ip"}
 def list_entities(type: str = Query("all", pattern="^(all|user|host|ip)$"),
                   limit: int = Query(25, le=100)):
     """UEBA: rank users/hosts/IPs by behavioural risk derived from their alert
-    history — severity-weighted volume plus ATT&CK technique diversity."""
+    history - severity-weighted volume plus ATT&CK technique diversity."""
     types = [type] if type != "all" else ["user", "host", "ip"]
     out = []
     with get_conn() as conn:
@@ -555,7 +555,7 @@ def import_sigma_rule(body: SigmaImport, user: dict = Depends(require_perm("siem
 
 @router.get("/rules/{rule_id}/sigma")
 def export_sigma_rule(rule_id: str):
-    """Export a rule as Sigma YAML — the original document for Sigma-imported
+    """Export a rule as Sigma YAML - the original document for Sigma-imported
     rules, generated Sigma for natively-authored ones."""
     from dashboard_api.sigma import rule_to_sigma
     with get_conn() as conn:
@@ -593,7 +593,7 @@ def ingest(body: IngestBody, user: dict = Depends(current_user)):
 @router.get("/log-listeners")
 def log_listeners_status():
     """Status of the long-running log collectors (syslog UDP listener + file/dir
-    watcher) — what's enabled and where."""
+    watcher) - what's enabled and where."""
     from dashboard_api.log_listeners import listener_status
     return listener_status()
 
@@ -665,7 +665,7 @@ def rule_schema():
 
 @router.post("/rules/test")
 def test_rule(body: RuleTest):
-    """Backtest a rule definition against recent events — returns matches without
+    """Backtest a rule definition against recent events - returns matches without
     creating any alerts, so analysts can tune before enabling."""
     if not (body.definition.get("conditions")):
         raise HTTPException(status_code=400, detail="Rule needs at least one condition")
@@ -847,7 +847,7 @@ class HuntSchedule(BaseModel):
 @router.post("/hunts/{hunt_id}/schedule")
 def schedule_hunt(hunt_id: str, body: HuntSchedule, user: dict = Depends(require_perm("siem.write"))):
     """Schedule a saved hunt to run on an interval (0 = off). When it runs and
-    finds events, it raises a SIEM alert (auto_alert) — a detection over time."""
+    finds events, it raises a SIEM alert (auto_alert) - a detection over time."""
     if body.schedule_minutes < 0 or body.schedule_minutes > 10080:
         raise HTTPException(status_code=400, detail="schedule_minutes must be 0..10080")
     with get_conn() as conn:

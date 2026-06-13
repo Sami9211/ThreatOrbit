@@ -1,9 +1,9 @@
-"""Email delivery channel — real SMTP when configured, honest no-op otherwise.
+"""Email delivery channel - real SMTP when configured, honest no-op otherwise.
 
 Scheduled reports and critical notifications can be delivered by email. Rather
 than ship a fake "email sent" toast, this performs a real SMTP send when the
 deployment provides SMTP settings, and reports `sent: false, reason:
-not-configured` when it doesn't — the same honest seam as the enrichment /
+not-configured` when it doesn't - the same honest seam as the enrichment /
 integration adapters. Never raises (a mail failure must not break a request or
 the engine tick).
 
@@ -64,5 +64,5 @@ def send_email(to: str | list[str], subject: str, html: str, *, text: str | None
         finally:
             server.quit()
         return {"sent": True, "recipients": recipients}
-    except Exception as e:  # SMTP/network failure — recorded, never crashes
+    except Exception as e:  # SMTP/network failure - recorded, never crashes
         return {"sent": False, "reason": f"SMTP send failed: {str(e)[:160]}"}

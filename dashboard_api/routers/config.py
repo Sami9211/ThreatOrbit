@@ -113,7 +113,7 @@ def database_backend(_: dict = Depends(require_perm("config.manage"))):
 @router.get("/backup")
 def download_backup(user: dict = Depends(require_perm("config.manage"))):
     """Download a transactionally consistent snapshot of the platform DB
-    (SQLite online-backup API — safe while the service is running). Restore
+    (SQLite online-backup API - safe while the service is running). Restore
     is an offline operation: see docs/OPERATIONS.md. Postgres deployments
     should use pg_dump instead; this endpoint refuses there."""
     import tempfile
@@ -197,7 +197,7 @@ def clear_license(user: dict = Depends(require_perm("license.manage"))):
 def onboarding_status(user: dict = Depends(current_user)):
     """First-run checklist, computed from REAL platform state (never stored):
     each step is done when the thing actually exists. A buyer can see exactly
-    what's left to be productive — and the wizard can never drift from reality."""
+    what's left to be productive - and the wizard can never drift from reality."""
     from dashboard_api.config import SEED_ADMIN_PASSWORD
     with get_conn() as conn:
         org = conn.execute("SELECT value FROM settings WHERE key='organization'").fetchone()

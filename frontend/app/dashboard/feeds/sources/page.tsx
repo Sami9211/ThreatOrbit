@@ -34,11 +34,11 @@ interface FeedSource {
 }
 
 const FEEDS: FeedSource[] = [
-  { id: 'f01', name: 'MISP — Internal Sharing',     type: 'Community',  format: 'MISP',      iocsPerDay: 4820,  lastPull: '2m ago',  reliability: 'A', enabled: true,  url: 'https://misp.corp.local/feeds', apiKeyConfigured: true,  pullInterval: '15m', taxiiCollection: 'org-default',          confidenceWeight: 90, tagMapping: ['tlp:amber', 'apt', 'internal'] },
+  { id: 'f01', name: 'MISP - Internal Sharing',     type: 'Community',  format: 'MISP',      iocsPerDay: 4820,  lastPull: '2m ago',  reliability: 'A', enabled: true,  url: 'https://misp.corp.local/feeds', apiKeyConfigured: true,  pullInterval: '15m', taxiiCollection: 'org-default',          confidenceWeight: 90, tagMapping: ['tlp:amber', 'apt', 'internal'] },
   { id: 'f02', name: 'AlienVault OTX',              type: 'Community',  format: 'STIX 2.1',  iocsPerDay: 12400, lastPull: '1m ago',  reliability: 'B', enabled: true,  url: 'https://otx.alienvault.com/api/v1/pulses', apiKeyConfigured: true,  pullInterval: '30m', taxiiCollection: 'subscribed-pulses', confidenceWeight: 65, tagMapping: ['osint', 'community'] },
-  { id: 'f03', name: 'Abuse.ch — URLhaus',         type: 'OSINT',      format: 'CSV',       iocsPerDay: 8200,  lastPull: '4m ago',  reliability: 'A', enabled: true,  url: 'https://urlhaus.abuse.ch/downloads/csv', apiKeyConfigured: false, pullInterval: '10m', taxiiCollection: 'n/a',                 confidenceWeight: 88, tagMapping: ['malware-url', 'osint'] },
-  { id: 'f04', name: 'Abuse.ch — ThreatFox',       type: 'OSINT',      format: 'JSON',      iocsPerDay: 5600,  lastPull: '3m ago',  reliability: 'A', enabled: true,  url: 'https://threatfox-api.abuse.ch/api/v1', apiKeyConfigured: true,  pullInterval: '10m', taxiiCollection: 'n/a',                 confidenceWeight: 85, tagMapping: ['ioc', 'malware'] },
-  { id: 'f05', name: 'Abuse.ch — Feodo Tracker',   type: 'OSINT',      format: 'CSV',       iocsPerDay: 320,   lastPull: '6m ago',  reliability: 'B', enabled: true,  url: 'https://feodotracker.abuse.ch/downloads/ipblocklist.csv', apiKeyConfigured: false, pullInterval: '30m', taxiiCollection: 'n/a',     confidenceWeight: 80, tagMapping: ['botnet-c2', 'ip'] },
+  { id: 'f03', name: 'Abuse.ch - URLhaus',         type: 'OSINT',      format: 'CSV',       iocsPerDay: 8200,  lastPull: '4m ago',  reliability: 'A', enabled: true,  url: 'https://urlhaus.abuse.ch/downloads/csv', apiKeyConfigured: false, pullInterval: '10m', taxiiCollection: 'n/a',                 confidenceWeight: 88, tagMapping: ['malware-url', 'osint'] },
+  { id: 'f04', name: 'Abuse.ch - ThreatFox',       type: 'OSINT',      format: 'JSON',      iocsPerDay: 5600,  lastPull: '3m ago',  reliability: 'A', enabled: true,  url: 'https://threatfox-api.abuse.ch/api/v1', apiKeyConfigured: true,  pullInterval: '10m', taxiiCollection: 'n/a',                 confidenceWeight: 85, tagMapping: ['ioc', 'malware'] },
+  { id: 'f05', name: 'Abuse.ch - Feodo Tracker',   type: 'OSINT',      format: 'CSV',       iocsPerDay: 320,   lastPull: '6m ago',  reliability: 'B', enabled: true,  url: 'https://feodotracker.abuse.ch/downloads/ipblocklist.csv', apiKeyConfigured: false, pullInterval: '30m', taxiiCollection: 'n/a',     confidenceWeight: 80, tagMapping: ['botnet-c2', 'ip'] },
   { id: 'f06', name: 'GreyNoise',                  type: 'Commercial', format: 'JSON',      iocsPerDay: 9800,  lastPull: '5m ago',  reliability: 'A', enabled: true,  url: 'https://api.greynoise.io/v3', apiKeyConfigured: true,  pullInterval: '20m', taxiiCollection: 'n/a',                 confidenceWeight: 92, tagMapping: ['scanner', 'noise', 'context'] },
   { id: 'f07', name: 'Shodan',                     type: 'Commercial', format: 'JSON',      iocsPerDay: 2100,  lastPull: '12m ago', reliability: 'B', enabled: true,  url: 'https://api.shodan.io', apiKeyConfigured: true,  pullInterval: '60m', taxiiCollection: 'n/a',                 confidenceWeight: 70, tagMapping: ['exposure', 'recon'] },
   { id: 'f08', name: 'AbuseIPDB',                  type: 'Community',  format: 'JSON',      iocsPerDay: 6400,  lastPull: '2m ago',  reliability: 'B', enabled: true,  url: 'https://api.abuseipdb.com/api/v2/blacklist', apiKeyConfigured: true,  pullInterval: '15m', taxiiCollection: 'n/a',          confidenceWeight: 72, tagMapping: ['malicious-ip', 'community'] },
@@ -160,8 +160,8 @@ export default function FeedSourcesPage() {
         {[
           { label: 'Active Feeds',     value: activeFeeds,                          color: 'text-safe'    },
           { label: 'IOCs Today',       value: `${(iocsToday / 1000).toFixed(1)}k`,  color: 'text-magenta' },
-          { label: 'Total Indicators', value: summary ? summary.totalIndicators.toLocaleString() : '—', color: 'text-violet' },
-          { label: 'Feeds Errored',    value: summary ? String(summary.errored) : '—', color: 'text-amber' },
+          { label: 'Total Indicators', value: summary ? summary.totalIndicators.toLocaleString() : '-', color: 'text-violet' },
+          { label: 'Feeds Errored',    value: summary ? String(summary.errored) : '-', color: 'text-amber' },
         ].map(({ label, value, color }) => (
           <div key={label} className="px-5 py-3">
             <div className={cn('text-xl font-bold font-mono', color)}>{value}</div>
@@ -374,7 +374,7 @@ export default function FeedSourcesPage() {
                 { value: 'JSON', label: 'JSON' }, { value: 'CSV', label: 'CSV' }, { value: 'MISP', label: 'MISP' },
               ] },
               { key: 'reliability', label: 'Reliability', type: 'select', default: 'B', options: [
-                { value: 'A', label: 'A — Reliable' }, { value: 'B', label: 'B — Usually reliable' }, { value: 'C', label: 'C — Fairly reliable' },
+                { value: 'A', label: 'A - Reliable' }, { value: 'B', label: 'B - Usually reliable' }, { value: 'C', label: 'C - Fairly reliable' },
               ] },
             ]}
           />

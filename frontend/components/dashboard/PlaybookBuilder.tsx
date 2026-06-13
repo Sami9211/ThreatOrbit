@@ -29,7 +29,7 @@ const mkStep = (kind: string, name: string, params: Record<string, unknown> = {}
   ({ _id: `s${++_uid}`, kind, name, params })
 
 /**
- * Visual playbook builder — compose a real, executable response workflow from
+ * Visual playbook builder - compose a real, executable response workflow from
  * the step-kind palette: ordered, reorderable, per-step parameters, a live
  * dry-run (no side effects), and version history with one-click revert. Saves
  * through the real /soar/playbooks API (every save snapshots a version).
@@ -57,7 +57,7 @@ export default function PlaybookBuilder({ playbook, onClose, onSaved }: {
     fetchPlaybookVersions(playbook!.id).then((vs) => {
       setVersions(vs)
       // The page's local steps drop `kind`; the latest version snapshot has the
-      // real executable steps — seed the canvas from it.
+      // real executable steps - seed the canvas from it.
       const haveKinds = steps.length > 0 && steps.every((s) => s.kind)
       if (!haveKinds && vs[0]?.steps?.length) {
         setSteps(vs[0].steps.filter((s) => s.kind).map((s) => mkStep(s.kind, s.name, s.params ?? {})))

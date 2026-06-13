@@ -43,7 +43,7 @@ export default function SavedViewsButton({ section, filters, onApply }: {
     if (next && views === null) load()
   }
 
-  // Persist only meaningful filter values — defaults add noise, not state.
+  // Persist only meaningful filter values - defaults add noise, not state.
   function currentFilters(): Record<string, string> {
     const out: Record<string, string> = {}
     for (const [k, v] of Object.entries(filters)) {
@@ -124,7 +124,7 @@ export default function SavedViewsButton({ section, filters, onApply }: {
               <p className="text-[11px] text-ink-600 py-1.5">Loading…</p>
             ) : views.length === 0 ? (
               <p className="text-[11px] text-ink-600 py-1.5">
-                Nothing saved yet — set some filters and save them here.
+                Nothing saved yet - set some filters and save them here.
               </p>
             ) : (
               <ul className="space-y-0.5 max-h-56 overflow-y-auto">

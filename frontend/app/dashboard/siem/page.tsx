@@ -71,7 +71,7 @@ type SiemAlert = {
 const ALERTS: SiemAlert[] = [
   {
     id: 'a001', ts: '2024-11-12T14:22:00Z',
-    title: 'Ransomware file encryption pattern detected — mass rename activity',
+    title: 'Ransomware file encryption pattern detected - mass rename activity',
     severity: 'critical', status: 'in-progress', disposition: 'true-positive', owner: 'j.chen',
     riskScore: 98,
     ruleId: 'EDR-9001', ruleName: 'Ransomware File Encryption Indicator',
@@ -87,7 +87,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a002', ts: '2024-11-12T14:18:00Z',
-    title: 'Root SSH login from untrusted external IP — Lazarus Group C2 IOC match',
+    title: 'Root SSH login from untrusted external IP - Lazarus Group C2 IOC match',
     severity: 'critical', status: 'assigned', disposition: 'true-positive', owner: 'a.patel',
     riskScore: 96,
     ruleId: 'SIEM-1042', ruleName: 'External SSH Root Login',
@@ -103,7 +103,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a003', ts: '2024-11-12T14:15:00Z',
-    title: 'PowerShell AMSI bypass + encoded payload — living-off-the-land execution',
+    title: 'PowerShell AMSI bypass + encoded payload - living-off-the-land execution',
     severity: 'critical', status: 'new', disposition: 'undetermined', owner: null,
     riskScore: 91,
     ruleId: 'EDR-4421', ruleName: 'PowerShell AMSI Bypass Detected',
@@ -151,7 +151,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a006', ts: '2024-11-12T13:55:00Z',
-    title: 'Multiple failed MFA attempts — push fatigue attack on alice@corp.com',
+    title: 'Multiple failed MFA attempts - push fatigue attack on alice@corp.com',
     severity: 'high', status: 'assigned', disposition: 'undetermined', owner: 'r.osei',
     riskScore: 72,
     ruleId: 'AUTH-6621', ruleName: 'MFA Push Fatigue Detection',
@@ -167,7 +167,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a007', ts: '2024-11-12T13:40:00Z',
-    title: 'DNS request to known malware C2 domain — CobaltStrike beacon pattern',
+    title: 'DNS request to known malware C2 domain - CobaltStrike beacon pattern',
     severity: 'high', status: 'resolved', disposition: 'true-positive', owner: 'j.chen',
     riskScore: 78,
     ruleId: 'DNS-2201', ruleName: 'DNS C2 Beacon Domain Match',
@@ -199,7 +199,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a009', ts: '2024-11-12T13:10:00Z',
-    title: 'SQL injection attempt: 847 payloads on /api/v2/users — WAF partially blocked',
+    title: 'SQL injection attempt: 847 payloads on /api/v2/users - WAF partially blocked',
     severity: 'high', status: 'new', disposition: 'undetermined', owner: null,
     riskScore: 67,
     ruleId: 'WAF-2231', ruleName: 'SQL Injection Attack Pattern',
@@ -215,7 +215,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a010', ts: '2024-11-12T12:55:00Z',
-    title: 'Large outbound transfer 4.2 GB to Azure Blob Storage — unusual destination',
+    title: 'Large outbound transfer 4.2 GB to Azure Blob Storage - unusual destination',
     severity: 'medium', status: 'new', disposition: 'undetermined', owner: null,
     riskScore: 54,
     ruleId: 'NET-3312', ruleName: 'Large Outbound Data Transfer',
@@ -231,10 +231,10 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a011', ts: '2024-11-12T12:40:00Z',
-    title: 'VPN login from Singapore — impossible travel (last login: New York 47 min ago)',
+    title: 'VPN login from Singapore - impossible travel (last login: New York 47 min ago)',
     severity: 'medium', status: 'pending', disposition: 'undetermined', owner: 'r.osei',
     riskScore: 48,
-    ruleId: 'VPN-0012', ruleName: 'Impossible Travel — VPN Authentication',
+    ruleId: 'VPN-0012', ruleName: 'Impossible Travel - VPN Authentication',
     mitreTactic: 'Initial Access', mitreTacticId: 'TA0001',
     mitreTech: 'Valid Accounts', mitreTechId: 'T1078',
     srcIp: '103.245.12.44', srcCountry: 'Singapore', srcPort: 0, srcHostname: 'unknown', srcAsn: 'AS132203 Tencent Cloud',
@@ -263,7 +263,7 @@ const ALERTS: SiemAlert[] = [
   },
   {
     id: 'a013', ts: '2024-11-12T12:15:00Z',
-    title: 'Brute-force SSH — 4,219 attempts from 14 IPs in 8 minutes',
+    title: 'Brute-force SSH - 4,219 attempts from 14 IPs in 8 minutes',
     severity: 'medium', status: 'resolved', disposition: 'true-positive', owner: 'j.chen',
     riskScore: 42,
     ruleId: 'FW-9821', ruleName: 'SSH Brute Force from Multiple Sources',
@@ -289,7 +289,7 @@ const ALERTS: SiemAlert[] = [
     destIp: '10.0.0.0/8', destPort: 0, destService: 'Multiple',
     username: 'dev_user3', hostname: 'WS-DEV-088', hostCriticality: 'low',
     processName: 'nmap', cmdLine: 'nmap -A -sV -O -p 1-65535 10.0.0.0/8',
-    description: 'Developer workstation ran full-range Nmap scan with OS detection and service version enumeration across the entire 10.0.0.0/8 internal subnet. Atypical behavior for this account — may indicate lateral movement reconnaissance.',
+    description: 'Developer workstation ran full-range Nmap scan with OS detection and service version enumeration across the entire 10.0.0.0/8 internal subnet. Atypical behavior for this account - may indicate lateral movement reconnaissance.',
     rawLog: 'Nov 12 11:55:12 ids-01: SCAN_DETECTED src=10.5.0.88 dst=10.0.0.0/8 type=NMAP_OS_FINGERPRINT packets=127422 scan_duration=120s',
     eventCount: 127422, tiHits: 0, bytesOut: 0,
   },
@@ -334,11 +334,11 @@ const RULES: CorrelationRule[] = [
   { id: 'DB-8801',  name: 'Bulk Database Exfiltration Pattern',     source: 'Database', mitreTactic: 'Exfiltration',         mitreTechId: 'T1048',     severity: 'critical', enabled: true,  firedLast7d: 1,    lastFired: '10h ago',   fpRate: 3,  description: 'Database query returning >100K rows from customer/PII tables followed by outbound transfer.' },
   { id: 'AUTH-6621', name: 'MFA Push Fatigue Detection',            source: 'Auth',     mitreTactic: 'Credential Access',   mitreTechId: 'T1621',     severity: 'high',     enabled: true,  firedLast7d: 22,   lastFired: '12h ago',   fpRate: 15, description: '>10 MFA push requests to same user within 5 minutes from external IP.' },
   { id: 'DNS-2201', name: 'DNS C2 Beacon Domain Match',             source: 'DNS',      mitreTactic: 'Command & Control',   mitreTechId: 'T1071.004', severity: 'high',     enabled: true,  firedLast7d: 44,   lastFired: '1h ago',    fpRate: 7,  description: 'DNS query matches known C2 infrastructure from Recorded Future, CrowdStrike, or MISP TI feeds.' },
-  { id: 'AD-5510',  name: 'Privileged Account Created After Hours', source: 'AD/LDAP',  mitreTactic: 'Persistence',          mitreTechId: 'T1136.002', severity: 'high',     enabled: true,  firedLast7d: 5,    lastFired: '1d ago',    fpRate: 42, description: 'Domain admin or group admin account created between 20:00–06:00 UTC local time.' },
+  { id: 'AD-5510',  name: 'Privileged Account Created After Hours', source: 'AD/LDAP',  mitreTactic: 'Persistence',          mitreTechId: 'T1136.002', severity: 'high',     enabled: true,  firedLast7d: 5,    lastFired: '1d ago',    fpRate: 42, description: 'Domain admin or group admin account created between 20:00-06:00 UTC local time.' },
   { id: 'FW-9821',  name: 'SSH Brute Force from Multiple Sources',  source: 'Firewall', mitreTactic: 'Credential Access',   mitreTechId: 'T1110.003', severity: 'medium',   enabled: true,  firedLast7d: 182,  lastFired: '30m ago',   fpRate: 5,  description: '>3 distinct source IPs attacking same destination port 22 within 5-minute window.' },
   { id: 'WAF-2231', name: 'SQL Injection Attack Pattern',           source: 'WAF',      mitreTactic: 'Initial Access',       mitreTechId: 'T1190',     severity: 'high',     enabled: true,  firedLast7d: 2847, lastFired: '15m ago',   fpRate: 2,  description: 'WAF ModSecurity rule set: SQL injection payloads in POST body or query parameters.' },
   { id: 'NET-3312', name: 'Large Outbound Data Transfer',           source: 'Network',  mitreTactic: 'Exfiltration',         mitreTechId: 'T1537',     severity: 'medium',   enabled: true,  firedLast7d: 28,   lastFired: '2h ago',    fpRate: 35, description: 'Single host transfers >2 GB to external IP outside known cloud backup windows.' },
-  { id: 'VPN-0012', name: 'Impossible Travel — VPN Authentication', source: 'VPN',      mitreTactic: 'Initial Access',       mitreTechId: 'T1078',     severity: 'medium',   enabled: true,  firedLast7d: 11,   lastFired: '3h ago',    fpRate: 28, description: 'Same user authenticates from geographically impossible locations within 90 minutes.' },
+  { id: 'VPN-0012', name: 'Impossible Travel - VPN Authentication', source: 'VPN',      mitreTactic: 'Initial Access',       mitreTechId: 'T1078',     severity: 'medium',   enabled: true,  firedLast7d: 11,   lastFired: '3h ago',    fpRate: 28, description: 'Same user authenticates from geographically impossible locations within 90 minutes.' },
   { id: 'MAIL-8812', name: 'Phishing Attachment Delivered',         source: 'Email',    mitreTactic: 'Initial Access',       mitreTechId: 'T1566.001', severity: 'high',     enabled: true,  firedLast7d: 67,   lastFired: '4h ago',    fpRate: 10, description: 'Email gateway delivered attachment matching malicious file hash or suspicious macro signature.' },
   { id: 'NET-4401', name: 'Internal Network Reconnaissance',        source: 'IDS',      mitreTactic: 'Discovery',            mitreTechId: 'T1046',     severity: 'medium',   enabled: true,  firedLast7d: 9,    lastFired: '6h ago',    fpRate: 22, description: 'Nmap or similar tool detected conducting service/OS discovery of internal subnets.' },
   { id: 'PATCH-0040', name: 'Critical Patch Application Failure',   source: 'WSUS',     mitreTactic: 'Initial Access',       mitreTechId: 'T1190',     severity: 'low',      enabled: false, firedLast7d: 0,    lastFired: '3d ago',    fpRate: 60, description: 'Critical or high CVSS patch fails to deploy within 72 hours of release. Disabled: too noisy.' },
@@ -515,7 +515,7 @@ function timeAgo(ts: string): string {
 }
 
 function fmtBytes(b: number): string {
-  if (b === 0) return '—'
+  if (b === 0) return '-'
   if (b < 1024) return `${b} B`
   if (b < 1048576) return `${(b / 1024).toFixed(0)} KB`
   if (b < 1073741824) return `${(b / 1048576).toFixed(1)} MB`
@@ -587,7 +587,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             { label: 'Assign to Me', icon: User, color: 'text-amber',
               run: () => { onUpdate(alert.id, { owner: 'you', status: alert.status === 'new' ? 'assigned' : alert.status }); flash('Assigned to you') } },
             { label: 'Escalate', icon: ArrowUpRight, color: 'text-threat',
-              run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Escalated — status set to In Progress') } },
+              run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Escalated - status set to In Progress') } },
             { label: 'Create Case', icon: FileText, color: 'text-violet',
               run: () => {
                 createCase({
@@ -603,7 +603,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                   ],
                 })
                   .then((c) => flash(`SOAR case ${c.id} created from this alert`))
-                  .catch(() => flash('Could not create case — is the dashboard API running?'))
+                  .catch(() => flash('Could not create case - is the dashboard API running?'))
               } },
             { label: 'Suppress', icon: Lock, color: 'text-ink-400',
               run: () => {
@@ -618,8 +618,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                 if (!ent) { flash('Alert closed as false-positive'); return }
                 createSuppression({ value: ent.value, field: ent.field,
                   reason: `From alert ${alert.id} · ${alert.ruleName}` })
-                  .then(() => flash(`Suppression added for ${ent.field}=${ent.value} — future matches dropped`))
-                  .catch(() => flash('Could not create suppression — is the dashboard API running?'))
+                  .then(() => flash(`Suppression added for ${ent.field}=${ent.value} - future matches dropped`))
+                  .catch(() => flash('Could not create suppression - is the dashboard API running?'))
               } },
             { label: 'Run Playbook', icon: Zap, color: 'text-safe',
               run: () => {
@@ -635,7 +635,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                     if (!match) throw new Error('no playbook')
                     return runPlaybook(match.id).then((run) => flash(`Playbook "${run.name}" executed in SOAR`))
                   })
-                  .catch(() => flash('Could not run a playbook — is the dashboard API running?'))
+                  .catch(() => flash('Could not run a playbook - is the dashboard API running?'))
               } },
           ].map(({ label, icon: Icon, color, run }) => (
             <button key={label} onClick={run}
@@ -646,7 +646,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
           ))}
         </div>
 
-        {/* Triage controls — status + disposition */}
+        {/* Triage controls - status + disposition */}
         <div className="flex items-center gap-2 mt-2.5">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-ink-600">Status</span>
@@ -707,7 +707,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               <p className="text-xs text-ink-300 leading-relaxed">{alert.description}</p>
             </Section>
             <Section title="Detection Details">
-              <Row label="Rule" value={`${alert.ruleId} — ${alert.ruleName}`} />
+              <Row label="Rule" value={`${alert.ruleId} - ${alert.ruleName}`} />
               <Row label="MITRE Tactic" value={`${alert.mitreTacticId} ${alert.mitreTactic}`} />
               <Row label="MITRE Technique" value={`${alert.mitreTechId} ${alert.mitreTech}`} />
               <Row label="Matched Events" value={alert.eventCount.toLocaleString()} />
@@ -730,7 +730,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               <Row label="Hostname" value={alert.srcHostname} mono />
               <Row label="Country" value={alert.srcCountry} />
               <Row label="ASN" value={alert.srcAsn} mono />
-              <Row label="Port" value={alert.srcPort > 0 ? `${alert.srcPort}` : '—'} mono />
+              <Row label="Port" value={alert.srcPort > 0 ? `${alert.srcPort}` : '-'} mono />
             </Section>
             <Section title="Destination">
               <Row label="IP Address" value={alert.destIp} mono />
@@ -786,7 +786,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             {alert.processName && (
               <Section title="Process">
                 <Row label="Process" value={alert.processName} mono />
-                <Row label="Command Line" value={alert.cmdLine ?? '—'} mono />
+                <Row label="Command Line" value={alert.cmdLine ?? '-'} mono />
                 <Row label="PID" value="9823" mono />
                 <Row label="Parent Process" value="explorer.exe (PID: 3401)" mono />
               </Section>
@@ -917,7 +917,7 @@ function ThreatHunt() {
       <div className="flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-[10px] text-ink-600">
           <span>{ran ? `${HUNT_RESULTS.length} matching events · scanned 41.2M events in 0.84s` : 'Run a query to see results'}</span>
-          {ran && <span className="text-safe">MITRE T1059.001 — PowerShell</span>}
+          {ran && <span className="text-safe">MITRE T1059.001 - PowerShell</span>}
         </div>
         {ran && (
           <div className="grid grid-cols-[120px_110px_90px_1fr_60px] gap-3 px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide">
@@ -957,7 +957,7 @@ function MitreCoverageMatrix() {
       <div className="px-4 py-3 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-white">ATT&CK Coverage Matrix</p>
-          <p className="text-[10px] text-ink-600 mt-0.5">Detection rule coverage across MITRE ATT&CK Enterprise — hover a technique cell for detail</p>
+          <p className="text-[10px] text-ink-600 mt-0.5">Detection rule coverage across MITRE ATT&CK Enterprise - hover a technique cell for detail</p>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-ink-400">
           <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded bg-safe/20 border border-safe/50" />Covered</span>
@@ -1009,7 +1009,7 @@ function MitreCoverageMatrix() {
                           ) : (
                             <div className="mt-2 pt-2 border-t border-white/8">
                               <p className="text-[9px] text-threat/80 font-semibold">✗ Coverage gap</p>
-                              <p className="text-[9px] text-ink-600 mt-0.5">No active detection rule — consider adding one</p>
+                              <p className="text-[9px] text-ink-600 mt-0.5">No active detection rule - consider adding one</p>
                             </div>
                           )}
                         </div>
@@ -1256,7 +1256,7 @@ export default function SIEMPage() {
 
   const filteredAlerts = useMemo(() => {
     const rows = alerts.filter((a) => {
-      // Normal mode: only actionable alerts — open status, critical/high severity
+      // Normal mode: only actionable alerts - open status, critical/high severity
       if (isNormal) {
         if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
         if (!['critical', 'high'].includes(a.severity)) return false
@@ -1426,7 +1426,7 @@ export default function SIEMPage() {
                 </button>
               </div>
 
-              {/* Rows — windowed above 150 alerts so huge queues stay smooth
+              {/* Rows - windowed above 150 alerts so huge queues stay smooth
                   (spacer padding preserves the scrollbar; no-op below that) */}
               <div className="flex-1 overflow-y-auto" {...alertWindow.containerProps}>
                 {filteredAlerts.length === 0 ? (
@@ -1608,7 +1608,7 @@ export default function SIEMPage() {
                     { metric: 'False Positive Rate',             value: `${metrics.fpRate}%`, target: '< 20%', status: apiKpis ? (apiKpis.fpRate < 20 ? 'good' : 'warn') : 'warn' },
                     { metric: 'Alert-to-Incident Escalation',
                       value: `${alerts.length ? Math.round(alerts.filter(a => ['resolved','closed'].includes(a.status)).length / alerts.length * 100) : 0}%`,
-                      target: '1–10%', status: 'good' },
+                      target: '1-10%', status: 'good' },
                     { metric: 'Automation Rate (SOAR)',          value: `${metrics.automationRate}%`, target: '> 60%', status: apiKpis ? (apiKpis.automationRate > 60 ? 'good' : 'warn') : 'good' },
                   ].map((row) => (
                     <div key={row.metric} className="grid grid-cols-3 px-4 py-2.5 text-xs">
@@ -1620,7 +1620,7 @@ export default function SIEMPage() {
                 </div>
               </div>
 
-              {/* ATT&CK coverage matrix — Power User */}
+              {/* ATT&CK coverage matrix - Power User */}
               <MitreCoverageMatrix />
             </div>
           )}

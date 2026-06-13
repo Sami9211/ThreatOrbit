@@ -1,6 +1,6 @@
 /**
  * Lightweight fallback shown while a WebGL scene's lazy chunk loads.
- * A soft centred plasma glow — keeps the layout from flashing empty and
+ * A soft centred plasma glow - keeps the layout from flashing empty and
  * hints that something is about to render. Pure CSS, zero JS cost.
  */
 export default function ScenePlaceholder() {

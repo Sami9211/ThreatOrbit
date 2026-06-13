@@ -11,7 +11,7 @@ A rule is a real, evaluable query over the raw `events` stream:
 
 Without aggregation, every matching event raises an alert (throttled per
 group so a noisy source can't flood). With aggregation, a group whose matching
-event count reaches the threshold inside the window raises one alert — this is
+event count reaches the threshold inside the window raises one alert - this is
 how brute-force/beaconing style detections work.
 
 `evaluate()` is pure: given a rule + events it returns matches; the caller
@@ -72,10 +72,10 @@ def suppression_active(s: dict, now: datetime | None = None) -> bool:
     """Whether a suppression applies right now.
 
     Two independent time boxes (both optional, both must pass):
-      * `expires_at` — absolute ISO expiry; NULL/empty means permanent.
-      * `window_start`/`window_end` — a recurring daily HH:MM UTC window
-        (e.g. a 02:00–04:00 maintenance window); supports overnight wrap
-        (22:00–06:00). Only consulted when both ends are set.
+      * `expires_at` - absolute ISO expiry; NULL/empty means permanent.
+      * `window_start`/`window_end` - a recurring daily HH:MM UTC window
+        (e.g. a 02:00-04:00 maintenance window); supports overnight wrap
+        (22:00-06:00). Only consulted when both ends are set.
     """
     now = now or datetime.now(timezone.utc)
     exp = s.get("expires_at")
@@ -156,7 +156,7 @@ def evaluate(rule: dict, events: list[dict], now: datetime | None = None) -> lis
     agg = definition.get("aggregation")
     if not agg or not agg.get("threshold"):
         # one alert per matching event (caller throttles)
-        return [{"entity": e.get("src_ip") or e.get("hostname") or e.get("username") or "—",
+        return [{"entity": e.get("src_ip") or e.get("hostname") or e.get("username") or "-",
                  "event": e, "count": 1} for e in matching]
 
     now = now or datetime.now(timezone.utc)
@@ -171,7 +171,7 @@ def evaluate(rule: dict, events: list[dict], now: datetime | None = None) -> lis
             continue
         if now - ts > window:
             continue
-        key = str(e.get(group_by) or "—")
+        key = str(e.get(group_by) or "-")
         groups.setdefault(key, []).append(e)
     out = []
     for key, evs in groups.items():

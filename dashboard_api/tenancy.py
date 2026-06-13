@@ -7,17 +7,17 @@ This ships the **foundation** of multi-tenancy in a fully non-breaking way:
   * org membership resolution on the authenticated principal;
   * org CRUD so an MSSP can create workspaces.
 
-The second half of multi-tenancy — *isolating every data table by org_id* — is
+The second half of multi-tenancy - *isolating every data table by org_id* - is
 now **wired but off by default**: every table in TENANT_TABLES carries a
 defaulted `org_id` column, and each one's list endpoint scopes reads to the
 caller's workspace when `DASHBOARD_MULTI_TENANT` is on (default off, so
-single-tenant deployments behave exactly as before — proven by the test suite
+single-tenant deployments behave exactly as before - proven by the test suite
 running with the flag off). User-driven create endpoints stamp `org_of(user)`
 so rows land in the creator's workspace (the single-tenant value IS the
 default org, so nothing changes there either), and the aggregate/summary
 endpoints (overview rollups, section KPIs) apply the same scope via
 `scope_sql`. Engine/seed/background writers deliberately stay in the default
-workspace — they run as the deployment, not a user; a per-org engine context
+workspace - they run as the deployment, not a user; a per-org engine context
 is a deployment-level concern. Known limits of the current isolation:
 get-by-id detail endpoints are id-addressed (UUIDs are unguessable, but a
 strict deployment may want them to 404 cross-org), and global search spans
@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 DEFAULT_ORG_ID = "org-default"
 DEFAULT_ORG_NAME = "Acme Security Corp"
 
-# When false (the default), data is NOT org-scoped — the app is single-tenant
+# When false (the default), data is NOT org-scoped - the app is single-tenant
 # and behaves exactly as it always has. Flip to "true" only once every data
 # table carries org_id and every query is scoped (the staged follow-up).
 MULTI_TENANT = os.environ.get("DASHBOARD_MULTI_TENANT", "false").lower() == "true"
@@ -87,7 +87,7 @@ def enforced() -> bool:
 
 
 def scope_sql(org_id: str, *, alias: str = "") -> tuple[str, list]:
-    """Return an (sql_fragment, params) that filters a query to `org_id` — or a
+    """Return an (sql_fragment, params) that filters a query to `org_id` - or a
     no-op when enforcement is off. This is the seam the follow-up migration will
     drop into each data query; kept pure and tested so wiring it later is safe.
 

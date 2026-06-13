@@ -16,7 +16,7 @@ router = APIRouter(prefix="/overview", tags=["overview"], dependencies=[Depends(
 
 
 def _scope(user: dict) -> tuple[str, list]:
-    """Workspace clause for the rollup queries — a no-op until multi-tenancy
+    """Workspace clause for the rollup queries - a no-op until multi-tenancy
     is switched on, then the same isolation the list endpoints enforce."""
     return tenancy.scope_sql(tenancy.org_of(user))
 
@@ -33,7 +33,7 @@ def kpis(user: dict = Depends(current_user)):
             f"AND status NOT IN ('resolved','closed') {sc}", sp
         ).fetchone()[0]
         assets = conn.execute(f"SELECT risk_score, criticality FROM assets WHERE 1=1 {sc}", sp).fetchall()
-    # Criticality-weighted org risk — crown jewels move the needle more than endpoints.
+    # Criticality-weighted org risk - crown jewels move the needle more than endpoints.
     return {"threats": threats, "iocs": iocs, "sources": feeds, "score": org_risk(assets)}
 
 
@@ -148,7 +148,7 @@ _CC = {"RU": "Russia", "CN": "China", "KP": "North Korea", "IR": "Iran",
 @router.get("/geo")
 def geo_distribution(limit: int = 20, user: dict = Depends(current_user)):
     """Observed attack origins, by country, from the platform's OWN alert
-    store (src_country on alerts) — real measurement, not global statistics.
+    store (src_country on alerts) - real measurement, not global statistics.
     Includes per-country severity mix and the latest observation time."""
     sc, sp = _scope(user)
     with get_conn() as conn:

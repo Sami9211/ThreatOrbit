@@ -1,4 +1,4 @@
-"""Database backend seam — SQLite today, Postgres staged.
+"""Database backend seam - SQLite today, Postgres staged.
 
 ThreatOrbit runs on single-file WAL SQLite, which is perfect up to a busy
 single node. Scaling past that means Postgres. The *full* switch is a breaking
@@ -7,14 +7,14 @@ SQLite idioms (`INSERT OR REPLACE`, `datetime('now')`, `AUTOINCREMENT`,
 `PRAGMA`, `executescript`). Rewriting all of that at once is risky, so it's
 staged here rather than rushed onto `main`:
 
-  * backend selection is live and non-breaking — `DASHBOARD_DB_BACKEND`
+  * backend selection is live and non-breaking - `DASHBOARD_DB_BACKEND`
     (default `sqlite`) + an optional `DATABASE_URL`;
   * the **dialect translation** below (`to_postgres`) is pure and unit-tested:
     it rewrites a SQLite statement to Postgres form (placeholders + the common
     idioms). When the Postgres path is switched on, `get_conn()` wraps
     `execute()` to translate on the fly, so call sites stay unchanged;
   * the Postgres connection path requires `psycopg` and is only taken when the
-    backend is explicitly set — SQLite installs are 100% unaffected.
+    backend is explicitly set - SQLite installs are 100% unaffected.
 
 Flipping it on (set `DASHBOARD_DB_BACKEND=postgres`, install psycopg, point at
 a DSN) is then mechanical and reviewable on its own, with this translation
@@ -41,7 +41,7 @@ _PRAGMA = re.compile(r"^\s*PRAGMA\b.*$", re.IGNORECASE | re.MULTILINE)
 
 
 def _qmark_to_dollar(sql: str) -> str:
-    """Replace `?` placeholders with `$1,$2,…` — but not `?` inside string
+    """Replace `?` placeholders with `$1,$2,…` - but not `?` inside string
     literals. Postgres' psycopg accepts `%s`; we use `%s` for parameter style
     compatibility with psycopg's default."""
     out, i, in_str = [], 0, False
@@ -73,7 +73,7 @@ def to_postgres(sql: str) -> str:
         first_col = cols.split(",")[0].strip()
         updates = ", ".join(f"{c.strip()}=EXCLUDED.{c.strip()}"
                             for c in cols.split(",") if c.strip() != first_col)
-        # ON CONFLICT on the PK/first column — matches how the app uses
+        # ON CONFLICT on the PK/first column - matches how the app uses
         # INSERT OR REPLACE (settings(key), single-PK upserts).
         tail = f" ON CONFLICT ({first_col}) DO UPDATE SET {updates}" if updates else \
                f" ON CONFLICT ({first_col}) DO NOTHING"

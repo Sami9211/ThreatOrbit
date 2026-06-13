@@ -19,7 +19,7 @@ const CAPABILITIES = [
     icon: RefreshCw,
     color: '#FF2E97',
     title: 'Indicator Queries',
-    desc: 'Read existing OpenCTI indicators directly from ThreatOrbit via GET /opencti/indicators. Supports filtering by type, confidence range, and created-after timestamp — no need to open the OpenCTI UI for routine queries.',
+    desc: 'Read existing OpenCTI indicators directly from ThreatOrbit via GET /opencti/indicators. Supports filtering by type, confidence range, and created-after timestamp - no need to open the OpenCTI UI for routine queries.',
   },
   {
     icon: CheckCircle,
@@ -31,7 +31,7 @@ const CAPABILITIES = [
     icon: Layers,
     color: '#7A3CFF',
     title: 'Automatic SOAR Trigger',
-    desc: 'When the log analysis pipeline detects anomalies, the SOAR module automatically bundles the findings as STIX 2.1 ObservedData and pushes them to OpenCTI — detection becomes response without manual steps.',
+    desc: 'When the log analysis pipeline detects anomalies, the SOAR module automatically bundles the findings as STIX 2.1 ObservedData and pushes them to OpenCTI - detection becomes response without manual steps.',
   },
 ]
 
@@ -72,7 +72,7 @@ export default function OpenCTIPage() {
           </h1>
           <p className="text-xl text-ink-300 max-w-2xl leading-relaxed mb-8">
             ThreatOrbit integrates natively with OpenCTI via its GraphQL API. Enriched STIX 2.1
-            bundles are pushed on every detection cycle — no scripts, no manual export, no seams.
+            bundles are pushed on every detection cycle - no scripts, no manual export, no seams.
           </p>
           <div className="flex gap-4 flex-wrap">
             <Link href="/docs/docker-deploy" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber/15 border border-amber/25 text-amber text-sm font-medium hover:bg-amber/25 transition-colors">

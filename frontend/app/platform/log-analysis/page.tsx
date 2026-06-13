@@ -75,7 +75,7 @@ export default function LogAnalysisPage() {
           </h1>
           <p className="text-xl text-ink-300 max-w-2xl leading-relaxed mb-8">
             ThreatOrbit&apos;s log analysis pipeline runs pattern matching, statistical baseline,
-            machine learning, and temporal correlation in parallel — consolidating all four verdicts
+            machine learning, and temporal correlation in parallel - consolidating all four verdicts
             into a single severity score per line.
           </p>
           <div className="flex gap-4 flex-wrap">
@@ -112,7 +112,7 @@ export default function LogAnalysisPage() {
         {/* Log Formats */}
         <section>
           <h2 className="font-display text-3xl font-bold text-white mb-2">Supported log formats</h2>
-          <p className="text-ink-400 mb-8">Format is auto-detected from the first 10 lines — no configuration needed.</p>
+          <p className="text-ink-400 mb-8">Format is auto-detected from the first 10 lines - no configuration needed.</p>
           <div className="space-y-3">
             {FORMATS.map(({ name, sample }) => (
               <div key={name} className="rounded-xl border border-white/6 bg-white/2 p-4">
@@ -131,7 +131,7 @@ export default function LogAnalysisPage() {
               { step: '01', title: 'Submit logs', icon: FileText,  color: '#FF2E97', desc: 'POST /analyze with raw log content (text/plain or application/json). The endpoint auto-detects format and returns a job_id immediately.' },
               { step: '02', title: 'Parse and tokenise', icon: Layers, color: '#7A3CFF', desc: 'Each line is split into structured fields. Apache logs yield method, path, status, bytes; syslog yields facility, severity, process; and so on.' },
               { step: '03', title: 'Run four detectors', icon: Brain,   color: '#FFB23E', desc: 'Pattern, statistical, ML, and temporal engines run concurrently on the parsed data. Each produces a per-line score and a list of matched evidence.' },
-              { step: '04', title: 'Merge scores', icon: Activity, color: '#2DD4BF', desc: 'Scores from all four engines are combined with configurable weights into a final severity (0.0–1.0). Lines above the threshold are included in the anomaly report.' },
+              { step: '04', title: 'Merge scores', icon: Activity, color: '#2DD4BF', desc: 'Scores from all four engines are combined with configurable weights into a final severity (0.0-1.0). Lines above the threshold are included in the anomaly report.' },
               { step: '05', title: 'Generate report', icon: Zap,      color: '#FF2E97', desc: 'An HTML report is generated with a severity timeline, top anomalous lines, detector breakdowns, and trend charts. Download via GET /report/{job_id}.' },
             ].map(({ step, title, icon: Icon, color, desc }) => (
               <div key={step} className="flex gap-5 items-start">

@@ -2,7 +2,7 @@
 
 Lets an operator see their current workspace and an admin create/list/rename
 workspaces (so an MSSP can stand up a tenant). Data is not yet isolated per
-org — see dashboard_api/tenancy.py for the staged isolation seam — so these
+org - see dashboard_api/tenancy.py for the staged isolation seam - so these
 endpoints manage the org directory only; they don't partition alerts/IOCs/etc.
 yet, which keeps the change non-breaking.
 """

@@ -117,7 +117,7 @@ let nextId = 200
 
 /* Responsive grid template for the asset table. The CVEs and Ports columns are
    hidden below md/lg, so the template must drop their tracks at those breakpoints
-   too — otherwise the empty tracks keep consuming width and squash the remaining
+   too - otherwise the empty tracks keep consuming width and squash the remaining
    columns (making the risk rings overlap badges on mobile). Track count always
    matches the number of *visible* cells at each breakpoint. */
 const ROW_GRID =
@@ -203,7 +203,7 @@ export default function AssetsPage() {
         if (items.length > 0) setAssets(items as unknown as Asset[])
       })
       .catch(() => {
-        // API unreachable — restore status rather than fabricate results.
+        // API unreachable - restore status rather than fabricate results.
         setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'unscanned' as ScanStatus } : a)))
       })
   }
@@ -487,7 +487,7 @@ export default function AssetsPage() {
                             <AlertTriangle className="w-3 h-3" /> {a.alerts}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-ink-600">—</span>
+                          <span className="text-[11px] text-ink-600">-</span>
                         )}
                       </div>
 
@@ -763,7 +763,7 @@ export default function AssetsPage() {
                         )
                       })}
                       <p className="text-[9px] text-ink-700 leading-relaxed pt-0.5">
-                        Bars show each axis (0–100); the figure is points added to the score after criticality scaling.
+                        Bars show each axis (0-100); the figure is points added to the score after criticality scaling.
                       </p>
                     </div>
                   )}
@@ -772,11 +772,11 @@ export default function AssetsPage() {
                     <p className="text-[10px] text-ink-600 uppercase tracking-wide">Details</p>
                     {[
                       { label: 'Owner',       value: a.owner ?? 'Unassigned' },
-                      { label: 'OS / Stack',  value: a.os ?? '—' },
+                      { label: 'OS / Stack',  value: a.os ?? '-' },
                       { label: 'Open Ports',  value: a.openPorts.join(', ') || 'None' },
-                      { label: 'Patch Age',   value: a.patchAge !== undefined ? `${a.patchAge} days` : '—' },
+                      { label: 'Patch Age',   value: a.patchAge !== undefined ? `${a.patchAge} days` : '-' },
                       { label: 'Last Scan',   value: a.lastScan },
-                      { label: 'Uptime',      value: a.uptime !== undefined ? `${a.uptime}%` : '—' },
+                      { label: 'Uptime',      value: a.uptime !== undefined ? `${a.uptime}%` : '-' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex items-start justify-between gap-2 py-1.5 border-b border-white/4 last:border-0">
                         <span className="text-[10px] text-ink-600 shrink-0">{label}</span>

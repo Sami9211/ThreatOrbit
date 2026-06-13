@@ -1,8 +1,8 @@
 """Signed evidence bundles (audit & compliance pack).
 
-Exports a case's full investigation record — the case itself, its evidence
+Exports a case's full investigation record - the case itself, its evidence
 items (each already carrying a per-item SHA-256 + chain-of-custody), the war
-room, tasks, and the case's audit-log slice — as one canonical JSON document
+room, tasks, and the case's audit-log slice - as one canonical JSON document
 signed with HMAC-SHA256. The signature makes the bundle *tamper-evident*:
 any later change to a single byte of the content fails verification, which is
 what "immutable" means for an export that has left the platform.

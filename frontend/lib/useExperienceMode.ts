@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 
 /**
- * Global "experience mode" — Normal (simplified) vs Power User (full detail).
+ * Global "experience mode" - Normal (simplified) vs Power User (full detail).
  * Persisted to localStorage and synced across all mounted components on the
  * same page (custom event) and across tabs (storage event). Defaults to
  * 'normal' and renders deterministically on first paint to avoid hydration

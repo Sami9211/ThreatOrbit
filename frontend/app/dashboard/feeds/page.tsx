@@ -51,7 +51,7 @@ type ThreatEntry = {
 const CONFIRMED_SEED: ThreatEntry[] = [
   {
     id: 'c001', ts: '2024-11-12T14:22:00Z', cve: 'CVE-2024-6387',
-    title: 'OpenSSH glibc RCE — unauthenticated remote code execution',
+    title: 'OpenSSH glibc RCE - unauthenticated remote code execution',
     attackType: 'RCE', source: '45.95.147.236', sourceCountry: 'Russia',
     severity: 'critical', sectors: ['Healthcare', 'Finance', 'Government'],
     summary: 'Signal handler race condition in OpenSSH before 9.8p1 allows unauthenticated RCE as root. 700k+ internet-exposed instances. Mass exploitation confirmed.',
@@ -61,7 +61,7 @@ const CONFIRMED_SEED: ThreatEntry[] = [
   },
   {
     id: 'c002', ts: '2024-11-12T14:18:00Z', cve: 'CVE-2024-3094',
-    title: 'XZ Utils backdoor — malicious supply chain compromise',
+    title: 'XZ Utils backdoor - malicious supply chain compromise',
     attackType: 'Supply Chain', source: '185.220.101.1', sourceCountry: 'North Korea',
     severity: 'critical', sectors: ['Technology', 'Government', 'Defense'],
     summary: 'Malicious code injected into XZ Utils 5.6.0-5.6.1 via social engineering. SSH authentication bypass via backdoor. CISA Emergency Directive issued.',
@@ -81,7 +81,7 @@ const CONFIRMED_SEED: ThreatEntry[] = [
   },
   {
     id: 'c004', ts: '2024-11-12T14:04:00Z', cve: 'CVE-2024-21762',
-    title: 'FortiOS SSL VPN out-of-bounds write — actively exploited',
+    title: 'FortiOS SSL VPN out-of-bounds write - actively exploited',
     attackType: 'Authentication Bypass', source: '91.92.251.103', sourceCountry: 'Iran',
     severity: 'critical', sectors: ['Government', 'Finance', 'Critical Infrastructure'],
     summary: 'Critical out-of-bounds write in FortiOS SSL VPN allows unauthenticated RCE. Actively exploited by Iranian threat actors targeting government networks in Middle East.',
@@ -121,7 +121,7 @@ const CONFIRMED_SEED: ThreatEntry[] = [
   },
   {
     id: 'c008', ts: '2024-11-12T13:22:00Z', cve: 'CVE-2024-21413',
-    title: 'Microsoft Outlook Moniker Link RCE — NTLM hash leak',
+    title: 'Microsoft Outlook Moniker Link RCE - NTLM hash leak',
     attackType: 'NTLM Relay', source: '94.102.61.14', sourceCountry: 'Russia',
     severity: 'high', sectors: ['Finance', 'Government', 'Enterprise'],
     summary: 'MonikerLink bug in Outlook forces NTLM credential leak via email preview panel. Actively exploited in spear-phishing campaigns against financial sector.',
@@ -144,7 +144,7 @@ const UNCONFIRMED_SEED: ThreatEntry[] = [
   },
   {
     id: 'u002', ts: '2024-11-12T14:52:00Z', cve: null,
-    title: 'Potential credential stuffing — 1,400 login failures against /api/auth in 5min',
+    title: 'Potential credential stuffing - 1,400 login failures against /api/auth in 5min',
     attackType: 'Credential Stuffing', source: '45.227.254.100', sourceCountry: 'Brazil',
     severity: 'medium', sectors: ['Finance', 'SaaS'],
     summary: 'AbuseIPDB score 89/100. Bot-like pattern: sequential usernames, consistent User-Agent, 5ms inter-request interval. No successful logins confirmed yet.',
@@ -154,7 +154,7 @@ const UNCONFIRMED_SEED: ThreatEntry[] = [
   },
   {
     id: 'u003', ts: '2024-11-12T14:38:00Z', cve: 'CVE-2024-49113',
-    title: 'LDAP Nightmare scanner detected — CVE-2024-49113 probe',
+    title: 'LDAP Nightmare scanner detected - CVE-2024-49113 probe',
     attackType: 'Reconnaissance', source: '198.98.62.55', sourceCountry: 'Germany',
     severity: 'medium', sectors: ['Enterprise', 'Active Directory'],
     summary: 'Shodan scanner IP probing for LDAP Nightmare vulnerability. Legitimate research or pre-attack reconnaissance unclear. IP belongs to known security scanner vendor.',
@@ -195,11 +195,11 @@ const UNCONFIRMED_SEED: ThreatEntry[] = [
 ]
 
 const LIVE_UNCONFIRMED: Partial<ThreatEntry>[] = [
-  { title: 'Brute force SSH — 2,400 attempts/min from 45.152.67.88', attackType: 'Brute Force', severity: 'medium', sourceCountry: 'China', aiConfidence: 67, feedSources: ['AbuseIPDB'], iocs: ['45.152.67.88'] },
+  { title: 'Brute force SSH - 2,400 attempts/min from 45.152.67.88', attackType: 'Brute Force', severity: 'medium', sourceCountry: 'China', aiConfidence: 67, feedSources: ['AbuseIPDB'], iocs: ['45.152.67.88'] },
   { title: 'Suspicious PowerShell encoded command on WORKSTATION-044', attackType: 'Defense Evasion', severity: 'high', sourceCountry: 'Internal', aiConfidence: 82, feedSources: ['InternalSIEM'], iocs: ['WS-044', 'powershell.exe'] },
   { title: 'Reconnaissance scan: 14 ports probed on API gateway', attackType: 'Reconnaissance', severity: 'low', sourceCountry: 'Netherlands', aiConfidence: 45, feedSources: ['GreyNoise'], iocs: ['52.212.100.41'] },
   { title: 'Unrecognized outbound HTTPS to high-entropy domain', attackType: 'C2 Beacon', severity: 'medium', sourceCountry: 'Internal', aiConfidence: 73, feedSources: ['DNS Analytics'], iocs: ['xm4k9p.cloudflare-ntp.org'] },
-  { title: 'Mass email relay attempt — 80K messages queued in 3 min', attackType: 'Spam/Relay', severity: 'high', sourceCountry: 'Russia', aiConfidence: 88, feedSources: ['SpamHaus'], iocs: ['91.108.56.88'] },
+  { title: 'Mass email relay attempt - 80K messages queued in 3 min', attackType: 'Spam/Relay', severity: 'high', sourceCountry: 'Russia', aiConfidence: 88, feedSources: ['SpamHaus'], iocs: ['91.108.56.88'] },
 ]
 
 const SEV_COLOR: Record<Severity, string> = {
@@ -314,7 +314,7 @@ function ThreatCard({
       tiHits: entry.feedSources.length,
     })
       .then((a) => note(`SIEM alert raised (${a.id.slice(0, 8)}…)`))
-      .catch(() => note('Could not raise alert — is the dashboard API running?'))
+      .catch(() => note('Could not raise alert - is the dashboard API running?'))
   }
 
   // Push this entry's importable indicators into the CTI store as a blocklist.
@@ -334,7 +334,7 @@ function ThreatCard({
       tags: ['blocklist', ...entry.tags.slice(0, 3)],
     })
       .then((out) => note(`${out.imported} IOC${out.imported === 1 ? '' : 's'} added to blocklist (${out.duplicates} already known)`))
-      .catch(() => note('Could not import IOCs — is the dashboard API running?'))
+      .catch(() => note('Could not import IOCs - is the dashboard API running?'))
   }
 
   return (
@@ -537,10 +537,10 @@ export default function FeedsPage() {
     id: i.id,
     ts: i.lastSeen || i.firstSeen || new Date().toISOString(),
     cve: i.type === 'cve' ? i.value : null,
-    title: `${i.threatType || 'Indicator'} — ${i.value}`,
+    title: `${i.threatType || 'Indicator'} - ${i.value}`,
     attackType: i.threatType || i.type.toUpperCase(),
     source: i.value,
-    sourceCountry: i.actor || '—',
+    sourceCountry: i.actor || '-',
     severity: (['critical', 'high', 'medium', 'low', 'info'].includes(i.severity) ? i.severity : 'medium') as Severity,
     sectors: [],
     summary: `${i.type.toUpperCase()} indicator ingested from ${i.source}. Confidence ${i.confidence}%.${i.actor ? ` Attributed to ${i.actor}.` : ''}`,
@@ -697,7 +697,7 @@ export default function FeedsPage() {
           { label: 'Confirmed', value: confirmed.length, color: 'text-safe', icon: CheckCircle2 },
           { label: 'Unconfirmed', value: unconfirmed.length, color: 'text-amber', icon: HelpCircle },
           { label: 'Critical', value: [...confirmed, ...unconfirmed].filter(e => e.severity === 'critical').length, color: 'text-magenta', icon: Flame },
-          { label: 'Total IOCs', value: feedsSummary ? feedsSummary.totalIndicators.toLocaleString() : '—', color: 'text-violet', icon: Activity },
+          { label: 'Total IOCs', value: feedsSummary ? feedsSummary.totalIndicators.toLocaleString() : '-', color: 'text-violet', icon: Activity },
         ].map(kpi => (
           <div key={kpi.label} className="flex items-center gap-3 px-4 py-3">
             <kpi.icon className={cn('w-4 h-4 shrink-0', kpi.color)} />
@@ -806,7 +806,7 @@ export default function FeedsPage() {
               {filteredUnconfirmed.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-32 text-ink-600">
                   <HelpCircle className="w-8 h-8 mb-2 opacity-30" />
-                  <p className="text-xs">No unconfirmed threats — feed is quiet</p>
+                  <p className="text-xs">No unconfirmed threats - feed is quiet</p>
                 </div>
               )}
             </AnimatePresence>

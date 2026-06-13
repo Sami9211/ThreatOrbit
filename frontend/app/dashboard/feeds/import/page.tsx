@@ -175,7 +175,7 @@ export default function ImportIocsPage() {
       setImportResult(res)
       loadHistory()
     } catch {
-      // API unreachable — surface an optimistic local tally instead.
+      // API unreachable - surface an optimistic local tally instead.
       setImportResult({ imported: totalCount, duplicates: 0, skipped: 0, total: totalCount })
     } finally {
       setImporting(false)
@@ -305,7 +305,7 @@ export default function ImportIocsPage() {
                   ) : (
                     <>
                       <p className="text-sm text-ink-200 font-medium">Drag &amp; drop a file here</p>
-                      <p className="text-xs text-ink-500 mt-1">or click to browse — .csv .txt .json .stix</p>
+                      <p className="text-xs text-ink-500 mt-1">or click to browse - .csv .txt .json .stix</p>
                     </>
                   )}
                   <label className="mt-4 px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white cursor-pointer">
@@ -439,14 +439,14 @@ export default function ImportIocsPage() {
               </thead>
               <tbody>
                 {history.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-600">No imports yet — import indicators above to populate this log.</td></tr>
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-600">No imports yet - import indicators above to populate this log.</td></tr>
                 )}
                 {history.map((h, i) => (
                   <tr key={h.id} className={cn('border-b border-white/4', i % 2 !== 0 && 'bg-white/[0.01]')}>
                     <td className="px-4 py-3 font-mono text-ink-200">{h.source}<span className="ml-2 text-[9px] uppercase text-ink-600">{h.method}</span></td>
                     <td className="px-4 py-3 font-mono text-violet text-right">{h.imported.toLocaleString()}</td>
                     <td className="px-4 py-3 font-mono text-ink-500 whitespace-nowrap">{relDay(h.ts)}</td>
-                    <td className="px-4 py-3 text-ink-400">{h.actor ?? '—'}</td>
+                    <td className="px-4 py-3 text-ink-400">{h.actor ?? '-'}</td>
                     <td className="px-4 py-3">
                       <span className={cn('px-2 py-0.5 rounded-full border text-[10px] font-semibold capitalize', STATUS_COLOR[h.status])}>
                         {h.status}

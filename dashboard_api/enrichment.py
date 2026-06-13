@@ -1,14 +1,14 @@
-"""IOC enrichment pipeline — pluggable enrichers with caching + history.
+"""IOC enrichment pipeline - pluggable enrichers with caching + history.
 
 Two kinds of enrichers run over an indicator:
 
-  * **Built-in, offline, real** — no network, no keys, genuine signal:
+  * **Built-in, offline, real** - no network, no keys, genuine signal:
       - `internal`  cross-references the live platform: prior sightings, related
                     alerts, attributed actor, dark-web mentions, lifecycle state.
       - `indicator` analyses the value itself: hash algorithm, domain entropy /
                     suspicious TLD, URL structure, IP class (private/public/
                     reserved) + a coarse RIR-by-block geo/ASN hint.
-  * **External providers** — VirusTotal / GreyNoise / Shodan / WHOIS. These are
+  * **External providers** - VirusTotal / GreyNoise / Shodan / WHOIS. These are
     real adapters but require an API key; with none configured they report
     `available: false` (honestly unavailable) rather than fabricating a verdict.
 
@@ -51,7 +51,7 @@ def _entropy(s: str) -> float:
 # ── Built-in enrichers ───────────────────────────────────────────────────────────
 
 def _enrich_internal(conn, value: str, ioc_type: str) -> dict:
-    """Cross-reference the platform's own stores — the most useful, zero-cost
+    """Cross-reference the platform's own stores - the most useful, zero-cost
     enrichment: have we seen this before, and what is it tied to?"""
     row = conn.execute(
         "SELECT id, severity, confidence, actor, threat_type, sightings, status "
@@ -132,7 +132,7 @@ def _enrich_indicator(conn, value: str, ioc_type: str) -> dict:
         if tld in _SUSPICIOUS_TLDS:
             flags.append(f"high-risk TLD .{tld}")
         if ent > 3.6:
-            flags.append(f"high subdomain entropy ({ent}) — possible DGA")
+            flags.append(f"high subdomain entropy ({ent}) - possible DGA")
         verdict = "suspicious" if flags else "unknown"
         summary = "; ".join(flags) or f".{tld} domain, {len(labels)} labels"
     elif t == "url":
@@ -270,7 +270,7 @@ _PROVIDER_CALLS = {
 def _enrich_external(provider: str, value: str, ioc_type: str) -> dict:
     """External provider adapter. Honestly reports unavailable when no API key
     is configured (rather than fabricating a verdict); with a key set it makes
-    the real provider call, and a failed call is reported as a failure — never
+    the real provider call, and a failed call is reported as a failure - never
     a made-up verdict."""
     env = EXTERNAL_PROVIDERS[provider]
     key = os.environ.get(env, "")
@@ -280,7 +280,7 @@ def _enrich_external(provider: str, value: str, ioc_type: str) -> dict:
                 "verdict": "unknown", "summary": "not configured", "data": {}}
     try:
         res = _PROVIDER_CALLS[provider](key, value, ioc_type)
-    except Exception as e:  # network/HTTP/parse — honest failure, no fabrication
+    except Exception as e:  # network/HTTP/parse - honest failure, no fabrication
         return {"provider": provider, "available": False,
                 "reason": f"lookup failed: {e.__class__.__name__}",
                 "verdict": "unknown", "summary": "lookup failed", "data": {}}

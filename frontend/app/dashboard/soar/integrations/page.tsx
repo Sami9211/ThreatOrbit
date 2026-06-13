@@ -38,12 +38,12 @@ const INTEGRATIONS: Integration[] = [
   { id: 'i04', name: 'Jira Service Mgmt',   vendor: 'Atlassian',    category: 'Ticketing',    status: 'connected',    lastSync: '2m ago',   actionsRun: 548,  avgResponseMs: 1200, description: 'Auto-create incidents, assign tickets, update SLA fields', actions: ['Create Issue', 'Update Issue', 'Assign Issue', 'Add Comment'], enabled: true, credentialed: false, baseUrl: null },
   { id: 'i05', name: 'PagerDuty',           vendor: 'PagerDuty',    category: 'Communication', status: 'connected',   lastSync: '45s ago',  actionsRun: 287,  avgResponseMs: 340,  description: 'Page on-call engineers, trigger incidents, resolve alerts', actions: ['Create Incident', 'Trigger Alert', 'Resolve Incident', 'Send Notification'], enabled: true, credentialed: false, baseUrl: null },
   { id: 'i06', name: 'Slack',               vendor: 'Slack',        category: 'Communication', status: 'connected',   lastSync: '12s ago',  actionsRun: 2140, avgResponseMs: 290,  description: 'War room notifications, analyst alerts, status updates', actions: ['Send Message', 'Create Channel', 'Post File', 'Add Reaction'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i07', name: 'VirusTotal',          vendor: 'Google',       category: 'Threat Intel', status: 'connected',    lastSync: '5m ago',   actionsRun: 7824, avgResponseMs: 680,  description: 'Enrich IOCs — IPs, domains, hashes, URLs against 90+ engines', actions: ['Scan IP', 'Scan URL', 'Scan Hash', 'Get File Report'], enabled: true, credentialed: false, baseUrl: null },
+  { id: 'i07', name: 'VirusTotal',          vendor: 'Google',       category: 'Threat Intel', status: 'connected',    lastSync: '5m ago',   actionsRun: 7824, avgResponseMs: 680,  description: 'Enrich IOCs - IPs, domains, hashes, URLs against 90+ engines', actions: ['Scan IP', 'Scan URL', 'Scan Hash', 'Get File Report'], enabled: true, credentialed: false, baseUrl: null },
   { id: 'i08', name: 'Recorded Future',     vendor: 'Recorded Future', category: 'Threat Intel', status: 'connected', lastSync: '11m ago',  actionsRun: 1203, avgResponseMs: 820,  description: 'Threat actor enrichment, risk scoring, C2 infrastructure lookup', actions: ['Enrich IP', 'Actor Lookup', 'Risk Score', 'IOC Context'], enabled: true, credentialed: false, baseUrl: null },
   { id: 'i09', name: 'Okta',               vendor: 'Okta',          category: 'Identity',     status: 'degraded',    lastSync: '18m ago',  actionsRun: 344,  avgResponseMs: 4800, description: 'Suspend user, reset MFA, revoke sessions, get user activity', actions: ['Suspend User', 'Reset MFA', 'Revoke Sessions', 'Get User Logs'], enabled: true, credentialed: false, baseUrl: null },
   { id: 'i10', name: 'AWS Security Hub',   vendor: 'Amazon',         category: 'Cloud',        status: 'connected',   lastSync: '2m ago',   actionsRun: 892,  avgResponseMs: 450,  description: 'Update findings, isolate EC2, revoke IAM keys, S3 lockdown', actions: ['Update Finding', 'Isolate EC2', 'Revoke IAM Key', 'Block S3 Access'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i11', name: 'Microsoft Sentinel', vendor: 'Microsoft',      category: 'SIEM',         status: 'pending',     lastSync: 'Never',    actionsRun: 0,    avgResponseMs: 0,    description: 'Pending API configuration — requires Azure app registration', actions: ['Create Incident', 'Run Logic App', 'Update Alert'], enabled: false, credentialed: false, baseUrl: null },
-  { id: 'i12', name: 'ServiceNow ITSM',   vendor: 'ServiceNow',      category: 'Ticketing',   status: 'disconnected', lastSync: '3d ago',   actionsRun: 0,    avgResponseMs: 0,    description: 'Disconnected — credential rotation required', actions: ['Create Incident', 'Update Incident', 'Assign CI'], enabled: false, credentialed: false, baseUrl: null },
+  { id: 'i11', name: 'Microsoft Sentinel', vendor: 'Microsoft',      category: 'SIEM',         status: 'pending',     lastSync: 'Never',    actionsRun: 0,    avgResponseMs: 0,    description: 'Pending API configuration - requires Azure app registration', actions: ['Create Incident', 'Run Logic App', 'Update Alert'], enabled: false, credentialed: false, baseUrl: null },
+  { id: 'i12', name: 'ServiceNow ITSM',   vendor: 'ServiceNow',      category: 'Ticketing',   status: 'disconnected', lastSync: '3d ago',   actionsRun: 0,    avgResponseMs: 0,    description: 'Disconnected - credential rotation required', actions: ['Create Incident', 'Update Incident', 'Assign CI'], enabled: false, credentialed: false, baseUrl: null },
 ]
 
 const CAT_COLORS: Record<IntCategory, string> = {
@@ -121,7 +121,7 @@ function CredentialsForm({ integration, onSaved }: {
       </div>
       <p className="text-[10px] text-ink-600 mb-3">
         With a base URL + API key, response actions call the live vendor API; without them,
-        attempts are honestly recorded as not-configured. The key is write-only — it is never shown again.
+        attempts are honestly recorded as not-configured. The key is write-only - it is never shown again.
       </p>
       <div className="grid sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
         <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
@@ -190,9 +190,9 @@ export default function SoarIntegrationsPage() {
       .then((updated) => {
         const mapped = apiToIntegration(updated as Parameters<typeof apiToIntegration>[0])
         setIntegrations((prev) => prev.map((i) => (i.id === id ? mapped : i)))
-        note(`Connection OK — ${mapped.name} synced just now`)
+        note(`Connection OK - ${mapped.name} synced just now`)
       })
-      .catch(() => note('Connection test failed — is the dashboard API running?'))
+      .catch(() => note('Connection test failed - is the dashboard API running?'))
   }
 
   function handleRunAction(id: string, action: string) {
@@ -204,8 +204,8 @@ export default function SoarIntegrationsPage() {
         note(`"${action}" executed`)
       })
       .catch((e) => note(e instanceof Error && e.message.includes('not connected')
-        ? 'Tool is not connected — run Test Connection first.'
-        : 'Action failed — is the dashboard API running?'))
+        ? 'Tool is not connected - run Test Connection first.'
+        : 'Action failed - is the dashboard API running?'))
   }
 
   const categories = ['All', ...Array.from(new Set(integrations.map(i => i.category)))]
@@ -325,8 +325,8 @@ export default function SoarIntegrationsPage() {
                       ? 'text-safe border-safe/20 bg-safe/10'
                       : 'text-ink-500 border-white/10 bg-white/5')}
                     title={int.credentialed
-                      ? 'API credentials configured — actions call the live vendor API'
-                      : 'No credentials — actions are recorded as not-configured until a base URL + API key are set'}>
+                      ? 'API credentials configured - actions call the live vendor API'
+                      : 'No credentials - actions are recorded as not-configured until a base URL + API key are set'}>
                     {int.credentialed ? 'live API' : 'no credentials'}
                   </span>
                 </div>
@@ -364,7 +364,7 @@ export default function SoarIntegrationsPage() {
             >
               <div className="p-5 rounded-2xl border border-magenta/20 bg-magenta/3 glass">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-white">{selectedInt.name} — Available Actions</h3>
+                  <h3 className="font-semibold text-white">{selectedInt.name} - Available Actions</h3>
                   <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-white/8 text-ink-500">
                     <X className="w-4 h-4" />
                   </button>
@@ -386,15 +386,15 @@ export default function SoarIntegrationsPage() {
                     ))}
                   </div>
                 )}
-                {/* Credential entry — set the vendor base URL + API key so
+                {/* Credential entry - set the vendor base URL + API key so
                     actions call the live API instead of recording not-configured */}
                 <CredentialsForm
                   integration={selectedInt}
                   onSaved={(updated) => {
                     setIntegrations((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
                     note(updated.credentialed
-                      ? `Credentials saved — ${updated.name} actions now call the live API`
-                      : 'Credentials cleared — actions will record as not-configured')
+                      ? `Credentials saved - ${updated.name} actions now call the live API`
+                      : 'Credentials cleared - actions will record as not-configured')
                   }}
                 />
                 <div className="flex items-center gap-2 mt-4 flex-wrap">

@@ -131,7 +131,7 @@ const PLAYBOOKS: Playbook[] = [
     id: 'pb-002',
     name: 'Phishing Email Response',
     category: 'Identity',
-    trigger: 'Auto: Phishing detected — mail gateway + URL reputation',
+    trigger: 'Auto: Phishing detected - mail gateway + URL reputation',
     triggerType: 'auto',
     stepsCount: 8,
     estimatedRuntime: '2m 14s',
@@ -176,7 +176,7 @@ const PLAYBOOKS: Playbook[] = [
     id: 'pb-004',
     name: 'C2 Beacon Isolation',
     category: 'Network',
-    trigger: 'Auto: C2 IOC match — DNS/HTTP beacon to known C2 domain',
+    trigger: 'Auto: C2 IOC match - DNS/HTTP beacon to known C2 domain',
     triggerType: 'auto',
     stepsCount: 10,
     estimatedRuntime: '5m 20s',
@@ -202,7 +202,7 @@ const PLAYBOOKS: Playbook[] = [
     id: 'pb-005',
     name: 'IAM Privilege Escalation Rollback',
     category: 'Cloud',
-    trigger: 'Auto: IAM change detected — policy attach with admin scope',
+    trigger: 'Auto: IAM change detected - policy attach with admin scope',
     triggerType: 'auto',
     stepsCount: 7,
     estimatedRuntime: '1m 42s',
@@ -225,7 +225,7 @@ const PLAYBOOKS: Playbook[] = [
     id: 'pb-006',
     name: 'Malware Sandboxing',
     category: 'Endpoint',
-    trigger: 'Manual trigger — analyst submits file for detonation',
+    trigger: 'Manual trigger - analyst submits file for detonation',
     triggerType: 'manual',
     stepsCount: 6,
     estimatedRuntime: '12m 00s',
@@ -238,7 +238,7 @@ const PLAYBOOKS: Playbook[] = [
       { name: 'Receive file hash or URL from analyst',             type: 'check',    status: 'completed', duration: '1s' },
       { name: 'Check VirusTotal cache (last 24h)',                 type: 'check',    status: 'completed', duration: '2s' },
       { name: 'Submit to Cuckoo/Any.run sandbox',                  type: 'action',   status: 'completed', duration: '10m 14s' },
-      { name: 'Parse sandbox report — extract IOCs',               type: 'action',   status: 'completed', duration: '30s' },
+      { name: 'Parse sandbox report - extract IOCs',               type: 'action',   status: 'completed', duration: '30s' },
       { name: 'Malicious verdict?',                                type: 'decision', status: 'completed', duration: '0s', note: 'Yes → push IOCs to SIEM + firewall. No → log benign.' },
       { name: 'Notify requesting analyst with full report',        type: 'notify',   status: 'completed', duration: '1s' },
     ],
@@ -247,7 +247,7 @@ const PLAYBOOKS: Playbook[] = [
     id: 'pb-007',
     name: 'GDPR Incident Notification',
     category: 'Compliance',
-    trigger: 'Auto: PII breach indicator — DLP alert + data exfil pattern',
+    trigger: 'Auto: PII breach indicator - DLP alert + data exfil pattern',
     triggerType: 'auto',
     stepsCount: 9,
     estimatedRuntime: '4m 10s',
@@ -272,7 +272,7 @@ const PLAYBOOKS: Playbook[] = [
     id: 'pb-008',
     name: 'Threat Intel Enrichment',
     category: 'Intel',
-    trigger: 'Auto: New IOC received — STIX/TAXII feed or manual import',
+    trigger: 'Auto: New IOC received - STIX/TAXII feed or manual import',
     triggerType: 'auto',
     stepsCount: 4,
     estimatedRuntime: '0m 45s',
@@ -662,7 +662,7 @@ export default function PlaybooksPage() {
     if (runningId) return
     setRunningId(id)
     try {
-      // Real execution: the engine runs every step and records the run —
+      // Real execution: the engine runs every step and records the run -
       // results land in the Run history panel below.
       const updated = await runPlaybook(id)
       const runStatus = updated.run?.status

@@ -52,7 +52,7 @@ function TerminalWidget() {
   )
 }
 
-// Floating 3D depth orb — shifts with cursor parallax at a given depth factor
+// Floating 3D depth orb - shifts with cursor parallax at a given depth factor
 function DepthOrb({
   cx, cy, size, color, depth, mouseX, mouseY,
 }: {
@@ -120,12 +120,12 @@ export default function Hero() {
       className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden"
       onMouseMove={handleMouseMove}
     >
-      {/* 3D floating geometry background — Three.js + bloom (decorative) */}
+      {/* 3D floating geometry background - Three.js + bloom (decorative) */}
       <motion.div style={{ scale: bgScale }} className="absolute inset-0 z-0 opacity-85" aria-hidden>
         <HeroScene mouseX={mouseX} mouseY={mouseY} />
       </motion.div>
 
-      {/* 3D depth orbs — each at different z-depth, parallaxes at different rates */}
+      {/* 3D depth orbs - each at different z-depth, parallaxes at different rates */}
       <DepthOrb cx="15%" cy="25%" size={320} color="#FF2E97" depth={28} mouseX={mouseX} mouseY={mouseY} />
       <DepthOrb cx="80%" cy="70%" size={260} color="#7A3CFF" depth={18} mouseX={mouseX} mouseY={mouseY} />
       <DepthOrb cx="65%" cy="20%" size={180} color="#FFB23E" depth={36} mouseX={mouseX} mouseY={mouseY} />
@@ -220,7 +220,7 @@ export default function Hero() {
           </motion.div>
         </div>
 
-        {/* Right — floats toward camera relative to cursor */}
+        {/* Right - floats toward camera relative to cursor */}
         <motion.div
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}

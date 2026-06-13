@@ -2,15 +2,15 @@
 
 The four roles map to named, per-section/per-action capabilities. Endpoints
 enforce a *capability* (e.g. `siem.write`) rather than hard-coding role names,
-so authorisation is one matrix instead of scattered role lists — and the UI can
+so authorisation is one matrix instead of scattered role lists - and the UI can
 ask `/auth/permissions` for the caller's effective set to hide controls it
 can't use.
 
 Roles (most → least privileged): admin ⊃ manager ⊃ analyst ⊃ viewer.
-  admin   — everything, incl. user deletion + API-key/secret administration.
-  manager — platform + SOC operations; cannot delete users.
-  analyst — SOC operations (triage, detections, response, intel) read+write.
-  viewer  — read-only across the board.
+  admin   - everything, incl. user deletion + API-key/secret administration.
+  manager - platform + SOC operations; cannot delete users.
+  analyst - SOC operations (triage, detections, response, intel) read+write.
+  viewer  - read-only across the board.
 """
 
 # Catalogue of capabilities (kept here so /config/roles can advertise them).

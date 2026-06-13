@@ -19,7 +19,7 @@ export const THEMES: {
   id: DashboardTheme
   label: string
   desc: string
-  /** Swatch colours for the picker — [bg, primary, secondary, tertiary] */
+  /** Swatch colours for the picker - [bg, primary, secondary, tertiary] */
   swatch: [string, string, string, string]
 }[] = [
   { id: 'plasma',  label: 'Plasma Noir', desc: 'Magenta · violet · amber',  swatch: ['#0A0612', '#FF2E97', '#7A3CFF', '#FFB23E'] },

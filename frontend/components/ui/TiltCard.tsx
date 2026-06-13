@@ -41,7 +41,7 @@ export default function TiltCard({
     scale.set(1.04)
   }
 
-  /* Touch drag — only tilt, don't scale (prevents flicker on tap) */
+  /* Touch drag - only tilt, don't scale (prevents flicker on tap) */
   const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!ref.current) return
     const r = ref.current.getBoundingClientRect()
@@ -52,7 +52,7 @@ export default function TiltCard({
     track(nx, ny)
   }
 
-  /* Device orientation (gyroscope) — accurate mapping.
+  /* Device orientation (gyroscope) - accurate mapping.
    *
    * The device is typically held at ~45° tilt (portrait, slight backward lean).
    * gamma = left-right rotation (-90..90), maps to card rotateY.

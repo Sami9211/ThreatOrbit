@@ -5,7 +5,7 @@ import Logo from '@/components/ui/Logo'
 export const metadata: Metadata = {
   title: 'CTI Library · ThreatOrbit',
   description:
-    'Free, self-hosted threat intelligence library. Pull from 5 OSINT sources, enrich with VirusTotal, export STIX 2.1 — no cloud required.',
+    'Free, self-hosted threat intelligence library. Pull from 5 OSINT sources, enrich with VirusTotal, export STIX 2.1 - no cloud required.',
 }
 
 const sources = [
@@ -73,7 +73,7 @@ export default function CTILibraryPage() {
             <span className="text-xs text-teal tracking-wide font-medium">Free Tier · Self-Hosted</span>
           </div>
           <h1 className="font-display text-5xl font-bold text-white mb-5 leading-tight">
-            CTI Library —{' '}
+            CTI Library -{' '}
             <span className="text-gradient-magenta">open-source</span>
             <br />threat intelligence
           </h1>
@@ -81,7 +81,7 @@ export default function CTILibraryPage() {
             ThreatOrbit's CTI Library is the open-core tier: a self-hosted threat intelligence
             aggregator that pulls from five OSINT sources, enriches every indicator against
             VirusTotal, and exports clean STIX 2.1 JSON. No cloud dependency, no per-indicator
-            billing, no SaaS lock-in — just a WAL-mode SQLite database that lives on your
+            billing, no SaaS lock-in - just a WAL-mode SQLite database that lives on your
             infrastructure.
           </p>
         </div>
@@ -151,7 +151,7 @@ export default function CTILibraryPage() {
                   ['type', 'enum', 'ip · domain · url · hash · email'],
                   ['value', 'string', 'The raw indicator value'],
                   ['source', 'string', 'Originating feed name'],
-                  ['trust_score', 'float 0–1', 'Composite confidence score'],
+                  ['trust_score', 'float 0-1', 'Composite confidence score'],
                   ['vt_positives', 'integer', 'VirusTotal detection count'],
                   ['first_seen', 'ISO 8601', 'When the indicator was first ingested'],
                   ['last_seen', 'ISO 8601', 'Most recent observation timestamp'],
@@ -175,7 +175,7 @@ export default function CTILibraryPage() {
             <p className="text-[13px] text-ink-400 leading-relaxed mb-3">
               Call <span className="font-mono text-magenta">GET /indicators/export/stix</span> to
               receive a full STIX 2.1 Bundle containing all indicators as Indicator SCOs. IDs are
-              deterministic — the same indicator always produces the same STIX ID, making bundles
+              deterministic - the same indicator always produces the same STIX ID, making bundles
               safe to import into OpenCTI multiple times without duplication.
             </p>
             <ul className="text-[13px] text-ink-400 space-y-1.5 list-disc pl-4">

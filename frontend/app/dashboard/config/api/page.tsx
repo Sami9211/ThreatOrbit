@@ -259,7 +259,7 @@ export default function ApiKeysPage() {
       })
       .catch((err) => setHookError(err instanceof Error && err.message.includes('http')
         ? 'URL must start with http:// or https://'
-        : 'Could not add webhook — check the API is running and you have admin access.'))
+        : 'Could not add webhook - check the API is running and you have admin access.'))
   }
 
   function toggleWebhook(w: WebhookEndpoint) {
@@ -358,7 +358,7 @@ export default function ApiKeysPage() {
                 {keys.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-xs text-ink-600">
-                      No API keys yet — generate one to integrate with the ThreatOrbit API.
+                      No API keys yet - generate one to integrate with the ThreatOrbit API.
                     </td>
                   </tr>
                 )}
@@ -459,7 +459,7 @@ export default function ApiKeysPage() {
           <div className="space-y-2">
             {webhooks.length === 0 && (
               <p className="text-xs text-ink-600 py-4 text-center rounded-xl border border-white/8 bg-surface">
-                No webhooks configured — add one above to push events to your stack.
+                No webhooks configured - add one above to push events to your stack.
               </p>
             )}
             {webhooks.map((w) => {

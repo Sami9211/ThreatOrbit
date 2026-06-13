@@ -27,7 +27,7 @@ const STATUS_STYLE: Record<string, { color: string; label: string }> = {
 const FILTERS = ['all', 'active', 'expired', 'known-good']
 
 function relTime(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s ago`
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
@@ -35,7 +35,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * IOC database with lifecycle — confidence decay, sightings, expiry and
+ * IOC database with lifecycle - confidence decay, sightings, expiry and
  * known-good handling. The effective-confidence bar shows decay against the
  * asserted value; analysts can record a sighting (refreshes/reactivates) or
  * whitelist an indicator (stops it matching).
@@ -207,7 +207,7 @@ export default function IocLifecyclePanel() {
                       {[
                         { label: 'age', value: `${lc.ageDays}d` },
                         { label: 'half-life', value: `${lc.halfLifeDays}d` },
-                        { label: lc.status === 'expired' ? 'expired' : 'expires in', value: lc.expiresInDays == null ? '—' : `${lc.expiresInDays}d` },
+                        { label: lc.status === 'expired' ? 'expired' : 'expires in', value: lc.expiresInDays == null ? '-' : `${lc.expiresInDays}d` },
                       ].map((m) => (
                         <div key={m.label} className="rounded-lg bg-surface-2/60 border border-white/6 px-2 py-1.5">
                           <div className="text-xs font-mono text-white">{m.value}</div>
@@ -270,8 +270,8 @@ export default function IocLifecyclePanel() {
               {/* Metadata */}
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 {[
-                  ['Severity', detail.severity], ['Threat type', detail.threatType || '—'],
-                  ['Actor', detail.actor || '—'], ['Source', detail.source || '—'],
+                  ['Severity', detail.severity], ['Threat type', detail.threatType || '-'],
+                  ['Actor', detail.actor || '-'], ['Source', detail.source || '-'],
                   ['First seen', relTime(detail.firstSeen)], ['Last seen', relTime(detail.lastSeen)],
                 ].map(([k, v]) => (
                   <div key={k} className="px-3 py-2 rounded-lg bg-surface-2/40 border border-white/5">

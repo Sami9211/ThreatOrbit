@@ -1,16 +1,16 @@
 """Dark-web depth: credential-leak matching + takedown workflow + feed import.
 
-  * **Credential matching** — every `credential-leak` finding is checked
+  * **Credential matching** - every `credential-leak` finding is checked
     against the *real* user directory: an exact email match, or an email on
     one of the organisation's own domains (derived from the directory), marks
-    the finding `matched_user` and raises a critical notification — leaked
+    the finding `matched_user` and raises a critical notification - leaked
     credentials for an account you actually operate are a force-reset event,
     not just intel.
-  * **Takedown workflow** — findings progress new → investigating →
+  * **Takedown workflow** - findings progress new → investigating →
     takedown-requested → mitigated/dismissed; requesting a takedown stamps the
     finding and emits a `darkweb.takedown` webhook so an external
     takedown/ticketing service can pick it up.
-  * **Feed import** — `import_findings()` is the sink for the `darkweb-json`
+  * **Feed import** - `import_findings()` is the sink for the `darkweb-json`
     connector kind: any leak-DB / paste-monitor API returning JSON maps into
     real findings (field-mapped, deduplicated by source URL/title).
 """
@@ -28,7 +28,7 @@ def _now() -> str:
 
 
 def watched_identities(conn) -> tuple[set, set]:
-    """(emails, domains) the org actually operates — from the user directory."""
+    """(emails, domains) the org actually operates - from the user directory."""
     emails = {str(r["email"]).lower() for r in conn.execute("SELECT email FROM users").fetchall()}
     domains = {e.split("@", 1)[1] for e in emails if "@" in e}
     return emails, domains
@@ -54,7 +54,7 @@ def match_credential_leaks(conn) -> dict:
                 try:
                     from dashboard_api.routers.platform import notify
                     notify(conn, type="darkweb", severity="critical",
-                           title=f"Workforce credential leaked: {em} — force a reset",
+                           title=f"Workforce credential leaked: {em} - force a reset",
                            detail=r["id"], link="/dashboard/darkweb")
                 except Exception:
                     pass

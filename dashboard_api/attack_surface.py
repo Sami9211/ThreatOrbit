@@ -1,13 +1,13 @@
-"""Attack-surface discovery — what's exposed, and what you didn't know you had.
+"""Attack-surface discovery - what's exposed, and what you didn't know you had.
 
 Two real capabilities over the live stores:
 
-  * **Passive discovery** — mine the event stream and alert history for hosts
+  * **Passive discovery** - mine the event stream and alert history for hosts
     that are emitting telemetry but are NOT in the asset inventory (shadow IT /
     unmanaged endpoints). Each candidate carries its observed activity (event
     + alert counts, first/last seen, a sample log line) so an analyst can vet
     it, then promote it into the inventory with one call.
-  * **Exposure scoring** — a transparent, factor-based score of how reachable
+  * **Exposure scoring** - a transparent, factor-based score of how reachable
     an asset is from the outside: public address, internet-facing tag, risky
     listening ports (RDP/SMB/Telnet/databases…), plaintext web, and open CVE
     findings on the exposed surface. Factors are returned with their weights so
@@ -121,7 +121,7 @@ def exposure_inventory(conn) -> dict:
 
 def discover_unmanaged(conn, *, limit: int = 50) -> list[dict]:
     """Passive discovery: hosts seen in telemetry/alerts that are NOT in the
-    asset inventory — each with its observed activity for vetting."""
+    asset inventory - each with its observed activity for vetting."""
     known = {str(r["name"]).lower() for r in conn.execute("SELECT name FROM assets").fetchall()}
     known |= {str(r["value"]).lower() for r in conn.execute("SELECT value FROM assets").fetchall()}
     rows = conn.execute(

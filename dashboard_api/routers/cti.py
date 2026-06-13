@@ -177,7 +177,7 @@ def _record_import(conn, source: str, method: str, imported: int, duplicates: in
 
 @router.get("/import-history")
 def import_history(limit: int = Query(50, le=200)):
-    """Recent IOC imports (manual / MISP / connector) — the Feeds → Import log."""
+    """Recent IOC imports (manual / MISP / connector) - the Feeds → Import log."""
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id, source, method, imported, duplicates, skipped, status, actor, ts "
@@ -195,7 +195,7 @@ def ioc_types():
 @router.get("/summary")
 def cti_summary(user: dict = Depends(current_user)):
     """Top-line CTI counts: actors by type, active actors/campaigns, IOC total."""
-    # Workspace clause for the rollups — a no-op until multi-tenancy is on.
+    # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         actors = conn.execute(
@@ -287,7 +287,7 @@ def get_ioc(ioc_id: str):
 
 @router.post("/iocs/{ioc_id}/sighting")
 def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(require_perm("cti.write"))):
-    """Record a manual sighting — refreshes the indicator and reactivates it."""
+    """Record a manual sighting - refreshes the indicator and reactivates it."""
     with get_conn() as conn:
         updated = record_sighting(conn, ioc_id=ioc_id, source=body.source.strip() or "manual",
                                   context=body.context)

@@ -80,7 +80,7 @@ def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_pe
                 raise HTTPException(status_code=400, detail="Invalid role")
             if col == "mfa_enabled":
                 # MFA turns ON only through the user's own TOTP enrolment
-                # (/auth/mfa/enroll + verify) — an admin can't enable it for
+                # (/auth/mfa/enroll + verify) - an admin can't enable it for
                 # someone (there'd be no secret). Admin reset (off) also
                 # clears the secret, recovering a locked-out user.
                 if val:

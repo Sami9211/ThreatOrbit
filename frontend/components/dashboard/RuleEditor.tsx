@@ -10,7 +10,7 @@ import {
 } from '@/lib/api'
 
 /**
- * Detection rule editor — author a real, evaluable correlation rule: field
+ * Detection rule editor - author a real, evaluable correlation rule: field
  * conditions, AND/OR logic, an optional aggregation threshold over a time
  * window, and a live backtest against recent events before you save it.
  */
@@ -52,7 +52,7 @@ export default function RuleEditor({ onClose, onCreated }: {
     setError(null)
     testRule(buildDef())
       .then(setTest)
-      .catch(() => setError('Backtest failed — check your conditions.'))
+      .catch(() => setError('Backtest failed - check your conditions.'))
       .finally(() => setTesting(false))
   }
 
@@ -177,7 +177,7 @@ export default function RuleEditor({ onClose, onCreated }: {
                     <span className="text-ink-300">{s.entity}</span> {s.count > 1 ? `×${s.count}` : ''} · {s.raw}
                   </div>
                 ))}
-                {test.sample.length === 0 && <p className="text-[10px] text-ink-600">No matches — tune the conditions, or wait for more telemetry.</p>}
+                {test.sample.length === 0 && <p className="text-[10px] text-ink-600">No matches - tune the conditions, or wait for more telemetry.</p>}
               </div>
             </div>
           )}

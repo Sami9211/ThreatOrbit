@@ -1,4 +1,4 @@
-"""Server-Sent Events endpoint — real-time push to the dashboard.
+"""Server-Sent Events endpoint - real-time push to the dashboard.
 
 `GET /stream?token=<jwt>` opens a `text/event-stream`. The browser's
 EventSource can't set an Authorization header, so the JWT is passed as a query

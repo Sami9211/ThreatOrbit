@@ -5,7 +5,7 @@ import { ChevronRight, BookOpen, Zap, KeyRound, Terminal, Container, GitFork } f
 
 export const metadata: Metadata = {
   title: 'Docs · ThreatOrbit',
-  description: 'ThreatOrbit developer documentation — quick start, authentication, REST API reference, Docker deployment, and changelog.',
+  description: 'ThreatOrbit developer documentation - quick start, authentication, REST API reference, Docker deployment, and changelog.',
 }
 
 const NAV = [

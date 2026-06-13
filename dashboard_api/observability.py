@@ -1,20 +1,20 @@
-"""Observability baseline (Tier-1 production hardening) — stdlib only.
+"""Observability baseline (Tier-1 production hardening) - stdlib only.
 
 Three pieces:
 
-  * **Prometheus metrics** — an ASGI middleware counts every request and its
+  * **Prometheus metrics** - an ASGI middleware counts every request and its
     latency by (method, route-template, status); the engine/ingest loops feed
     domain counters; `/metrics` renders the standard text exposition format
     plus on-scrape gauges (uptime, core-table row counts). No client library
-    needed — the format is plain text. Scraping is open by default (private
+    needed - the format is plain text. Scraping is open by default (private
     networks); set `DASHBOARD_METRICS_TOKEN` to require
     `Authorization: Bearer <token>`.
 
-  * **Structured logs** — `DASHBOARD_LOG_FORMAT=json` switches the root
+  * **Structured logs** - `DASHBOARD_LOG_FORMAT=json` switches the root
     handler to one-line JSON records (ts, level, logger, message, exc), ready
     for Loki/CloudWatch/Datadog pipelines. Default stays human-readable.
 
-  * **Error tracking** — `SENTRY_DSN` initialises sentry-sdk when the package
+  * **Error tracking** - `SENTRY_DSN` initialises sentry-sdk when the package
     is installed; if it isn't, we say so once instead of pretending.
     Unhandled exceptions are counted in `threatorbit_errors_total` either way.
 """
@@ -108,7 +108,7 @@ def render_metrics() -> str:
               "# TYPE threatorbit_domain_total counter"]
     for name, n in sorted(counters.items()):
         lines.append(f'threatorbit_domain_total{{counter="{_esc(name)}"}} {n}')
-    # Row-count gauges sampled at scrape time — storage growth at a glance.
+    # Row-count gauges sampled at scrape time - storage growth at a glance.
     lines += ["# HELP threatorbit_table_rows Current row count of core tables",
               "# TYPE threatorbit_table_rows gauge"]
     try:
@@ -120,7 +120,7 @@ def render_metrics() -> str:
                     lines.append(f'threatorbit_table_rows{{table="{t}"}} {n}')
                 except Exception:
                     continue
-    except Exception:  # storage briefly unavailable — scrape still succeeds
+    except Exception:  # storage briefly unavailable - scrape still succeeds
         pass
     return "\n".join(lines) + "\n"
 
@@ -131,7 +131,7 @@ class SecurityHeadersMiddleware:
     The API serves JSON to authenticated clients, so the conservative set is
     safe everywhere: no MIME sniffing, no framing, no referrer leakage, and
     no intermediary caching of (often sensitive) responses. The static
-    frontend's CSP/HSTS belong to whatever serves it — see docs/DEPLOYMENT.md
+    frontend's CSP/HSTS belong to whatever serves it - see docs/DEPLOYMENT.md
     for the reverse-proxy reference configs."""
 
     _HEADERS = [
@@ -162,7 +162,7 @@ class SecurityHeadersMiddleware:
 # ── Structured logging ──────────────────────────────────────────────────────────
 
 class JsonFormatter(logging.Formatter):
-    """One JSON object per line — machine-shippable log records."""
+    """One JSON object per line - machine-shippable log records."""
 
     def format(self, record: logging.LogRecord) -> str:
         out = {
@@ -196,10 +196,10 @@ def init_error_tracking() -> bool:
     if not dsn:
         return False
     try:
-        import sentry_sdk  # optional dependency — deliberately not pinned
+        import sentry_sdk  # optional dependency - deliberately not pinned
     except ImportError:
         logger.warning("SENTRY_DSN is set but sentry-sdk is not installed "
-                       "(pip install sentry-sdk) — error tracking disabled")
+                       "(pip install sentry-sdk) - error tracking disabled")
         return False
     sentry_sdk.init(dsn=dsn, traces_sample_rate=0.0)
     logger.info("Sentry error tracking enabled")

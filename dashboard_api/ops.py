@@ -2,7 +2,7 @@
 
 SQLite backups use the online backup API (`Connection.backup`), which takes a
 transactionally consistent snapshot even while the service is running under
-WAL — never copy the .db file directly (you'd race the WAL). Postgres
+WAL - never copy the .db file directly (you'd race the WAL). Postgres
 deployments should use `pg_dump` instead (see docs/OPERATIONS.md).
 
 CLI:

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/* ── Static scan history (deterministic — no Date.now()) ─────────── */
+/* ── Static scan history (deterministic - no Date.now()) ─────────── */
 const SCAN_HISTORY = [
   { target: 'http://malicious-phishing-site.xyz/login', type: 'url',  verdict: 'malicious', score: 93, engines: '62/90', time: '2m ago'  },
   { target: '45.95.147.236',                            type: 'ip',   verdict: 'malicious', score: 81, engines: '41/90', time: '8m ago'  },
@@ -51,7 +51,7 @@ const DEMO_RESULTS: Record<string, ScanResult> = {
       { name: 'Barracuda', verdict: 'malicious', category: 'Phishing' },
     ],
     iocs: ['104.21.55.198', 'malicious-phishing-site.xyz', 'a3f8e92b1d47c61e'],
-    mitre: ['T1566.002 – Spearphishing Link', 'T1056 – Input Capture'],
+    mitre: ['T1566.002 - Spearphishing Link', 'T1056 - Input Capture'],
   },
   ip: {
     target: '45.95.147.236',
@@ -77,7 +77,7 @@ const DEMO_RESULTS: Record<string, ScanResult> = {
       { name: 'ESET', verdict: 'clean', category: null },
     ],
     iocs: ['45.95.147.236', 'CVE-2024-6387'],
-    mitre: ['T1110.001 – Brute Force: Password Guessing', 'T1078 – Valid Accounts'],
+    mitre: ['T1110.001 - Brute Force: Password Guessing', 'T1078 - Valid Accounts'],
   },
   hash: {
     target: 'a3f8e92b1d47c61e83dd2a9f7c4b5e01',
@@ -105,7 +105,7 @@ const DEMO_RESULTS: Record<string, ScanResult> = {
       { name: 'Trend Micro', verdict: 'malicious', category: 'RANSOM_RYUK.SM' },
     ],
     iocs: ['a3f8e92b1d47c61e83dd2a9f7c4b5e01', 'ryuk_loader.exe', 'BLACKBASTA'],
-    mitre: ['T1486 – Data Encrypted for Impact', 'T1490 – Inhibit System Recovery', 'T1059 – Command and Scripting Interpreter'],
+    mitre: ['T1486 - Data Encrypted for Impact', 'T1490 - Inhibit System Recovery', 'T1059 - Command and Scripting Interpreter'],
     fileInfo: { name: 'invoice_Q4.exe', size: '182 KB', type: 'PE32 executable', compiler: 'Microsoft Visual C++', signature: 'Not signed' },
   },
   clean: {
@@ -161,7 +161,7 @@ function fmtBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// SHA-256 of a file via Web Crypto — the same first-pass fingerprint a
+// SHA-256 of a file via Web Crypto - the same first-pass fingerprint a
 // detonation pipeline would compute before deciding to run the sample.
 async function sha256Hex(file: globalThis.File): Promise<string> {
   const buf = await file.arrayBuffer()
@@ -289,7 +289,7 @@ export default function ScannerPage() {
           type: s.type,
           verdict: s.verdict,
           score: Math.round(s.score * 100),
-          engines: s.engines ?? '—',
+          engines: s.engines ?? '-',
           time: relativeTime(s.ts),
         })))
       }
@@ -328,7 +328,7 @@ export default function ScannerPage() {
     lookupIoc(query.trim())
       .then((hit) => {
         if (!hit.found) {
-          // Not in our TI — report clean/unverified rather than a fake verdict.
+          // Not in our TI - report clean/unverified rather than a fake verdict.
           finish({
             ...demo, target: query.trim(), verdict: 'clean', score: 0,
             detectionRatio: '0/90', categories: [],
@@ -366,12 +366,12 @@ export default function ScannerPage() {
         name: file.name,
         size: fmtBytes(file.size),
         type: file.type || 'unknown',
-        compiler: '—',
+        compiler: '-',
         signature: `sha256:${hash.slice(0, 16)}…`,
       }
       const base: ScanResult = {
         target: hash, type: 'file', verdict: 'clean', detectionRatio: '0/90', score: 0,
-        firstSeen: '—', lastSeen: '—', categories: [],
+        firstSeen: '-', lastSeen: '-', categories: [],
         community: { votes: 0, malicious: 0, clean: 0 },
         network: { asn: 'N/A', ip: 'N/A', country: 'N/A', registrar: 'N/A' },
         engines: [], iocs: [hash], mitre: [], fileInfo,
@@ -384,13 +384,13 @@ export default function ScannerPage() {
             ...base,
             verdict: hit.verdict,
             score: hit.confidence,
-            firstSeen: hit.firstSeen ?? '—',
-            lastSeen: hit.lastSeen ?? '—',
+            firstSeen: hit.firstSeen ?? '-',
+            lastSeen: hit.lastSeen ?? '-',
             categories: [hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
               .filter(Boolean) as string[],
           }
         }
-      } catch { /* TI store unreachable — report the unverified fingerprint */ }
+      } catch { /* TI store unreachable - report the unverified fingerprint */ }
       setResult(scanResult)
       recordScan({
         target: `${file.name} (${hash.slice(0, 12)}…)`, type: 'file',
@@ -435,8 +435,8 @@ export default function ScannerPage() {
         {/* Stats row */}
         <div className="flex items-center gap-3 flex-wrap">
           {[
-            { label: 'Scans today', value: stats ? stats.scansToday.toLocaleString() : '—', icon: Zap,          color: '#7A3CFF' },
-            { label: 'Malicious',   value: stats ? stats.malicious.toLocaleString() : '—',  icon: AlertTriangle, color: '#FF2E97' },
+            { label: 'Scans today', value: stats ? stats.scansToday.toLocaleString() : '-', icon: Zap,          color: '#7A3CFF' },
+            { label: 'Malicious',   value: stats ? stats.malicious.toLocaleString() : '-',  icon: AlertTriangle, color: '#FF2E97' },
             { label: 'Engines',     value: '90+',   icon: Database,      color: '#2DD4BF' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="glass border border-white/5 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
@@ -574,7 +574,7 @@ export default function ScannerPage() {
         )}
       </AnimatePresence>
 
-      {/* Recent Scans — shown when idle */}
+      {/* Recent Scans - shown when idle */}
       <AnimatePresence>
         {!result && !scanning && (
           <motion.div
@@ -616,7 +616,7 @@ export default function ScannerPage() {
         )}
       </AnimatePresence>
 
-      {/* What you can scan — fills idle space with useful guidance */}
+      {/* What you can scan - fills idle space with useful guidance */}
       <AnimatePresence>
         {!result && !scanning && (
           <motion.div
@@ -736,9 +736,9 @@ export default function ScannerPage() {
                       {result.mitre.map((t) => (
                         <div key={t} className="flex items-center gap-2 text-xs">
                           <span className="px-1.5 py-0.5 rounded bg-violet/15 text-violet font-mono text-[9px]">
-                            {t.split(' – ')[0]}
+                            {t.split(' - ')[0]}
                           </span>
-                          <span className="text-ink-300">{t.split(' – ')[1]}</span>
+                          <span className="text-ink-300">{t.split(' - ')[1]}</span>
                           <ExternalLink className="w-3 h-3 text-ink-600 ml-auto shrink-0" />
                         </div>
                       ))}

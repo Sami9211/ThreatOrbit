@@ -12,7 +12,7 @@ const BASE =
 export const TOKEN_KEY = 'to_token'
 export const USER_KEY  = 'to_user'
 
-// Server-Sent Events URL (token in query — EventSource can't set headers).
+// Server-Sent Events URL (token in query - EventSource can't set headers).
 export function liveStreamUrl(): string | null {
   const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
   return tok ? `${BASE}/stream?token=${encodeURIComponent(tok)}` : null
@@ -1390,7 +1390,7 @@ export interface LogAnalysisResult {
   anomalies?: Array<Record<string, unknown>>
   [key: string]: unknown
 }
-// Multipart upload — bypasses the JSON wrapper so the browser sets the boundary.
+// Multipart upload - bypasses the JSON wrapper so the browser sets the boundary.
 export async function analyseLogFile(file: globalThis.File, logFormat = 'generic'): Promise<LogAnalysisResult> {
   const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
   const form = new FormData()

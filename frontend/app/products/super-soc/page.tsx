@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 const features = [
   {
     title: 'Unified API Surface',
-    desc: 'Two purpose-built APIs — Threat API (port 8000) and Log API (port 8001) — share a common auth model and response envelope. One SDK, two attack surfaces covered.',
+    desc: 'Two purpose-built APIs - Threat API (port 8000) and Log API (port 8001) - share a common auth model and response envelope. One SDK, two attack surfaces covered.',
     color: '#FF2E97',
   },
   {
@@ -21,17 +21,17 @@ const features = [
   },
   {
     title: 'The Three Orbits',
-    desc: 'CTI collects and scores indicators. SIEM detects anomalies in live log streams. SOAR wraps detections in STIX 2.1 and pushes them to OpenCTI automatically — all in one runtime.',
+    desc: 'CTI collects and scores indicators. SIEM detects anomalies in live log streams. SOAR wraps detections in STIX 2.1 and pushes them to OpenCTI automatically - all in one runtime.',
     color: '#FFB23E',
   },
   {
     title: 'Async Job Pipeline',
-    desc: 'Heavy work — indicator enrichment, ML model runs, report generation — is queued asynchronously. Poll /jobs/{id} for progress or stream server-sent events for real-time status.',
+    desc: 'Heavy work - indicator enrichment, ML model runs, report generation - is queued asynchronously. Poll /jobs/{id} for progress or stream server-sent events for real-time status.',
     color: '#2DD4BF',
   },
   {
     title: 'OpenCTI as Output Layer',
-    desc: 'Every detection and enriched indicator flows into your OpenCTI instance as a deterministic STIX 2.1 bundle. Push is idempotent — re-running a job never creates duplicate objects.',
+    desc: 'Every detection and enriched indicator flows into your OpenCTI instance as a deterministic STIX 2.1 bundle. Push is idempotent - re-running a job never creates duplicate objects.',
     color: '#34F5C5',
   },
   {
@@ -73,7 +73,7 @@ export default function SuperSOCPage() {
             <span className="text-xs text-magenta tracking-wide font-medium">Product</span>
           </div>
           <h1 className="font-display text-5xl font-bold text-white mb-5 leading-tight">
-            Super SOC —{' '}
+            Super SOC -{' '}
             <span className="text-gradient-magenta">one platform,</span>
             <br />three disciplines
           </h1>
@@ -81,7 +81,7 @@ export default function SuperSOCPage() {
             ThreatOrbit's Super SOC collapses CTI, SIEM, and SOAR into a single deployable unit. No
             stitching vendor APIs together, no alert fatigue from disconnected toolchains. A unified
             async pipeline carries every raw signal from open-source intel feeds all the way to an
-            actionable STIX 2.1 bundle in your OpenCTI instance — automatically.
+            actionable STIX 2.1 bundle in your OpenCTI instance - automatically.
           </p>
         </div>
 
@@ -105,7 +105,7 @@ export default function SuperSOCPage() {
         {/* How It Works */}
         <div className="mb-16">
           <h2 className="font-display text-2xl font-bold text-white mb-2">How It Works</h2>
-          <p className="text-sm text-ink-500 mb-8">The continuous orbit — from raw signal to closed loop.</p>
+          <p className="text-sm text-ink-500 mb-8">The continuous orbit - from raw signal to closed loop.</p>
           <div className="space-y-0">
             {steps.map(({ n, title, body }, i) => (
               <div key={n} className="flex gap-5 group">
@@ -133,7 +133,7 @@ export default function SuperSOCPage() {
             {[
               ['Runtime', 'Python 3.11, FastAPI, asyncio'],
               ['Storage', 'WAL-mode SQLite (Postgres in enterprise)'],
-              ['Auth', 'Dual API keys — read + write scopes'],
+              ['Auth', 'Dual API keys - read + write scopes'],
               ['Job queue', 'In-process asyncio task queue, SSE streaming'],
               ['Export', 'STIX 2.1 JSON bundles (deterministic UUIDs)'],
               ['Deployment', 'Docker Compose; single-command `docker compose up`'],

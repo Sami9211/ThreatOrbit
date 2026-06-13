@@ -555,7 +555,7 @@ function NormalCTI() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-xl font-bold text-white">Threat Brief</h1>
-          <p className="text-xs text-ink-500 mt-0.5">Today's top threats — what's happening and what to do</p>
+          <p className="text-xs text-ink-500 mt-0.5">Today's top threats - what's happening and what to do</p>
         </div>
         <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
           <Eye className="w-3 h-3" /> Normal mode
@@ -641,14 +641,14 @@ function NormalCTI() {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 // API actors use a different shape (motivations[], campaign_count, integer
-// sophistication, ISO dates). Map them explicitly — a blind cast crashes the
+// sophistication, ISO dates). Map them explicitly - a blind cast crashes the
 // page as soon as live data loads.
 const SOPHISTICATION_LABEL: Record<number, string> = {
   1: 'Basic', 2: 'Intermediate', 3: 'High', 4: 'Advanced', 5: 'Expert',
 }
 
 function apiActorToPage(a: ApiActor): Actor {
-  const year = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : '—')
+  const year = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : '-')
   return {
     id: a.id,
     name: a.name,
@@ -800,8 +800,8 @@ export default function CTIPage() {
               <div className="flex items-center gap-4 text-[9px] text-ink-500">
                 {[
                   { label: '> 80%', color: '#FF2E97' },
-                  { label: '60–80%', color: '#FF4D6D' },
-                  { label: '40–60%', color: '#FFB23E' },
+                  { label: '60-80%', color: '#FF4D6D' },
+                  { label: '40-60%', color: '#FFB23E' },
                   { label: '< 40%', color: '#7A3CFF' },
                 ].map(({ label, color }) => (
                   <div key={label} className="flex items-center gap-1">
@@ -854,7 +854,7 @@ export default function CTIPage() {
                 { date: 'Oct 2024', name: 'Ryuk ransomware hospital campaign',              actor: 'Lazarus', severity: 'critical' },
                 { date: 'Oct 2024', name: 'Living-off-the-land in US water utilities',      actor: 'Volt Typhoon', severity: 'high' },
                 { date: 'Sep 2024', name: 'BEC phishing against hospitality sector',       actor: 'Scattered Spider', severity: 'high' },
-                { date: 'Aug 2024', name: 'CARBANAK POS system deployment — retail',       actor: 'FIN7',    severity: 'medium' },
+                { date: 'Aug 2024', name: 'CARBANAK POS system deployment - retail',       actor: 'FIN7',    severity: 'medium' },
               ].map(({ date, name, actor, severity }) => (
                 <div key={name} className="flex items-start gap-4 pl-7 relative">
                   <div className="absolute left-2 top-1.5 w-2 h-2 rounded-full border border-white/20"

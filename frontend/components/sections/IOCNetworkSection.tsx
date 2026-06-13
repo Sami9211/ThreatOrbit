@@ -22,13 +22,13 @@ const IOC_TYPES = [
 ]
 
 const LIVE_EVENTS = [
-  'New IP correlated — 3 domains linked',
-  'Hash cluster merged — 7 samples',
+  'New IP correlated - 3 domains linked',
+  'Hash cluster merged - 7 samples',
   'Threat actor TTP mapped to 12 IOCs',
-  'Domain DGA pattern detected — 18 children',
-  'C2 infrastructure pivoted — 5 IPs',
+  'Domain DGA pattern detected - 18 children',
+  'C2 infrastructure pivoted - 5 IPs',
   'Malware family attributed to actor',
-  'URL redirect chain unrolled — depth 4',
+  'URL redirect chain unrolled - depth 4',
   'AS correlation: 9 IPs same netblock',
 ]
 

@@ -19,7 +19,7 @@ const EXAMPLES = [
 ]
 
 function relTime(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60); if (m < 60) return `${m}m`
@@ -27,7 +27,7 @@ function relTime(iso: string | null): string {
 }
 
 /**
- * Event-stream search — a real field-operator query language over the raw
+ * Event-stream search - a real field-operator query language over the raw
  * telemetry the SIEM ingests (engine + native log collector). Supports
  * `field=value`, `!= > < >= <=`, `~regex`, `:contains`, `field in a,b,c`,
  * bare full-text tokens, `| stats count by <field>`, and cross-source
@@ -48,7 +48,7 @@ export default function EventSearchPanel() {
     setError(null)
     eventSearch(q, range)
       .then((r) => setRes(r))
-      .catch((e) => setError(e?.message || 'Search failed — is the dashboard API running?'))
+      .catch((e) => setError(e?.message || 'Search failed - is the dashboard API running?'))
       .finally(() => setBusy(false))
   }
 

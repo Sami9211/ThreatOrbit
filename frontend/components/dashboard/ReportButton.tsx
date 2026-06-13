@@ -20,7 +20,7 @@ const PERIODS = [
 /**
  * Generate-Report control + viewer. Drop `<ReportButton kind="siem" />` into
  * any section header. Produces a structured, paginated, print-to-PDF report
- * (Nessus/Acunetix-style) with a period selector — not a CSV dump.
+ * (Nessus/Acunetix-style) with a period selector - not a CSV dump.
  */
 export default function ReportButton({ kind, label, caseId }: { kind: string; label?: string; caseId?: string }) {
   const [open, setOpen] = useState(false)
@@ -50,7 +50,7 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
   const generate = useCallback(() => {
     setLoading(true)
     setError(null)
-    // Incident reports are case-scoped — no period window.
+    // Incident reports are case-scoped - no period window.
     ;(caseId
       ? fetchIncidentReport(caseId)
       : fetchReport(kind, period, period === 'custom' ? `${from}T00:00:00` : undefined,
@@ -79,9 +79,9 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
   }
 
   function scheduleReport() {
-    const cadence = window.prompt('Deliver this report automatically — type "daily" or "weekly":', period === 'daily' ? 'daily' : 'weekly')
+    const cadence = window.prompt('Deliver this report automatically - type "daily" or "weekly":', period === 'daily' ? 'daily' : 'weekly')
     if (!cadence || !['daily', 'weekly'].includes(cadence)) return
-    const url = window.prompt('Webhook URL to deliver to (optional — leave blank to just record on the platform):', '') || undefined
+    const url = window.prompt('Webhook URL to deliver to (optional - leave blank to just record on the platform):', '') || undefined
     createReportSchedule({ kind, period, cadence, webhook_url: url })
       .then(() => setError(null))
       .catch(() => setError('Could not create the schedule.'))

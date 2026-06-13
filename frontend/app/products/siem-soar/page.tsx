@@ -5,7 +5,7 @@ import Logo from '@/components/ui/Logo'
 export const metadata: Metadata = {
   title: 'SIEM + SOAR · ThreatOrbit',
   description:
-    'Four-engine detection and automated STIX response. Pattern matching, statistical baselines, ML IsolationForest, and temporal correlation — all in one async pipeline.',
+    'Four-engine detection and automated STIX response. Pattern matching, statistical baselines, ML IsolationForest, and temporal correlation - all in one async pipeline.',
 }
 
 const engines = [
@@ -36,7 +36,7 @@ const engines = [
 ]
 
 const formats = [
-  { name: 'Apache / Nginx', detail: 'Combined Log Format — parsed with named-group regex; extracts IP, method, URI, status, bytes, user-agent.' },
+  { name: 'Apache / Nginx', detail: 'Combined Log Format - parsed with named-group regex; extracts IP, method, URI, status, bytes, user-agent.' },
   { name: 'Syslog (RFC 5424)', detail: 'Facility, severity, hostname, process, and structured-data parsed from both IETF and BSD syslog variants.' },
   { name: 'Windows Event Log', detail: 'JSON-exported Event Log records; maps EventID, Channel, Computer, User, and TimeCreated fields.' },
   { name: 'Generic JSON', detail: 'Any newline-delimited JSON log stream. Field mapping is configurable per-source so custom schemas work without code changes.' },
@@ -75,14 +75,14 @@ export default function SIEMSOARPage() {
             <span className="text-xs text-violet tracking-wide font-medium">Product · SIEM + SOAR</span>
           </div>
           <h1 className="font-display text-5xl font-bold text-white mb-5 leading-tight">
-            Detect, score, respond —{' '}
+            Detect, score, respond -{' '}
             <span className="text-gradient-magenta">automatically</span>
           </h1>
           <p className="text-lg text-ink-400 leading-relaxed">
             ThreatOrbit's SIEM+SOAR layer runs four complementary detection engines over any log
             format in a single async job. Pattern matching catches known IOCs, statistical analysis
             spots baseline deviations, ML IsolationForest surfaces behavioural outliers, and
-            temporal correlation detects coordinated multi-event attacks — all without manual rule
+            temporal correlation detects coordinated multi-event attacks - all without manual rule
             tuning. Confirmed findings trigger automatic STIX 2.1 response pushed to OpenCTI.
           </p>
         </div>
@@ -112,7 +112,7 @@ export default function SIEMSOARPage() {
         {/* Log Formats */}
         <div className="mb-16">
           <h2 className="font-display text-2xl font-bold text-white mb-2">Supported Log Formats</h2>
-          <p className="text-sm text-ink-500 mb-6">Auto-detected on submit — no format flag required.</p>
+          <p className="text-sm text-ink-500 mb-6">Auto-detected on submit - no format flag required.</p>
           <div className="space-y-2">
             {formats.map(({ name, detail }) => (
               <div key={name} className="flex gap-4 rounded-xl border border-white/5 bg-white/2 px-5 py-4 text-[13px]">
@@ -150,10 +150,10 @@ export default function SIEMSOARPage() {
           <h2 className="font-display text-lg font-bold text-white mb-4">Technical Specifications</h2>
           <div className="grid sm:grid-cols-2 gap-x-10 gap-y-3">
             {[
-              ['Detection engines', '4 — Pattern, Statistical, ML, Temporal'],
+              ['Detection engines', '4 - Pattern, Statistical, ML, Temporal'],
               ['ML model', 'scikit-learn IsolationForest (auto-trained)'],
               ['Log API port', ':8001 (independent from Threat API :8000)'],
-              ['Job model', 'Async — non-blocking submit, poll /jobs/{id}'],
+              ['Job model', 'Async - non-blocking submit, poll /jobs/{id}'],
               ['Streaming', 'Server-sent events on /jobs/{id}/stream'],
               ['Report output', 'HTML report + JSON findings per job'],
               ['SOAR output', 'STIX 2.1 Incident bundle → OpenCTI push'],

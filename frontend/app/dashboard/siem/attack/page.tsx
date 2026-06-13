@@ -41,7 +41,7 @@ export default function AttackNavigatorPage() {
             <Crosshair className="w-4 h-4 text-magenta" />
             <h1 className="text-lg font-display font-semibold text-white">ATT&amp;CK Navigator</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Detection coverage by MITRE technique — green = covered, brighter = more alerts, dim = gap</p>
+          <p className="text-xs text-ink-500 mt-0.5">Detection coverage by MITRE technique - green = covered, brighter = more alerts, dim = gap</p>
         </div>
         <div className="flex items-center gap-3 text-[9px] text-ink-500">
           {[['Gap', 'rgba(255,255,255,0.12)'], ['Covered', '#34F5C5'], ['Active', '#FFB23E'], ['Hot', '#FF2E97']].map(([l, c]) => (
@@ -101,7 +101,7 @@ export default function AttackNavigatorPage() {
               </div>
               <div className={cn('px-3 py-2.5 rounded-xl border text-xs',
                 selected.covered ? 'border-safe/25 bg-safe/10 text-safe' : 'border-amber/25 bg-amber/10 text-amber')}>
-                {selected.covered ? `Covered by ${selected.rules} detection rule${selected.rules === 1 ? '' : 's'}.` : 'Coverage gap — no enabled rule maps to this technique.'}
+                {selected.covered ? `Covered by ${selected.rules} detection rule${selected.rules === 1 ? '' : 's'}.` : 'Coverage gap - no enabled rule maps to this technique.'}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="px-3 py-2 rounded-lg bg-surface-2/60 border border-white/8"><div className="text-lg font-bold font-mono text-white">{selected.rules}</div><div className="text-[10px] text-ink-500">rules</div></div>

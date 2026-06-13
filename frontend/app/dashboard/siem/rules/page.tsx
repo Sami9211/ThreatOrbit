@@ -194,7 +194,7 @@ const RULES_DATA: DetectionRule[] = [
     lastFired: '3d ago',
     created: '2024-04-01',
     updatedBy: 'j.chen',
-    description: 'Identifies DNS exfiltration by analysing query volume, subdomain entropy, and query label length. Triggers when a host issues more than 200 unique subdomain queries to a single apex domain within 5 minutes AND average label entropy exceeds 3.8 bits — characteristic of base64-encoded data tunnelled over DNS.',
+    description: 'Identifies DNS exfiltration by analysing query volume, subdomain entropy, and query label length. Triggers when a host issues more than 200 unique subdomain queries to a single apex domain within 5 minutes AND average label entropy exceeds 3.8 bits - characteristic of base64-encoded data tunnelled over DNS.',
     kql: `dns where dns.question.type: "A"
 | stats
     unique_subs = dcount(dns.question.subdomain),
@@ -259,7 +259,7 @@ const RULES_DATA: DetectionRule[] = [
     /* LSASS minidump creation */
     or (file.path: ("*\\lsass*.dmp","*\\lsass*.mdmp") and file.Ext.header_bytes: "4d444d50*")
   )`,
-    suppressionWindow: 'None — page immediately',
+    suppressionWindow: 'None - page immediately',
     severityOverride: null,
     tags: ['mimikatz', 'credential-access', 'lsass', 'privilege'],
   },
@@ -330,13 +330,13 @@ AND NOT source.ip: (lookup TI_ALLOWLIST ip)
     lastFired: '1d ago',
     created: '2024-05-10',
     updatedBy: 'j.chen',
-    description: 'Detects S3 bucket ACL or bucket policy modifications that grant public read or public read-write access (Principal: "*"). Also fires on PutBucketAcl with "public-read" canned ACL. SUPPRESSED: Engineering team has a scheduled review cadence; false-positive rate is high during sandbox environment provisioning windows (Tue/Thu 09:00–11:00 UTC).',
+    description: 'Detects S3 bucket ACL or bucket policy modifications that grant public read or public read-write access (Principal: "*"). Also fires on PutBucketAcl with "public-read" canned ACL. SUPPRESSED: Engineering team has a scheduled review cadence; false-positive rate is high during sandbox environment provisioning windows (Tue/Thu 09:00-11:00 UTC).',
     kql: `event.dataset: "aws.cloudtrail"
   AND event.action: ("PutBucketAcl","PutBucketPolicy")
   AND requestParameters.accessControlList.x-amz-grant-read: "*"
   OR (requestParameters.bucketPolicy.Statement{}.Principal: "*"
       AND requestParameters.bucketPolicy.Statement{}.Effect: "Allow")`,
-    suppressionWindow: 'Tue/Thu 09:00–11:00 UTC (recurring)',
+    suppressionWindow: 'Tue/Thu 09:00-11:00 UTC (recurring)',
     severityOverride: 'low',
     tags: ['s3', 'public-exposure', 'cloud', 'data-leak'],
   },
@@ -934,7 +934,7 @@ export default function RulesEnginePage() {
                     {/* Hits */}
                     <div className="flex items-center">
                       <span className={cn('text-xs font-semibold', rule.hits24h > 0 ? 'text-magenta' : 'text-ink-700')}>
-                        {rule.hits24h > 0 ? rule.hits24h : '—'}
+                        {rule.hits24h > 0 ? rule.hits24h : '-'}
                       </span>
                     </div>
 

@@ -1,8 +1,8 @@
 """Structured report generator (Nessus/Acunetix-style).
 
-Each report is a structured document — cover metadata, an executive summary
+Each report is a structured document - cover metadata, an executive summary
 with headline metrics and a narrative, severity breakdowns, detailed findings,
-and recommendations — built over a time window (daily / weekly / custom). The
+and recommendations - built over a time window (daily / weekly / custom). The
 frontend renders this into a clean, paginated, print-to-PDF layout; nothing
 here is a raw CSV dump.
 
@@ -70,7 +70,7 @@ def _siem_report(conn, since, until, label) -> dict:
     top_tech = sorted(tech.items(), key=lambda x: -x[1])[:8]
     findings = [{
         "title": a["title"], "severity": a["severity"], "score": a["risk_score"],
-        "ts": a["ts"], "entity": a.get("src_ip") or a.get("hostname") or a.get("username") or "—",
+        "ts": a["ts"], "entity": a.get("src_ip") or a.get("hostname") or a.get("username") or "-",
         "technique": a.get("mitre_tech_id"), "tactic": a.get("mitre_tactic"),
         "rule": a.get("rule_name"), "status": a["status"],
         "detail": a.get("description") or "",
@@ -117,7 +117,7 @@ def _soar_report(conn, since, until, label) -> dict:
     crit = sum(1 for c in cases if c["severity"] == "critical")
     findings = [{
         "title": c["title"], "severity": c["severity"], "status": c["status"],
-        "ts": c["created"], "entity": c.get("type") or "—", "owner": c.get("owner") or "Unassigned",
+        "ts": c["created"], "entity": c.get("type") or "-", "owner": c.get("owner") or "Unassigned",
         "detail": c.get("description") or "", "score": c.get("alert_count") or 0,
         "rule": f"{c.get('alert_count', 0)} alerts",
     } for c in cases[:50]]
@@ -165,7 +165,7 @@ def _cti_report(conn, since, until, label) -> dict:
     findings = [{
         "title": f"{i['type'].upper()} · {i['value']}", "severity": i.get("severity") or "medium",
         "score": i.get("confidence") or 0, "ts": i.get("last_seen"),
-        "entity": i.get("actor") or "—", "rule": i.get("source"),
+        "entity": i.get("actor") or "-", "rule": i.get("source"),
         "detail": i.get("threat_type") or "", "status": "active",
     } for i in iocs[:50]]
     return {
@@ -213,7 +213,7 @@ def _assets_report(conn, since, until, label) -> dict:
     findings = [{
         "title": f"{a['name']} ({a['value']})", "severity": a["criticality"],
         "score": a["risk_score"], "ts": a.get("last_scan"), "entity": a["type"],
-        "rule": a.get("owner") or "—", "status": a["status"],
+        "rule": a.get("owner") or "-", "status": a["status"],
         "detail": f"Risk {a['risk_score']}/100 · {a.get('alerts', 0)} open alerts",
     } for a in assets[:50]]
     return {
@@ -256,7 +256,7 @@ def _darkweb_report(conn, since, until, label) -> dict:
         by_cat[r["category"]] = by_cat.get(r["category"], 0) + 1
     findings = [{
         "title": r["title"], "severity": r["severity"], "ts": r["ts"],
-        "entity": r.get("entity") or "—", "rule": r.get("source"),
+        "entity": r.get("entity") or "-", "rule": r.get("source"),
         "status": r["status"], "detail": r.get("detail") or "", "score": 0,
     } for r in rows[:50]]
     return {
@@ -365,12 +365,12 @@ def build_incident_report(case_id: str) -> dict:
     runs = related["runs"]
     closed = case["status"] in ("resolved", "closed")
     sla_verdict = {"met": "SLA met", "breached": "SLA BREACHED",
-                   "within": "within SLA", "at-risk": "SLA at risk"}.get(sla["slaStatus"], "—")
+                   "within": "within SLA", "at-risk": "SLA at risk"}.get(sla["slaStatus"], "-")
 
     findings = []
     for t in related["timeline"]:
         findings.append({
-            "title": t["title"] or "—",
+            "title": t["title"] or "-",
             "severity": t["severity"] or ("info" if t["type"] in ("system", "note", "manual") else "low"),
             "score": 0, "ts": t["ts"],
             "entity": None, "technique": t.get("technique"), "tactic": None,
@@ -384,15 +384,15 @@ def build_incident_report(case_id: str) -> dict:
     ]
     if related["techniques"]:
         top = related["techniques"][0]["technique"]
-        recs.append(f"Review detection coverage for {top} — the dominant technique in this incident — and backtest tuned rules.")
+        recs.append(f"Review detection coverage for {top} - the dominant technique in this incident - and backtest tuned rules.")
     if not case.get("playbook"):
         recs.append("No playbook drove this case: author an automation trigger so the next occurrence is contained automatically.")
     if sla["slaStatus"] == "breached":
-        recs.append("The response breached its SLA — review escalation routing and on-call staffing for this alert class.")
+        recs.append("The response breached its SLA - review escalation routing and on-call staffing for this alert class.")
     recs.append("Capture lessons learned in the runbook: what detected it, what slowed response, what to automate next.")
 
     return {
-        "meta": _meta("incident", f"Post-Incident Report — {case['id']}",
+        "meta": _meta("incident", f"Post-Incident Report - {case['id']}",
                       f"{case['title']}", case["created"], case.get("updated") or case["created"]),
         "summary": {
             "headline": [

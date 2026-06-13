@@ -1,4 +1,4 @@
-"""TAXII 2.1 server — let external tools pull ThreatOrbit's intel as STIX.
+"""TAXII 2.1 server - let external tools pull ThreatOrbit's intel as STIX.
 
 A read-only TAXII 2.1 service (discovery → api-root → collections → objects)
 exposing two collections, `indicators` and `threat-actors`, serialized as
@@ -82,7 +82,7 @@ def _objects_for(collection_id: str) -> list[dict]:
 
 @router.get("/")
 def discovery(request: Request):
-    """TAXII discovery — advertises the API root."""
+    """TAXII discovery - advertises the API root."""
     base = str(request.base_url).rstrip("/")
     return _taxii({
         "title": "ThreatOrbit TAXII Server",
@@ -148,7 +148,7 @@ def get_objects(collection_id: str,
 def add_objects(collection_id: str, principal: dict = Depends(taxii_principal),
                 envelope: dict = Body(...)):
     """TAXII write/push: accept a STIX envelope (or bundle) and ingest its
-    `indicator` objects into the IOC store — true publish-subscribe. Returns a
+    `indicator` objects into the IOC store - true publish-subscribe. Returns a
     TAXII status resource."""
     if collection_id not in COLLECTIONS:
         raise HTTPException(status_code=404, detail="Collection not found")

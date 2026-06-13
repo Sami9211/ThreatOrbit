@@ -2,8 +2,8 @@
 
 The dashboard's hunt pages accept free-form KQL-ish text. Rather than parse a
 full query grammar, the engine extracts the discriminating tokens analysts
-actually pivot on — MITRE technique ids, IPv4 addresses, severities, and
-quoted/bare keywords — and matches them against stored alerts (SIEM domain)
+actually pivot on - MITRE technique ids, IPv4 addresses, severities, and
+quoted/bare keywords - and matches them against stored alerts (SIEM domain)
 or IOCs (CTI domain). Every result row is a real stored record.
 """
 import re
@@ -172,7 +172,7 @@ def run_saved_hunt(domain: str, hunt_id: str, actor: str) -> dict | None:
 
 
 # ── Event-stream search language ────────────────────────────────────────────────
-# A real, compact field-operator query over the raw `events` stream — the data a
+# A real, compact field-operator query over the raw `events` stream - the data a
 # hunter actually searches (not just alerts). Splunk/KQL-flavoured:
 #
 #   src_ip=10.0.0.5 event_type=failed_login        implicit AND of conditions
@@ -207,7 +207,7 @@ def parse_query(q: str) -> dict:
 
     `conditions` use the rule-engine field/op/value shape; `freetext` are bare
     tokens matched as substrings of the raw line; `stats` is an optional
-    {"by": field} group-by; `join` is an optional cross-source correlation —
+    {"by": field} group-by; `join` is an optional cross-source correlation -
     `| join <field> <subquery>` keeps left-side rows whose <field> value also
     appears in the subquery's matches (e.g. successful logins from IPs that
     also produced failed logins). Pipes compose: join runs first, stats after.
@@ -295,7 +295,7 @@ def event_search(query: str, time_range: str = "24h", limit: int = 200) -> dict:
         groups: dict[str, int] = {}
         for e in matched:
             v = e.get(by)
-            key = "—" if v in (None, "") else str(v)
+            key = "-" if v in (None, "") else str(v)
             groups[key] = groups.get(key, 0) + 1
         agg = sorted(({"value": k, "count": v} for k, v in groups.items()), key=lambda x: -x["count"])
         return {"scanned": scanned, "hits": len(matched), "groupCount": len(agg),

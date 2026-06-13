@@ -93,7 +93,7 @@ export default function DarkWebPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" /> Live
             </span>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">External exposure — leaked credentials, data sales, brand mentions & threat-actor chatter</p>
+          <p className="text-xs text-ink-500 mt-0.5">External exposure - leaked credentials, data sales, brand mentions & threat-actor chatter</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -137,7 +137,7 @@ export default function DarkWebPage() {
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {loading && <p className="text-xs text-ink-600 py-8 text-center animate-pulse">Loading dark-web findings…</p>}
         {!loading && filtered.length === 0 && (
-          <p className="text-xs text-ink-600 py-8 text-center">No findings yet — the engine surfaces these as it monitors. Check back shortly.</p>
+          <p className="text-xs text-ink-600 py-8 text-center">No findings yet - the engine surfaces these as it monitors. Check back shortly.</p>
         )}
         {filtered.map((f) => {
           const cat = CATEGORY_META[f.category] ?? CATEGORY_META['brand-mention']
@@ -198,7 +198,7 @@ export default function DarkWebPage() {
                       </div>
                     </div>
 
-                    {[['Affected entity', selected.entity], ['Threat actor', selected.actor || '—'], ['Source', selected.source]].map(([k, v]) => (
+                    {[['Affected entity', selected.entity], ['Threat actor', selected.actor || '-'], ['Source', selected.source]].map(([k, v]) => (
                       <div key={k} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 text-xs">
                         <span className="text-ink-500">{k}</span><span className="text-ink-200 font-mono text-right truncate">{v}</span>
                       </div>

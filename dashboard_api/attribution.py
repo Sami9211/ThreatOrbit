@@ -1,13 +1,13 @@
 """Evidence-weighted actor attribution.
 
-Given observed activity — MITRE techniques, indicators, targeted sectors,
-source country — score which tracked threat actor it most likely maps to, and
+Given observed activity - MITRE techniques, indicators, targeted sectors,
+source country - score which tracked threat actor it most likely maps to, and
 show *why* (transparent, weighted evidence) rather than a black-box label.
 
 Weights reflect how discriminating each signal is:
   * IOC overlap is strongest (an indicator already attributed to the actor),
   * then shared malware, then technique (TTP) overlap, then sector/origin.
-Scores are normalised 0–100 against the best-scoring actor so the ranking is
+Scores are normalised 0-100 against the best-scoring actor so the ranking is
 readable; confidence bands flag how thin the evidence is.
 """
 import json

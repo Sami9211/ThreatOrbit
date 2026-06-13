@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Canvas 2D particle network — replaces Three.js/WebGL entirely.
+ * Canvas 2D particle network - replaces Three.js/WebGL entirely.
  * No shader compilation, no GPU context overhead, works natively on mobile.
  * Touch and mouse reactive: particles repel from the pointer.
  */

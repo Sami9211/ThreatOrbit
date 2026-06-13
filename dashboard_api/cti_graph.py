@@ -1,14 +1,14 @@
-"""CTI relationship graph — actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors.
+"""CTI relationship graph - actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors.
 
 Builds an interactive intelligence graph from the live stores and supports the
 two operations analysts actually need on one:
 
-  * **pivot** — expand a node to its neighbours (`neighbours`), so you can walk
+  * **pivot** - expand a node to its neighbours (`neighbours`), so you can walk
     out from an actor to its malware/TTPs/indicators or from an indicator back
     to the actor that uses it;
-  * **path-finding** — `shortest_path` between any two nodes (BFS over the
+  * **path-finding** - `shortest_path` between any two nodes (BFS over the
     adjacency), e.g. how an IOC connects to a sector through an actor + a shared
-    technique — the "why are these related?" question.
+    technique - the "why are these related?" question.
 
 Shared malware/technique/sector nodes are the connective tissue: two actors
 that use the same tool or TTP are linked through it, which is what makes the

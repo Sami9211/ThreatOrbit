@@ -1,18 +1,18 @@
 """Secrets at rest (Tier-1 production hardening).
 
-Credentials the platform stores in its own DB — connector API keys,
-integration API keys, per-user Slack webhook URLs — are encrypted with
+Credentials the platform stores in its own DB - connector API keys,
+integration API keys, per-user Slack webhook URLs - are encrypted with
 Fernet (AES-128-CBC + HMAC-SHA256) before they touch disk. Values are
 written as `enc:v1:<token>`; anything without that prefix is treated as
 legacy plaintext: still readable, and re-encrypted in place by the boot
 migration (`encrypt_existing`), so upgrades are seamless.
 
-Key material: `DASHBOARD_ENCRYPTION_KEY` (recommended — set it once and
+Key material: `DASHBOARD_ENCRYPTION_KEY` (recommended - set it once and
 keep it stable), falling back to the JWT secret so encryption is on by
 default. The caveat of the fallback is documented loudly: rotating
 `DASHBOARD_JWT_SECRET` without having pinned a dedicated encryption key
 makes previously stored secrets undecryptable. A failed decrypt is an
-HONEST failure — the value reads back empty, so dependent features
+HONEST failure - the value reads back empty, so dependent features
 degrade to their not-configured behaviour instead of sending garbage
 credentials to a vendor.
 """
@@ -66,7 +66,7 @@ def decrypt(value: str | None) -> str | None:
         return _fernet().decrypt(s[len(_PREFIX):].encode()).decode()
     except InvalidToken:
         logger.warning(
-            "Stored secret could not be decrypted (encryption key changed?) — "
+            "Stored secret could not be decrypted (encryption key changed?) - "
             "treating as not configured. Set DASHBOARD_ENCRYPTION_KEY and keep it stable.")
         return ""
 

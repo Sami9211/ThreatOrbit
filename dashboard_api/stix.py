@@ -1,4 +1,4 @@
-"""STIX 2.1 serialization — turn ThreatOrbit's intel into standards content.
+"""STIX 2.1 serialization - turn ThreatOrbit's intel into standards content.
 
 Maps the live stores onto STIX 2.1 SDOs so other platforms (OpenCTI, MISP,
 Anomali, a SIEM's TAXII client) can consume ThreatOrbit as a real CTI source:
@@ -9,7 +9,7 @@ Anomali, a SIEM's TAXII client) can consume ThreatOrbit as a real CTI source:
   IOC attributed to an actor      → `relationship` (indicator `indicates` actor)
 
 Object ids are deterministic (uuid5 over the value), so re-exporting the same
-indicator yields the same STIX id — clients can de-duplicate across pulls.
+indicator yields the same STIX id - clients can de-duplicate across pulls.
 """
 import json
 import re

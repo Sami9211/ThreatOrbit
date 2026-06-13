@@ -31,7 +31,7 @@ const FEATURES = [
     title: 'STIX 2.1 Native',
     desc: 'Export any indicator set as standards-compliant STIX bundles for any TAXII platform.',
     accent: 'magenta',
-    detail: 'The /export/stix endpoint builds a full STIX 2.1 Bundle with Indicator SDOs, RelationshipSROs, and a ThreatActor identity object. UUIDs are deterministic from the IOC value so re-exporting the same indicator always produces the same STIX ID — safe for idempotent pushes to OpenCTI.',
+    detail: 'The /export/stix endpoint builds a full STIX 2.1 Bundle with Indicator SDOs, RelationshipSROs, and a ThreatActor identity object. UUIDs are deterministic from the IOC value so re-exporting the same indicator always produces the same STIX ID - safe for idempotent pushes to OpenCTI.',
     link: '/platform/opencti',
   },
   {
@@ -47,7 +47,7 @@ const FEATURES = [
     title: 'Async Job Pipeline',
     desc: 'POST to /fetch returns a job_id instantly. The full pipeline runs in background threads.',
     accent: 'amber',
-    detail: 'Heavy operations (OSINT fetch, VirusTotal enrichment, STIX export, OpenCTI push) run as async background jobs. The POST endpoint enqueues the job and returns job_id immediately with a 202. Clients poll GET /jobs/{id} for status (pending → running → complete) and retrieve the result when ready — no timeouts, no blocking, mobile-safe.',
+    detail: 'Heavy operations (OSINT fetch, VirusTotal enrichment, STIX export, OpenCTI push) run as async background jobs. The POST endpoint enqueues the job and returns job_id immediately with a 202. Clients poll GET /jobs/{id} for status (pending → running → complete) and retrieve the result when ready - no timeouts, no blocking, mobile-safe.',
     link: '/docs/rest-api',
   },
   {
@@ -55,7 +55,7 @@ const FEATURES = [
     title: 'Dual API Key Auth',
     desc: 'Standard read keys for analysts, admin keys for write operations.',
     accent: 'safe',
-    detail: 'The X-API-Key header carries either a standard key (read: list indicators, check status) or an admin key (write: trigger fetch, export STIX, push to OpenCTI). Keys are compared with constant-time equality to prevent timing attacks. If ADMIN_API_KEY is not set, the standard key gains write access automatically — safe for single-operator deployments.',
+    detail: 'The X-API-Key header carries either a standard key (read: list indicators, check status) or an admin key (write: trigger fetch, export STIX, push to OpenCTI). Keys are compared with constant-time equality to prevent timing attacks. If ADMIN_API_KEY is not set, the standard key gains write access automatically - safe for single-operator deployments.',
     link: '/docs/authentication',
   },
   {
@@ -79,7 +79,7 @@ const FEATURES = [
     title: 'Real-Time Monitoring',
     desc: 'Poll job status, stream live IOC counts, and surface threat deltas from WAL SQLite.',
     accent: 'amber',
-    detail: 'WAL mode means reads never block writes, so you can query the indicator count while a fetch job is mid-ingest and always get a consistent view. The /jobs/{id} endpoint supports long-poll (up to 30 s) — the response blocks until the job transitions state, saving you polling round-trips. Delta queries (since parameter) let dashboards fetch only new indicators since last check.',
+    detail: 'WAL mode means reads never block writes, so you can query the indicator count while a fetch job is mid-ingest and always get a consistent view. The /jobs/{id} endpoint supports long-poll (up to 30 s) - the response blocks until the job transitions state, saving you polling round-trips. Delta queries (since parameter) let dashboards fetch only new indicators since last check.',
     link: '/docs/rest-api',
   },
 ]

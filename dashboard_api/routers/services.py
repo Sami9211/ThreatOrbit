@@ -3,7 +3,7 @@
 The two ingestion services authenticate with X-API-Key headers that must not
 reach the browser, so the dashboard proxies them server-side: the operator
 stays on JWT auth, keys stay in the environment. Every upstream call degrades
-gracefully — when a service is down the caller gets {"available": false}
+gracefully - when a service is down the caller gets {"available": false}
 (or 503 for actions) rather than an opaque error.
 """
 import json
@@ -80,7 +80,7 @@ def threat_fetch(user: dict = Depends(require_perm("services.run"))):
         r.raise_for_status()
         body = r.json()
     except httpx.HTTPError:
-        raise HTTPException(status_code=503, detail="Threat API is unreachable — start it on " + THREAT_API_URL)
+        raise HTTPException(status_code=503, detail="Threat API is unreachable - start it on " + THREAT_API_URL)
     with get_conn() as conn:
         audit(conn, user["email"], "services.threat_fetch", body.get("job_id"))
         conn.commit()
@@ -115,7 +115,7 @@ def sync_threat_iocs(limit: int = 500, user: dict = Depends(require_perm("servic
     OSINT engine and the operator console."""
     upstream = _get(THREAT_API_URL, "/iocs", params={"limit": max(1, min(limit, 1000))})
     if upstream is None:
-        raise HTTPException(status_code=503, detail="Threat API is unreachable — start it on " + THREAT_API_URL)
+        raise HTTPException(status_code=503, detail="Threat API is unreachable - start it on " + THREAT_API_URL)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     imported = duplicates = skipped = 0
     with get_conn() as conn:
@@ -194,7 +194,7 @@ async def logs_analyse(
             pass
         raise HTTPException(status_code=e.response.status_code, detail=detail)
     except httpx.HTTPError:
-        raise HTTPException(status_code=503, detail="Log API is unreachable — start it on " + LOG_API_URL)
+        raise HTTPException(status_code=503, detail="Log API is unreachable - start it on " + LOG_API_URL)
 
     findings = body.get("findings", []) if isinstance(body, dict) else []
     alerts_created = 0
