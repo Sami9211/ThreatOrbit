@@ -3,7 +3,8 @@ import { test, expect } from './fixtures'
 // The critical analyst workflows, end to end against the live stack.
 test.describe('Dashboard workflows', () => {
   test('overview shows live KPIs', async ({ authedPage: page }) => {
-    await expect(page.getByRole('heading', { name: /security overview/i })).toBeVisible()
+    // default Normal mode shows "Security Status"; Power shows "Security Overview"
+    await expect(page.getByRole('heading', { name: /security (overview|status)/i })).toBeVisible()
     // at least one numeric KPI rendered
     await expect(page.locator('text=/^\\d[\\d,]*$/').first()).toBeVisible()
   })

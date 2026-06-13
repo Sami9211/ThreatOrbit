@@ -29,13 +29,6 @@ jobs:
       - name: Install API deps
         run: pip install -r dashboard_api/requirements.txt
 
-      - name: Boot dashboard API (seeded demo data)
-        run: |
-          python -m uvicorn dashboard_api.main:app --host 127.0.0.1 --port 8002 &
-          for i in $(seq 1 40); do
-            curl -sf http://127.0.0.1:8002/health && break || sleep 1
-          done
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -51,9 +44,20 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Run E2E suite
-        working-directory: frontend
-        run: npm run e2e
+      # Boot the API inside the SAME step as the tests. A previous step that
+      # backgrounds uvicorn doesn't survive into this one (the runner reaps it
+      # between steps), which left every login-dependent test failing.
+      - name: Run E2E suite (API booted in-step so it stays up)
+        run: |
+          python -m uvicorn dashboard_api.main:app --host 127.0.0.1 --port 8002 &
+          API_PID=$!
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8002/health && break || sleep 1
+          done
+          cd frontend && npm run e2e
+          status=$?
+          kill $API_PID 2>/dev/null || true
+          exit $status
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

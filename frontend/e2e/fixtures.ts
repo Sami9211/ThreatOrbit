@@ -11,7 +11,9 @@ export async function login(page: Page, creds = ADMIN) {
   await page.getByPlaceholder('jane@company.com').fill(creds.email)
   await page.getByPlaceholder('••••••••').fill(creds.password)
   await page.getByRole('button', { name: /sign in/i }).click()
-  await page.waitForURL('**/dashboard', { timeout: 20_000 })
+  // next.config has trailingSlash: true, so the app lands on /dashboard/ -
+  // match with or without the trailing slash.
+  await page.waitForURL(/\/dashboard\/?$/, { timeout: 20_000 })
 }
 
 /** A test that starts already authenticated on the dashboard. */

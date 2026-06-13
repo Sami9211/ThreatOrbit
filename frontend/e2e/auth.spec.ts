@@ -14,7 +14,9 @@ test.describe('Authentication', () => {
   test('valid login reaches the dashboard', async ({ page }) => {
     await login(page)
     await expect(page).toHaveURL(/\/dashboard/)
-    await expect(page.getByRole('heading', { name: /security overview/i })).toBeVisible()
+    // default experience mode is Normal ("Security Status"); Power shows
+    // "Security Overview" - accept either.
+    await expect(page.getByRole('heading', { name: /security (overview|status)/i })).toBeVisible()
   })
 
   test('protected route redirects to login when unauthenticated', async ({ page }) => {

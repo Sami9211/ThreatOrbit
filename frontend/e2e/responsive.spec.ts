@@ -7,7 +7,7 @@ import { test, expect } from './fixtures'
  */
 test.describe('Responsive (mobile viewport)', () => {
   const pages = [
-    { path: '/dashboard', heading: /security overview/i },
+    { path: '/dashboard', heading: /security (overview|status)/i },
     { path: '/dashboard/siem', heading: /siem|alert/i },
     { path: '/dashboard/soar', heading: /soar|case|playbook/i },
     { path: '/dashboard/cti', heading: /threat|intelligence|actor/i },
