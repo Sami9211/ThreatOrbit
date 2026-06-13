@@ -143,6 +143,9 @@ _CC = {"RU": "Russia", "CN": "China", "KP": "North Korea", "IR": "Iran",
        "JP": "Japan", "KR": "South Korea", "SG": "Singapore", "AE": "UAE",
        "FR": "France", "IT": "Italy", "ES": "Spain", "TR": "Turkey", "PK": "Pakistan",
        "ID": "Indonesia", "MX": "Mexico", "CA": "Canada", "PL": "Poland", "BY": "Belarus"}
+# Reverse lookup so we can also emit the ISO-2 code (the frontend choropleth
+# joins it to country polygons), whether a row stored a code or a display name.
+_NAME_TO_CC = {v: k for k, v in _CC.items()}
 
 
 @router.get("/geo")
@@ -166,10 +169,17 @@ def geo_distribution(limit: int = 20, user: dict = Depends(current_user)):
         ).fetchone()["n"]
     merged: dict[str, dict] = {}
     for r in rows_to_dicts(rows):
-        name = _CC.get(str(r["country"]).upper(), r["country"]) if len(str(r["country"])) == 2 \
-            else r["country"]
-        g = merged.setdefault(name, {"country": name, "observed": 0, "critical": 0,
-                                     "high": 0, "last_seen": r["last_seen"]})
+        raw = str(r["country"])
+        if len(raw) == 2:
+            iso2 = raw.upper()
+            name = _CC.get(iso2, iso2)
+        else:
+            name = raw
+            iso2 = _NAME_TO_CC.get(name)
+        g = merged.setdefault(name, {"country": name, "iso2": iso2, "observed": 0,
+                                     "critical": 0, "high": 0, "last_seen": r["last_seen"]})
+        if iso2 and not g.get("iso2"):
+            g["iso2"] = iso2
         g["observed"] += r["observed"]
         g["critical"] += r["critical"]
         g["high"] += r["high"]

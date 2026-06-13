@@ -944,8 +944,8 @@ export default function DashboardOverview() {
       </div>
 
       {/* World Map + Live Feed */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
-        <div className="h-[360px] w-full">
+      <div className="grid grid-cols-1 xl:grid-cols-[2.2fr_1fr] gap-4">
+        <div className="h-[480px] w-full">
           <WorldMap />
         </div>
         <LiveThreatFeed seed={liveFeed} />

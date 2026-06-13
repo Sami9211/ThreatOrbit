@@ -374,6 +374,19 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Live attack map -> real choropleth** (user-requested). Replaced
+  the point-marker map with a true country-area choropleth: real country
+  polygons (world-atlas TopoJSON rendered with d3-geo's Natural Earth
+  projection, bundled in-package - no network), each country **filled by its
+  attack count** on a cold->hot scale, **hovering highlights the whole country
+  area** (brightened fill + white outline) with a tooltip, and a
+  **Countries / Continents toggle** that re-buckets and recolours by continent.
+  The join is reliable: `/overview/geo` now emits the ISO-2 code, mapped to the
+  polygons' ISO-numeric ids via a compact build-time-generated `countryMeta`
+  (so the heavy `world-countries` stays a dev dependency). Added a colour
+  legend, flag-tagged top-origins panel with bidirectional hover, and **made
+  the map much larger** (full-width-ish, 480px). Frontend builds clean; 161
+  backend tests green.
 - **2026-06-13 · Reports: meaningful synthesis + a real "Overall" report**
   (user-requested). The exported reports no longer dump rows "as is". (a) The
   **Asset Risk & Vulnerability Report** now synthesises the real scanner

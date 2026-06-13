@@ -518,7 +518,7 @@ export const authChangePassword = (currentPassword: string, newPassword: string)
 export const fetchKpis    = () => api<OverviewKpis>('/overview/kpis')
 export const fetchVectors = () => api<ThreatVector[]>('/overview/threat-vectors')
 export const fetchHourly  = () => api<number[]>('/overview/hourly-volume')
-export interface GeoCountry { country: string; observed: number; critical: number; high: number; lastSeen: string | null }
+export interface GeoCountry { country: string; iso2: string | null; observed: number; critical: number; high: number; lastSeen: string | null }
 export const fetchGeo = (limit = 20) =>
   api<{ countries: GeoCountry[]; totalGeolocated: number }>(`/overview/geo?limit=${limit}`)
 export const fetchHeatmap = () => api<Array<{ label: string; vals: number[] }>>('/overview/mitre-heatmap')
