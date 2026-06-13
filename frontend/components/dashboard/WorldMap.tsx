@@ -1,751 +1,313 @@
 'use client'
 
-import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { fetchLiveFeed, fetchGeo, type LiveFeedItem, type GeoCountry } from '@/lib/api'
+import { fetchGeo, type GeoCountry } from '@/lib/api'
 
-/* Country → continent-region id, for rolling OBSERVED alert origins (from the
-   platform's own /overview/geo measurement) up into the region hover stats. */
-const COUNTRY_REGION: Record<string, string> = {
-  'Russia': 'eu', 'China': 'as', 'North Korea': 'as', 'Vietnam': 'as', 'Japan': 'as',
-  'South Korea': 'as', 'India': 'as', 'Singapore': 'as', 'Iran': 'me', 'UAE': 'me',
-  'United States': 'na', 'Brazil': 'sa', 'Netherlands': 'eu', 'Romania': 'eu',
-  'United Kingdom': 'eu', 'Germany': 'eu', 'Ukraine': 'eu', 'Nigeria': 'af',
-  'Egypt': 'af', 'Australia': 'oc',
-}
-
+/* Equirectangular projection onto a 360x180 viewBox (1 unit = 1 degree). */
 const W = 360
 const H = 180
 const project = (lon: number, lat: number): [number, number] => [lon + 180, 90 - lat]
 
+/* Hand-drawn coastline (subtle land fill). Kept from the original map. */
 const LAND: number[][][] = [
   [[-168,65],[-162,70],[-156,71],[-140,70],[-125,72],[-110,74],[-95,72],[-80,68],[-64,60],[-56,50],[-67,45],[-70,44],[-74,40],[-75,38],[-81,31],[-80,25],[-82,28],[-90,29],[-97,26],[-97,21],[-95,19],[-91,19],[-90,21],[-87,21],[-88,16],[-92,15],[-97,16],[-105,20],[-110,23],[-112,26],[-117,33],[-120,34],[-124,40],[-125,49],[-130,54],[-135,58],[-140,60],[-148,60],[-153,57],[-158,57],[-166,60],[-168,65]],
   [[-45,60],[-30,60],[-20,64],[-18,70],[-22,76],[-32,82],[-45,83],[-58,82],[-55,76],[-58,70],[-53,66],[-45,60]],
   [[-81,7],[-77,8],[-77,1],[-80,-3],[-81,-6],[-77,-12],[-70,-18],[-71,-24],[-71,-30],[-73,-38],[-75,-46],[-69,-52],[-66,-55],[-64,-53],[-65,-48],[-62,-40],[-57,-34],[-48,-25],[-40,-22],[-35,-8],[-35,-5],[-44,-2],[-50,0],[-52,4],[-60,8],[-66,11],[-72,12],[-77,8],[-81,7]],
   [[-17,15],[-16,21],[-10,27],[-6,32],[-2,36],[10,37],[11,33],[20,32],[25,32],[32,31],[34,28],[35,23],[37,18],[39,15],[43,11],[51,12],[51,8],[48,5],[42,-1],[40,-4],[40,-11],[35,-17],[35,-24],[32,-26],[26,-34],[20,-35],[18,-34],[15,-27],[12,-17],[13,-9],[9,-1],[9,4],[4,6],[-4,5],[-8,5],[-13,8],[-16,12],[-17,15]],
   [[-10,37],[-9,43],[-2,43],[-2,48],[2,51],[4,52],[7,53],[8,57],[5,58],[8,62],[11,64],[14,68],[20,70],[26,71],[30,68],[28,60],[24,60],[24,57],[20,55],[14,54],[12,55],[8,54],[3,51],[-2,49],[-5,48],[-9,44],[-10,37]],
-  [[-6,50],[-2,51],[0,53],[-2,56],[-5,58],[-7,57],[-6,53],[-6,50]],
   [[26,41],[35,42],[40,44],[48,46],[55,50],[60,55],[68,55],[68,40],[57,42],[53,37],[57,25],[60,25],[57,20],[52,16],[48,24],[44,39],[40,40],[35,37],[28,41],[26,41]],
   [[60,55],[66,55],[68,68],[80,73],[105,78],[140,73],[160,70],[170,66],[165,62],[160,60],[155,52],[142,46],[140,36],[135,35],[130,43],[127,34],[122,40],[122,30],[117,24],[109,18],[105,10],[103,1],[97,8],[100,14],[92,21],[88,22],[80,13],[77,8],[73,16],[70,21],[67,25],[62,25],[58,30],[55,40],[55,50],[60,55]],
-  [[35,30],[40,30],[48,30],[57,25],[52,16],[45,13],[43,17],[38,22],[35,28],[35,30]],
   [[130,31],[136,35],[141,40],[142,45],[140,42],[137,37],[132,33],[130,31]],
   [[95,5],[105,1],[110,-3],[117,-4],[119,0],[125,1],[131,-1],[141,-2],[150,-6],[141,-9],[131,-4],[120,-9],[110,-8],[100,0],[95,5]],
-  [[120,6],[126,7],[126,16],[122,18],[120,13],[120,6]],
   [[114,-22],[122,-18],[130,-12],[137,-12],[142,-11],[146,-19],[150,-25],[153,-28],[150,-38],[143,-39],[137,-36],[129,-32],[122,-34],[115,-34],[114,-22]],
-  [[167,-46],[171,-44],[174,-41],[178,-38],[176,-41],[172,-44],[167,-46]],
-  [[43,-12],[50,-15],[50,-25],[45,-25],[43,-18],[43,-12]],
 ]
 
-function pointInPoly(lon: number, lat: number, poly: number[][]): boolean {
-  let inside = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], yi = poly[i][1]
-    const xj = poly[j][0], yj = poly[j][1]
-    const intersect = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
-    if (intersect) inside = !inside
-  }
-  return inside
+const LAND_PATHS = LAND.map((poly) =>
+  poly.map(([lon, lat], i) => `${i ? 'L' : 'M'}${project(lon, lat).join(' ')}`).join(' ') + 'Z')
+
+/* Country centroid (lat, lon) + flag, for every name /overview/geo can emit
+   (its _CC ISO->name normalization). Markers are placed here. */
+const COUNTRY: Record<string, { lat: number; lon: number; flag: string }> = {
+  'Russia': { lat: 55, lon: 50, flag: '🇷🇺' }, 'China': { lat: 35, lon: 105, flag: '🇨🇳' },
+  'North Korea': { lat: 40, lon: 127, flag: '🇰🇵' }, 'Iran': { lat: 32, lon: 53, flag: '🇮🇷' },
+  'United States': { lat: 39, lon: -98, flag: '🇺🇸' }, 'Brazil': { lat: -10, lon: -52, flag: '🇧🇷' },
+  'Netherlands': { lat: 52, lon: 5, flag: '🇳🇱' }, 'Romania': { lat: 46, lon: 25, flag: '🇷🇴' },
+  'Vietnam': { lat: 16, lon: 106, flag: '🇻🇳' }, 'Nigeria': { lat: 9, lon: 8, flag: '🇳🇬' },
+  'India': { lat: 22, lon: 79, flag: '🇮🇳' }, 'United Kingdom': { lat: 54, lon: -2, flag: '🇬🇧' },
+  'Germany': { lat: 51, lon: 10, flag: '🇩🇪' }, 'Ukraine': { lat: 49, lon: 32, flag: '🇺🇦' },
+  'Egypt': { lat: 27, lon: 30, flag: '🇪🇬' }, 'Australia': { lat: -25, lon: 133, flag: '🇦🇺' },
+  'Japan': { lat: 36, lon: 138, flag: '🇯🇵' }, 'South Korea': { lat: 36, lon: 128, flag: '🇰🇷' },
+  'Singapore': { lat: 1.3, lon: 103.8, flag: '🇸🇬' }, 'UAE': { lat: 24, lon: 54, flag: '🇦🇪' },
+  'France': { lat: 47, lon: 2, flag: '🇫🇷' }, 'Italy': { lat: 42, lon: 12, flag: '🇮🇹' },
+  'Spain': { lat: 40, lon: -4, flag: '🇪🇸' }, 'Turkey': { lat: 39, lon: 35, flag: '🇹🇷' },
+  'Pakistan': { lat: 30, lon: 70, flag: '🇵🇰' }, 'Indonesia': { lat: -2, lon: 118, flag: '🇮🇩' },
+  'Mexico': { lat: 23, lon: -102, flag: '🇲🇽' }, 'Canada': { lat: 56, lon: -106, flag: '🇨🇦' },
+  'Poland': { lat: 52, lon: 19, flag: '🇵🇱' }, 'Belarus': { lat: 53, lon: 28, flag: '🇧🇾' },
 }
 
-const isLand = (lon: number, lat: number) => LAND.some((p) => pointInPoly(lon, lat, p))
+/* A point representing the monitored environment — arcs converge here so the
+   map reads as "origins -> what we observed", not a claim about geography. */
+const HOME = project(15, 30)
 
-type RegionStat = {
-  id: string; name: string; count: number
-  lonRange: [number, number]; latRange: [number, number]
-  color: string; dotOpacity: number
+type Origin = GeoCountry & { x: number; y: number; flag: string; sev: 'critical' | 'high' | 'medium' }
+
+const SEV_COLOR = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E' } as const
+
+function severityOf(c: GeoCountry): 'critical' | 'high' | 'medium' {
+  if (c.critical > 0) return 'critical'
+  if (c.high > 0) return 'high'
+  return 'medium'
 }
 
-const REGION_STATS: RegionStat[] = [
-  { id: 'as', name: 'Asia',          count: 94318, lonRange: [65,  170], latRange: [0,   77], color: '#FF2E97', dotOpacity: 0.75 },
-  { id: 'eu', name: 'Europe',        count: 61429, lonRange: [-12, 40],  latRange: [36,  72], color: '#7A3CFF', dotOpacity: 0.65 },
-  { id: 'na', name: 'North America', count: 48231, lonRange: [-170,-50], latRange: [15,  80], color: '#FF4D6D', dotOpacity: 0.55 },
-  { id: 'me', name: 'Middle East',   count: 19872, lonRange: [30,  65],  latRange: [10,  40], color: '#FFB23E', dotOpacity: 0.45 },
-  { id: 'sa', name: 'South America', count: 12847, lonRange: [-82, -34], latRange: [-56, 15], color: '#FF9B2E', dotOpacity: 0.35 },
-  { id: 'af', name: 'Africa',        count: 8394,  lonRange: [-18, 52],  latRange: [-36, 36], color: '#2DD4BF', dotOpacity: 0.30 },
-  { id: 'oc', name: 'Oceania',       count: 6127,  lonRange: [110, 180], latRange: [-50, 0],  color: '#34F5C5', dotOpacity: 0.25 },
-]
-
-const MAX_COUNT = Math.max(...REGION_STATS.map((r) => r.count))
-const REGION_PRIORITY = ['me', 'eu', 'na', 'sa', 'af', 'as', 'oc']
-const regionById = Object.fromEntries(REGION_STATS.map((r) => [r.id, r]))
-const HOVER_DRAW_ORDER = [...REGION_PRIORITY].reverse()
-
-function getRegion(lon: number, lat: number): RegionStat | null {
-  for (const id of REGION_PRIORITY) {
-    const r = regionById[id]
-    if (lon >= r.lonRange[0] && lon <= r.lonRange[1] && lat >= r.latRange[0] && lat <= r.latRange[1]) return r
-  }
-  return null
+function relTime(iso: string | null): string {
+  if (!iso) return '-'
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60); return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
 }
-
-/* ── Per-country stats ───────────────────────────────────────────── */
-type CountryStat = {
-  country: string
-  flag: string
-  attacks: number
-  topTypes: string[]
-  topTargets: string[]
-  knownActors: string[]
-  color: string
-}
-
-const COUNTRY_STATS: Record<string, CountryStat> = {
-  'Russia':       { country: 'Russia',        flag: '🇷🇺', attacks: 42817, topTypes: ['Ransomware', 'APT', 'Phishing', 'C2'], topTargets: ['Finance', 'Government', 'Energy'], knownActors: ['Sandworm', 'APT29', 'LockBit'], color: '#FF2E97' },
-  'China':        { country: 'China',         flag: '🇨🇳', attacks: 38924, topTypes: ['APT', 'Espionage', 'Supply Chain'], topTargets: ['Defense', 'Technology', 'IP Theft'], knownActors: ['APT41', 'Volt Typhoon', 'Salt Typhoon'], color: '#FF4D6D' },
-  'North Korea':  { country: 'North Korea',   flag: '🇰🇵', attacks: 18472, topTypes: ['Cryptocurrency', 'Supply Chain', 'APT'], topTargets: ['Finance', 'Crypto', 'Defense'], knownActors: ['Lazarus', 'Kimsuky', 'UNC4736'], color: '#FF2E97' },
-  'Iran':         { country: 'Iran',          flag: '🇮🇷', attacks: 15834, topTypes: ['Wiper', 'DoS', 'Espionage'], topTargets: ['Israel', 'US Gov', 'Critical Infra'], knownActors: ['APT33', 'OilRig', 'Charming Kitten'], color: '#FFB23E' },
-  'United States':{ country: 'United States', flag: '🇺🇸', attacks: 12847, topTypes: ['Ransomware', 'BEC', 'Phishing'], topTargets: ['Healthcare', 'Finance', 'Education'], knownActors: ['FIN7', 'Scattered Spider', 'TA505'], color: '#FF4D6D' },
-  'Brazil':       { country: 'Brazil',        flag: '🇧🇷', attacks: 7241,  topTypes: ['Banking Trojan', 'Phishing', 'Credential'], topTargets: ['Banking', 'Retail', 'Telecom'], knownActors: ['Guildma', 'Prilex', 'BrasDex'], color: '#2DD4BF' },
-  'United Kingdom': { country: 'United Kingdom', flag: '🇬🇧', attacks: 9832, topTypes: ['Phishing', 'Ransomware', 'BEC'], topTargets: ['Finance', 'NHS', 'Government'], knownActors: ['Clop', 'LockBit', 'BlackBasta'], color: '#7A3CFF' },
-  'Germany':      { country: 'Germany',       flag: '🇩🇪', attacks: 6918,  topTypes: ['Espionage', 'Ransomware', 'Phishing'], topTargets: ['Auto', 'Pharma', 'Government'], knownActors: ['APT28', 'Fancy Bear'], color: '#2DD4BF' },
-  'India':        { country: 'India',         flag: '🇮🇳', attacks: 8441,  topTypes: ['Phishing', 'Credential', 'Mobile Malware'], topTargets: ['BFSI', 'Telecom', 'Government'], knownActors: ['SideWinder', 'APT-C-35'], color: '#FFB23E' },
-  'Japan':        { country: 'Japan',         flag: '🇯🇵', attacks: 5234,  topTypes: ['Supply Chain', 'Espionage', 'APT'], topTargets: ['Defense', 'Technology', 'Manufacturing'], knownActors: ['APT10', 'Tick'], color: '#FFB23E' },
-  'South Korea':  { country: 'South Korea',   flag: '🇰🇷', attacks: 4891,  topTypes: ['APT', 'Ransomware', 'Phishing'], topTargets: ['Defense', 'Crypto', 'Government'], knownActors: ['Lazarus', 'Kimsuky'], color: '#2DD4BF' },
-  'Singapore':    { country: 'Singapore',     flag: '🇸🇬', attacks: 3127,  topTypes: ['Phishing', 'BEC', 'Credential'], topTargets: ['Finance', 'Shipping', 'Technology'], knownActors: ['APT40', 'UNC1945'], color: '#7A3CFF' },
-  'Australia':    { country: 'Australia',     flag: '🇦🇺', attacks: 4218,  topTypes: ['Ransomware', 'Phishing', 'Credential'], topTargets: ['Healthcare', 'Education', 'Government'], knownActors: ['LockBit', 'BlackCat'], color: '#7A3CFF' },
-  'Dubai':        { country: 'UAE',           flag: '🇦🇪', attacks: 3847,  topTypes: ['BEC', 'Phishing', 'Spyware'], topTargets: ['Finance', 'Government', 'Energy'], knownActors: ['APT-C-37', 'Dark River'], color: '#7A3CFF' },
-  'Cairo':        { country: 'Egypt',         flag: '🇪🇬', attacks: 2891,  topTypes: ['Phishing', 'Mobile Malware', 'RAT'], topTargets: ['Government', 'Telecom', 'Banking'], knownActors: ['APT-C-37', 'Charming Kitten'], color: '#FFB23E' },
-  'Lagos':        { country: 'Nigeria',       flag: '🇳🇬', attacks: 5124,  topTypes: ['BEC', 'Advance Fee', 'Phishing'], topTargets: ['Finance', 'HR', 'Executives'], knownActors: ['SilverTerrier', 'BEC crews'], color: '#FFB23E' },
-  'Tehran':       { country: 'Iran',          flag: '🇮🇷', attacks: 15834, topTypes: ['Wiper', 'DoS', 'Espionage'], topTargets: ['Israel', 'US Gov', 'Critical Infra'], knownActors: ['APT33', 'OilRig'], color: '#FFB23E' },
-  'Beijing':      { country: 'China',         flag: '🇨🇳', attacks: 38924, topTypes: ['APT', 'Espionage', 'Supply Chain'], topTargets: ['Defense', 'Technology', 'IP Theft'], knownActors: ['APT41', 'Volt Typhoon'], color: '#FF4D6D' },
-  'Moscow':       { country: 'Russia',        flag: '🇷🇺', attacks: 42817, topTypes: ['Ransomware', 'APT', 'Phishing'], topTargets: ['Finance', 'Government', 'Energy'], knownActors: ['Sandworm', 'APT29'], color: '#FF2E97' },
-  'Kyiv':         { country: 'Ukraine',       flag: '🇺🇦', attacks: 8244,  topTypes: ['Wiper', 'DDoS', 'Espionage'], topTargets: ['Government', 'Military', 'Critical Infra'], knownActors: ['UAC-0056', 'Sandworm targets'], color: '#FF4D6D' },
-  'New York':     { country: 'United States', flag: '🇺🇸', attacks: 12847, topTypes: ['Ransomware', 'BEC', 'Phishing'], topTargets: ['Finance', 'Healthcare', 'Education'], knownActors: ['FIN7', 'Scattered Spider'], color: '#FF4D6D' },
-  'Washington':   { country: 'United States', flag: '🇺🇸', attacks: 12847, topTypes: ['APT', 'Espionage', 'Phishing'], topTargets: ['Government', 'Defense', 'Think Tanks'], knownActors: ['APT29', 'APT28', 'Lazarus'], color: '#FF4D6D' },
-  'Los Angeles':  { country: 'United States', flag: '🇺🇸', attacks: 12847, topTypes: ['Ransomware', 'BEC', 'Credential'], topTargets: ['Entertainment', 'Healthcare', 'Tech'], knownActors: ['Scattered Spider', 'LockBit'], color: '#FF4D6D' },
-  'São Paulo':    { country: 'Brazil',        flag: '🇧🇷', attacks: 7241,  topTypes: ['Banking Trojan', 'Phishing', 'Credential'], topTargets: ['Banking', 'Retail', 'Telecom'], knownActors: ['Guildma', 'BrasDex'], color: '#2DD4BF' },
-  'Mumbai':       { country: 'India',         flag: '🇮🇳', attacks: 8441,  topTypes: ['Phishing', 'Mobile Malware', 'BEC'], topTargets: ['Banking', 'IT Sector', 'Telecom'], knownActors: ['SideWinder', 'APT-C-35'], color: '#FFB23E' },
-  'London':       { country: 'United Kingdom', flag: '🇬🇧', attacks: 9832, topTypes: ['Phishing', 'Ransomware', 'BEC'], topTargets: ['Finance', 'NHS', 'Government'], knownActors: ['Clop', 'LockBit'], color: '#7A3CFF' },
-  'Berlin':       { country: 'Germany',       flag: '🇩🇪', attacks: 6918,  topTypes: ['Espionage', 'Ransomware', 'APT'], topTargets: ['Auto Industry', 'Gov', 'Pharma'], knownActors: ['APT28', 'Wizard Spider'], color: '#2DD4BF' },
-  'Seoul':        { country: 'South Korea',   flag: '🇰🇷', attacks: 4891,  topTypes: ['APT', 'Ransomware', 'Phishing'], topTargets: ['Defense', 'Crypto', 'Telco'], knownActors: ['Lazarus', 'Kimsuky'], color: '#2DD4BF' },
-  'Tokyo':        { country: 'Japan',         flag: '🇯🇵', attacks: 5234,  topTypes: ['Supply Chain', 'APT', 'Espionage'], topTargets: ['Defense', 'Manufacturing', 'Finance'], knownActors: ['APT10', 'Bronze Butler'], color: '#FFB23E' },
-  'Sydney':       { country: 'Australia',     flag: '🇦🇺', attacks: 4218,  topTypes: ['Ransomware', 'Phishing', 'Credential'], topTargets: ['Healthcare', 'Education', 'Gov'], knownActors: ['LockBit', 'BlackCat'], color: '#7A3CFF' },
-}
-
-type City = { name: string; lat: number; lon: number; color: string; intensity: number }
-const CITIES: City[] = [
-  { name: 'New York',    lat: 40.7,  lon: -74.0,  color: '#FF4D6D', intensity: 1.0  },
-  { name: 'Washington',  lat: 38.9,  lon: -77.0,  color: '#FF2E97', intensity: 0.9  },
-  { name: 'Los Angeles', lat: 34.0,  lon: -118.2, color: '#FFB23E', intensity: 0.8  },
-  { name: 'São Paulo',   lat: -23.5, lon: -46.6,  color: '#2DD4BF', intensity: 0.6  },
-  { name: 'London',      lat: 51.5,  lon: -0.1,   color: '#7A3CFF', intensity: 0.95 },
-  { name: 'Berlin',      lat: 52.5,  lon: 13.4,   color: '#2DD4BF', intensity: 0.7  },
-  { name: 'Kyiv',        lat: 50.5,  lon: 30.5,   color: '#FF4D6D', intensity: 0.75 },
-  { name: 'Moscow',      lat: 55.75, lon: 37.6,   color: '#FF2E97', intensity: 1.0  },
-  { name: 'Lagos',       lat: 6.5,   lon: 3.4,    color: '#FFB23E', intensity: 0.65 },
-  { name: 'Cairo',       lat: 30.0,  lon: 31.2,   color: '#FFB23E', intensity: 0.7  },
-  { name: 'Tehran',      lat: 35.7,  lon: 51.4,   color: '#FF4D6D', intensity: 0.8  },
-  { name: 'Dubai',       lat: 25.2,  lon: 55.3,   color: '#7A3CFF', intensity: 0.7  },
-  { name: 'Mumbai',      lat: 19.0,  lon: 72.8,   color: '#FFB23E', intensity: 0.75 },
-  { name: 'Singapore',   lat: 1.35,  lon: 103.8,  color: '#7A3CFF', intensity: 0.7  },
-  { name: 'Beijing',     lat: 39.9,  lon: 116.4,  color: '#FF2E97', intensity: 0.95 },
-  { name: 'Seoul',       lat: 37.6,  lon: 126.9,  color: '#2DD4BF', intensity: 0.7  },
-  { name: 'Tokyo',       lat: 35.7,  lon: 139.7,  color: '#FFB23E', intensity: 0.85 },
-  { name: 'Sydney',      lat: -33.9, lon: 151.2,  color: '#7A3CFF', intensity: 0.55 },
-]
-
-/* Severity → color, matching the platform-wide severity palette. */
-const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
-}
-
-/* Fallback attack routes used until (or instead of) the live feed. */
-type AttackRoute = { from: string; to: string; severity: string; label: string }
-const FALLBACK_ROUTES: AttackRoute[] = [
-  { from: 'Moscow',    to: 'New York',    severity: 'critical', label: 'Ransomware C2 beacon' },
-  { from: 'Beijing',   to: 'Washington',  severity: 'high',     label: 'APT espionage attempt' },
-  { from: 'Tehran',    to: 'London',      severity: 'medium',   label: 'Credential phishing wave' },
-  { from: 'Moscow',    to: 'Berlin',      severity: 'critical', label: 'Wiper staging' },
-  { from: 'Beijing',   to: 'Tokyo',       severity: 'high',     label: 'Supply-chain probe' },
-  { from: 'Singapore', to: 'Sydney',      severity: 'low',      label: 'Scanner sweep' },
-  { from: 'Lagos',     to: 'London',      severity: 'medium',   label: 'BEC campaign' },
-  { from: 'Tehran',    to: 'Dubai',       severity: 'high',     label: 'Spyware delivery' },
-  { from: 'Beijing',   to: 'Mumbai',      severity: 'medium',   label: 'Mobile malware push' },
-  { from: 'Moscow',    to: 'Kyiv',        severity: 'critical', label: 'DDoS burst' },
-  { from: 'São Paulo', to: 'New York',    severity: 'low',      label: 'Banking trojan relay' },
-  { from: 'Seoul',     to: 'Los Angeles', severity: 'medium',   label: 'Credential stuffing' },
-]
-
-const cityMap = Object.fromEntries(CITIES.map((c) => [c.name, c]))
-
-/* Deterministic city pick from any string — used to geolocate feed entries. */
-function hashCity(seed: string, exclude?: string): City {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  let city = CITIES[h % CITIES.length]
-  if (exclude && city.name === exclude) city = CITIES[(h + 7) % CITIES.length]
-  return city
-}
-
-/* A live arc currently animating on the map. */
-type LiveArc = { key: number; from: string; to: string; color: string; label: string }
 
 function arcPath(x1: number, y1: number, x2: number, y2: number): string {
   const mx = (x1 + x2) / 2
-  const my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.28
+  const my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.32
   return `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`
 }
 
-const SORTED_BY_COUNT = [...REGION_STATS].sort((a, b) => b.count - a.count)
-
-/* ── Tooltip component (rendered in HTML overlay, not SVG) ─────── */
-function CountryTooltip({
-  city,
-  screenX,
-  screenY,
-  containerW,
-  containerH,
-  pinned,
-  onClose,
-  observed,
-}: {
-  city: string
-  screenX: number
-  screenY: number
-  containerW: number
-  containerH: number
-  pinned?: boolean
-  onClose?: () => void
-  observed?: number | null
-}) {
-  const data = COUNTRY_STATS[city]
-  if (!data) return null
-
-  // Keep tooltip inside container
-  const tooltipW = 220
-  const tooltipH = 160
-  let left = screenX + 12
-  let top = screenY - tooltipH / 2
-  if (left + tooltipW > containerW - 8) left = screenX - tooltipW - 12
-  if (top < 8) top = 8
-  if (top + tooltipH > containerH - 8) top = containerH - tooltipH - 8
-
-  return (
-    <div
-      className={cn('absolute z-50', pinned ? 'pointer-events-auto' : 'pointer-events-none')}
-      style={{ left, top, width: tooltipW }}
-    >
-      <div
-        className="rounded-xl border p-3 text-xs shadow-2xl"
-        style={{
-          background: 'rgb(var(--surface) / 0.96)',
-          borderColor: data.color + '44',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-base">{data.flag}</span>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-white">{data.country}</p>
-            <p style={{ color: data.color }} className="text-[10px] font-mono font-bold">
-              {observed != null
-                ? (observed > 0 ? `${observed.toLocaleString()} observed alerts · origin`
-                                : 'no activity observed from here')
-                : 'threat landscape reference'}
-            </p>
-          </div>
-          {pinned && (
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="p-1 -m-1 rounded text-ink-500 hover:text-white transition-colors shrink-0"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {/* Top attack types */}
-        <div className="mb-2">
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Typical Attack Types · reference</p>
-          <div className="flex flex-wrap gap-1">
-            {data.topTypes.slice(0, 3).map(t => (
-              <span key={t} className="text-[9px] px-1.5 py-0.5 rounded"
-                style={{ background: data.color + '22', color: data.color, border: `1px solid ${data.color}33` }}>
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Primary targets */}
-        <div className="mb-2">
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Primary Targets · reference</p>
-          <p className="text-[10px] text-slate-300">{data.topTargets.join(', ')}</p>
-        </div>
-
-        {/* Known actors */}
-        <div>
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Known Actors · reference</p>
-          <p className="text-[10px] text-slate-300">{data.knownActors.join(' · ')}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* Top origin countries by attack volume — deduped from COUNTRY_STATS by country. */
-const TOP_COUNTRIES = (() => {
-  const seen = new Set<string>()
-  const list: CountryStat[] = []
-  for (const key of Object.keys(COUNTRY_STATS)) {
-    const c = COUNTRY_STATS[key]
-    if (seen.has(c.country)) continue
-    seen.add(c.country)
-    list.push(c)
-  }
-  return list.sort((a, b) => b.attacks - a.attacks).slice(0, 8)
-})()
-
+/**
+ * Live attack origins map. Every marker is a country the platform has REALLY
+ * observed attacks from (/overview/geo, derived from alerts.src_country) -
+ * sized by observed volume, coloured by its worst severity. Hovering a marker
+ * or a row in the ranked panel highlights both and shows the detail. No
+ * hardcoded "attack" numbers; an honest empty state when nothing is observed.
+ */
 export default function WorldMap() {
-  const [view, setView] = useState<'continents' | 'countries'>('continents')
-  const [hoveredRegion, setHoveredRegion] = useState<RegionStat | null>(null)
-  const [hoveredCity, setHoveredCity] = useState<string | null>(null)
-  const [pinnedCity, setPinnedCity] = useState<string | null>(null)
-  const [cityTooltipPos, setCityTooltipPos] = useState({ x: 0, y: 0 })
-  const svgRef = useRef<SVGSVGElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const clearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cityLeaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  /* ── Live attack stream ─────────────────────────────────────────
-     Real IOC events from /overview/live-feed drive the arcs and the
-     ticker; the bundled routes take over when the API is offline. */
-  const [feed, setFeed] = useState<LiveFeedItem[]>([])
-  const [arcs, setArcs] = useState<LiveArc[]>([])
-  const [ticker, setTicker] = useState<Array<{ key: number; color: string; text: string }>>([])
-  const [attackCount, setAttackCount] = useState(0)
-  const seqRef = useRef(0)
+  const [geo, setGeo] = useState<{ countries: GeoCountry[]; totalGeolocated: number } | null>(null)
+  const [hover, setHover] = useState<string | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetchLiveFeed(20).then(setFeed).catch(() => {})
-    fetchGeo(20).then((g) => setGeo(g.countries)).catch(() => {})
-  }, [])
-
-  /* ── Real observed origins (the platform's own measurement) ────────
-     /overview/geo aggregates alerts.src_country. When present these REPLACE
-     the static reference tallies: leaderboard, region hover counts, and the
-     country tooltip's count all show what THIS deployment actually observed. */
-  const [geo, setGeo] = useState<GeoCountry[]>([])
-  const geoByCountry = useMemo(
-    () => Object.fromEntries(geo.map((g) => [g.country, g])), [geo])
-  const regionObserved = useMemo(() => {
-    if (geo.length === 0) return null
-    const acc: Record<string, number> = {}
-    for (const g of geo) {
-      const rid = COUNTRY_REGION[g.country]
-      if (rid) acc[rid] = (acc[rid] ?? 0) + g.observed
-    }
-    return acc
-  }, [geo])
-  const topCountries = useMemo(() => {
-    if (geo.length === 0) return TOP_COUNTRIES.map((c) => ({ ...c, live: false }))
-    return geo.slice(0, 8).map((g) => {
-      const ref = Object.values(COUNTRY_STATS).find((c) => c.country === g.country)
-      return { country: g.country, flag: ref?.flag ?? '🌐', attacks: g.observed,
-               color: ref?.color ?? '#7A3CFF', live: true }
-    })
-  }, [geo])
-  const topMax = Math.max(1, ...topCountries.map((c) => c.attacks))
-  const fmtCount = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-
-  useEffect(() => {
-    const launch = () => {
-      const key = ++seqRef.current
-      let arc: LiveArc
-      let text: string
-      if (feed.length > 0) {
-        const item = feed[key % feed.length]
-        const from = hashCity(item.ip ?? String(key))
-        const to = hashCity(item.detail ?? item.id ?? String(key * 7), from.name)
-        const color = SEV_COLOR[item.severity] ?? '#7A3CFF'
-        arc = { key, from: from.name, to: to.name, color, label: item.detail ?? item.type }
-        text = `${item.ip} · ${item.detail ?? item.type}`
-      } else {
-        const r = FALLBACK_ROUTES[key % FALLBACK_ROUTES.length]
-        arc = { key, from: r.from, to: r.to, color: SEV_COLOR[r.severity], label: r.label }
-        text = `${r.from} → ${r.to} · ${r.label}`
-      }
-      setArcs((prev) => [...prev.slice(-6), arc])
-      setTicker((prev) => [{ key, color: arc.color, text }, ...prev].slice(0, 3))
-      setAttackCount((c) => c + 1)
-      // retire the arc after its flight completes
-      setTimeout(() => setArcs((prev) => prev.filter((a) => a.key !== key)), 4200)
-    }
-    launch()
-    const t = setInterval(launch, 2100)
+    const load = () => fetchGeo(20).then(setGeo).catch(() => {})
+    load()
+    const t = setInterval(load, 20000) // live refresh
     return () => clearInterval(t)
-  }, [feed])
-
-  function enterRegion(r: RegionStat) {
-    if (clearRef.current) clearTimeout(clearRef.current)
-    setHoveredRegion(r)
-  }
-  function scheduleLeave() {
-    clearRef.current = setTimeout(() => setHoveredRegion(null), 80)
-  }
-
-  // Convert SVG coords to container-relative pixels
-  function svgToScreen(svgX: number, svgY: number): { x: number; y: number } {
-    const svg = svgRef.current
-    const container = containerRef.current
-    if (!svg || !container) return { x: svgX, y: svgY }
-    const vb = svg.viewBox.baseVal
-    const rect = svg.getBoundingClientRect()
-    const cRect = container.getBoundingClientRect()
-    const scaleX = rect.width / vb.width
-    const scaleY = rect.height / vb.height
-    return {
-      x: (svgX - vb.x) * scaleX + (rect.left - cRect.left),
-      y: (svgY - vb.y) * scaleY + (rect.top - cRect.top),
-    }
-  }
-
-  function enterCity(name: string, cx: number, cy: number) {
-    if (cityLeaveRef.current) clearTimeout(cityLeaveRef.current)
-    const pos = svgToScreen(cx, cy)
-    setCityTooltipPos(pos)
-    setHoveredCity(name)
-  }
-
-  function leaveCitySchedule() {
-    cityLeaveRef.current = setTimeout(() => setHoveredCity(null), 120)
-  }
-
-  // Touch handler for mobile
-  const handleTouchCity = useCallback((name: string, cx: number, cy: number, e: React.TouchEvent) => {
-    e.preventDefault()
-    if (hoveredCity === name) {
-      setHoveredCity(null)
-    } else {
-      const pos = svgToScreen(cx, cy)
-      setCityTooltipPos(pos)
-      setHoveredCity(name)
-    }
-  }, [hoveredCity])
-
-  const dots = useMemo(() => {
-    const out: { x: number; y: number; regionId: string | null; color: string; baseOpacity: number }[] = []
-    for (let lat = 78; lat >= -56; lat -= 3) {
-      for (let lon = -178; lon <= 180; lon += 2.5) {
-        if (isLand(lon, lat)) {
-          const [x, y] = project(lon, lat)
-          const region = getRegion(lon, lat)
-          out.push({
-            x, y,
-            regionId: region?.id ?? null,
-            color: region?.color ?? '#3A2E63',
-            baseOpacity: region?.dotOpacity ?? 0.18,
-          })
-        }
-      }
-    }
-    return out
   }, [])
 
-  const containerW = containerRef.current?.getBoundingClientRect().width ?? 400
-  const containerH = containerRef.current?.getBoundingClientRect().height ?? 220
+  const origins = useMemo<Origin[]>(() => {
+    if (!geo) return []
+    return geo.countries
+      .filter((c) => COUNTRY[c.country])
+      .map((c) => {
+        const { lat, lon, flag } = COUNTRY[c.country]
+        const [x, y] = project(lon, lat)
+        return { ...c, x, y, flag, sev: severityOf(c) }
+      })
+  }, [geo])
+
+  const maxObs = Math.max(1, ...origins.map((o) => o.observed))
+  const topArcs = origins.slice(0, 6)
+  const active = hover ? origins.find((o) => o.country === hover) ?? null : null
+  const totalObserved = geo?.totalGeolocated ?? 0
+
+  /* radius scales with sqrt(volume) so large origins don't swamp the map */
+  const radius = (obs: number) => 1.6 + Math.sqrt(obs / maxObs) * 3.6
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-[#070512] rounded-xl overflow-hidden border border-white/5">
-      {/* Grid */}
-      <div
-        className="absolute inset-0 opacity-[0.12]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(122,60,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(122,60,255,0.4) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-        }}
-      />
-
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className="absolute inset-0 w-full h-full"
-        preserveAspectRatio="xMidYMid meet"
-        onMouseLeave={scheduleLeave}
-      >
-        <defs>
-          <filter id="wm-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="0.6" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="city-glow" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="1.5" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-
-        {/* Land dots */}
-        {dots.map((d, i) => {
-          const isHov = hoveredRegion !== null && d.regionId === hoveredRegion.id
-          return <circle key={i} cx={d.x} cy={d.y} r={0.62} fill={d.color} opacity={isHov ? Math.min(d.baseOpacity + 0.22, 0.97) : d.baseOpacity} />
-        })}
-
-        {/* Live attack arcs: comet travels the arc, target gets an impact ripple */}
-        {arcs.map((a) => {
-          const s = cityMap[a.from]; const t = cityMap[a.to]
-          if (!s || !t) return null
-          const [x1, y1] = project(s.lon, s.lat)
-          const [x2, y2] = project(t.lon, t.lat)
-          const d = arcPath(x1, y1, x2, y2)
-          const pid = `wm-arc-${a.key}`
-          return (
-            <g key={a.key}>
-              <path
-                id={pid} d={d}
-                fill="none" stroke={a.color} strokeWidth={0.5} strokeLinecap="round"
-                strokeDasharray="3 2.2"
-                style={{ animation: 'wmArcFade 4s ease-in-out forwards', filter: 'url(#wm-glow)' }}
-              />
-              {/* Comet head */}
-              <circle r={1.1} fill="#fff" filter="url(#city-glow)">
-                <animateMotion dur="2.6s" begin="0s" fill="freeze" keyPoints="0;1" keyTimes="0;1"
-                  calcMode="spline" keySplines="0.3 0 0.4 1">
-                  <mpath href={`#${pid}`} />
-                </animateMotion>
-                <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" dur="2.6s" fill="freeze" />
-                <animate attributeName="fill" values={`#fff;${a.color}`} dur="2.6s" fill="freeze" />
-              </circle>
-              {/* Impact ripple at the target */}
-              <circle cx={x2} cy={y2} r={1} fill="none" stroke={a.color} strokeWidth={0.5} opacity={0}>
-                <animate attributeName="r" values="0.8;5.5" begin="2.5s" dur="1.2s" fill="freeze" />
-                <animate attributeName="opacity" values="0;0.9;0" keyTimes="0;0.15;1" begin="2.5s" dur="1.2s" fill="freeze" />
-              </circle>
-              <circle cx={x2} cy={y2} r={1.1} fill={a.color} opacity={0}>
-                <animate attributeName="opacity" values="0;1;0" begin="2.5s" dur="1.1s" fill="freeze" />
-              </circle>
-            </g>
-          )
-        })}
-
-        {/* City nodes — hover previews, click pins the tooltip */}
-        {CITIES.map((c) => {
-          const [cx, cy] = project(c.lon, c.lat)
-          const isPinned = pinnedCity === c.name
-          const isHov = hoveredCity === c.name || isPinned
-          const hasData = !!COUNTRY_STATS[c.name]
-          return (
-            <g
-              key={c.name}
-              style={{ cursor: hasData ? 'pointer' : 'default' }}
-              onMouseEnter={() => hasData && enterCity(c.name, cx, cy)}
-              onMouseLeave={() => { if (!isPinned) leaveCitySchedule() }}
-              onClick={() => {
-                if (!hasData) return
-                if (isPinned) { setPinnedCity(null); setHoveredCity(null) }
-                else { const pos = svgToScreen(cx, cy); setCityTooltipPos(pos); setPinnedCity(c.name); setHoveredCity(c.name) }
-              }}
-              onTouchStart={(e) => hasData && handleTouchCity(c.name, cx, cy, e)}
-            >
-              {/* Invisible tap target (larger area for mobile) */}
-              <circle cx={cx} cy={cy} r={5} fill="rgba(0,0,0,0)" />
-              {/* Pulse ring */}
-              <circle cx={cx} cy={cy} r={isHov ? 3.5 : 2.2} fill="none" stroke={c.color}
-                strokeWidth={isHov ? 0.6 : 0.35} opacity={isHov ? 0.8 : 0.4}
-                style={{ animation: `wmPulse 2.6s ease-out infinite ${(c.lon + 180) / 90}s`, transition: 'r 0.2s, opacity 0.2s' }}
-              />
-              {/* City dot */}
-              <circle
-                cx={cx} cy={cy}
-                r={isHov ? 1.6 : 0.95}
-                fill={c.color}
-                opacity={isHov ? 1 : c.intensity}
-                filter={isHov ? 'url(#city-glow)' : 'url(#wm-glow)'}
-                style={{ transition: 'r 0.15s' }}
-              />
-              {/* City name chip on hover */}
-              {isHov && (
-                <g style={{ pointerEvents: 'none' }}>
-                  <rect
-                    x={cx - c.name.length * 1.45 - 3} y={cy - 10.5}
-                    width={c.name.length * 2.9 + 6} height={7.5} rx={3.75}
-                    fill="#100A1C" fillOpacity={0.95}
-                    stroke={c.color} strokeOpacity={0.55} strokeWidth={0.35}
-                  />
-                  <text
-                    x={cx} y={cy - 5.2}
-                    textAnchor="middle" fill="white"
-                    fontSize={4.2} fontWeight="600" fontFamily="system-ui,sans-serif"
-                  >
-                    {c.name}
-                  </text>
-                </g>
-              )}
-            </g>
-          )
-        })}
-
-        {/* Region hover rects (continents view only) */}
-        {view === 'continents' && HOVER_DRAW_ORDER.map((id) => {
-          const r = regionById[id]
-          const [x1, y1] = project(r.lonRange[0], r.latRange[1])
-          const [x2, y2] = project(r.lonRange[1], r.latRange[0])
-          return (
-            <rect
-              key={id}
-              x={x1} y={y1} width={x2 - x1} height={y2 - y1}
-              fill="rgba(0,0,0,0)"
-              style={{ pointerEvents: 'all', cursor: 'crosshair' }}
-              onMouseEnter={() => enterRegion(r)}
-              onMouseLeave={scheduleLeave}
-            />
-          )
-        })}
-
-        {/* Region tooltip (SVG) */}
-        {view === 'continents' && hoveredRegion && !hoveredCity && (() => {
-          const cx = (hoveredRegion.lonRange[0] + hoveredRegion.lonRange[1]) / 2 + 180
-          const cy = 90 - (hoveredRegion.latRange[0] + hoveredRegion.latRange[1]) / 2
-          const tx = Math.max(60, Math.min(W - 60, cx))
-          const ty = Math.max(24, Math.min(H - 22, cy - 18))
-          // Prefer the real observed roll-up; static reference only when no data.
-          const liveRegion = regionObserved !== null
-          const count = liveRegion ? (regionObserved[hoveredRegion.id] ?? 0) : hoveredRegion.count
-          const liveMax = liveRegion ? Math.max(1, ...Object.values(regionObserved)) : MAX_COUNT
-          const barW = 92 * (count / liveMax)
-          const rank = liveRegion
-            ? [...REGION_STATS].sort((a, b) => (regionObserved[b.id] ?? 0) - (regionObserved[a.id] ?? 0))
-                .findIndex((r) => r.id === hoveredRegion.id) + 1
-            : SORTED_BY_COUNT.findIndex((r) => r.id === hoveredRegion.id) + 1
-          return (
-            <g style={{ pointerEvents: 'none' }}>
-              <rect x={tx - 59} y={ty - 19} width={118} height={44} rx={5} fill="#000" opacity={0.4} />
-              <rect x={tx - 58} y={ty - 20} width={116} height={44} rx={4.5}
-                fill="#100A1C" fillOpacity={0.97} stroke={hoveredRegion.color} strokeOpacity={0.45} strokeWidth={0.65} />
-              <text x={tx} y={ty - 7} textAnchor="middle" fill="white"
-                fontSize={7} fontWeight="700" fontFamily="system-ui,sans-serif">
-                {hoveredRegion.name}
-              </text>
-              <text x={tx} y={ty + 4} textAnchor="middle" fill={hoveredRegion.color}
-                fontSize={5.5} fontFamily="system-ui,sans-serif">
-                {liveRegion
-                  ? `${count.toLocaleString()} observed alerts · #${rank} origin`
-                  : `${count.toLocaleString()} attacks · #${rank} most targeted`}
-              </text>
-              <rect x={tx - 46} y={ty + 9.5} width={92} height={2.5} rx={1.25} fill="rgba(255,255,255,0.1)" />
-              <rect x={tx - 46} y={ty + 9.5} width={barW} height={2.5} rx={1.25}
-                fill={hoveredRegion.color} opacity={0.85} />
-            </g>
-          )
-        })()}
-      </svg>
-
-      {/* Country tooltip (HTML overlay — richer, supports flex layout) */}
-      {(pinnedCity ?? hoveredCity) && COUNTRY_STATS[(pinnedCity ?? hoveredCity)!] && (
-        <CountryTooltip
-          city={(pinnedCity ?? hoveredCity)!}
-          screenX={cityTooltipPos.x}
-          screenY={cityTooltipPos.y}
-          containerW={containerRef.current?.clientWidth ?? 400}
-          containerH={containerRef.current?.clientHeight ?? 220}
-          pinned={!!pinnedCity}
-          onClose={() => { setPinnedCity(null); setHoveredCity(null) }}
-          observed={geo.length
-            ? (geoByCountry[COUNTRY_STATS[(pinnedCity ?? hoveredCity)!].country]?.observed ?? 0)
-            : null}
-        />
-      )}
-
-      <style>{`
-        @keyframes wmArcFade {
-          0%   { opacity: 0; }
-          12%  { opacity: 0.8; }
-          70%  { opacity: 0.55; }
-          100% { opacity: 0; }
-        }
-        @keyframes wmPulse {
-          0%   { r: 1; opacity: 0.7; }
-          100% { r: 4.5; opacity: 0; }
-        }
-        @keyframes wmTickerIn {
-          from { opacity: 0; transform: translateY(5px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
-      <div className="absolute top-3 left-3 pointer-events-none">
-        <div className="flex items-center gap-1.5 text-[10px] text-safe">
-          <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
-          Live Attack Map
-          <span className="font-mono text-ink-400 ml-1">{attackCount.toLocaleString()} this session</span>
+    <div className="glass border border-white/5 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-magenta/60" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-magenta" />
+          </span>
+          <h3 className="text-sm font-semibold text-white">Live Attack Origins</h3>
         </div>
+        <span className="text-[10px] text-ink-500">
+          <span className="font-mono text-ink-300">{totalObserved.toLocaleString()}</span> observed
+          {origins.length > 0 && <> · {origins.length} countries</>}
+        </span>
       </div>
 
-      {/* Live event ticker — the three most recent attacks */}
-      <div className="absolute bottom-3 left-3 space-y-1 pointer-events-none max-w-[58%]">
-        {ticker.map((t) => (
-          <div key={t.key}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface/85 border border-white/8 backdrop-blur-sm"
-            style={{ animation: 'wmTickerIn 0.3s ease-out' }}>
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.color }} />
-            <span className="text-[9px] font-mono text-ink-300 truncate">{t.text}</span>
-          </div>
-        ))}
-      </div>
+      <div className="grid lg:grid-cols-[1.55fr_1fr]">
+        {/* ── Map ── */}
+        <div ref={wrapRef} className="relative border-b lg:border-b-0 lg:border-r border-white/5">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full block" style={{ aspectRatio: '2 / 1' }}>
+            <defs>
+              <radialGradient id="wm-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#FF2E97" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="#FF2E97" stopOpacity="0" />
+              </radialGradient>
+            </defs>
 
-      {/* View toggle: Continents (hover regions) ↔ Top Countries leaderboard */}
-      <div className="absolute top-2.5 right-2.5 flex items-center p-0.5 rounded-lg bg-surface-2/90 border border-white/10 backdrop-blur-sm z-20">
-        {(['continents', 'countries'] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            aria-pressed={view === v}
-            className={cn(
-              'px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
-              view === v ? 'bg-magenta/15 text-magenta border border-magenta/30' : 'text-ink-500 hover:text-ink-200 border border-transparent',
-            )}
-          >
-            {v === 'continents' ? 'Continents' : 'Top Countries'}
-          </button>
-        ))}
-      </div>
-
-      {/* Top-countries leaderboard */}
-      {view === 'countries' && (
-        <div className="absolute top-12 right-2.5 w-52 max-w-[60%] rounded-xl border border-white/10 bg-surface/95 backdrop-blur-md p-3 z-10 shadow-2xl">
-          <p className="text-[9px] uppercase tracking-widest text-ink-500 font-semibold mb-2">
-            {geo.length > 0 ? 'Observed attack origins' : 'Top attack origins'}
-          </p>
-          <div className="space-y-2">
-            {topCountries.map((c, i) => (
-              <div key={c.country} className="flex items-center gap-2">
-                <span className="text-[10px] text-ink-600 w-3 shrink-0">{i + 1}</span>
-                <span className="text-sm shrink-0">{c.flag}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-ink-200 truncate">{c.country}</span>
-                    <span className="text-[10px] font-mono shrink-0" style={{ color: c.color }}>
-                      {fmtCount(c.attacks)}
-                    </span>
-                  </div>
-                  <div className="h-1 mt-0.5 rounded-full bg-white/8 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${(c.attacks / topMax) * 100}%`, background: c.color }} />
-                  </div>
-                </div>
-              </div>
+            {/* subtle grid */}
+            {[30, 60, 90, 120, 150].map((x) => (
+              <line key={`v${x}`} x1={x} y1={0} x2={x} y2={H} stroke="rgba(255,255,255,0.03)" strokeWidth={0.3} />
             ))}
-          </div>
-          {geo.length > 0 && (
-            <p className="text-[8px] text-ink-700 mt-2">From this deployment&apos;s alert telemetry</p>
+            {[45, 90, 135].map((y) => (
+              <line key={`h${y}`} x1={0} y1={y} x2={W} y2={y} stroke="rgba(255,255,255,0.03)" strokeWidth={0.3} />
+            ))}
+
+            {/* land */}
+            {LAND_PATHS.map((d, i) => (
+              <path key={i} d={d} fill="rgba(122,60,255,0.06)" stroke="rgba(255,255,255,0.10)" strokeWidth={0.4} />
+            ))}
+
+            {/* converge node */}
+            <circle cx={HOME[0]} cy={HOME[1]} r={1.4} fill="#34F5C5" opacity={0.7} />
+            <circle cx={HOME[0]} cy={HOME[1]} r={3} fill="none" stroke="#34F5C5" strokeWidth={0.3} opacity={0.4}>
+              <animate attributeName="r" values="2;6;2" dur="3s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0;0.5" dur="3s" repeatCount="indefinite" />
+            </circle>
+
+            {/* live arcs from top origins -> converge node */}
+            {topArcs.map((o) => {
+              const isActive = active?.country === o.country
+              const c = SEV_COLOR[o.sev]
+              return (
+                <path
+                  key={`arc-${o.country}`}
+                  d={arcPath(o.x, o.y, HOME[0], HOME[1])}
+                  fill="none"
+                  stroke={c}
+                  strokeWidth={isActive ? 0.8 : 0.45}
+                  strokeOpacity={hover && !isActive ? 0.12 : 0.4}
+                  strokeDasharray="2 4"
+                  style={{ transition: 'stroke-opacity .25s, stroke-width .25s' }}
+                >
+                  <animate attributeName="stroke-dashoffset" from="6" to="0" dur="1.1s" repeatCount="indefinite" />
+                </path>
+              )
+            })}
+
+            {/* origin markers */}
+            {origins.map((o) => {
+              const r = radius(o.observed)
+              const c = SEV_COLOR[o.sev]
+              const isActive = active?.country === o.country
+              const dim = hover && !isActive
+              return (
+                <g
+                  key={o.country}
+                  style={{ cursor: 'pointer', transition: 'opacity .25s' }}
+                  opacity={dim ? 0.35 : 1}
+                  onMouseEnter={() => setHover(o.country)}
+                  onMouseLeave={() => setHover((h) => (h === o.country ? null : h))}
+                >
+                  <circle cx={o.x} cy={o.y} r={r * 3} fill="url(#wm-glow)" />
+                  {/* pulse ring */}
+                  <circle cx={o.x} cy={o.y} r={r} fill="none" stroke={c} strokeWidth={0.5} opacity={0.6}>
+                    <animate attributeName="r" values={`${r};${r * 2.4};${r}`} dur="2.4s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.6;0;0.6" dur="2.4s" repeatCount="indefinite" />
+                  </circle>
+                  <circle
+                    cx={o.x} cy={o.y}
+                    r={isActive ? r * 1.5 : r}
+                    fill={c}
+                    style={{ transition: 'r .2s ease' }}
+                  />
+                  {isActive && <circle cx={o.x} cy={o.y} r={r * 2.2} fill="none" stroke={c} strokeWidth={0.6} />}
+                </g>
+              )
+            })}
+          </svg>
+
+          {/* empty state */}
+          {geo && origins.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className="text-[11px] text-ink-600 max-w-[260px] text-center px-4">
+                No attack origins observed yet. Countries light up here as the engine
+                records the source of real alerts.
+              </p>
+            </div>
           )}
-        </div>
-      )}
 
-      {view === 'continents' && !hoveredRegion && !hoveredCity && (
-        <div className="absolute top-12 right-3 text-[9px] text-slate-600 pointer-events-none hidden md:block">
-          Hover regions &amp; cities · tap on mobile
+          {/* tooltip */}
+          <AnimatePresence>
+            {active && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.14 }}
+                className="absolute z-20 pointer-events-none rounded-lg border border-white/10 bg-[#0B0712]/95 backdrop-blur px-3 py-2 shadow-xl"
+                style={{
+                  left: `${Math.min(70, (active.x / W) * 100)}%`,
+                  top: `${Math.max(4, (active.y / H) * 100 - 4)}%`,
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm">{active.flag}</span>
+                  <span className="text-xs font-semibold text-white">{active.country}</span>
+                </div>
+                <p className="text-[11px] text-ink-300">
+                  <span className="font-mono" style={{ color: SEV_COLOR[active.sev] }}>
+                    {active.observed.toLocaleString()}
+                  </span>{' '}
+                  observed {active.observed === 1 ? 'alert' : 'alerts'}
+                </p>
+                <p className="text-[10px] text-ink-600 mt-0.5">
+                  {active.critical > 0 && <span className="text-magenta">{active.critical} critical</span>}
+                  {active.critical > 0 && active.high > 0 && ' · '}
+                  {active.high > 0 && <span className="text-threat">{active.high} high</span>}
+                  {(active.critical > 0 || active.high > 0) && ' · '}
+                  last {relTime(active.lastSeen)}
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      )}
 
-      <div className="absolute bottom-3 right-3 flex items-center gap-3 text-[10px] text-ink-400 pointer-events-none">
-        {([['Critical','#FF2E97'],['High','#FF4D6D'],['Medium','#FFB23E'],['Low','#34F5C5']] as const).map(([l, c]) => (
-          <div key={l} className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: c }} />
-            {l}
-          </div>
-        ))}
+        {/* ── Top countries panel ── */}
+        <div className="p-3">
+          <p className="text-[10px] font-semibold text-ink-400 uppercase tracking-wide px-2 mb-1.5">
+            Top origin countries
+          </p>
+          {(!geo || origins.length === 0) ? (
+            <p className="text-[11px] text-ink-600 px-2 py-6 text-center">
+              {geo ? 'No observed origins yet.' : 'Loading observed origins…'}
+            </p>
+          ) : (
+            <div className="space-y-0.5 max-h-[280px] overflow-y-auto">
+              {origins.slice(0, 8).map((o, i) => {
+                const isActive = hover === o.country
+                return (
+                  <button
+                    key={o.country}
+                    onMouseEnter={() => setHover(o.country)}
+                    onMouseLeave={() => setHover((h) => (h === o.country ? null : h))}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors',
+                      isActive ? 'bg-white/8' : 'hover:bg-white/4',
+                    )}
+                  >
+                    <span className="text-[10px] text-ink-600 w-3">{i + 1}</span>
+                    <span className="text-sm leading-none">{o.flag}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-ink-200 truncate">{o.country}</span>
+                        <span className="text-[10px] font-mono text-ink-400">{o.observed.toLocaleString()}</span>
+                      </div>
+                      <div className="h-1 bg-surface-3 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(o.observed / maxObs) * 100}%` }}
+                          transition={{ duration: 0.6, ease: 'easeOut', delay: i * 0.04 }}
+                          className="h-full rounded-full"
+                          style={{ background: SEV_COLOR[o.sev] }}
+                        />
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <p className="text-[9px] text-ink-700 px-2 pt-2">
+            Observed source countries of real alerts - not global statistics.
+          </p>
+        </div>
       </div>
     </div>
   )
