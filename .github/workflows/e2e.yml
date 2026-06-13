@@ -20,6 +20,8 @@ jobs:
       DASHBOARD_ADMIN_PASSWORD: ChangeMe123!
       DASHBOARD_DB_PATH: ${{ github.workspace }}/e2e.db
       NEXT_PUBLIC_API_URL: http://127.0.0.1:8002
+      # The suite logs in many times; don't let the brute-force throttle trip.
+      DASHBOARD_AUTH_MAX_FAILURES: '1000'
     steps:
       - uses: actions/checkout@v4
 

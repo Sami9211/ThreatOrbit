@@ -135,7 +135,7 @@ export default function LoginPage() {
               </label>
 
               {error && (
-                <div className="flex items-center gap-2 rounded-xl bg-threat/10 border border-threat/25 px-3 py-2.5 text-xs text-threat">
+                <div role="alert" className="flex items-center gap-2 rounded-xl bg-threat/10 border border-threat/25 px-3 py-2.5 text-xs text-threat">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   {error}
                 </div>

@@ -314,8 +314,11 @@ that buying companies require. Realistic positioning today:
       a camelCase alias), and added a CI job that runs the suite against a
       Postgres service container on every change. 159 passed / 2 SQLite-only
       skipped on PG; 161 on SQLite.
-- [ ] **Execute the E2E suite in CI and fix what it flags** (browsers are
-      CDN-blocked in the dev environment; the workflow exists).
+- [x] **Execute the E2E suite in CI and fix what it flags** — DONE (see
+      CHANGELOG): the Playwright suite had failed on every run; root-caused and
+      fixed (API booted in the test step, trailing-slash login wait, Normal-mode
+      assertions, reliable typing, an accessible error alert, throttle disabled
+      in CI). 34 passing across desktop-chromium + mobile-safari.
 - [ ] **Licensing/billing decision** — keys work today (HMAC, limits
       enforced); Stripe self-serve is only needed if selling without a
       sales-led motion.
@@ -377,6 +380,22 @@ that buying companies require. Realistic positioning today:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-13 · E2E (Playwright) suite green in CI (Tier 1).** The suite had
+  failed on *every* run since it was added (the workflow existed but nothing
+  made it pass). Root-caused and fixed, iterating against CI: (a) the API was
+  booted in a separate step and reaped before the tests ran - boot it in the
+  same step so it stays up (this alone took it 34-fail → 28-pass); (b)
+  `trailingSlash: true` meant the app lands on `/dashboard/` but `login()`
+  waited for the glob `**/dashboard` - match a trailing-slash regex; (c) the
+  SIEM/CTI specs asserted Power-mode text while the suite runs in default
+  Normal mode - assert the real "Acknowledge/Dismiss" and "Tracked
+  Actors"/IOC UI; (d) a `fill()`-vs-React race left the submit button disabled
+  - type with `pressSequentially`; (e) the bad-credentials test now asserts an
+  accessible `role="alert"` (also a real a11y win) instead of brittle error
+  wording, and CI disables the login throttle so the suite's many logins can't
+  trip it. Result: **34 passing** across desktop-chromium + mobile-safari
+  (~1.6 min, was a 19-min wall of failures).
 
 - **2026-06-13 · Validated the Postgres backend against a live server + CI gate
   (Tier 1).** Ran the full dashboard test suite against a real Postgres 16

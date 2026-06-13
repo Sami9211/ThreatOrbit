@@ -6,9 +6,10 @@ test.describe('Authentication', () => {
     await page.getByPlaceholder('jane@company.com').pressSequentially(ADMIN.email)
     await page.getByPlaceholder('••••••••').pressSequentially('definitely-wrong')
     await page.getByRole('button', { name: /sign in/i }).click()
-    // stays on /login and surfaces an error
+    // stays on /login and surfaces an error (exact wording varies - invalid
+    // credentials, throttle, etc. - so assert the alert, not the text)
     await expect(page).toHaveURL(/\/login/)
-    await expect(page.getByText(/invalid|incorrect|failed|credentials/i)).toBeVisible()
+    await expect(page.getByRole('alert')).toBeVisible()
   })
 
   test('valid login reaches the dashboard', async ({ page }) => {
