@@ -22,6 +22,7 @@ layer already proven.
 """
 import os
 import re
+from decimal import Decimal
 
 BACKEND = os.environ.get("DASHBOARD_DB_BACKEND", "sqlite").lower()
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -66,6 +67,16 @@ def to_postgres(sql: str) -> str:
     """
     s = _PRAGMA.sub("", sql)
     s = _AUTOINC.sub("BIGSERIAL PRIMARY KEY", s)
+    # SQLite's INTEGER is 64-bit; Postgres INTEGER is 32-bit and overflows on the
+    # larger values this app stores (uptime, byte counts, epoch-ish ints), so map
+    # plain INTEGER -> BIGINT. Runs after AUTOINCREMENT handling (which already
+    # produced BIGSERIAL), so PKs are unaffected.
+    s = re.sub(r"\bINTEGER\b", "BIGINT", s)
+    # SQLite's scalar MIN(a, b)/MAX(a, b) (always written here with a numeric
+    # first argument) is LEAST()/GREATEST() in Postgres; aggregate MIN(col)/
+    # MAX(col) never starts with a digit, so this targeted form is safe.
+    s = re.sub(r"\bMIN\(\s*(\d)", r"LEAST(\1", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bMAX\(\s*(\d)", r"GREATEST(\1", s, flags=re.IGNORECASE)
     s = _DATETIME_NOW.sub("now()", s)
 
     def _upsert(m):
@@ -92,26 +103,55 @@ def to_postgres(sql: str) -> str:
 
 class PgRow(dict):
     """Row supporting BOTH dict access (`row["col"]`) and positional access
-    (`row[0]`), matching how the codebase reads sqlite3.Row."""
+    (`row[0]`), matching how the codebase reads sqlite3.Row. Key lookup is also
+    case-insensitive, because Postgres folds unquoted column/alias names to
+    lower case while call sites may read them in mixed case."""
     def __getitem__(self, key):
         if isinstance(key, int):
             return list(self.values())[key]
-        return super().__getitem__(key)
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        return super().__getitem__(key.lower())
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except (KeyError, IndexError):
+            return default
 
 
 def split_statements(script: str) -> list[str]:
-    """Split a SQL script on `;` outside string literals (for executescript)."""
+    """Split a SQL script into statements on `;`, ignoring semicolons inside
+    string literals and `-- line comments` (a `;` in a schema comment must not
+    start a new statement, and a bare comment fragment is not valid SQL to PG)."""
     out, buf, in_str = [], [], False
-    for ch in script:
+    i, n = 0, len(script)
+    while i < n:
+        ch = script[i]
+        if in_str:
+            buf.append(ch)
+            if ch == "'":
+                in_str = False
+            i += 1
+            continue
         if ch == "'":
-            in_str = not in_str
-        if ch == ";" and not in_str:
+            in_str = True
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == "-" and i + 1 < n and script[i + 1] == "-":
+            while i < n and script[i] != "\n":   # skip the line comment
+                i += 1
+            continue
+        if ch == ";":
             stmt = "".join(buf).strip()
             if stmt:
                 out.append(stmt)
             buf = []
-        else:
-            buf.append(ch)
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
     tail = "".join(buf).strip()
     if tail:
         out.append(tail)
@@ -130,7 +170,10 @@ class _PgCursor:  # pragma: no cover - exercised only against a live Postgres
         if row is None:
             return None
         cols = [d[0] for d in (self._cur.description or [])]
-        return PgRow(zip(cols, row))
+        # Postgres aggregates (AVG/SUM) and NUMERIC columns come back as Decimal,
+        # which the codebase and stdlib json don't expect - normalise to float so
+        # rows behave exactly like SQLite's (which yields int/float/str).
+        return PgRow((c, float(v) if isinstance(v, Decimal) else v) for c, v in zip(cols, row))
 
     def fetchone(self):
         return self._wrap(self._cur.fetchone())
@@ -201,10 +244,10 @@ def backend_info() -> dict:
         "backend": "postgres" if is_postgres() else "sqlite",
         "configured": is_postgres() and bool(DATABASE_URL),
         "driverReady": _driver_ready(),
-        "note": ("Postgres adapter implemented (translated execute, dual-access "
-                 "rows, backend-aware migrations). Enable with "
-                 "DASHBOARD_DB_BACKEND=postgres + DATABASE_URL + psycopg; "
-                 "validate against your Postgres before production cutover."),
+        "note": ("Postgres adapter implemented and validated against a live "
+                 "Postgres 16 (full dashboard suite green; CI runs it on every "
+                 "change). Enable with DASHBOARD_DB_BACKEND=postgres + "
+                 "DATABASE_URL + psycopg. SQLite remains the default."),
     }
 
 

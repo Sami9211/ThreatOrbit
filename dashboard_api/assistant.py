@@ -142,10 +142,10 @@ def _t_top_actors(user, limit=5, **_):
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT a.name, a.origin, a.threat_level, a.sophistication, "
-            "COALESCE(ic.n,0) AS attributedIndicators FROM threat_actors a "
+            "COALESCE(ic.n,0) AS \"attributedIndicators\" FROM threat_actors a "
             "LEFT JOIN (SELECT actor, COUNT(*) n FROM iocs WHERE actor!='' GROUP BY actor) ic "
             f"ON ic.actor=a.name WHERE 1=1 {sc.replace('org_id','a.org_id')} "
-            "ORDER BY attributedIndicators DESC, a.sophistication DESC LIMIT ?",
+            "ORDER BY \"attributedIndicators\" DESC, a.sophistication DESC LIMIT ?",
             sp + [min(int(limit or 5), 15)]).fetchall()
     return {"actors": rows_to_dicts(rows)}
 

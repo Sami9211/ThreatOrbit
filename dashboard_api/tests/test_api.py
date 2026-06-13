@@ -1,4 +1,13 @@
 """Smoke + behaviour tests across every domain router."""
+import pytest
+
+from dashboard_api.db_backend import is_postgres
+
+# A few tests assert SQLite-specific behaviour (the online-backup snapshot,
+# sqlite_master index introspection, the default backend). They are skipped when
+# the suite runs against Postgres (DASHBOARD_DB_BACKEND=postgres) to validate
+# that path; every other test must pass on both backends.
+_PG = is_postgres()
 
 
 def test_health(client):
@@ -852,6 +861,7 @@ def test_observability_metrics(client, auth, monkeypatch):
     assert _dt.fromisoformat(parsed["ts"])  # a real, parseable UTC timestamp
 
 
+@pytest.mark.skipif(_PG, reason="SQLite online-backup; Postgres uses pg_dump (see docs/OPERATIONS.md)")
 def test_backup_snapshot(client, auth, tmp_path):
     """Tier-1 ops: the backup endpoint streams a consistent, integrity-checked
     SQLite snapshot; the CLI helpers verify it; viewers are denied."""
@@ -2243,9 +2253,7 @@ def test_email_channel(client, auth, monkeypatch):
 
 def test_db_backend_dialect_units():
     """SQLite→Postgres statement translation (the staged Postgres seam)."""
-    from dashboard_api.db_backend import to_postgres, is_postgres
-    # default backend is SQLite, unaffected
-    assert is_postgres() is False
+    from dashboard_api.db_backend import to_postgres
     # placeholder translation, but not inside string literals
     assert to_postgres("SELECT * FROM iocs WHERE value=? AND type=?") == \
         "SELECT * FROM iocs WHERE value=%s AND type=%s"
@@ -2276,15 +2284,17 @@ def test_pg_adapter_units():
 
 
 def test_database_backend_endpoint(client, auth):
-    """The backend info endpoint reports SQLite (the live default) + readiness."""
+    """The backend info endpoint reports the active backend + readiness."""
     info = client.get("/config/database", headers=auth).json()
-    assert info["backend"] == "sqlite" and info["configured"] is False
+    assert info["backend"] == ("postgres" if _PG else "sqlite")
+    assert info["configured"] is _PG  # configured only when a Postgres DSN is set
     assert "note" in info and isinstance(info["driverReady"], bool)
     # admin/manager only
     viewer = _token(client, "tom.okafor@threatorbit.space")
     assert client.get("/config/database", headers=viewer).status_code == 403
 
 
+@pytest.mark.skipif(_PG, reason="sqlite_master / EXPLAIN QUERY PLAN is SQLite-specific")
 def test_hot_path_indexes_in_use():
     """The hot-path indexes exist and SQLite actually uses them."""
     from dashboard_api.db import get_conn

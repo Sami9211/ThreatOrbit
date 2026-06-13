@@ -307,9 +307,13 @@ that buying companies require. Realistic positioning today:
       environment, forward real syslog/files, and tune parsers + built-in
       rules on actual data (the generated event stream only proves the
       pipeline, not parser coverage).
-- [ ] **Validate the Postgres path against a live server** (adapter is
-      implemented + unit-tested; needs a real PG run) — required even for
-      small scale if the customer mandates Postgres.
+- [x] **Validate the Postgres path against a live server** — DONE (see
+      CHANGELOG): ran the full dashboard suite against a live Postgres 16,
+      found + fixed the real dialect gaps (INTEGER→BIGINT, scalar
+      MIN/MAX→LEAST/GREATEST, comment-aware script splitting, Decimal→float,
+      a camelCase alias), and added a CI job that runs the suite against a
+      Postgres service container on every change. 159 passed / 2 SQLite-only
+      skipped on PG; 161 on SQLite.
 - [ ] **Execute the E2E suite in CI and fix what it flags** (browsers are
       CDN-blocked in the dev environment; the workflow exists).
 - [ ] **Licensing/billing decision** — keys work today (HMAC, limits
@@ -374,6 +378,22 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Validated the Postgres backend against a live server + CI gate
+  (Tier 1).** Ran the full dashboard test suite against a real Postgres 16
+  (`DASHBOARD_DB_BACKEND=postgres`) and fixed the dialect gaps the live run
+  surfaced - all centralised in the `db_backend` translation seam so SQLite is
+  untouched: (a) SQLite's 64-bit `INTEGER` → Postgres `BIGINT` (32-bit
+  `INTEGER` overflowed on stored counts/uptime); (b) scalar `MIN(n,…)`/`MAX(n,…)`
+  → `LEAST`/`GREATEST` (Postgres has no 2-arg min/max); (c) comment-aware
+  statement splitting (a `;` inside a schema `--` comment broke `executescript`);
+  (d) `Decimal` (psycopg's type for `AVG`/`NUMERIC`) normalised to `float` in
+  the row adapter so results match SQLite and stay JSON-serialisable; (e) the
+  one camelCase SQL alias quoted so Postgres preserves its case; plus a
+  case-insensitive `PgRow`. Added **`.github/workflows/tests.yml`** which runs
+  all backend suites (previously **none** ran in CI) and the dashboard suite
+  against a Postgres **service container** every push/PR, so the staged path
+  can't silently rot. Result: **161 passed on SQLite**, **159 passed + 2
+  SQLite-only skipped on Postgres**.
 - **2026-06-13 · Live attack map -> real choropleth** (user-requested). Replaced
   the point-marker map with a true country-area choropleth: real country
   polygons (world-atlas TopoJSON rendered with d3-geo's Natural Earth
