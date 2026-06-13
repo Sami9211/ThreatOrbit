@@ -5,12 +5,14 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 /**
- * ThreatOrbit mark: a luminous 3D core (the unified Super SOC) orbited by three
- * rings for the disciplines converging into it - CTI (magenta), SIEM (violet),
- * SOAR (amber). The core is a shaded sphere (light from the upper-left, plasma
- * body, deep-violet terminator) with a specular highlight and a soft bloom, so
- * it reads as a real 3D object rather than a flat shape. Each ring carries one
- * node - a threat under continuous watch. Pure animated SVG, crisp at any size.
+ * ThreatOrbit mark - "Convergence".
+ *
+ * The product's thesis is that the disciplines a SOC normally runs apart - CTI
+ * (magenta), SIEM (violet) and SOAR (amber) - converge into one watchful core.
+ * The mark draws exactly that: three orbital streams sweep inward as tracked
+ * signals (each fades from its tail to a bright leading node, so it reads as
+ * motion) and orbit a luminous core whose aperture/iris stands for continuous
+ * vigilance. Pure animated SVG, crisp from 16px up.
  */
 export default function Logo({
   size = 28,
@@ -22,17 +24,18 @@ export default function Logo({
   animate?: boolean
 }) {
   // Unique ids so several logos on a page (navbar, footer, login) don't share
-  // gradient/filter definitions.
+  // gradient definitions.
   const uid = useId().replace(/:/g, '')
+  const bloom = `bloom-${uid}`
   const core = `core-${uid}`
-  const spec = `spec-${uid}`
-  const glow = `glow-${uid}`
-  const ringGrad = (i: number) => `ring-${uid}-${i}`
+  const streamId = (k: string) => `stream-${uid}-${k}`
 
-  const rings = [
-    { rotate: 0,   color: '#FF2E97', dur: 14 }, // CTI
-    { rotate: 60,  color: '#7A3CFF', dur: 18 }, // SIEM
-    { rotate: 120, color: '#FFB23E', dur: 22 }, // SOAR
+  // Each stream is the same arc rotated into place; its gradient fades from a
+  // faint tail to the bright leading node (the tracked signal).
+  const streams = [
+    { rotate: 0,   color: '#FF2E97', key: 'cti'  }, // CTI
+    { rotate: 120, color: '#7A3CFF', key: 'siem' }, // SIEM
+    { rotate: 240, color: '#FFB23E', key: 'soar' }, // SOAR
   ]
 
   return (
@@ -45,66 +48,63 @@ export default function Logo({
       aria-label="ThreatOrbit logo"
     >
       <defs>
-        {/* Sphere body: highlight (upper-left) -> plasma -> deep-violet edge */}
+        <radialGradient id={bloom} cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="#FF2E97" stopOpacity="0.38" />
+          <stop offset="55%"  stopColor="#7A3CFF" stopOpacity="0.10" />
+          <stop offset="100%" stopColor="#7A3CFF" stopOpacity="0" />
+        </radialGradient>
+        {/* Watchful core: warm highlight -> plasma -> deep-violet edge */}
         <radialGradient id={core} cx="38%" cy="34%" r="74%">
           <stop offset="0%"   stopColor="#FFE9C2" />
-          <stop offset="20%"  stopColor="#FF9ECB" />
-          <stop offset="52%"  stopColor="#FF2E97" />
+          <stop offset="22%"  stopColor="#FF9ECB" />
+          <stop offset="55%"  stopColor="#FF2E97" />
           <stop offset="100%" stopColor="#591A84" />
         </radialGradient>
-        {/* Glossy specular hotspot */}
-        <radialGradient id={spec} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#FFFFFF" stopOpacity="0.92" />
-          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-        </radialGradient>
-        {/* Soft bloom behind the core */}
-        <radialGradient id={glow} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#FF2E97" stopOpacity="0.55" />
-          <stop offset="55%"  stopColor="#FF2E97" stopOpacity="0.13" />
-          <stop offset="100%" stopColor="#FF2E97" stopOpacity="0" />
-        </radialGradient>
-        {/* Front-to-back depth gradient on each ring stroke */}
-        {rings.map((r, i) => (
-          <linearGradient key={i} id={ringGrad(i)} x1="4" y1="24" x2="44" y2="24"
-            gradientUnits="userSpaceOnUse">
-            <stop offset="0%"   stopColor={r.color} stopOpacity="0.18" />
-            <stop offset="50%"  stopColor={r.color} stopOpacity="0.9" />
-            <stop offset="100%" stopColor={r.color} stopOpacity="0.18" />
+        {/* Per-stream tail->head fade (tail faint at the top, bright node at
+            the bottom of the un-rotated arc). */}
+        {streams.map((s) => (
+          <linearGradient key={s.key} id={streamId(s.key)}
+            x1="29.81" y1="9.63" x2="29.81" y2="38.37" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stopColor={s.color} stopOpacity="0.08" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="1" />
           </linearGradient>
         ))}
       </defs>
 
-      {/* bloom */}
-      <circle cx="24" cy="24" r="13.5" fill={`url(#${glow})`} />
+      {/* outer bloom */}
+      <circle cx="24" cy="24" r="15.5" fill={`url(#${bloom})`} />
 
-      {/* orbit rings (behind the core); node sits ON the ring, placed by tilt */}
-      {rings.map((ring, i) => (
-        <motion.g
-          key={i}
-          style={{ transformOrigin: '24px 24px' }}
-          initial={false}
-          animate={animate ? { rotate: i % 2 === 0 ? 360 : -360 } : undefined}
-          transition={{ duration: ring.dur, repeat: Infinity, ease: 'linear' }}
-        >
-          <g transform={`rotate(${ring.rotate} 24 24)`}>
-            <ellipse cx="24" cy="24" rx="20" ry="7.4" stroke={`url(#${ringGrad(i)})`} strokeWidth="1.5" />
-            <circle cx="44" cy="24" r="2.3" fill={ring.color} />
-            <circle cx="44" cy="24" r="2.3" fill={ring.color} opacity="0.5" style={{ filter: 'blur(1.6px)' }} />
+      {/* three converging streams, orbiting the core as one system */}
+      <motion.g
+        style={{ transformOrigin: '24px 24px' }}
+        initial={false}
+        animate={animate ? { rotate: 360 } : undefined}
+        transition={{ duration: 26, repeat: Infinity, ease: 'linear' }}
+      >
+        {streams.map((s) => (
+          <g key={s.key} transform={`rotate(${s.rotate} 24 24)`}>
+            <path d="M 29.81 9.63 A 15.5 15.5 0 0 1 29.81 38.37" fill="none"
+              stroke={`url(#${streamId(s.key)})`} strokeWidth="2.8" strokeLinecap="round" />
+            {/* tracked-signal node: soft halo + body + specular */}
+            <circle cx="29.81" cy="38.37" r="4.2" fill={s.color} opacity="0.28" />
+            <circle cx="29.81" cy="38.37" r="2.5" fill={s.color} />
+            <circle cx="29.0"  cy="37.4"  r="0.9" fill="#FFFFFF" opacity="0.7" />
           </g>
-        </motion.g>
-      ))}
+        ))}
+      </motion.g>
 
-      {/* 3D core sphere with a gentle breathe */}
+      {/* watchful core with a gentle breathe */}
       <motion.g
         style={{ transformOrigin: '24px 24px' }}
         animate={animate ? { scale: [1, 1.04, 1] } : undefined}
-        transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
       >
-        <circle cx="24" cy="24" r="8.4" fill={`url(#${core})`} />
-        {/* specular highlight, upper-left, aligned to the light direction */}
-        <ellipse cx="20.7" cy="20.3" rx="3.2" ry="2.2" fill={`url(#${spec})`} transform="rotate(-34 20.7 20.3)" />
-        {/* crisp edge for definition against any background */}
-        <circle cx="24" cy="24" r="8.4" fill="none" stroke="#FFFFFF" strokeOpacity="0.16" strokeWidth="0.5" />
+        <circle cx="24" cy="24" r="6.9" fill={`url(#${core})`} />
+        <circle cx="24" cy="24" r="6.9" fill="none" stroke="#FFFFFF" strokeOpacity="0.16" strokeWidth="0.5" />
+        {/* aperture / iris - the "watch" */}
+        <circle cx="24" cy="24" r="2.9" fill="none" stroke="#FFFFFF" strokeOpacity="0.5" strokeWidth="1" />
+        {/* specular highlight, upper-left */}
+        <ellipse cx="21.5" cy="21.2" rx="2.3" ry="1.5" fill="#FFFFFF" fillOpacity="0.55" transform="rotate(-35 21.5 21.2)" />
       </motion.g>
     </svg>
   )
