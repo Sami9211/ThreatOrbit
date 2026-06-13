@@ -65,10 +65,10 @@ def list_actors(active: bool | None = None, user: dict = Depends(current_user)):
 
 
 @router.get("/actors/{actor_id}")
-def get_actor(actor_id: str):
+def get_actor(actor_id: str, user: dict = Depends(current_user)):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM threat_actors WHERE id=?", (actor_id,)).fetchone()
-    if not row:
+    if not row or tenancy.cross_org(row, user):
         raise HTTPException(status_code=404, detail="Actor not found")
     return row_to_dict(row)
 
@@ -271,12 +271,12 @@ class SightingBody(BaseModel):
 
 
 @router.get("/iocs/{ioc_id}")
-def get_ioc(ioc_id: str):
+def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
     """IOC detail with full lifecycle (effective confidence, decay, expiry) and
     its sightings history."""
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
-        if not row:
+        if not row or tenancy.cross_org(row, user):
             raise HTTPException(status_code=404, detail="IOC not found")
         ioc = row_to_dict(row)
         sightings = rows_to_dicts(conn.execute(

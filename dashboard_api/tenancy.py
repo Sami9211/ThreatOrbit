@@ -86,6 +86,20 @@ def enforced() -> bool:
     return MULTI_TENANT
 
 
+def cross_org(row, user: dict) -> bool:
+    """True when isolation is on and `row` belongs to a different workspace than
+    `user`. Use to 404 id-addressed detail reads across tenants (list endpoints
+    already scope via scope_sql; get-by-id reads are id-addressed and need this
+    explicit check). Safe no-op when isolation is off or the row has no org_id."""
+    if not MULTI_TENANT or row is None:
+        return False
+    try:
+        row_org = row["org_id"]
+    except (KeyError, IndexError, TypeError):
+        return False
+    return bool(row_org) and row_org != org_of(user)
+
+
 def scope_sql(org_id: str, *, alias: str = "") -> tuple[str, list]:
     """Return an (sql_fragment, params) that filters a query to `org_id` - or a
     no-op when enforcement is off. This is the seam the follow-up migration will

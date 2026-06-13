@@ -2,7 +2,9 @@
 
 Why PBKDF2 over bcrypt: bcrypt needs a native build that is fragile in slim
 containers. PBKDF2-HMAC-SHA256 ships with the stdlib, has no build step, and at
-260k iterations is a sound choice for this workload.
+600k iterations meets the OWASP/NIST 2023+ floor. Stored hashes are
+self-describing ("<iterations>$<hex>") so the cost can be raised over time
+without invalidating hashes written at an older cost.
 """
 import base64
 import hashlib
@@ -17,7 +19,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from dashboard_api.config import JWT_SECRET, JWT_TTL_MINUTES
 from dashboard_api.db import get_conn, row_to_dict
 
-_PBKDF2_ITERS = 260_000
+_PBKDF2_ITERS = 600_000          # cost for NEW hashes (OWASP/NIST 2023+ floor)
+_PBKDF2_ITERS_LEGACY = 260_000   # assumed for hashes stored before the cost marker
 
 
 # --- Minimal HS256 JWT (stdlib only) ---------------------------------------
@@ -58,15 +61,24 @@ def _jwt_decode(token: str) -> dict:
 
 
 def hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
-    """Return (hash_hex, salt_hex). Generates a fresh salt when not supplied."""
+    """Return (stored_hash, salt_hex), generating a fresh salt when not supplied.
+    The stored hash is self-describing - "<iterations>$<hex>" - so the PBKDF2
+    cost can be raised later without invalidating existing hashes."""
     salt = salt or os.urandom(16).hex()
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), _PBKDF2_ITERS)
-    return dk.hex(), salt
+    return f"{_PBKDF2_ITERS}${dk.hex()}", salt
 
 
-def verify_password(password: str, hash_hex: str, salt: str) -> bool:
-    candidate, _ = hash_password(password, salt)
-    return hmac.compare_digest(candidate, hash_hex)
+def verify_password(password: str, stored: str, salt: str) -> bool:
+    """Verify against a stored hash, honouring an embedded "<iters>$<hex>" cost
+    marker and falling back to the legacy cost for hashes written before it."""
+    iters, expected = _PBKDF2_ITERS_LEGACY, stored
+    if stored and "$" in stored:
+        head, tail = stored.split("$", 1)
+        if head.isdigit():
+            iters, expected = int(head), tail
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), iters)
+    return hmac.compare_digest(dk.hex(), expected)
 
 
 def create_token(user: dict) -> str:

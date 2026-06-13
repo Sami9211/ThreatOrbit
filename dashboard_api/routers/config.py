@@ -399,9 +399,11 @@ def list_webhooks(_: dict = Depends(require_perm("config.manage"))):
 
 @router.post("/webhooks", status_code=201)
 def create_webhook(body: WebhookCreate, user: dict = Depends(require_perm("config.manage"))):
-    url = body.url.strip()
-    if not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="url must start with http:// or https://")
+    from dashboard_api.net_guard import validate_external_url, UnsafeUrlError
+    try:
+        url = validate_external_url(body.url)  # SSRF guard (blocks internal/reserved)
+    except UnsafeUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     bad = [e for e in body.events if e not in _WEBHOOK_EVENTS]
     if bad or not body.events:
         raise HTTPException(status_code=400, detail=f"events must be a non-empty subset of {sorted(_WEBHOOK_EVENTS)}")

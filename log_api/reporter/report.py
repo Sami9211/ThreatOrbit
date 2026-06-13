@@ -57,19 +57,21 @@ def _finding_card(f: AnomalyFinding, idx: int) -> str:
     )
     evidence = "".join(f"<code>{_esc(e)}</code>" for e in f.evidence[:5])
 
+    # User-controlled fields (source_ip, username come from parsed logs) are
+    # escaped so a crafted log line can't inject HTML/script into the report.
     meta = []
     if f.source_ip:
-        meta.append(f"IP: {f.source_ip}")
+        meta.append(f"IP: {_esc(str(f.source_ip))}")
     if f.username:
-        meta.append(f"User: {f.username}")
+        meta.append(f"User: {_esc(str(f.username))}")
     if f.timestamp:
         meta.append(f"Time: {f.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-    meta.append(f"Detector: {f.detector}")
+    meta.append(f"Detector: {_esc(str(f.detector))}")
     meta.append(f"Count: {f.count}")
 
     return f"""
 <div class="card">
-  <div><span class="badge" style="background:{bg};color:{fg}">{emoji} {sev}</span> <strong>{f.finding_type}</strong> (Score: {f.severity_score}/100)</div>
+  <div><span class="badge" style="background:{bg};color:{fg}">{emoji} {sev}</span> <strong>{_esc(str(f.finding_type))}</strong> (Score: {f.severity_score}/100)</div>
   <p>{_esc(f.description)}</p>
   <p class="meta">{' | '.join(meta)}</p>
   <p>{mitre_html}</p>

@@ -374,6 +374,27 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Security hardening pass (audit-driven)** — a full defensive
+  audit (SQLi/LFI/SSRF/XSS/IDOR/authz/crypto/DoS) found and fixed real gaps,
+  choosing fixes that harden production without breaking the local/demo start.
+  (a) **SSRF guard** (`net_guard.py`) on every user-supplied outbound URL -
+  webhooks, custom connectors, personal Slack - rejecting the local host and
+  private/link-local/reserved ranges (incl. `169.254.169.254`); http(s)-only;
+  `DASHBOARD_ALLOW_PRIVATE_URLS` escape hatch for local dev. (b) **No shared
+  default secrets**: `DASHBOARD_JWT_SECRET`, when unset, is auto-generated and
+  persisted per-install (never the old `dev-insecure` default) so an attacker
+  can't forge tokens with a known key; `DASHBOARD_REQUIRE_SECRETS` /
+  `DASHBOARD_ENV=production` make explicit secrets + a non-default admin
+  password mandatory (fail-fast). (c) **CORS** wildcard refused while
+  credentials are enabled. (d) **PBKDF2** 260k → 600k (OWASP/NIST 2023+) with
+  self-describing hashes so the cost rises without breaking existing logins.
+  (e) **Constant-time** API-key comparison on the Threat API. (f) **IDOR**:
+  id-addressed detail reads (`/cti/actors|iocs/{id}`, `/soar/cases/{id}`) are
+  now org-scoped under multi-tenancy (`tenancy.cross_org`). (g) **XSS**: the
+  log-report HTML now escapes user-controlled fields (source_ip, username,
+  detector, finding_type). (h) name length cap on registration; `.jwt_secret`
+  git-ignored. New `test_net_guard.py`; 161 dashboard tests green (+ threat/log
+  suites), OWASP Top-10 alignment refreshed in SECURITY.md.
 - **2026-06-13 · Appearance: 11 themes + in-depth customization, plus 3 UI
   fixes** (user-requested batch). (a) **Appearance panel** (config →
   Appearance): five new palettes (nebula, oceanic, cyber, slate, ember →

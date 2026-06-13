@@ -1,3 +1,4 @@
+import hmac
 import json
 import logging
 import os
@@ -77,12 +78,21 @@ def handle_unhandled_exception(e):
 # Auth / rate limiting
 # ---------------------------------------------------------------------------
 
+def _key_matches(provided, *valid):
+    """Constant-time check of a provided API key against the accepted keys, so
+    a wrong key can't be brute-forced by timing the comparison."""
+    if not provided:
+        return False
+    pb = provided.encode()
+    return any(v and hmac.compare_digest(pb, v.encode()) for v in valid)
+
+
 def require_api_key(fn):
     """Standard user access: accepts USER key or ADMIN key."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
         key = request.headers.get("X-API-Key")
-        if not key or key not in (APP_API_KEY, ADMIN_API_KEY):
+        if not _key_matches(key, APP_API_KEY, ADMIN_API_KEY):
             return jsonify({"error": "Unauthorized"}), 401
         client = request.remote_addr or "unknown"
         if not limiter.allow(client):
@@ -96,7 +106,7 @@ def require_admin_key(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         key = request.headers.get("X-API-Key")
-        if not key or key != ADMIN_API_KEY:
+        if not _key_matches(key, ADMIN_API_KEY):
             return jsonify({"error": "Admin access required"}), 403
         client = request.remote_addr or "unknown"
         if not limiter.allow(client):

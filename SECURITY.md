@@ -32,6 +32,21 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.
+- **SSRF guard** (`net_guard.py`) on every user-supplied outbound URL
+  (webhooks, custom connectors, personal Slack routing): http/https only, and
+  the local host plus private / link-local / reserved ranges (incl. the cloud
+  metadata endpoint) are rejected. Override for local dev with
+  `DASHBOARD_ALLOW_PRIVATE_URLS=true`.
+- **No shared default secrets.** When `DASHBOARD_JWT_SECRET` is unset the API
+  generates and persists a per-install random secret rather than using a known
+  default. `DASHBOARD_REQUIRE_SECRETS=true` (or `DASHBOARD_ENV=production`)
+  makes explicit secrets and a non-default admin password mandatory, and a
+  wildcard `DASHBOARD_CORS_ORIGINS` is refused because credentials are enabled.
+- **Password hashing** PBKDF2-HMAC-SHA256 at 600k iterations (OWASP/NIST
+  2023+), with self-describing hashes so the cost can rise without breaking
+  existing logins. **Constant-time** API-key comparison on the Threat API.
+  Tenant detail reads (`/cti/actors|iocs/{id}`, `/soar/cases/{id}`) are
+  org-scoped under multi-tenancy. HTML reports escape user-controlled fields.
 - Hardening + operations runbooks: `docs/DEPLOYMENT.md`,
   `docs/OPERATIONS.md`.
 

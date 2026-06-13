@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ORIGINS, DATA_MODE
+from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ALLOWED, DATA_MODE
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
     assets, assistant as assistant_router, auth, connectors as connectors_router, cti,
@@ -35,7 +35,7 @@ app.add_middleware(observability.MetricsMiddleware)
 app.add_middleware(observability.SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in CORS_ORIGINS.split(",")],
+    allow_origins=CORS_ALLOWED,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -129,12 +129,10 @@ def _engine_loop():
 @app.on_event("startup")
 def startup():
     import threading
-    from dashboard_api.config import JWT_SECRET
-    if JWT_SECRET == "dev-insecure-secret-change-me":
-        logger.warning(
-            "DASHBOARD_JWT_SECRET is the development default - set a long random "
-            "value before exposing this service (e.g. `openssl rand -hex 32`)."
-        )
+    # JWT_SECRET is now always a strong value: an explicit env var, or a
+    # per-install random secret generated and persisted by config.py (never the
+    # old shared default). DASHBOARD_REQUIRE_SECRETS makes an explicit value
+    # mandatory in production.
     init_db()
     # Secrets-at-rest migration: encrypt any legacy plaintext credentials.
     try:

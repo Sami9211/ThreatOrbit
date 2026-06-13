@@ -129,6 +129,8 @@ def register(body: RegisterRequest, request: Request):
     email = body.email.strip().lower()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
+    if len(name) > 200:
+        raise HTTPException(status_code=400, detail="Name must be 200 characters or fewer")
     if not _EMAIL_RE.match(email):
         _record_failure(key)
         raise HTTPException(status_code=400, detail="Enter a valid email address")
@@ -265,8 +267,12 @@ def set_slack_routing(body: SlackPrefs, user: dict = Depends(current_user)):
         raise HTTPException(status_code=400,
                             detail=f"min_severity must be one of {sorted(_SEV_RANK)}")
     url = (body.webhook_url or "").strip() or None
-    if url and not url.startswith(("https://", "http://")):
-        raise HTTPException(status_code=400, detail="webhook_url must be an http(s) URL")
+    if url:
+        from dashboard_api.net_guard import validate_external_url, UnsafeUrlError
+        try:
+            validate_external_url(url)  # SSRF guard (blocks internal/reserved)
+        except UnsafeUrlError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     from dashboard_api.secretstore import encrypt
     with get_conn() as conn:
         conn.execute("UPDATE users SET slack_webhook=?, slack_min_severity=? WHERE id=?",

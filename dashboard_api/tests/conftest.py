@@ -11,6 +11,10 @@ os.environ["DASHBOARD_DB_PATH"] = _tmp.name
 os.environ["DASHBOARD_JWT_SECRET"] = "test-secret"
 os.environ["DASHBOARD_ADMIN_EMAIL"] = "admin@threatorbit.space"
 os.environ["DASHBOARD_ADMIN_PASSWORD"] = "ChangeMe123!"
+# The webhook-delivery tests post to a local sink (127.0.0.1); allow private
+# targets here. The SSRF guard's blocking behaviour is covered directly in
+# test_net_guard.py (which calls it with allow_private=False).
+os.environ["DASHBOARD_ALLOW_PRIVATE_URLS"] = "true"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

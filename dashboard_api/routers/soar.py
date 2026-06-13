@@ -150,10 +150,10 @@ def create_case(body: CaseCreate, user: dict = Depends(require_perm("soar.write"
 
 
 @router.get("/cases/{case_id}")
-def get_case(case_id: str):
+def get_case(case_id: str, user: dict = Depends(current_user)):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
-    if not row:
+    if not row or tenancy.cross_org(row, user):
         raise HTTPException(status_code=404, detail="Case not found")
     return _with_sla(row_to_dict(row))
 
