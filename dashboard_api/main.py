@@ -16,9 +16,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ORIGINS, DATA_MODE
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
-    assets, auth, connectors as connectors_router, cti, config as config_router,
-    darkweb, feeds, overview, platform as platform_router, reports as reports_router,
-    orgs, services, siem, soar, stream, taxii, users,
+    assets, assistant as assistant_router, auth, connectors as connectors_router, cti,
+    config as config_router, darkweb, feeds, overview, platform as platform_router,
+    reports as reports_router, orgs, services, siem, soar, stream, taxii, users,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -206,7 +206,8 @@ def ready():
 for r in (auth.router, users.router, overview.router, siem.router, soar.router,
           cti.router, assets.router, feeds.router, config_router.router, services.router,
           connectors_router.router, darkweb.router, reports_router.router,
-          platform_router.router, taxii.router, stream.router, orgs.router):
+          platform_router.router, taxii.router, stream.router, orgs.router,
+          assistant_router.router):
     app.include_router(r)
 
 

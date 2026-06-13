@@ -374,6 +374,23 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Dashboard assistant + map rehaul + top-actors fix + dash sweep**
+  (user-requested batch). (a) **Security-bounded AI assistant**
+  (`dashboard_api/assistant.py`, `/assistant/chat|status`, floating
+  `AssistantWidget`): answers/reviews/recommends/redirects over a fixed
+  registry of READ-only tools executed as the caller, no secrets ever
+  selected, tool output treated as untrusted data (prompt-injection
+  contained), navigation proposed not executed, bounded loop, per-user rate
+  limit, audited. Anthropic Messages API over httpx (model `claude-opus-4-8`,
+  `ANTHROPIC_API_KEY`); honest-degrades to a deterministic intent router over
+  the same tools when no key. (b) **Top Threat Actors** fixed in live mode via
+  the curated `threat_actor_library` + real attributed-indicator ranking. (c)
+  **Live attack map** rewritten (752→~330 lines) on real `/overview/geo` data:
+  top-countries panel, bidirectional hover, smooth animations, honest empty
+  states. (d) Replaced all long dashes (em/en) with hyphens across the
+  frontend + backend app code. Tests cover the assistant's basic mode, the
+  secrets-never-leak guarantee, and the agentic tool-loop (147 backend tests
+  green; frontend build clean).
 - **2026-06-13 · Fix combined-install conflict (build)** — the security-pass
   backend bump (fastapi 0.118+/python-multipart 0.0.27+) left `log_api`
   pinned to the old `fastapi==0.115.0` / `python-multipart==0.0.9`. The

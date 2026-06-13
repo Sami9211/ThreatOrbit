@@ -30,6 +30,7 @@ internet ──TLS──> reverse proxy (nginx/caddy)
 | `CORS_ORIGINS` | the exact frontend origin(s) — never `*` in production |
 | `DASHBOARD_METRICS_TOKEN` | gate `/metrics` if the proxy exposes it |
 | `SMTP_*` / `SENTRY_DSN` / `DASHBOARD_LOG_FORMAT=json` | mail, error tracking, log shipping (optional, honest-degrade) |
+| `ANTHROPIC_API_KEY` | enables the full AI dashboard assistant (optional). Unset = the assistant degrades to a deterministic command set. `DASHBOARD_ASSISTANT_MODEL` overrides the model (default `claude-opus-4-8`). The assistant is read-only, runs as the caller, and never returns credentials. |
 
 ## nginx reference
 

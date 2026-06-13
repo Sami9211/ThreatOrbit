@@ -7,6 +7,7 @@ import ThemeScope from '@/components/dashboard/ThemeScope'
 import PageScale from '@/components/dashboard/PageScale'
 import CursorParticles from '@/components/effects/CursorParticles'
 import AuthGuard from '@/components/dashboard/AuthGuard'
+import AssistantWidget from '@/components/dashboard/AssistantWidget'
 
 export const metadata: Metadata = {
   title: {
@@ -29,6 +30,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <CommandPalette />
         <DetailDrawer />
         <CursorParticles />
+        <AssistantWidget />
       </ThemeScope>
     </AuthGuard>
   )

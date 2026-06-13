@@ -1422,3 +1422,13 @@ export const patchUser  = (id: string, body: Partial<Pick<User, 'name' | 'role' 
     }),
   })
 export const deleteUser = (id: string) => api<void>(`/users/${id}`, { method: 'DELETE' })
+
+// ── Dashboard assistant (security-bounded, read-only agent) ───────────
+export interface AssistantNav { label: string; path: string }
+export interface AssistantReply {
+  reply: string; toolsUsed: string[]; navigations: AssistantNav[]; mode: 'ai' | 'basic' | 'empty'
+}
+export interface AssistantStatus { configured: boolean; mode: 'ai' | 'basic'; capabilities: string[] }
+export const fetchAssistantStatus = () => api<AssistantStatus>('/assistant/status')
+export const sendAssistantChat = (message: string, history: { role: string; text: string }[]) =>
+  api<AssistantReply>('/assistant/chat', { method: 'POST', body: JSON.stringify({ message, history }) })
