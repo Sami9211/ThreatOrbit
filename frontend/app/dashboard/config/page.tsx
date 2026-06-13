@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings, Key, Bell, Shield, Globe, Plug, Database,
@@ -632,12 +632,38 @@ function Segmented<T extends string>({ label, desc, value, options, onChange }: 
    reduced motion stops animations. All persist per-browser and sync across
    open dashboard tabs (see lib/useDashboardTheme.ts). The public marketing
    site is never affected. */
-function ThemeCard() {
+function ThemeCard({ saveTick }: { saveTick: number }) {
   const [theme, setTheme] = useDashboardTheme()
   const [prefs, setPrefs] = useDashboardPrefs()
-  const active = THEMES.find((t) => t.id === theme) ?? THEMES[0]
-  const accentColor = (prefs.accent ?? active.swatch[1]).toLowerCase()
-  const isCustomAccent = !!prefs.accent && !ACCENT_PRESETS.some((p) => p.toLowerCase() === prefs.accent!.toLowerCase())
+
+  // Apply-on-save: edits update a local draft (the card reflects them), and are
+  // only committed to the live theme/prefs - and the rest of the dashboard -
+  // when the page Save button is clicked (which bumps `saveTick`).
+  const [dTheme, setDTheme] = useState(theme)
+  const [dPrefs, setDPrefs] = useState(prefs)
+  const [dirty, setDirty] = useState(false)
+
+  // Follow the persisted values (localStorage hydration after mount, or a change
+  // from another tab) only while the user has not started an unsaved edit.
+  useEffect(() => { if (!dirty) setDTheme(theme) }, [theme, dirty])
+  useEffect(() => { if (!dirty) setDPrefs(prefs) }, [prefs, dirty])
+
+  // Commit the draft when Save is clicked (skip the initial mount).
+  const firstSave = useRef(true)
+  useEffect(() => {
+    if (firstSave.current) { firstSave.current = false; return }
+    setTheme(dTheme)
+    setPrefs(dPrefs)
+    setDirty(false)
+  }, [saveTick]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const editTheme = (t: typeof theme) => { setDTheme(t); setDirty(true) }
+  const editPrefs = (patch: Partial<typeof prefs>) => { setDPrefs((p) => ({ ...p, ...patch })); setDirty(true) }
+  const revert = () => { setDTheme(theme); setDPrefs(prefs); setDirty(false) }
+
+  const active = THEMES.find((t) => t.id === dTheme) ?? THEMES[0]
+  const accentColor = (dPrefs.accent ?? active.swatch[1]).toLowerCase()
+  const isCustomAccent = !!dPrefs.accent && !ACCENT_PRESETS.some((p) => p.toLowerCase() === dPrefs.accent!.toLowerCase())
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -648,21 +674,31 @@ function ThemeCard() {
         </div>
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white">Appearance</h2>
-          <p className="text-[11px] text-ink-500 mt-0.5">Theme, accent, scale, motion and density - applies instantly, only here (not the public site)</p>
+          <p className="text-[11px] text-ink-500 mt-0.5">Theme, accent, scale, motion and density - applied when you click Save Changes, only here (not the public site)</p>
         </div>
-        <div className="ml-auto shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-white/12 bg-white/5 text-ink-200">
-          {active.label}
-        </div>
+        {dirty ? (
+          <div className="ml-auto shrink-0 flex items-center gap-1.5">
+            <span className="px-2 py-1 rounded-full text-[10px] font-semibold border border-amber/30 bg-amber/10 text-amber whitespace-nowrap">Pending - click Save</span>
+            <button onClick={revert} title="Discard appearance changes"
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
+              <RotateCcw className="w-3 h-3" /> Revert
+            </button>
+          </div>
+        ) : (
+          <div className="ml-auto shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-white/12 bg-white/5 text-ink-200">
+            {active.label}
+          </div>
+        )}
       </div>
 
       {/* ── Theme presets ── */}
       <div className="p-3 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         {THEMES.map((t) => {
-          const isActive = t.id === theme
+          const isActive = t.id === dTheme
           return (
             <button
               key={t.id}
-              onClick={() => setTheme(t.id)}
+              onClick={() => editTheme(t.id)}
               className={cn(
                 'group relative text-left rounded-xl border p-2 sm:p-3 transition-all',
                 isActive
@@ -704,8 +740,8 @@ function ThemeCard() {
               <p className="text-xs font-semibold text-white">Accent colour</p>
               <p className="text-[10px] text-ink-600">Overrides the theme&apos;s primary across charts, buttons and highlights</p>
             </div>
-            {prefs.accent && (
-              <button onClick={() => setPrefs({ accent: null })}
+            {dPrefs.accent && (
+              <button onClick={() => editPrefs({ accent: null })}
                 className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors shrink-0">
                 <RotateCcw className="w-3 h-3" /> Theme default
               </button>
@@ -713,9 +749,9 @@ function ThemeCard() {
           </div>
           <div className="flex items-center flex-wrap gap-2">
             {ACCENT_PRESETS.map((hex) => {
-              const on = prefs.accent?.toLowerCase() === hex.toLowerCase()
+              const on = dPrefs.accent?.toLowerCase() === hex.toLowerCase()
               return (
-                <button key={hex} onClick={() => setPrefs({ accent: hex })}
+                <button key={hex} onClick={() => editPrefs({ accent: hex })}
                   aria-label={`Accent ${hex}`} aria-pressed={on} title={hex}
                   className={cn('w-7 h-7 rounded-full border-2 grid place-items-center transition-transform hover:scale-110',
                     on ? 'border-white' : 'border-white/15')}
@@ -728,13 +764,13 @@ function ThemeCard() {
             <label
               className={cn('relative w-7 h-7 rounded-full border-2 grid place-items-center cursor-pointer transition-transform hover:scale-110',
                 isCustomAccent ? 'border-white' : 'border-dashed border-white/30')}
-              style={isCustomAccent ? { background: prefs.accent! } : undefined}
+              style={isCustomAccent ? { background: dPrefs.accent! } : undefined}
               title="Custom colour">
               {isCustomAccent
                 ? <Check className="w-3.5 h-3.5 text-black/75" strokeWidth={3} />
                 : <Plus className="w-3.5 h-3.5 text-ink-400" />}
               <input type="color" value={accentColor}
-                onChange={(e) => setPrefs({ accent: e.target.value })}
+                onChange={(e) => editPrefs({ accent: e.target.value })}
                 className="absolute inset-0 opacity-0 cursor-pointer"
                 aria-label="Custom accent colour" />
             </label>
@@ -749,9 +785,9 @@ function ThemeCard() {
               <p className="text-[10px] text-ink-600">Zoom the whole dashboard in or out</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[11px] font-mono text-ink-300 tabular-nums">{Math.round(prefs.scale * 100)}%</span>
-              {prefs.scale !== 1 && (
-                <button onClick={() => setPrefs({ scale: 1 })} title="Reset to 100%"
+              <span className="text-[11px] font-mono text-ink-300 tabular-nums">{Math.round(dPrefs.scale * 100)}%</span>
+              {dPrefs.scale !== 1 && (
+                <button onClick={() => editPrefs({ scale: 1 })} title="Reset to 100%"
                   className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
@@ -760,8 +796,8 @@ function ThemeCard() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-ink-600 select-none">A</span>
-            <input type="range" min={0.9} max={1.1} step={0.05} value={prefs.scale}
-              onChange={(e) => setPrefs({ scale: parseFloat(e.target.value) })}
+            <input type="range" min={0.9} max={1.1} step={0.05} value={dPrefs.scale}
+              onChange={(e) => editPrefs({ scale: parseFloat(e.target.value) })}
               aria-label="UI scale"
               className="flex-1 h-1.5 accent-magenta cursor-pointer" />
             <span className="text-sm text-ink-400 select-none">A</span>
@@ -772,20 +808,20 @@ function ThemeCard() {
         <div className="grid sm:grid-cols-2 gap-4">
           <Segmented<'full' | 'reduced'>
             label="Motion" desc="Reduce animations and transitions"
-            value={prefs.motion}
+            value={dPrefs.motion}
             options={[{ v: 'full', l: 'Full' }, { v: 'reduced', l: 'Reduced' }]}
-            onChange={(v) => setPrefs({ motion: v })} />
+            onChange={(v) => editPrefs({ motion: v })} />
           <Segmented<'comfortable' | 'compact'>
             label="Density" desc="Tighten spacing to fit more on screen"
-            value={prefs.density}
+            value={dPrefs.density}
             options={[{ v: 'comfortable', l: 'Comfortable' }, { v: 'compact', l: 'Compact' }]}
-            onChange={(v) => setPrefs({ density: v })} />
+            onChange={(v) => editPrefs({ density: v })} />
         </div>
       </div>
 
       <div className="px-4 pb-3 sm:px-5 sm:pb-4">
         <p className="text-[10px] text-ink-700">
-          All appearance choices are saved to this browser and sync across open dashboard tabs. The marketing site keeps its signature Plasma Noir look.
+          Appearance applies when you click <b className="text-ink-500">Save Changes</b> (top right). Choices are saved to this browser and sync across open dashboard tabs; the marketing site keeps its signature Plasma Noir look.
         </p>
       </div>
     </motion.div>
@@ -1287,6 +1323,8 @@ function BackgroundJobs() {
 export default function ConfigPage() {
   const [tab, setTab] = useState('general')
   const [saved, setSaved] = useState(false)
+  // Bumped on every Save - the Appearance card commits its draft on the change.
+  const [saveTick, setSaveTick] = useState(0)
   const [cursorFx, setCursorFx] = useCursorEffect()
 
   // Platform settings, loaded from and persisted to the backend settings store.
@@ -1311,6 +1349,7 @@ export default function ConfigPage() {
 
   const save = () => {
     updateSettings(settings).catch(() => {})  // persists when API is up; UI state is source of truth otherwise
+    setSaveTick((t) => t + 1)                  // commit pending Appearance draft
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
@@ -1357,7 +1396,7 @@ export default function ConfigPage() {
               <ExperienceModeCard />
 
               {/* ── Dashboard Theme ─────────────────────────────────── */}
-              <ThemeCard />
+              <ThemeCard saveTick={saveTick} />
 
               <Section title="Platform Settings" icon={Settings} color="#7A3CFF">
                 <div className="space-y-4">

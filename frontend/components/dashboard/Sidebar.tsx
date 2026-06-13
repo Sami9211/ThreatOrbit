@@ -265,13 +265,14 @@ export default function Sidebar() {
           <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-0.5">
             {NAV.map(({ section, items }) => (
               <div key={section ?? '__root'}>
-                <AnimatePresence>
+                <AnimatePresence initial={false}>
                   {expanded && section && (
                     <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="px-4 pt-4 pb-1"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="px-4 pt-4 pb-1 overflow-hidden"
                     >
                       <span className="text-[9px] font-semibold tracking-widest uppercase text-ink-600">
                         {section}
