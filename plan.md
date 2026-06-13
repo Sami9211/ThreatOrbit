@@ -374,6 +374,16 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Fix combined-install conflict (build)** — the security-pass
+  backend bump (fastapi 0.118+/python-multipart 0.0.27+) left `log_api`
+  pinned to the old `fastapi==0.115.0` / `python-multipart==0.0.9`. The
+  Windows bats (`windows-start.bat`, `windows-test.bat`) install all three
+  services' requirements in one `pip install`, so the divergence produced a
+  hard `ResolutionImpossible` and both bats died at the install step before
+  any test/app ran. Aligned `log_api`'s shared pins with `dashboard_api`
+  (same FastAPI/uvicorn/python-multipart stack, same upload-DoS fix — its
+  tests already pass on the new versions). Combined install now resolves;
+  all three suites green (143 + 1 + 1); frontend builds + type-checks clean.
 - **2026-06-12 · Security pass: audits in CI + patched deps + disclosure
   (Tier 1)** — `.github/workflows/security.yml` runs pip-audit (strict) and
   a frontend audit gate on every change plus weekly. The npm gate
