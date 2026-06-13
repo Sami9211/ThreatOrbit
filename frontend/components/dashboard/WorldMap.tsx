@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { feature } from 'topojson-client'
 import type { Feature, Geometry } from 'geojson'
@@ -98,19 +98,28 @@ export default function WorldMap() {
 
   const top = useMemo(() => [...data].sort((a, b) => b.observed - a.observed).slice(0, 8), [data])
 
-  const fillFor = (s: Shape) => {
-    if (mode === 'continent') { const g = byCont[s.continent]; return g ? colorFor(g.observed, max) : NODATA }
-    const c = byNum[s.id]; return c ? colorFor(c.observed, max) : NODATA
-  }
-  const isHot = (s: Shape) => mode === 'continent' ? hoverCont === s.continent : hoverId === s.id
-  const hasData = (s: Shape) => mode === 'continent' ? !!byCont[s.continent] : !!byNum[s.id]
-
-  const onEnter = (s: Shape) => { if (mode === 'continent') setHoverCont(s.continent); else setHoverId(s.id) }
   const onLeave = () => { setHoverId(null); setHoverCont(null); setTip(null) }
-  const onMove = (e: React.MouseEvent) => {
+  // Tooltip follows the cursor; kept stable so it doesn't re-render the polygons.
+  const onMove = useCallback((e: React.MouseEvent) => {
     const r = wrapRef.current?.getBoundingClientRect()
     if (r) setTip({ x: e.clientX - r.left, y: e.clientY - r.top })
-  }
+  }, [])
+
+  // Memoise the 177 country paths so moving the cursor (tooltip position only)
+  // doesn't rebuild them - they recompute only when the data/mode/hover changes.
+  const paths = useMemo(() => SHAPES.map((s) => {
+    const datum = mode === 'continent' ? byCont[s.continent] : byNum[s.id]
+    const fill = datum ? colorFor(datum.observed, max) : NODATA
+    const hot = mode === 'continent' ? hoverCont === s.continent : hoverId === s.id
+    return (
+      <path key={s.id} d={s.d} fill={fill}
+        stroke={hot ? '#FFFFFF' : 'rgba(255,255,255,0.10)'} strokeWidth={hot ? 1 : 0.4}
+        onMouseEnter={() => { if (mode === 'continent') setHoverCont(s.continent); else setHoverId(s.id) }}
+        onMouseMove={onMove}
+        style={{ cursor: datum ? 'pointer' : 'default', filter: hot ? 'brightness(1.35)' : undefined,
+          transition: 'fill 200ms ease' }} />
+    )
+  }), [mode, hoverId, hoverCont, byNum, byCont, max, onMove])
 
   // Tooltip content for the current hover.
   const tipBody = (() => {
@@ -165,16 +174,7 @@ export default function WorldMap() {
         <div ref={wrapRef} className="relative min-h-0" onMouseLeave={onLeave}>
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet"
             style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 30%, rgba(122,60,255,0.07), transparent 70%)' }}>
-            {SHAPES.map((s) => {
-              const hot = isHot(s)
-              return (
-                <path key={s.id} d={s.d} fill={fillFor(s)}
-                  stroke={hot ? '#FFFFFF' : 'rgba(255,255,255,0.10)'} strokeWidth={hot ? 1 : 0.4}
-                  onMouseEnter={() => onEnter(s)} onMouseMove={onMove}
-                  style={{ cursor: hasData(s) ? 'pointer' : 'default', filter: hot ? 'brightness(1.35)' : undefined,
-                    transition: 'fill 200ms ease' }} />
-              )
-            })}
+            {paths}
           </svg>
 
           {/* Tooltip */}
