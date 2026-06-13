@@ -374,6 +374,28 @@ that buying companies require. Realistic positioning today:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-13 · Appearance: 11 themes + in-depth customization, plus 3 UI
+  fixes** (user-requested batch). (a) **Appearance panel** (config →
+  Appearance): five new palettes (nebula, oceanic, cyber, slate, ember →
+  **11 total**); a **custom accent** (12 presets + native hex picker) that
+  overrides the active theme's primary across the whole dashboard via an
+  inline `--magenta` RGB-triplet override; **UI scale** 90-110% and
+  **Comfortable / Compact density** both applied through the document's rem
+  baseline by `ThemeScope` (a genuine zoom / density change, not a cosmetic
+  flag — restored on leaving the dashboard); and a **Reduced-motion** toggle
+  that stops animations/transitions. All four prefs persist per-browser
+  (`to-dashboard-prefs`) and sync across open tabs, scoped to the dashboard
+  so the marketing site is untouched. Retired the old decorative no-op
+  toggles (Dark Mode / Compact View / Animated Effects / Auto-refresh) now
+  that real controls exist. (b) **Monochrome contrast** — solid accent
+  buttons forced dark text (white-on-white fixed); faint tints untouched.
+  (c) **Hero/orbit scroll flicker** — the 3D scenes mounted the `<Canvas>`
+  conditionally, so a sudden scroll tore down and rebuilt the WebGL context
+  (a blank frame); they now mount once and stay alive, pausing the render
+  loop (`frameloop: demand`) off-screen. (d) **Logo** — flat hex replaced
+  with a faceted, beveled 3D gem (lit/shaded half-faces, specular crown,
+  cast shadow, glow bloom behind the core). Frontend builds + type-checks
+  clean.
 - **2026-06-13 · Dashboard assistant + map rehaul + top-actors fix + dash sweep**
   (user-requested batch). (a) **Security-bounded AI assistant**
   (`dashboard_api/assistant.py`, `/assistant/chat|status`, floating

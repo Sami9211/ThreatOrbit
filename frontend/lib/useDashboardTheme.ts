@@ -13,7 +13,9 @@ import { useEffect, useState, useCallback } from 'react'
  * paint as 'plasma' to avoid hydration mismatch; the stored value is applied
  * after mount.
  */
-export type DashboardTheme = 'plasma' | 'mono' | 'arctic' | 'matrix' | 'solar' | 'crimson'
+export type DashboardTheme =
+  | 'plasma' | 'mono' | 'arctic' | 'matrix' | 'solar' | 'crimson'
+  | 'nebula' | 'oceanic' | 'cyber' | 'slate' | 'ember'
 
 export const THEMES: {
   id: DashboardTheme
@@ -28,7 +30,92 @@ export const THEMES: {
   { id: 'matrix',  label: 'Matrix',      desc: 'Terminal green',            swatch: ['#050A05', '#34D058', '#16A34A', '#A3E635'] },
   { id: 'solar',   label: 'Solar Flare', desc: 'Amber · orange warmth',     swatch: ['#120B05', '#FB923C', '#F59E0B', '#FBBF24'] },
   { id: 'crimson', label: 'Crimson',     desc: 'Rose · red threat tone',    swatch: ['#0F0608', '#F43F5E', '#DC2626', '#FB7185'] },
+  { id: 'nebula',  label: 'Nebula',      desc: 'Violet · fuchsia · cyan',   swatch: ['#0B0818', '#C084FC', '#818CF8', '#22D3EE'] },
+  { id: 'oceanic', label: 'Oceanic',     desc: 'Cyan · aqua on deep teal',  swatch: ['#050E14', '#22D3EE', '#38BDF8', '#5EEAD4'] },
+  { id: 'cyber',   label: 'Cyberpunk',   desc: 'Neon cyan · magenta · lime', swatch: ['#06060A', '#00F5D4', '#FF0099', '#BEF264'] },
+  { id: 'slate',   label: 'Slate',       desc: 'Cool professional blue-grey', swatch: ['#090C12', '#60A5FA', '#818CF8', '#94A3B8'] },
+  { id: 'ember',   label: 'Ember',       desc: 'Warm rose · gold on charcoal', swatch: ['#0E0A09', '#FB923C', '#F472B6', '#FACC15'] },
 ]
+
+/* ── Detailed customization knobs (layered on top of the chosen theme) ──────
+   Persisted separately and applied by ThemeScope: a custom accent (overrides
+   the theme's primary), a UI scale (zoom), reduced motion, and compact
+   density. Synced cross-tab like the theme. */
+export interface DashboardPrefs {
+  accent: string | null   // hex like "#FF2E97" - overrides the theme primary
+  scale: number           // 0.9 .. 1.1 (UI zoom)
+  motion: 'full' | 'reduced'
+  density: 'comfortable' | 'compact'
+}
+
+export const DEFAULT_PREFS: DashboardPrefs = {
+  accent: null, scale: 1, motion: 'full', density: 'comfortable',
+}
+
+/** Suggested accent swatches for quick selection in the picker. */
+export const ACCENT_PRESETS = [
+  '#FF2E97', '#7A3CFF', '#FB923C', '#34D058', '#38BDF8', '#22D3EE',
+  '#F43F5E', '#FACC15', '#C084FC', '#FF0099', '#00F5D4', '#60A5FA',
+]
+
+const PREFS_KEY = 'to-dashboard-prefs'
+const PREFS_EVT = 'to-dashboard-prefs-change'
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, n))
+}
+
+function sanitizePrefs(raw: unknown): DashboardPrefs {
+  const p = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  const accent = typeof p.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.accent) ? p.accent : null
+  const scale = typeof p.scale === 'number' ? clamp(p.scale, 0.9, 1.1) : 1
+  const motion = p.motion === 'reduced' ? 'reduced' : 'full'
+  const density = p.density === 'compact' ? 'compact' : 'comfortable'
+  return { accent, scale, motion, density }
+}
+
+export function useDashboardPrefs(): [DashboardPrefs, (patch: Partial<DashboardPrefs>) => void] {
+  const [prefs, setPrefs] = useState<DashboardPrefs>(DEFAULT_PREFS)
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(PREFS_KEY)
+      if (stored) setPrefs(sanitizePrefs(JSON.parse(stored)))
+    } catch { /* ignore */ }
+
+    const onCustom = (e: Event) => setPrefs(sanitizePrefs((e as CustomEvent).detail))
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === PREFS_KEY && e.newValue) {
+        try { setPrefs(sanitizePrefs(JSON.parse(e.newValue))) } catch { /* ignore */ }
+      }
+    }
+    window.addEventListener(PREFS_EVT, onCustom)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(PREFS_EVT, onCustom)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+
+  const update = useCallback((patch: Partial<DashboardPrefs>) => {
+    setPrefs((prev) => {
+      const next = sanitizePrefs({ ...prev, ...patch })
+      try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent(PREFS_EVT, { detail: next }))
+      return next
+    })
+  }, [])
+
+  return [prefs, update]
+}
+
+/** Convert "#RRGGBB" -> "r g b" for a CSS custom property. */
+export function hexToRgbTriplet(hex: string): string | null {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex)
+  if (!m) return null
+  const n = parseInt(m[1], 16)
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
+}
 
 const KEY = 'to-dashboard-theme'
 const EVT = 'to-dashboard-theme-change'

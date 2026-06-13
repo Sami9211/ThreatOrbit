@@ -156,6 +156,129 @@
   --ink-800: 39 26 30;
 }
 
+/* ── Nebula - violet/fuchsia/cyan on deep indigo ───────────────────── */
+[data-theme='nebula'] {
+  --bg: 11 8 24;
+  --surface: 18 13 36;
+  --surface-2: 26 18 50;
+  --surface-3: 38 26 70;
+  --magenta: 192 132 252;
+  --violet: 129 140 248;
+  --amber: 34 211 238;
+  --teal: 45 212 191;
+  --threat: 244 114 182;
+  --safe: 110 231 183;
+  --ink-100: 243 240 255;
+  --ink-200: 221 214 245;
+  --ink-300: 190 180 224;
+  --ink-400: 148 138 184;
+  --ink-500: 110 100 145;
+  --ink-600: 78 70 105;
+  --ink-700: 56 50 78;
+  --ink-800: 38 33 56;
+}
+
+/* ── Oceanic - cyan/aqua/blue on deep teal-navy ────────────────────── */
+[data-theme='oceanic'] {
+  --bg: 5 14 20;
+  --surface: 8 22 31;
+  --surface-2: 12 32 44;
+  --surface-3: 18 46 62;
+  --magenta: 34 211 238;
+  --violet: 56 189 248;
+  --amber: 45 212 191;
+  --teal: 94 234 212;
+  --threat: 251 113 133;
+  --safe: 52 211 153;
+  --ink-100: 236 250 252;
+  --ink-200: 205 232 238;
+  --ink-300: 168 205 214;
+  --ink-400: 124 158 168;
+  --ink-500: 88 116 126;
+  --ink-600: 60 82 92;
+  --ink-700: 44 60 68;
+  --ink-800: 28 40 48;
+}
+
+/* ── Cyberpunk - neon cyan/magenta/lime on pure black ──────────────── */
+[data-theme='cyber'] {
+  --bg: 6 6 10;
+  --surface: 12 12 18;
+  --surface-2: 18 18 26;
+  --surface-3: 28 28 40;
+  --magenta: 0 245 212;
+  --violet: 255 0 153;
+  --amber: 190 242 100;
+  --teal: 0 245 212;
+  --threat: 255 64 129;
+  --safe: 0 230 180;
+  --ink-100: 235 245 248;
+  --ink-200: 206 222 228;
+  --ink-300: 168 188 196;
+  --ink-400: 126 146 156;
+  --ink-500: 92 108 118;
+  --ink-600: 64 76 86;
+  --ink-700: 46 56 64;
+  --ink-800: 28 36 44;
+}
+
+/* ── Slate - cool professional blue-grey ───────────────────────────── */
+[data-theme='slate'] {
+  --bg: 9 12 18;
+  --surface: 15 20 30;
+  --surface-2: 22 29 42;
+  --surface-3: 32 42 60;
+  --magenta: 96 165 250;
+  --violet: 129 140 248;
+  --amber: 148 163 184;
+  --teal: 45 212 191;
+  --threat: 248 113 113;
+  --safe: 52 211 153;
+  --ink-100: 241 245 252;
+  --ink-200: 218 226 240;
+  --ink-300: 186 198 218;
+  --ink-400: 142 156 180;
+  --ink-500: 104 118 142;
+  --ink-600: 72 84 105;
+  --ink-700: 52 62 80;
+  --ink-800: 34 42 58;
+}
+
+/* ── Ember - warm rose/gold on charcoal ────────────────────────────── */
+[data-theme='ember'] {
+  --bg: 14 10 9;
+  --surface: 22 16 14;
+  --surface-2: 32 23 20;
+  --surface-3: 46 33 28;
+  --magenta: 251 146 60;
+  --violet: 244 114 182;
+  --amber: 250 204 21;
+  --teal: 251 191 36;
+  --threat: 248 113 113;
+  --safe: 132 204 22;
+  --ink-100: 252 244 238;
+  --ink-200: 238 220 210;
+  --ink-300: 212 186 172;
+  --ink-400: 170 142 128;
+  --ink-500: 122 100 90;
+  --ink-600: 84 68 60;
+  --ink-700: 60 48 42;
+  --ink-800: 40 32 28;
+}
+
+/* ── Customization knobs (layered on top of the active theme) ──────────
+   Reduced motion is enforced here. UI scale and compact density act on the
+   document's rem baseline (set by ThemeScope), and the custom accent is
+   applied inline (--magenta override) by ThemeScope. */
+[data-motion='reduced'] *,
+[data-motion='reduced'] *::before,
+[data-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 * {
   box-sizing: border-box;
 }
