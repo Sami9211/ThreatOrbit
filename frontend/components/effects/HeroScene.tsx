@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Float, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -114,10 +114,15 @@ export default function HeroScene({ mouseX, mouseY }: {
   mouseY: MotionValue<number>
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  // Generous margin so the canvas mounts just before it scrolls into view and
-  // unmounts (freeing its WebGL context) once well off-screen - keeps the page
-  // from holding several live GL contexts at once.
-  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
+  // Mount the canvas just before it scrolls into view, then KEEP it mounted
+  // (the `mounted` latch). Tearing the WebGL context down on every scroll-away
+  // and rebuilding it on scroll-back caused a blank frame - the object/orbit
+  // briefly vanishing on a sudden scroll. Instead we keep one context alive and
+  // only pause the render loop (`frameloop: demand`) while it is off-screen, so
+  // the last frame stays on screen with zero GPU cost.
+  const { ref, visible } = useInViewport<HTMLDivElement>('600px')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
 
   const objects   = isLowPower ? OBJECTS.slice(0, 6) : OBJECTS
@@ -130,9 +135,9 @@ export default function HeroScene({ mouseX, mouseY }: {
 
   return (
     <div ref={ref} className="w-full h-full">
-      {visible ? (
+      {mounted ? (
         <Canvas
-          frameloop={animate ? 'always' : 'demand'}
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0, 6.5], fov: 56 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           dpr={dpr}

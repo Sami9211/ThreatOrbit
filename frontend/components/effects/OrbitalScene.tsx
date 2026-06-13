@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -159,10 +159,13 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   mouseY:  MotionValue<number>
 }) {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  // Mount the GL context only near the viewport; unmount well off-screen.
-  // Use a large margin so the canvas mounts well before the user scrolls here,
-  // eliminating the visible 5-10s delay caused by shader compilation on first render.
+  // Mount the GL context near the viewport, then KEEP it mounted (latch) so a
+  // sudden scroll never tears down and rebuilds the context - which showed as
+  // the orbit briefly vanishing. Render loop pauses (frameloop demand) while
+  // off-screen, so the last frame stays put at zero GPU cost.
   const { ref, visible } = useInViewport<HTMLDivElement>('800px')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
 
   const animate   = !prefersReducedMotion
@@ -177,9 +180,9 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
 
   return (
     <div ref={ref} className="w-full h-full">
-      {visible ? (
+      {mounted ? (
         <Canvas
-          frameloop="always"
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0.8, camZ], fov: 46 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}

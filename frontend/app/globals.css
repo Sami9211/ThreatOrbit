@@ -59,6 +59,15 @@
   --ink-800: 39 39 42;
 }
 
+/* Monochrome accent fills are near-white, so white text on them is invisible.
+   Force dark text on any filled accent surface (and white text nested inside
+   one). Faint tints like `bg-magenta/10` keep their light text - the selector
+   only matches the solid utilities, not the `/opacity` variants. */
+[data-theme='mono'] :is(.bg-plasma, .bg-magenta, .bg-violet, .bg-amber, .bg-threat),
+[data-theme='mono'] :is(.bg-plasma, .bg-magenta, .bg-violet, .bg-amber, .bg-threat) :is(.text-white, .text-ink-100) {
+  color: #0a0a0b !important;
+}
+
 /* ── Arctic - cool sky/indigo on deep navy ─────────────────────────── */
 [data-theme='arctic'] {
   --bg: 6 11 18;
