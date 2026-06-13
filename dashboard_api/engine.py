@@ -40,8 +40,9 @@ _PROCS = ["powershell.exe", "cmd.exe", "rundll32.exe", "mshta.exe", "wmic.exe",
           "certutil.exe", "regsvr32.exe", "svchost.exe", "lsass.exe", "sshd"]
 _COUNTRIES = ["Russia", "China", "North Korea", "Iran", "United States", "Brazil",
               "Netherlands", "Romania", "Vietnam", "Nigeria"]
-_ACTORS = ["Lazarus Group", "APT29", "Volt Typhoon", "Scattered Spider", "FIN7",
-           "LockBit", "BlackBasta", "Sandworm"]
+# Attribution names come from the curated reference library, so every
+# indicator the engine attributes lands on a real actor row (no drift).
+from dashboard_api.threat_actor_library import ACTOR_NAMES as _ACTORS
 _MALWARE = ["Cobalt Strike", "Emotet", "QakBot", "AgentTesla", "Ryuk", "BumbleBee",
             "IcedID", "RedLine Stealer"]
 _BAD_DOMAINS = ["m1crosoft-update.com", "secure-login-portal.net", "cdn-analytics.xyz",
@@ -493,6 +494,14 @@ def process_tick(max_events: int = 6) -> dict:
         # SOAR automation: auto-trigger playbooks whose criteria match new alerts.
         from dashboard_api.playbook_engine import auto_trigger_playbooks
         pb_runs, pb_dispatches = auto_trigger_playbooks(conn)
+        # Refresh actor activity from the indicators just attributed (real,
+        # honest counts that drive the Top Threat Actors ranking).
+        if iocs:
+            try:
+                from dashboard_api.threat_actor_library import recompute_actor_activity
+                recompute_actor_activity(conn)
+            except Exception:
+                pass
         _emit_notifications(conn)
         conn.commit()
     if pb_dispatches:

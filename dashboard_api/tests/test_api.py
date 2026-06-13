@@ -3105,6 +3105,45 @@ def test_rbac_viewer_is_read_only(client, auth):
     client.delete(f"/users/{analyst.json()['id']}", headers=auth)
 
 
+def test_top_actors_from_real_attribution(client, auth):
+    """Top Threat Actors ranks the curated actor library by indicators REALLY
+    attributed to each actor in the store, not a static count. The library
+    seeds in both modes (so live mode is never empty) and the engine's
+    attribution names stay in lockstep with it."""
+    from dashboard_api.db import get_conn
+    from dashboard_api.threat_actor_library import (
+        ACTOR_NAMES, seed_actor_library, recompute_actor_activity)
+    from dashboard_api.engine import _ACTORS
+
+    # the engine attributes to names that all exist in the library (no drift)
+    assert set(_ACTORS) == set(ACTOR_NAMES)
+
+    # library is idempotent and present
+    with get_conn() as conn:
+        seed_actor_library(conn); conn.commit()
+        before = conn.execute("SELECT COUNT(*) FROM threat_actors").fetchone()[0]
+        seed_actor_library(conn); conn.commit()  # second call adds nothing
+        assert conn.execute("SELECT COUNT(*) FROM threat_actors").fetchone()[0] == before
+        # attribute three indicators to one real actor, then recompute
+        actor = ACTOR_NAMES[0]
+        for i in range(3):
+            conn.execute("INSERT INTO iocs (id,type,value,threat_type,confidence,severity,"
+                         "source,actor,first_seen,last_seen,tags) "
+                         "VALUES (?,?,?,?,50,'high','test',?,datetime('now'),datetime('now'),'[]')",
+                         (f"ta-{i}", "ip", f"9.9.9.{i}", "c2", actor))
+        recompute_actor_activity(conn); conn.commit()
+        n = conn.execute("SELECT ioc_count FROM threat_actors WHERE name=?", (actor,)).fetchone()[0]
+    assert n >= 3
+
+    top = client.get("/overview/top-actors?limit=10", headers=auth).json()
+    assert top, "actor library is seeded, so this is never empty"
+    me = next((a for a in top if a["name"] == actor), None)
+    assert me and me["attacks"] >= 3
+    # ranked by attributed activity descending
+    counts = [a["attacks"] for a in top]
+    assert counts == sorted(counts, reverse=True)
+
+
 def test_geo_distribution_is_observed(client, auth):
     """/overview/geo counts come from the platform's own alert store (engine
     telemetry carries source country → alerts.src_country), not constants."""

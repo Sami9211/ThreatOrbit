@@ -118,9 +118,18 @@ def recent_incidents(limit: int = 6, user: dict = Depends(current_user)):
 def top_actors(limit: int = 5, user: dict = Depends(current_user)):
     sc, sp = _scope(user)
     with get_conn() as conn:
+        # Rank by indicators REALLY attributed to each actor in the store (a
+        # live LEFT JOIN, so it is accurate between engine ticks too), falling
+        # back to sophistication for actors with no observed activity yet.
         rows = conn.execute(
-            "SELECT name, origin, sophistication AS score, ioc_count AS attacks, threat_level "
-            f"FROM threat_actors WHERE 1=1 {sc} ORDER BY ioc_count DESC LIMIT ?", sp + [limit]
+            "SELECT a.name, a.origin, a.sophistication AS score, a.threat_level, "
+            "COALESCE(ic.n, 0) AS attacks "
+            "FROM threat_actors a "
+            "LEFT JOIN (SELECT actor, COUNT(*) AS n FROM iocs "
+            "           WHERE actor IS NOT NULL AND actor != '' GROUP BY actor) ic "
+            "  ON ic.actor = a.name "
+            f"WHERE 1=1 {sc.replace('org_id', 'a.org_id')} "
+            "ORDER BY attacks DESC, a.sophistication DESC, a.name LIMIT ?", sp + [limit]
         ).fetchall()
     return rows_to_dicts(rows)
 

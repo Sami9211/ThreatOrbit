@@ -365,42 +365,24 @@ def _seed_integrations(conn, rng):
 
 
 def _seed_actors(conn, rng):
-    actors = [
-        ("APT29", ["Cozy Bear", "Nobelium"], "RU", "🇷🇺", "Nation-State", ["Espionage"], 5, "critical",
-         ["Government", "Defense", "Think Tanks"], ["WellMess", "WellMail", "SUNBURST"]),
-        ("APT41", ["Wicked Panda", "Barium"], "CN", "🇨🇳", "Nation-State", ["Espionage", "Financial"], 5, "critical",
-         ["Healthcare", "Telecom", "Gaming"], ["ShadowPad", "PlugX", "Winnti"]),
-        ("Lazarus Group", ["Hidden Cobra", "APT38"], "KP", "🇰🇵", "Nation-State", ["Financial", "Disruption"], 5, "critical",
-         ["Finance", "Crypto", "Defense"], ["AppleJeus", "FALLCHILL"]),
-        ("FIN7", ["Carbanak", "Carbon Spider"], "RU", "🇷🇺", "Cybercrime", ["Financial"], 4, "high",
-         ["Retail", "Hospitality"], ["Carbanak", "Griffon", "BABYMETAL"]),
-        ("Sandworm", ["Voodoo Bear", "Iridium"], "RU", "🇷🇺", "Nation-State", ["Disruption"], 5, "critical",
-         ["Energy", "Government"], ["NotPetya", "Industroyer", "BlackEnergy"]),
-        ("Charming Kitten", ["APT35", "Phosphorus"], "IR", "🇮🇷", "Nation-State", ["Espionage"], 4, "high",
-         ["Academia", "Journalism", "NGOs"], ["PowerShortShell", "HYPERSCRAPE"]),
-        ("Scattered Spider", ["UNC3944", "Muddled Libra"], "US", "🇺🇸", "Cybercrime", ["Financial"], 4, "high",
-         ["Telecom", "SaaS", "Gaming"], ["AlphV", "RansomHub"]),
-        ("Volt Typhoon", ["Bronze Silhouette"], "CN", "🇨🇳", "Nation-State", ["Espionage", "Disruption"], 5, "critical",
-         ["Critical Infrastructure", "Utilities"], ["living-off-the-land"]),
-    ]
-    actor_names = []
-    for name, aliases, origin, flag, typ, mot, soph, level, sectors, malware in actors:
-        ttps = rng.sample([m[2] for m in MITRE], rng.randint(4, 8))
-        campaigns = [{"year": 2024 - i, "name": f"Operation {rng.choice(['Ghost','Tide','Echo','Cobalt','Frost'])} {rng.randint(1,9)}",
+    """Demo actors come from the same curated reference library live mode uses,
+    so identity is consistent across modes. Demo then layers on illustrative
+    campaigns/last-seen; real activity (ioc_count) is filled from attributed
+    indicators after the IOC seed runs."""
+    from dashboard_api.threat_actor_library import ACTOR_LIBRARY, seed_actor_library
+    seed_actor_library(conn)
+    actor_names = [a[0] for a in ACTOR_LIBRARY]
+    # Demo flavour: give each actor a couple of illustrative campaigns + a
+    # plausible recent last-seen so the CTI page has texture before live data.
+    for name in actor_names:
+        campaigns = [{"year": 2024 - i,
+                      "name": f"Operation {rng.choice(['Ghost','Tide','Echo','Cobalt','Frost'])} {rng.randint(1,9)}",
                       "note": "Targeted intrusion campaign."} for i in range(rng.randint(1, 3))]
-        ioc_count = rng.randint(20, 400)
         conn.execute(
-            "INSERT INTO threat_actors (id,name,aliases,origin,flag,type,motivations,active,first_seen,"
-            "last_seen,sophistication,threat_level,sectors,ttps,malware,ioc_count,campaign_count,"
-            "recent_activity,description,campaigns,iocs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), name, dumps(aliases), origin, flag, typ, dumps(mot),
-             1, f"{2008 + rng.randint(0,12)}-01-01", _ago(rng, 720),
-             soph, level, dumps(sectors), dumps(ttps), dumps(malware), ioc_count, len(campaigns),
-             f"Observed targeting {sectors[0].lower()} sector.",
-             f"{name} is a {typ.lower()} group ({origin}) known for {mot[0].lower()}-motivated operations.",
-             dumps(campaigns), dumps([_rand_ip(rng) for _ in range(3)])),
-        )
-        actor_names.append(name)
+            "UPDATE threat_actors SET first_seen=?, last_seen=?, campaign_count=?, "
+            "campaigns=?, iocs=? WHERE name=?",
+            (f"{2008 + rng.randint(0,12)}-01-01", _ago(rng, 720), len(campaigns),
+             dumps(campaigns), dumps([_rand_ip(rng) for _ in range(3)]), name))
     return actor_names
 
 
@@ -509,6 +491,10 @@ def seed(force: bool = False):
         _seed_integrations(conn, rng)
         actors = _seed_actors(conn, rng)
         _seed_iocs(conn, rng, actors)
+        # Fill each actor's activity from the indicators just attributed to it,
+        # so the Top Threat Actors ranking is real (not a random ioc_count).
+        from dashboard_api.threat_actor_library import recompute_actor_activity
+        recompute_actor_activity(conn)
         _seed_feeds(conn, rng)
         _seed_hunts(conn, rng)
         _seed_settings(conn)
@@ -532,21 +518,26 @@ def bootstrap_live():
     real feed catalogue — but NO demo alerts/actors/assets. Indicators arrive
     from the connector engine. Idempotent (no-op once a user exists)."""
     from dashboard_api.auth import hash_password
+    from dashboard_api.threat_actor_library import seed_actor_library, recompute_actor_activity
     with get_conn() as conn:
-        if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
-            return False
-        ph, salt = hash_password(SEED_ADMIN_PASSWORD)
-        conn.execute(
-            "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
-            "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), SEED_ADMIN_EMAIL, "Admin Operator", "admin", "active",
-             ph, salt, "#FF2E97", 1, None, _iso(_now())),
-        )
-        _seed_settings(conn)
-        from dashboard_api.tenancy import ensure_default_org
-        ensure_default_org(conn)
+        first = not conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        if first:
+            ph, salt = hash_password(SEED_ADMIN_PASSWORD)
+            conn.execute(
+                "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
+                "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), SEED_ADMIN_EMAIL, "Admin Operator", "admin", "active",
+                 ph, salt, "#FF2E97", 1, None, _iso(_now())),
+            )
+            _seed_settings(conn)
+            from dashboard_api.tenancy import ensure_default_org
+            ensure_default_org(conn)
+        # Reference actor knowledge base + real attributed activity — every boot
+        # (idempotent), so existing live deployments get backfilled too.
+        seed_actor_library(conn)
+        recompute_actor_activity(conn)
         conn.commit()
-    return True
+    return first
 
 
 if __name__ == "__main__":

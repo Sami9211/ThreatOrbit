@@ -327,6 +327,12 @@ function TopActors({ actors }: { actors: TopActor[] }) {
         <Link href="/dashboard/cti" className="text-xs text-magenta hover:underline">CTI →</Link>
       </div>
       <div className="p-4 space-y-3">
+        {actors.length === 0 && (
+          <p className="text-[11px] text-ink-600 py-6 text-center">
+            No actor activity observed yet. Tracked actors light up here as the engine
+            attributes indicators to them.
+          </p>
+        )}
         {actors.map((a, i) => (
           <div key={a.name} className="flex items-center gap-3">
             <span className="text-[10px] text-ink-600 w-4">{i + 1}</span>
