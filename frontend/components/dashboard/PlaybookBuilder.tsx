@@ -14,7 +14,7 @@ import {
   type StepKind, type BuilderStep, type PlaybookRun, type PlaybookVersion,
 } from '@/lib/api'
 
-const KIND_ICON: Record<string, React.ElementType> = {
+const KIND_ICON: Record<string, React.ComponentType<any>> = {
   enrich: Search, condition: GitBranch, block_ip: ShieldOff, isolate_host: Server,
   disable_user: UserX, create_case: FileText, add_note: MessageSquare,
   close_alerts: CheckCircle2, notify: Bell, webhook: Webhook, approval: UserCheck,

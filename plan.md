@@ -413,8 +413,11 @@ caught by the user, not by us. Honest findings (2026-06-14):
   grouped weekly PRs (and security PRs immediately); `dependabot-auto-merge.yml`
   auto-merges patch/minor bumps once the Tests/E2E/Security gates pass, leaving
   majors for human review. **next@16 DONE** (2026-06-14) - cleared all 5 npm
-  advisories on React 18. **Still to do:** the remaining major upgrades as
-  tracked units with full E2E (react@19 + the R3F v9 / three / motion set), and:
+  advisories on React 18. **react@19 + the R3F v9 chain DONE** (2026-06-14) -
+  react/react-dom 19.2, @react-three/fiber 9, drei 10, postprocessing 3,
+  framer-motion 12, lucide-react 1 (see CHANGELOG). **Still to do** as their own
+  tracked units: tailwindcss 3→4 (config/PostCSS rewrite) and @types/node 20→25.
+  Also:
   - **SBOM** - DONE (2026-06-14): `scripts/sbom.sh` + `supply-chain.yml`
     publish CycloneDX SBOMs (backend resolved env + frontend npm) as artifacts
     on every run; the **release** workflow also attaches signed SBOMs to each
@@ -535,6 +538,28 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-14 · React 19 + the react-three-fiber v9 chain (last outdated major
+  set).** Took the riskiest remaining upgrade as its own unit: react/react-dom
+  18→**19.2.7**, @react-three/fiber 8→**9.6.1**, @react-three/drei 9→**10.7.7**,
+  @react-three/postprocessing 2→**3.0.4**, framer-motion 11→**12.40.0**, plus
+  @types/react(-dom) 19. The blast radius was small where it counted - the 3D
+  stack is used in only 4 `components/effects/` files, and those type-checked
+  clean under v9 (no scene code changes needed). The real work was two React 19
+  type migrations: (a) `useRef<T>()` now requires an initial value - fixed the
+  two rAF-handle refs to `useRef<number | undefined>(undefined)`; (b) `icon:
+  React.ElementType` collapsed icon props to `never` because R3F v9's JSX
+  augmentation balloons `keyof JSX.IntrinsicElements` - replaced all 30 icon-slot
+  `React.ElementType`s with `React.ComponentType<any>` (behavior-preserving, no
+  new imports). Also bumped **lucide-react 0.417→1.18** for React 19 support;
+  v1 dropped brand icons, so the `Github` glyph now ships as a local
+  `components/ui/GithubIcon.tsx` (drop-in, same call sites). Verified locally:
+  `tsc --noEmit` clean, the **static export builds** (all 50+ routes prerender),
+  `npm audit` has **0 high/critical** (only the 2 known triaged postcss
+  moderates), and no removed framer-motion v12 APIs are used. **E2E is the gate**
+  and runs in CI (Playwright's browser CDN isn't reachable from this env, so the
+  suite couldn't run locally). This supersedes Dependabot PRs #14/#17/#19/#20/#21
+  (Dependabot auto-closes superseded PRs on its next cycle).
 
 - **2026-06-14 · Supply-chain hardening: SBOM + image/secret scanning + Docker
   auto-update.** Continuing the dependency-security push: (a) **SBOMs** -

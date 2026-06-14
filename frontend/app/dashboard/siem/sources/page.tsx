@@ -45,7 +45,7 @@ const SOURCES: LogSource[] = [
   { id: 's10', name: 'GitHub Enterprise Audit',              type: 'API Pull',      host: 'github.corp', status: 'healthy',  epsAvg: 14,   epsPeak: 88,   lastEvent: '18s ago',  totalEvents24h: '1.2M', latencyMs: 1200, parseSuccess: 100,  format: 'GitHub JSON',     tags: ['DevOps', 'SCM'] },
 ]
 
-const STATUS_CONFIG: Record<SourceStatus, { label: string; color: string; dot: string; icon: React.ElementType }> = {
+const STATUS_CONFIG: Record<SourceStatus, { label: string; color: string; dot: string; icon: React.ComponentType<any> }> = {
   healthy:  { label: 'Healthy',  color: 'text-safe  bg-safe/10  border-safe/20',  dot: 'bg-safe',    icon: CheckCircle  },
   degraded: { label: 'Degraded', color: 'text-amber bg-amber/10 border-amber/20', dot: 'bg-amber',   icon: AlertTriangle },
   offline:  { label: 'Offline',  color: 'text-threat bg-threat/10 border-threat/20', dot: 'bg-threat', icon: XCircle    },

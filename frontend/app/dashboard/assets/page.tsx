@@ -40,7 +40,7 @@ type Asset = {
 }
 
 /* ── Meta ───────────────────────────────────────────────────────── */
-const TYPE_META: Record<AssetType, { icon: React.ElementType; label: string; color: string }> = {
+const TYPE_META: Record<AssetType, { icon: React.ComponentType<any>; label: string; color: string }> = {
   domain:   { icon: Globe,      label: 'Domain',     color: '#7A3CFF' },
   ip:       { icon: Wifi,       label: 'IP / Host',  color: '#2DD4BF' },
   server:   { icon: Server,     label: 'Server',     color: '#FF2E97' },

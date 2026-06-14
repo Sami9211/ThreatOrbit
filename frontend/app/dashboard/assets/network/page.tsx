@@ -48,7 +48,7 @@ const RISK_META: Record<Risk, { label: string; color: string }> = {
   healthy:  { label: 'Healthy',  color: '#34F5C5' },
 }
 
-const TYPE_ICON: Record<NodeType, React.ElementType> = {
+const TYPE_ICON: Record<NodeType, React.ComponentType<any>> = {
   internet: Globe, firewall: Shield, server: Server,
   workstation: Monitor, cloud: Cloud, database: Database, ot: Cpu,
 }

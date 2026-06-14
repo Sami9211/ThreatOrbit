@@ -17,7 +17,7 @@ type SubItem = { href: string; label: string }
 type NavItem = {
   href: string
   label: string
-  icon: React.ElementType
+  icon: React.ComponentType<any>
   sub?: SubItem[]
 }
 

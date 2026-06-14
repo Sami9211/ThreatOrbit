@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Github, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
+import GithubIcon from '@/components/ui/GithubIcon'
 import Logo from '@/components/ui/Logo'
 
 const LINKS = {
@@ -59,7 +60,7 @@ export default function Footer() {
                 className="p-2 rounded-lg border border-white/8 text-ink-500 hover:text-white hover:border-magenta/30 transition-all duration-200"
                 aria-label="GitHub"
               >
-                <Github className="w-4 h-4" />
+                <GithubIcon className="w-4 h-4" />
               </a>
               <Link
                 href="/docs"

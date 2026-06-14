@@ -39,7 +39,7 @@ interface CustomSourceType {
   id: string
   name: string
   description: string
-  icon: React.ElementType
+  icon: React.ComponentType<any>
 }
 
 /* ── Seed data ───────────────────────────────────────────────────── */
@@ -74,7 +74,7 @@ const CUSTOM_SOURCES: CustomSourceType[] = [
   { id: 'custom',  name: 'Custom / Other', description: 'Any source - name it and set the type yourself', icon: Plus },
 ]
 
-const CATEGORIES: { id: ConnCategory; icon: React.ElementType; color: string }[] = [
+const CATEGORIES: { id: ConnCategory; icon: React.ComponentType<any>; color: string }[] = [
   { id: 'Cloud',    icon: Cloud,             color: '#FFB23E' },
   { id: 'Identity', icon: Fingerprint,       color: '#7A3CFF' },
   { id: 'Endpoint', icon: MonitorSmartphone, color: '#FF4D6D' },

@@ -18,7 +18,7 @@ const RUN_STYLE: Record<string, { color: string; label: string }> = {
   'awaiting-approval': { color: '#FFB23E', label: 'Awaiting approval' },
   'rejected': { color: '#665B7D', label: 'Rejected' },
 }
-const STEP_ICON: Record<PlaybookRunStep['status'], { icon: React.ElementType; color: string }> = {
+const STEP_ICON: Record<PlaybookRunStep['status'], { icon: React.ComponentType<any>; color: string }> = {
   'success': { icon: CheckCircle2, color: '#34F5C5' },
   'failed': { icon: XCircle, color: '#FF4D6D' },
   'skipped': { icon: MinusCircle, color: '#665B7D' },

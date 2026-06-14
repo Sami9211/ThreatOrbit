@@ -14,7 +14,7 @@ import {
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 
-const CATEGORY_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+const CATEGORY_META: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
   'credential-leak': { label: 'Credential Leak',  icon: KeyRound,      color: '#FF2E97' },
   'data-for-sale':   { label: 'Data for Sale',    icon: ShoppingCart,  color: '#FF4D6D' },
   'brand-mention':   { label: 'Brand Mention',    icon: AtSign,        color: '#FFB23E' },

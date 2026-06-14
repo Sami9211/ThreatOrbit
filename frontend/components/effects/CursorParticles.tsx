@@ -29,7 +29,7 @@ export default function CursorParticles() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const blobsRef  = useRef<Blob[]>([])
   const cursor    = useRef({ x: -500, y: -500 })
-  const raf       = useRef<number>()
+  const raf       = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (!enabled) return

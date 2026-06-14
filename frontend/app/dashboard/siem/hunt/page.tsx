@@ -215,7 +215,7 @@ function exportResults(run: HuntRun) {
 function MetricCard({
   label, value, icon: Icon, color, sub,
 }: {
-  label: string; value: string | number; icon: React.ElementType; color: string; sub?: string
+  label: string; value: string | number; icon: React.ComponentType<any>; color: string; sub?: string
 }) {
   return (
     <div className="glass border border-white/5 rounded-xl p-4 relative overflow-hidden">

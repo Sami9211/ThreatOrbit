@@ -611,7 +611,7 @@ function RulePanel({ rule, onClose, onToggle }: {
   )
 }
 
-function PanelSection({ title, icon: Icon }: { title: string; icon: React.ElementType }) {
+function PanelSection({ title, icon: Icon }: { title: string; icon: React.ComponentType<any> }) {
   return (
     <div className="flex items-center gap-2">
       <Icon className="w-3.5 h-3.5 text-ink-600" />
@@ -1046,7 +1046,7 @@ function FilterSelect({
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
-  icon: React.ElementType
+  icon: React.ComponentType<any>
 }) {
   return (
     <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-2 border border-white/8 hover:border-white/15 transition-colors cursor-pointer">

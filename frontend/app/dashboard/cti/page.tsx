@@ -334,7 +334,7 @@ const HUNTS = [
 ]
 
 const HUNT_COLOR: Record<HuntStatus, string> = { active: '#34F5C5', completed: '#7A3CFF', paused: '#FFB23E' }
-const HUNT_ICON: Record<HuntStatus, React.ElementType> = { active: Play, completed: CheckCircle, paused: Pause }
+const HUNT_ICON: Record<HuntStatus, React.ComponentType<any>> = { active: Play, completed: CheckCircle, paused: Pause }
 
 type PanelHunt = typeof HUNTS[number]
 

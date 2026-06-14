@@ -12,7 +12,7 @@ type Item = {
   label: string
   description: string
   href: string
-  icon: React.ElementType
+  icon: React.ComponentType<any>
   color: string
   keys?: string[]
 }

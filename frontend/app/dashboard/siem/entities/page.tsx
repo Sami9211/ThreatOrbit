@@ -12,7 +12,7 @@ const BAND_COLOR: Record<string, string> = {
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
 }
-const TYPE_ICON: Record<string, React.ElementType> = { user: User, host: Server, ip: Globe }
+const TYPE_ICON: Record<string, React.ComponentType<any>> = { user: User, host: Server, ip: Globe }
 
 function relTime(iso: string | null): string {
   if (!iso) return '-'

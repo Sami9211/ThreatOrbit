@@ -831,7 +831,7 @@ function ThemeCard({ saveTick }: { saveTick: number }) {
 
 /* ── Section wrapper ─────────────────────────────────────────────── */
 function Section({ title, icon: Icon, color, children }: {
-  title: string; icon: React.ElementType; color: string; children: React.ReactNode
+  title: string; icon: React.ComponentType<any>; color: string; children: React.ReactNode
 }) {
   return (
     <motion.div

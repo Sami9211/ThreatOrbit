@@ -33,8 +33,10 @@ updates:
     commit-message: { prefix: "deps(log_api)" }
 
   # ── Frontend ─────────────────────────────────────────────────────
-  # Minor/patch are grouped (low noise, auto-mergeable); majors (next 16,
-  # react 19, three, framer-motion, fiber) open separately for human review.
+  # Minor/patch are grouped (low noise, auto-mergeable); majors (e.g. tailwindcss
+  # 4, @types/node 25) open separately for human review. The big framework set -
+  # next 16, react 19, the react-three-fiber v9 chain, framer-motion 12 - has
+  # already been taken (see plan.md CHANGELOG).
   - package-ecosystem: npm
     directory: /frontend
     schedule: { interval: weekly }

@@ -37,7 +37,7 @@ function KPICard({
   label: string
   value: string
   sub?: string
-  icon: React.ElementType
+  icon: React.ComponentType<any>
   color: string
   trend?: 'up' | 'down'
   trendVal?: string

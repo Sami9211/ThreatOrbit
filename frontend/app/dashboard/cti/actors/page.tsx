@@ -316,14 +316,14 @@ const ACTORS: ThreatActor[] = [
 ]
 
 /* ─── Config / lookups ──────────────────────────────────────────────── */
-const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ElementType }> = {
+const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ComponentType<any> }> = {
   Espionage:   { color: '#7A3CFF', icon: Globe },
   Financial:   { color: '#34F5C5', icon: DollarSign },
   Hacktivism:  { color: '#FFB23E', icon: Megaphone },
   Destruction: { color: '#FF4D6D', icon: Flame },
 }
 
-const TYPE_CFG: Record<ActorType, { color: string; icon: React.ElementType }> = {
+const TYPE_CFG: Record<ActorType, { color: string; icon: React.ComponentType<any> }> = {
   'Nation-State': { color: '#FF2E97', icon: Globe },
   Cybercrime:     { color: '#FFB23E', icon: DollarSign },
   Hacktivist:     { color: '#34F5C5', icon: Megaphone },
@@ -557,7 +557,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
   )
 }
 
-function SectionHead({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+function SectionHead({ icon: Icon, title }: { icon: React.ComponentType<any>; title: string }) {
   return (
     <div className="flex items-center gap-2">
       <Icon className="w-3.5 h-3.5 text-ink-600" />
@@ -567,7 +567,7 @@ function SectionHead({ icon: Icon, title }: { icon: React.ElementType; title: st
 }
 
 /* ─── KPI strip ─────────────────────────────────────────────────────── */
-const KPIS: { label: string; value: string | number; icon: React.ElementType; color: string; sub: string }[] = [
+const KPIS: { label: string; value: string | number; icon: React.ComponentType<any>; color: string; sub: string }[] = [
   { label: 'Tracked Actors',     value: 47, icon: Users,    color: '#7A3CFF', sub: 'in library' },
   { label: 'Active Campaigns',   value: 12, icon: Activity, color: '#FF2E97', sub: 'ongoing' },
   { label: 'Nation-State',       value: 23, icon: Globe,    color: '#FF4D6D', sub: 'APT groups' },
@@ -581,7 +581,7 @@ function FilterSelect({
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
-  icon: React.ElementType
+  icon: React.ComponentType<any>
 }) {
   return (
     <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-2 border border-white/8 hover:border-white/15 transition-colors">

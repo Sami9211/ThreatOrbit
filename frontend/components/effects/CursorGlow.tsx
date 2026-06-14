@@ -6,7 +6,7 @@ export default function CursorGlow() {
   const glowRef = useRef<HTMLDivElement>(null)
   const pos = useRef({ x: -1000, y: -1000 })
   const current = useRef({ x: -1000, y: -1000 })
-  const rafRef = useRef<number>()
+  const rafRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     const el = glowRef.current

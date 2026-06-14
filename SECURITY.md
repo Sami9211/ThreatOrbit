@@ -47,7 +47,8 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
   over the SBOMs, source archive, and checksums, plus **SLSA3 build provenance**
   (in-toto) from the official generator. Verification commands are in the
   workflow header. Remaining (tracked in `plan.md`): signing published container
-  images once a registry-push pipeline exists, and the react@19 upgrade.
+  images once a registry-push pipeline exists. (The react@19 + react-three-fiber
+  v9 upgrade landed 2026-06-14, leaving the frontend on current majors.)
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.

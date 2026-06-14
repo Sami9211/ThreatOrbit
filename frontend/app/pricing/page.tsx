@@ -34,7 +34,7 @@ interface Module {
   id: string
   name: string
   price: number
-  icon: React.ElementType
+  icon: React.ComponentType<any>
   description: string
   tag?: string
   alwaysOn?: boolean

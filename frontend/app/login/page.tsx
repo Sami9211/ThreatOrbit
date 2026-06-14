@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, ShieldCheck, Github, AlertCircle, KeyRound } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, ShieldCheck, AlertCircle, KeyRound } from 'lucide-react'
+import GithubIcon from '@/components/ui/GithubIcon'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 import { useAuth } from '@/lib/auth-context'
@@ -182,7 +183,7 @@ export default function LoginPage() {
 
             <button type="button" disabled
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 text-sm text-ink-500 cursor-not-allowed opacity-50">
-              <Github className="w-4 h-4" /> Continue with GitHub
+              <GithubIcon className="w-4 h-4" /> Continue with GitHub
             </button>
           </div>
 

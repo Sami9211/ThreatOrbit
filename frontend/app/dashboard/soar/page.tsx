@@ -354,7 +354,7 @@ const STATUS_STYLE: Record<CaseStatus, { label: string; color: string }> = {
   'closed':      { label: 'Closed',      color: 'text-ink-600' },
 }
 
-const STEP_ICON: Record<StepType, React.ElementType> = {
+const STEP_ICON: Record<StepType, React.ComponentType<any>> = {
   check:          Shield,
   action:         Zap,
   decision:       GitBranch,

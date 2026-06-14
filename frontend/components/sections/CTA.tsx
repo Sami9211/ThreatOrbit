@@ -2,7 +2,8 @@
 
 import { useRef, useEffect, useState } from 'react'
 import { motion, useInView, useReducedMotion } from 'framer-motion'
-import { ArrowRight, Terminal, Github, Zap } from 'lucide-react'
+import { ArrowRight, Terminal, Zap } from 'lucide-react'
+import GithubIcon from '@/components/ui/GithubIcon'
 import Reveal from '@/components/ui/Reveal'
 import MagneticButton from '@/components/ui/MagneticButton'
 import Logo from '@/components/ui/Logo'
@@ -214,7 +215,7 @@ export default function CTA() {
                   href="https://github.com/Sami9211/ThreatOrbit-V2"
                   className="px-7 py-3.5 rounded-xl glass border border-white/10 text-ink-200 font-medium text-sm hover:border-white/25 hover:text-white transition-colors duration-300"
                 >
-                  <Github className="w-4 h-4" />
+                  <GithubIcon className="w-4 h-4" />
                   View on GitHub
                 </MagneticButton>
               </motion.div>

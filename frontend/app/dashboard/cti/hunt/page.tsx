@@ -235,13 +235,13 @@ const HUNTS: Hunt[] = [
 ]
 
 /* ─── Status config ──────────────────────────────────────────────────── */
-const HUNT_STATUS: Record<HuntStatus, { label: string; color: string; icon: React.ElementType }> = {
+const HUNT_STATUS: Record<HuntStatus, { label: string; color: string; icon: React.ComponentType<any> }> = {
   active:    { label: 'Active',    color: '#34F5C5', icon: Play },
   paused:    { label: 'Paused',    color: '#FFB23E', icon: Pause },
   completed: { label: 'Completed', color: '#7A3CFF', icon: CheckCircle },
 }
 
-const HYP_STATUS: Record<HypothesisStatus, { label: string; color: string; icon: React.ElementType }> = {
+const HYP_STATUS: Record<HypothesisStatus, { label: string; color: string; icon: React.ComponentType<any> }> = {
   confirmed:     { label: 'Confirmed',     color: '#FF4D6D', icon: CheckCircle },
   refuted:       { label: 'Refuted',       color: '#34F5C5', icon: XCircle },
   investigating: { label: 'Investigating', color: '#FFB23E', icon: Search },

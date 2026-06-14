@@ -45,7 +45,7 @@ type Playbook = {
 }
 
 /* ── Constants ────────────────────────────────────────────────────── */
-const STEP_ICON: Record<StepType, React.ElementType> = {
+const STEP_ICON: Record<StepType, React.ComponentType<any>> = {
   check:           Shield,
   action:          Zap,
   decision:        GitBranch,
@@ -72,7 +72,7 @@ const CAT_COLOR: Record<string, string> = {
   Intel:      'border-teal/30 bg-teal/10 text-teal',
 }
 
-const CAT_ICON: Record<string, React.ElementType> = {
+const CAT_ICON: Record<string, React.ComponentType<any>> = {
   Network:    Network,
   Endpoint:   Shield,
   Cloud:      Cloud,

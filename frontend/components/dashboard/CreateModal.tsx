@@ -23,7 +23,7 @@ export interface CreateField {
  */
 export default function CreateModal({ title, icon: Icon, accent = '#FF2E97', fields, submitLabel, onSubmit, onClose }: {
   title: string
-  icon: React.ElementType
+  icon: React.ComponentType<any>
   accent?: string
   fields: CreateField[]
   submitLabel: string

@@ -314,7 +314,7 @@ export default function SignUpPage() {
 }
 
 function Input({ icon: Icon, label, value, onChange, placeholder, type = 'text', valid }: {
-  icon: React.ElementType; label: string; value: string; onChange: (v: string) => void
+  icon: React.ComponentType<any>; label: string; value: string; onChange: (v: string) => void
   placeholder?: string; type?: string; valid?: boolean
 }) {
   return (
