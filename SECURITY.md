@@ -33,8 +33,13 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
   patch/minor bumps once the test gates pass. Honest status (2026-06-14): the
   Next.js 14 advisories were **cleared by upgrading to next@16** (production
   audit has no high/critical; React stays on 18), and `threat_api`'s vulnerable
-  `flask-cors` 4.0.1 was fixed (>=6.0.1). A full standing gap analysis (incl.
-  SBOM, signed releases, image scanning, the react@19 set) is in `plan.md`.
+  `flask-cors` 4.0.1 was fixed (>=6.0.1).
+- **Supply-chain evidence + scanning** (`.github/workflows/supply-chain.yml`):
+  CycloneDX **SBOMs** (backend + frontend) published as artifacts on every run,
+  **Trivy** scanning for vulnerable deps + committed secrets (fails on a fixable
+  CRITICAL) and Docker/IaC misconfigurations, and Dependabot tracking the
+  container **base images**. Remaining (tracked in `plan.md`): digest-pinned
+  base images, signed releases + SLSA provenance, and the react@19 upgrade.
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.

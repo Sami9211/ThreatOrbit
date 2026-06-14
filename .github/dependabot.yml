@@ -46,6 +46,15 @@ updates:
     labels: ["dependencies", "frontend"]
     commit-message: { prefix: "deps(frontend)" }
 
+  # ── Container base images (python-slim, node-alpine, nginx-alpine) ──
+  - package-ecosystem: docker
+    directories: ["/dashboard_api", "/threat_api", "/log_api", "/frontend"]
+    schedule: { interval: weekly }
+    groups:
+      base-images: { patterns: ["*"] }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "deps(docker)" }
+
   # ── CI workflow actions (clears the Node-20 action deprecation, etc.) ──
   - package-ecosystem: github-actions
     directory: /

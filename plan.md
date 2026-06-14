@@ -415,10 +415,14 @@ caught by the user, not by us. Honest findings (2026-06-14):
   majors for human review. **next@16 DONE** (2026-06-14) - cleared all 5 npm
   advisories on React 18. **Still to do:** the remaining major upgrades as
   tracked units with full E2E (react@19 + the R3F v9 / three / motion set), and:
-  - **SBOM** per release (CycloneDX/SPDX) - buyers' procurement asks for it;
-  - **signed releases + provenance** (cosign / SLSA) and **digest-pinned** base
-    images (the Dockerfiles pin tags, not digests);
-  - **container image scanning** (Trivy/Grype) in CI, not just package audits;
+  - **SBOM** - DONE (2026-06-14): `scripts/sbom.sh` + `supply-chain.yml`
+    publish CycloneDX SBOMs (backend resolved env + frontend npm) as artifacts
+    on every run; still to do: attach them to tagged releases.
+  - **container image / IaC scanning** - DONE (2026-06-14): `supply-chain.yml`
+    runs Trivy (vuln + secret, fails on a fixable CRITICAL; misconfig
+    report-only), and Dependabot now tracks the **Docker base images**. Still
+    to do: **digest-pin** the base images (they pin tags today) and **signed
+    releases + provenance** (cosign / SLSA).
   - an **in-product "platform updates" notice**: a self-hosted instance should
     check for a newer release and surface an upgrade prompt (it already has the
     additive-migration contract), distinct from the **threat-intel / detection
@@ -521,6 +525,20 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-14 · Supply-chain hardening: SBOM + image/secret scanning + Docker
+  auto-update.** Continuing the dependency-security push: (a) **SBOMs** -
+  `scripts/sbom.sh` generates CycloneDX SBOMs for the backend (resolved Python
+  environment, 124 components) and the frontend (npm tree, 448 components), and
+  `.github/workflows/supply-chain.yml` publishes them as artifacts on every
+  push/PR/weekly run - the procurement "give us your SBOM" ask. (b) **Trivy**
+  scans the repo for vulnerable deps + committed secrets (fails on a fixable
+  CRITICAL) and for Docker/IaC misconfigurations (report-only artifact). (c)
+  **Dependabot** now also tracks the **Docker base images** (python-slim,
+  node-alpine, nginx-alpine) so they stay patched. Both SBOM generators
+  verified locally. Remaining supply-chain work (tracked in the gap analysis):
+  digest-pinning base images, signed releases + SLSA provenance, and attaching
+  SBOMs to tagged releases.
 
 - **2026-06-14 · Automated dependency updates + fixed a missed CVE + honest gap
   analysis.** Prompted by a fair user catch (the install prints "5
