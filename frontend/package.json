@@ -24,7 +24,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.4.0",
-    "three": "^0.167.1",
+    "three": "^0.184.0",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   },
@@ -34,7 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@types/three": "^0.167.1",
+    "@types/three": "^0.184.1",
     "@types/topojson-client": "^3.1.5",
     "autoprefixer": "^10.4.19",
     "eslint": "^9",
