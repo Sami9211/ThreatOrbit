@@ -6,7 +6,7 @@ import {
   Settings, Key, Bell, Shield, Globe, Plug, Database,
   Eye, Copy, CheckCircle, Save,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
-  PanelLeftOpen, PanelLeftClose, ScrollText, Plus, RotateCcw,
+  PanelLeftOpen, PanelLeftClose, ScrollText, Plus, RotateCcw, CreditCard, ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -16,6 +16,7 @@ import {
   fetchEngineStatus, controlEngine, enforceRetention,
   fetchCurrentOrg, type Org,
   fetchLicense, activateLicense, type LicenseStatus,
+  fetchBillingStatus, startCheckout, openBillingPortal, type BillingStatus,
   fetchDatabaseInfo, type DatabaseInfo,
   fetchMySlackRouting, setMySlackRouting, testMySlackRouting,
   fetchMfaStatus, mfaEnroll, mfaVerify, mfaDisable,
@@ -1189,6 +1190,92 @@ function LicenseCard() {
   )
 }
 
+/* ── Billing (Stripe self-serve; honest "not configured" fallback) ── */
+function BillingCard() {
+  const [bs, setBs] = useState<BillingStatus | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchBillingStatus().then(setBs).catch(() => {})
+    // surface the post-Stripe redirect outcome (?billing=success|cancel|portal)
+    const p = new URLSearchParams(window.location.search).get('billing')
+    if (p === 'success') setMsg('Subscription active - your plan is now updated.')
+    else if (p === 'cancel') setMsg('Checkout cancelled - no changes were made.')
+  }, [])
+
+  function upgrade(plan: string) {
+    setBusy(plan); setMsg(null)
+    startCheckout(plan)
+      .then((r) => { window.location.href = r.url })
+      .catch(() => { setMsg('Could not start checkout. Is billing configured on the server?'); setBusy(null) })
+  }
+  function manage() {
+    setBusy('portal'); setMsg(null)
+    openBillingPortal()
+      .then((r) => { window.location.href = r.url })
+      .catch(() => { setMsg('Could not open the billing portal.'); setBusy(null) })
+  }
+
+  if (!bs) return null
+
+  // Honest degrade: billing not enabled on this deployment.
+  if (!bs.configured) {
+    return (
+      <Section title="Billing" icon={CreditCard} color="#7A3CFF">
+        <p className="text-xs text-ink-400 leading-relaxed">
+          Self-serve billing (Stripe) is not configured on this deployment. Activate a
+          <b className="text-ink-200"> license key</b> above to change plan, or contact sales for
+          Enterprise. Operators can enable self-serve checkout by setting <code className="font-mono text-ink-300">STRIPE_SECRET_KEY</code> and the plan price IDs.
+        </p>
+      </Section>
+    )
+  }
+
+  const others = bs.plans.filter((p) => p.plan !== bs.currentPlan)
+  return (
+    <Section title="Billing" icon={CreditCard} color="#7A3CFF">
+      <div className="flex items-center gap-3 flex-wrap mb-4">
+        <div className="flex-1 min-w-[160px]">
+          <p className="text-sm font-semibold text-white capitalize">
+            {bs.currentPlan ?? 'free'} plan
+            {bs.currentPlanBuiltin && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded-full bg-white/8 text-ink-400 uppercase">built-in</span>}
+          </p>
+          <p className="text-[10px] text-ink-500 mt-0.5">
+            {bs.hasSubscription ? 'Billed monthly via Stripe' : 'No active subscription'}
+          </p>
+        </div>
+        {bs.portalAvailable && (
+          <button onClick={manage} disabled={!!busy}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-200 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50">
+            {busy === 'portal' ? 'Opening…' : <>Manage billing <ExternalLink className="w-3 h-3" /></>}
+          </button>
+        )}
+      </div>
+      {others.length > 0 && (
+        <div className="grid sm:grid-cols-2 gap-2.5">
+          {others.map((p) => (
+            <button key={p.plan} onClick={() => upgrade(p.plan)} disabled={!!busy}
+              className="text-left p-3 rounded-xl border border-violet/25 bg-violet/5 hover:bg-violet/10 hover:border-violet/40 transition-colors disabled:opacity-50">
+              <p className="text-xs font-semibold text-white capitalize">{p.label}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">
+                {p.seats === null ? 'Unlimited seats' : `${p.seats} seats`} ·{' '}
+                {p.connectors === null ? 'unlimited connectors' : `${p.connectors} connectors`}
+              </p>
+              <p className="text-[11px] text-violet font-medium mt-1.5">{busy === p.plan ? 'Redirecting…' : 'Switch to this plan →'}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {msg && <p className="text-[11px] text-ink-400 mt-3" role="status">{msg}</p>}
+      <p className="text-[10px] text-ink-700 mt-3">
+        Checkout and plan management are handled securely by Stripe; a completed subscription mints
+        this workspace&apos;s license key automatically.
+      </p>
+    </Section>
+  )
+}
+
 function LiveEngineCard() {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -1385,6 +1472,9 @@ export default function ConfigPage() {
 
               {/* ── License & plan limits ───────────────────────────── */}
               <LicenseCard />
+
+              {/* ── Billing (Stripe self-serve) ─────────────────────── */}
+              <BillingCard />
 
               {/* ── Storage backend (Postgres staged) ───────────────── */}
               <StorageCard />

@@ -1280,6 +1280,20 @@ export const activateLicense = (key: string) =>
     { method: 'POST', body: JSON.stringify({ key }) })
 export const clearLicense = () => api<void>('/config/license', { method: 'DELETE' })
 
+// ── Billing (Stripe self-serve; degrades to not-configured) ───────────────
+export interface BillingStatus {
+  configured: boolean
+  plans: Array<{ plan: string; label: string; seats: number | null; connectors: number | null }>
+  currentPlan: string | null
+  currentPlanBuiltin: boolean
+  hasSubscription: boolean
+  portalAvailable: boolean
+}
+export const fetchBillingStatus = () => api<BillingStatus>('/billing/status')
+export const startCheckout = (plan: string) =>
+  api<{ url: string }>('/billing/checkout', { method: 'POST', body: JSON.stringify({ plan }) })
+export const openBillingPortal = () => api<{ url: string }>('/billing/portal', { method: 'POST' })
+
 export interface DatabaseInfo { backend: string; configured: boolean; driverReady: boolean; note: string }
 export const fetchDatabaseInfo = () => api<DatabaseInfo>('/config/database')
 

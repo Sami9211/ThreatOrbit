@@ -106,6 +106,23 @@ SERVICES_API_KEY = os.environ.get("SERVICES_API_KEY", os.environ.get("APP_API_KE
 SERVICES_ADMIN_KEY = os.environ.get("SERVICES_ADMIN_KEY",
                                     os.environ.get("ADMIN_API_KEY", SERVICES_API_KEY))
 
+# --- Billing (Stripe self-serve, optional) ----------------------------------
+# Entirely opt-in: with no STRIPE_SECRET_KEY the billing endpoints degrade
+# honestly to "not configured" and licence keys remain the only path. When set,
+# a completed Checkout mints the plan's signed licence key (so the existing
+# limit enforcement is unchanged). Map the paid tiers to Stripe Price IDs.
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+# Where Stripe sends the customer back to (the dashboard origin).
+BILLING_RETURN_URL = os.environ.get("DASHBOARD_BILLING_RETURN_URL",
+                                    "http://localhost:3000/dashboard/config").rstrip("/")
+# backend plan id -> Stripe Price ID (only the self-serve paid tiers).
+STRIPE_PRICES = {
+    plan: os.environ[env].strip()
+    for plan, env in (("starter", "STRIPE_PRICE_STARTER"), ("pro", "STRIPE_PRICE_PRO"))
+    if os.environ.get(env, "").strip()
+}
+
 # --- Data mode --------------------------------------------------------------
 # "demo" → seed realistic demo data on first boot (great for evaluation/sales).
 # "live" → start empty, bootstrap the admin + built-in connectors, and ingest

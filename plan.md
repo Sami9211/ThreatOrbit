@@ -319,9 +319,11 @@ that buying companies require. Realistic positioning today:
       fixed (API booted in the test step, trailing-slash login wait, Normal-mode
       assertions, reliable typing, an accessible error alert, throttle disabled
       in CI). 34 passing across desktop-chromium + mobile-safari.
-- [ ] **Licensing/billing decision** — keys work today (HMAC, limits
-      enforced); Stripe self-serve is only needed if selling without a
-      sales-led motion.
+- [x] **Licensing/billing** — DONE (see CHANGELOG): signed license keys
+      already enforced limits; added optional **Stripe self-serve** checkout +
+      billing portal + signature-verified webhook that mints the plan's license
+      key on a completed subscription. Fully opt-in - degrades to
+      "not configured" with no key, so the default install is unaffected.
 
 ### Tier 2 — mid-size deployments
 
@@ -380,6 +382,21 @@ that buying companies require. Realistic positioning today:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-14 · Stripe self-serve billing (Tier 1, opt-in).** Layered onto the
+  existing signed-license-key system so enforcement is unchanged: a completed
+  Stripe Checkout **mints the plan's license key and stores it**, and the
+  seat/connector limits in `licensing.py` just work. New `billing.py`
+  (Stripe REST over httpx - no SDK dependency; stdlib-HMAC webhook
+  verification) + `routers/billing.py` (`/billing/status|checkout|portal|
+  webhook`). The webhook is unauthenticated but every event is
+  signature-verified before it can touch the plan; cancellation reverts the
+  minted key. **Entirely opt-in** - with no `STRIPE_SECRET_KEY` the endpoints
+  return "not configured" and the config Billing card falls back to license-key
+  activation, so the default install and demo are untouched. Frontend Billing
+  card (plan, upgrade buttons -> Checkout, manage -> portal, post-redirect
+  status). Tests: honest degradation + webhook activation/revert + bad-signature
+  rejection (165 backend tests green; frontend builds clean).
 
 - **2026-06-13 · E2E (Playwright) suite green in CI (Tier 1).** The suite had
   failed on *every* run since it was added (the workflow existed but nothing
