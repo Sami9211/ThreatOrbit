@@ -498,6 +498,11 @@ export const authRegister = (body: { name: string; email: string; password: stri
 export const authMe = () => api<User>('/auth/me')
 export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 
+// SSO (OIDC) - degrades to { configured: false }. The login link is a full
+// browser navigation to the backend, which redirects to the identity provider.
+export const fetchSsoStatus = () => api<{ configured: boolean; loginPath: string }>('/auth/sso/status')
+export const ssoLoginUrl = () => `${BASE}/auth/sso/login`
+
 // Workspaces (multi-tenancy foundation).
 export interface Org {
   id: string; name: string; slug: string; plan: string; status: string

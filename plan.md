@@ -327,8 +327,10 @@ that buying companies require. Realistic positioning today:
 
 ### Tier 2 — mid-size deployments
 
-- [ ] **SSO** — OIDC first (then SAML), JIT user provisioning + SCIM for
-      deprovisioning; map IdP groups → roles in the capability matrix.
+- [~] **SSO** — OIDC DONE (see CHANGELOG): authorization-code flow against any
+      OIDC provider, ID-token RS256 signature verified against the IdP JWKS,
+      JIT user provisioning, and IdP-group→role mapping. Opt-in (degrades to
+      "not configured"). Remaining: SAML, and SCIM for deprovisioning.
 - [ ] **Parser & source breadth** — Windows Event/Sysmon, AWS CloudTrail,
       Azure AD / M365, GCP audit, common EDR + firewall exports; TLS syslog
       (RFC 5425) and an agentless-pull option (S3/blob bucket tail). Publish
@@ -382,6 +384,25 @@ that buying companies require. Realistic positioning today:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-14 · SSO via OIDC (Tier 2, opt-in).** Single sign-on against any
+  OpenID Connect provider (Entra ID / Okta / Google / Auth0 / Keycloak):
+  authorization-code flow with `/auth/sso/login` → IdP → `/auth/sso/callback`,
+  which exchanges the code, **verifies the ID token's RS256 signature against
+  the provider's JWKS** (using `cryptography` - already a dep via Fernet, no
+  PyJWT), checks issuer/audience/expiry/nonce, then JIT-provisions the user and
+  maps an IdP groups claim to a role (admin|manager|analyst|viewer). CSRF state
+  + nonce are carried in a value signed with the dashboard JWT secret (no
+  server session store); the callback hands the normal session token to the
+  frontend in the URL fragment so it never hits a server log; an optional
+  email-domain allowlist gates provisioning. New `oidc.py` + `routers/sso.py`;
+  the login page shows a "Sign in with SSO" button when configured and
+  completes the callback. **Entirely opt-in** - no `OIDC_ISSUER` means the
+  endpoints report "not configured" and email+password is unaffected. Tests
+  mint a local RSA key and prove signature verification, claim checks, signed
+  state, role mapping and the domain allowlist (170 backend tests green;
+  frontend builds clean). Remaining for full enterprise SSO: SAML + SCIM
+  deprovisioning.
 
 - **2026-06-14 · Stripe self-serve billing (Tier 1, opt-in).** Layered onto the
   existing signed-license-key system so enforcement is unchanged: a completed

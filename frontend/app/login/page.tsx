@@ -1,17 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, ShieldCheck, Github, AlertCircle } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, ShieldCheck, Github, AlertCircle, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 import { useAuth } from '@/lib/auth-context'
+import { fetchSsoStatus, ssoLoginUrl } from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login } = useAuth()
+  const { login, completeSso } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -21,6 +22,24 @@ export default function LoginPage() {
   // TOTP step-up: shown when the account has MFA enrolled.
   const [mfaRequired, setMfaRequired] = useState(false)
   const [mfaCode, setMfaCode] = useState('')
+  const [ssoOn, setSsoOn] = useState(false)
+
+  // SSO: discover whether it's enabled, and complete a callback that handed us
+  // a session token (or an error) back in the URL fragment.
+  useEffect(() => {
+    fetchSsoStatus().then((s) => setSsoOn(s.configured)).catch(() => {})
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const tok = hash.get('sso_token')
+    const err = hash.get('sso_error')
+    if (tok) {
+      history.replaceState(null, '', window.location.pathname)
+      completeSso(tok).then(() => router.replace('/dashboard'))
+        .catch(() => setError('Single sign-on succeeded but the session could not be established.'))
+    } else if (err) {
+      history.replaceState(null, '', window.location.pathname)
+      setError(decodeURIComponent(err))
+    }
+  }, [completeSso, router])
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
   const canSubmit = emailValid && password.length > 0 && (!mfaRequired || mfaCode.length >= 6)
@@ -153,6 +172,13 @@ export default function LoginPage() {
               <span className="text-[10px] text-ink-600 uppercase tracking-widest">or</span>
               <div className="flex-1 h-px bg-white/8" />
             </div>
+
+            {ssoOn && (
+              <a href={ssoLoginUrl()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-violet/30 bg-violet/10 text-sm text-violet font-medium hover:bg-violet/15 transition-colors mb-2.5">
+                <KeyRound className="w-4 h-4" /> Sign in with SSO
+              </a>
+            )}
 
             <button type="button" disabled
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 text-sm text-ink-500 cursor-not-allowed opacity-50">

@@ -123,6 +123,33 @@ STRIPE_PRICES = {
     if os.environ.get(env, "").strip()
 }
 
+# --- SSO (OIDC, optional) ---------------------------------------------------
+# Opt-in single sign-on via any OpenID Connect provider (Entra ID, Okta, Google
+# Workspace, Auth0, Keycloak…). With no OIDC_ISSUER the SSO endpoints degrade to
+# "not configured" and email+password remains the only path. The redirect URI
+# is the backend callback you register with the IdP; users are JIT-provisioned
+# on first login and their role is mapped from an IdP groups claim.
+OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "").strip().rstrip("/")
+OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "").strip()
+OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET", "").strip()
+OIDC_REDIRECT_URI = os.environ.get("OIDC_REDIRECT_URI",
+                                   "http://localhost:8002/auth/sso/callback").strip()
+OIDC_SCOPES = os.environ.get("OIDC_SCOPES", "openid email profile").strip()
+OIDC_GROUPS_CLAIM = os.environ.get("OIDC_GROUPS_CLAIM", "groups").strip()
+# JSON map of IdP group -> role (admin|manager|analyst|viewer). First match wins.
+import json as _json  # noqa: E402
+try:
+    OIDC_ROLE_MAP = _json.loads(os.environ.get("OIDC_ROLE_MAP", "{}"))
+except ValueError:
+    OIDC_ROLE_MAP = {}
+OIDC_DEFAULT_ROLE = os.environ.get("OIDC_DEFAULT_ROLE", "viewer").strip()
+# Optional comma-separated allowlist of email domains (e.g. "acme.com").
+OIDC_ALLOWED_DOMAINS = [d.strip().lower() for d in
+                        os.environ.get("OIDC_ALLOWED_DOMAINS", "").split(",") if d.strip()]
+# Frontend page to land on after callback (receives the session token in the
+# URL fragment so it never hits a server log).
+OIDC_POST_LOGIN_URL = os.environ.get("OIDC_POST_LOGIN_URL", "http://localhost:3000/login").rstrip("/")
+
 # --- Data mode --------------------------------------------------------------
 # "demo" → seed realistic demo data on first boot (great for evaluation/sales).
 # "live" → start empty, bootstrap the admin + built-in connectors, and ingest

@@ -9,12 +9,13 @@ interface AuthCtx {
   loading: boolean
   login: (email: string, password: string, code?: string) => Promise<void>
   register: (body: { name: string; email: string; password: string; company?: string }) => Promise<void>
+  completeSso: (token: string) => Promise<void>
   logout: () => void
 }
 
 const AuthContext = createContext<AuthCtx>({
   user: null, token: null, loading: true,
-  login: async () => {}, register: async () => {}, logout: () => {},
+  login: async () => {}, register: async () => {}, completeSso: async () => {}, logout: () => {},
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -56,6 +57,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     storeSession(tok, u)
   }, [storeSession])
 
+  // Complete an SSO sign-in: the backend handed us a session token in the URL
+  // fragment; store it, then load the user with it.
+  const completeSso = useCallback(async (tok: string) => {
+    localStorage.setItem(TOKEN_KEY, tok)
+    setToken(tok)
+    const u = await authMe()
+    storeSession(tok, u)
+  }, [storeSession])
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
@@ -64,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, completeSso }}>
       {children}
     </AuthContext.Provider>
   )
