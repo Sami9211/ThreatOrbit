@@ -47,11 +47,20 @@ updates:
     commit-message: { prefix: "deps(frontend)" }
 
   # ── Container base images (python-slim, node-alpine, nginx-alpine) ──
+  # Keep the *tags* fixed at the versions the app is built + tested on
+  # (python 3.11, node 22 LTS, nginx 1.27) and let Dependabot only refresh their
+  # immutable @sha256 digests for base-OS security patches. Major/minor *tag*
+  # jumps (e.g. python 3.14, node 26) are deliberate runtime migrations taken by
+  # a human - like the JS framework majors - not auto-bumps, especially since no
+  # CI job builds the images to catch a jump that breaks pip install / npm ci.
   - package-ecosystem: docker
     directories: ["/dashboard_api", "/threat_api", "/log_api", "/frontend"]
     schedule: { interval: weekly }
     groups:
       base-images: { patterns: ["*"] }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     labels: ["dependencies", "docker"]
     commit-message: { prefix: "deps(docker)" }
 

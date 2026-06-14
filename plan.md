@@ -564,6 +564,17 @@ _Move completed items here with the date so the roadmap stays honest._
   release. Verify instructions are in the workflow header. Remaining: signing
   published **container images** (deferred until a registry-push pipeline
   exists - nothing pushes images today).
+  - **Auto-update policy hardened the same day (caught live).** Within minutes
+    of pinning, Dependabot's docker group rebased and proposed *major* runtime
+    jumps (python 3.11→**3.14**, node 22→**26**) in PR #24 - and because **no CI
+    job builds the images**, such a jump could break `pip install` / `npm ci`
+    without any gate going red, then auto-merge. Fixed: `dependabot.yml` now
+    keeps the base-image **tags fixed** (python 3.11 / node 22 LTS / nginx 1.27)
+    and only refreshes their `@sha256` **digests** (ignore semver major+minor),
+    and `dependabot-auto-merge.yml` **excludes the docker ecosystem** so every
+    base-image PR gets human review. PR #24 closed. Tracked follow-up: add a
+    Dockerfile **image-build job** to CI so base-image bumps are actually
+    validated - which would let digest refreshes auto-merge safely again.
 
 - **2026-06-14 · Automated dependency updates + fixed a missed CVE + honest gap
   analysis.** Prompted by a fair user catch (the install prints "5
