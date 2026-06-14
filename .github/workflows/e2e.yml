@@ -23,15 +23,15 @@ jobs:
       # The suite logs in many times; don't let the brute-force throttle trip.
       DASHBOARD_AUTH_MAX_FAILURES: '1000'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Install API deps
         run: pip install -r dashboard_api/requirements.txt
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -61,7 +61,7 @@ jobs:
           kill $API_PID 2>/dev/null || true
           exit $status
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
