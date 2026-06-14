@@ -1,0 +1,124 @@
+name: Release
+
+# Signed, provenance-backed releases. Fires only on a version tag (v*), so the
+# workflow is dormant during normal development. For each release it produces:
+#   - CycloneDX SBOMs (backend + frontend) — the procurement artifact;
+#   - a reproducible source archive (git archive of the tagged tree);
+#   - a SHA256SUMS manifest covering all of the above;
+#   - cosign *keyless* signatures (Sigstore Fulcio cert + Rekor transparency-log
+#     entry) for each artifact, as detached .cosign.bundle files;
+#   - SLSA build provenance (in-toto attestation) via the official generator,
+#     so a consumer can verify the artifacts were built by THIS workflow.
+#
+# Verify a signed artifact (no key needed — identity is the GitHub workflow):
+#   cosign verify-blob \
+#     --bundle backend.cdx.json.cosign.bundle \
+#     --certificate-identity-regexp '^https://github.com/[^/]+/[^/]+/\.github/workflows/release\.yml@' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     backend.cdx.json
+#
+# Verify the SLSA provenance:
+#   slsa-verifier verify-artifact source.tar.gz \
+#     --provenance-path provenance.intoto.jsonl \
+#     --source-uri github.com/<org>/<repo>
+#
+# Action refs are kept current by Dependabot's github-actions ecosystem.
+
+on:
+  push:
+    tags: ["v*"]
+  # Manual re-run: trigger this workflow *against a tag ref* in the Actions UI.
+  # The guard below skips any non-tag ref, so running it against a branch is a
+  # harmless no-op rather than a stray "release".
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build CycloneDX SBOMs (backend + frontend)
+        run: bash scripts/sbom.sh dist
+
+      - name: Source archive (tagged tree)
+        run: git archive --format=tar.gz -o dist/source.tar.gz HEAD
+
+      - name: Checksums + base64 subjects for provenance
+        id: hashes
+        working-directory: dist
+        run: |
+          sha256sum *.cdx.json source.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          # The SLSA generator signs over exactly these subjects.
+          echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*
+          retention-days: 7
+
+  sign-and-release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the GitHub release + upload assets
+      id-token: write   # cosign keyless (OIDC) signing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign each artifact (keyless, Rekor-logged)
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          for f in *.cdx.json source.tar.gz SHA256SUMS; do
+            echo "==> signing $f"
+            cosign sign-blob --yes --bundle "$f.cosign.bundle" "$f"
+          done
+
+      - name: Publish release with signatures
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.cdx.json
+            dist/source.tar.gz
+            dist/SHA256SUMS
+            dist/*.cosign.bundle
+
+  # SLSA3 build provenance for the same subjects, attached to the release the
+  # job above created. Runs after sign-and-release so there's a single release
+  # creator (no race) and the provenance lands on an existing release.
+  provenance:
+    needs: [build, sign-and-release]
+    permissions:
+      actions: read     # read this run's metadata for the attestation
+      id-token: write   # keyless signing of the provenance
+      contents: write   # upload provenance.intoto.jsonl to the release
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.build.outputs.hashes }}
+      provenance-name: provenance.intoto.jsonl
+      upload-assets: true

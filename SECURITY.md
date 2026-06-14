@@ -38,8 +38,16 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
   CycloneDX **SBOMs** (backend + frontend) published as artifacts on every run,
   **Trivy** scanning for vulnerable deps + committed secrets (fails on a fixable
   CRITICAL) and Docker/IaC misconfigurations, and Dependabot tracking the
-  container **base images**. Remaining (tracked in `plan.md`): digest-pinned
-  base images, signed releases + SLSA provenance, and the react@19 upgrade.
+  container **base images**.
+- **Digest-pinned base images + signed releases.** All four Dockerfiles pin
+  their base image by immutable `@sha256:` digest, so a build can't silently
+  inherit a re-pushed tag (Dependabot keeps the digests current). The
+  tag-triggered `release.yml` workflow ships each release with **cosign keyless
+  signatures** (Sigstore Fulcio + Rekor transparency log — no long-lived key)
+  over the SBOMs, source archive, and checksums, plus **SLSA3 build provenance**
+  (in-toto) from the official generator. Verification commands are in the
+  workflow header. Remaining (tracked in `plan.md`): signing published container
+  images once a registry-push pipeline exists, and the react@19 upgrade.
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.

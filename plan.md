@@ -417,12 +417,22 @@ caught by the user, not by us. Honest findings (2026-06-14):
   tracked units with full E2E (react@19 + the R3F v9 / three / motion set), and:
   - **SBOM** - DONE (2026-06-14): `scripts/sbom.sh` + `supply-chain.yml`
     publish CycloneDX SBOMs (backend resolved env + frontend npm) as artifacts
-    on every run; still to do: attach them to tagged releases.
+    on every run; the **release** workflow also attaches signed SBOMs to each
+    tagged release (below).
   - **container image / IaC scanning** - DONE (2026-06-14): `supply-chain.yml`
     runs Trivy (vuln + secret, fails on a fixable CRITICAL; misconfig
-    report-only), and Dependabot now tracks the **Docker base images**. Still
-    to do: **digest-pin** the base images (they pin tags today) and **signed
-    releases + provenance** (cosign / SLSA).
+    report-only), and Dependabot now tracks the **Docker base images**.
+  - **digest-pinned base images** - DONE (2026-06-14): all four Dockerfiles pin
+    `image:tag@sha256:...` (python:3.11-slim, node:22-alpine, nginx:1.27-alpine),
+    so a build can't silently pick up a re-pushed tag; Dependabot's docker
+    ecosystem bumps the digests.
+  - **signed releases + SLSA provenance** - DONE (2026-06-14):
+    `.github/workflows/release.yml` (tag-triggered, dormant otherwise) builds
+    the SBOMs + a source archive + SHA256SUMS, **cosign-keyless-signs** each
+    (Fulcio cert + Rekor log, detached `.cosign.bundle`), and emits **SLSA3
+    build provenance** via the official generator - all attached to the GitHub
+    release. Still to do: sign published **container images** once a registry
+    push pipeline exists (no registry push today).
   - an **in-product "platform updates" notice**: a self-hosted instance should
     check for a newer release and surface an upgrade prompt (it already has the
     additive-migration contract), distinct from the **threat-intel / detection
@@ -536,9 +546,24 @@ _Move completed items here with the date so the roadmap stays honest._
   CRITICAL) and for Docker/IaC misconfigurations (report-only artifact). (c)
   **Dependabot** now also tracks the **Docker base images** (python-slim,
   node-alpine, nginx-alpine) so they stay patched. Both SBOM generators
-  verified locally. Remaining supply-chain work (tracked in the gap analysis):
-  digest-pinning base images, signed releases + SLSA provenance, and attaching
-  SBOMs to tagged releases.
+  verified locally.
+
+- **2026-06-14 · Digest-pinned base images + signed, provenance-backed
+  releases.** Closing out the P0 supply-chain gap: (a) all four Dockerfiles now
+  pin their base image by **digest** (`python:3.11-slim@sha256:ae52c5…`,
+  `node:22-alpine@sha256:9385cd…`, `nginx:1.27-alpine@sha256:65645c…`) - all
+  three digests resolved and re-verified against the live Docker Hub registry,
+  so a build can no longer silently pick up a re-pushed tag; Dependabot's docker
+  ecosystem keeps the digests current. (b) **`.github/workflows/release.yml`**
+  (fires only on a `v*` tag, a harmless no-op against any other ref) builds the
+  CycloneDX SBOMs + a reproducible source archive + a SHA256SUMS manifest,
+  **cosign-keyless-signs** each artifact (Sigstore Fulcio cert + Rekor
+  transparency-log entry, detached `.cosign.bundle` - no long-lived signing key
+  to leak), and generates **SLSA3 build provenance** via the official
+  `slsa-github-generator` (pinned `@v2.1.0`), all attached to the GitHub
+  release. Verify instructions are in the workflow header. Remaining: signing
+  published **container images** (deferred until a registry-push pipeline
+  exists - nothing pushes images today).
 
 - **2026-06-14 · Automated dependency updates + fixed a missed CVE + honest gap
   analysis.** Prompted by a fair user catch (the install prints "5
