@@ -1,5 +1,8 @@
 import type { MetadataRoute } from 'next'
 
+// Static export (Next 16): pre-render this metadata route at build time.
+export const dynamic = 'force-static'
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'ThreatOrbit · Enterprise Threat Intelligence Platform',

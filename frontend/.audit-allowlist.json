@@ -1,17 +1,4 @@
 {
-  "_doc": "Triaged npm-audit advisories. Every entry needs a reason and an expiry; scripts/audit-gate.mjs fails the build for any high+ advisory NOT listed here, and for any listed entry past its expiry — so triage decisions cannot rot silently.",
-  "allow": [
-    {
-      "package": "next",
-      "advisories": [
-        "GHSA-9g9p-9gw9-jx7f", "GHSA-h25m-26qc-wcjf", "GHSA-ggv3-7p47-pfv8",
-        "GHSA-3x4c-7xq6-9pq8", "GHSA-q4gf-8mx6-v5v3", "GHSA-8h8q-6873-q5fj",
-        "GHSA-3g8h-86w9-wvmq", "GHSA-ffhc-5mcf-pf4q", "GHSA-vfv6-92ff-j949",
-        "GHSA-gx5p-jg67-6x7h", "GHSA-h64f-5h5j-jqjh", "GHSA-c4j6-fc7j-m34r",
-        "GHSA-wfc6-r584-vfw7", "GHSA-36qx-fr4f-26g5"
-      ],
-      "reason": "All target the self-hosted Next.js SERVER runtime (image optimizer, middleware/proxy, RSC handling, WebSocket upgrades). This app deploys as a static export (output: 'export') served by nginx/caddy — no Next server runs in production; the dev server is local-only. Real fix is the next@16 major upgrade, tracked in plan.md (Tier 1, security pass follow-up).",
-      "expires": "2026-09-30"
-    }
-  ]
+  "_doc": "Triaged npm-audit advisories. scripts/audit-gate.mjs fails the build for any high/critical advisory NOT listed here (each needs a reason + expiry), and for any listed entry past its expiry, so triage decisions cannot rot silently. As of 2026-06-14 this list is empty: the Next.js 14 SERVER advisories that used to live here were FIXED by upgrading to next@16 (the production audit now has no high/critical). Two moderate, build-time advisories remain (postcss CSS-stringify XSS, reached only during the build) - below this gate's high/critical threshold.",
+  "allow": []
 }

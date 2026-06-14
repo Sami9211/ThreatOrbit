@@ -30,10 +30,11 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
   red on a new high/critical or an expired triage), and **`dependabot.yml`**
   opens grouped weekly update PRs across all four services + the CI actions
   (security PRs immediately) while **`dependabot-auto-merge.yml`** merges safe
-  patch/minor bumps once the test gates pass. Honest status: the Next.js 14
-  advisories clear at next@16 (a tracked upgrade); `threat_api`'s vulnerable
-  `flask-cors` 4.0.1 was fixed (>=6.0.1) on 2026-06-14. A full standing gap
-  analysis (incl. SBOM, signed releases, image scanning) is in `plan.md`.
+  patch/minor bumps once the test gates pass. Honest status (2026-06-14): the
+  Next.js 14 advisories were **cleared by upgrading to next@16** (production
+  audit has no high/critical; React stays on 18), and `threat_api`'s vulnerable
+  `flask-cors` 4.0.1 was fixed (>=6.0.1). A full standing gap analysis (incl.
+  SBOM, signed releases, image scanning, the react@19 set) is in `plan.md`.
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.
@@ -59,8 +60,10 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
 
 | Advisory | Component | Why accepted | Until |
 |---|---|---|---|
-| 14× Next.js server CVEs (see `frontend/.audit-allowlist.json`) | next 14.x | production deploys the **static export** — no Next server runs; real fix is the next@16 major upgrade (tracked in plan.md) | 2026-09-30 |
+| 2× moderate postcss (CSS-stringify XSS) | build tooling | Reached only during the build (processing our own CSS), not at runtime; below the gate's high/critical threshold | next minor bump |
 | PYSEC-2026-161 | starlette | Host-header validation; fix needs starlette ≥1.0.1, unsupported by any FastAPI yet. Reference proxy configs pin Host; the API builds no absolute URLs from it | FastAPI ceiling moves |
+
+_Resolved: the 14 Next.js 14 server advisories were **fixed** by upgrading to next@16 (2026-06-14), not just triaged._
 
 A third-party penetration test is a pre-sale requirement (plan.md Tier 1)
 and has **not** been performed yet — this file does not claim otherwise.

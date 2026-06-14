@@ -412,9 +412,9 @@ caught by the user, not by us. Honest findings (2026-06-14):
   watches all four services (pip ×3 + npm) **and** the CI actions, opening
   grouped weekly PRs (and security PRs immediately); `dependabot-auto-merge.yml`
   auto-merges patch/minor bumps once the Tests/E2E/Security gates pass, leaving
-  majors for human review. **Still to do:** the actual major upgrades as tracked
-  units with full E2E (next@16 first - it clears the 5 npm advisories - then
-  react@19 + the R3F/three/motion set), and:
+  majors for human review. **next@16 DONE** (2026-06-14) - cleared all 5 npm
+  advisories on React 18. **Still to do:** the remaining major upgrades as
+  tracked units with full E2E (react@19 + the R3F v9 / three / motion set), and:
   - **SBOM** per release (CycloneDX/SPDX) - buyers' procurement asks for it;
   - **signed releases + provenance** (cosign / SLSA) and **digest-pinned** base
     images (the Dockerfiles pin tags, not digests);
@@ -538,6 +538,19 @@ _Move completed items here with the date so the roadmap stays honest._
   API contract, UX/a11y, testing) with priorities and definitions of done. The
   npm advisories (Next.js 14) and the major upgrades (next@16, react@19, …) are
   now tracked as units to do with full E2E rather than left as silent triage.
+- **2026-06-14 · Cleared the 5 npm advisories: upgraded Next.js 14 → 16.**
+  The remaining frontend advisories (Next.js image-optimizer DoS, the
+  eslint-config-next/glob command-injection, postcss XSS) all fixed at next@16.
+  Took the low-risk path: next@16 still supports **React 18**
+  (`peerDeps: ^18.2.0 || ^19.0.0`), so the whole react-three-fiber / three /
+  motion stack stays put - no React-19 chain. Breaking changes handled: the
+  metadata route handlers (`robots`/`sitemap`/`manifest`) now declare
+  `export const dynamic = 'force-static'` for the static export, and tsconfig
+  picked up Next 16's `jsx: react-jsx`. Production `npm audit` now has **no
+  high/critical** (2 moderate build-time postcss advisories remain, below the
+  gate threshold); the `.audit-allowlist.json` Next triage entries were removed
+  since the advisories are genuinely fixed. Type-checks + builds clean; the E2E
+  gate validates the runtime. (react@19 + R3F v9 remain a separate tracked unit.)
 
 - **2026-06-14 · SSO via OIDC (Tier 2, opt-in).** Single sign-on against any
   OpenID Connect provider (Entra ID / Okta / Google / Auth0 / Keycloak):
