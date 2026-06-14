@@ -24,11 +24,16 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
 
 ## What's already in place
 
-- Dependency audits in CI (`.github/workflows/security.yml`): `pip-audit`
-  on the backend and an npm-audit gate with an **expiring allowlist** on the
-  frontend — every triaged advisory carries a reason and an expiry date, and
-  the build goes red when either a new high/critical advisory appears or a
-  triage decision expires.
+- Dependency audits **and automated updates** in CI: `.github/workflows/
+  security.yml` runs `pip-audit` + an npm-audit gate with an **expiring
+  allowlist** (every triaged advisory carries a reason + expiry; the build goes
+  red on a new high/critical or an expired triage), and **`dependabot.yml`**
+  opens grouped weekly update PRs across all four services + the CI actions
+  (security PRs immediately) while **`dependabot-auto-merge.yml`** merges safe
+  patch/minor bumps once the test gates pass. Honest status: the Next.js 14
+  advisories clear at next@16 (a tracked upgrade); `threat_api`'s vulnerable
+  `flask-cors` 4.0.1 was fixed (>=6.0.1) on 2026-06-14. A full standing gap
+  analysis (incl. SBOM, signed releases, image scanning) is in `plan.md`.
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.

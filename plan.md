@@ -381,9 +381,163 @@ that buying companies require. Realistic positioning today:
 
 ---
 
+## Honest gap analysis — the most important things still missing (2026-06-14)
+
+A deep, self-critical pass on what stands between this and a product an
+enterprise security team would actually trust and buy. Some items restate
+Tier 2/3 with sharper "why it matters / definition of done"; several are new.
+Ordered by priority. **P0** = do now / credibility-blocking; **P1** =
+enterprise-required; **P2** = maturity.
+
+### P0 — Supply-chain & dependency hygiene (the weakest current link)
+
+This is the gap that most undercuts the "secure product" claim, and it was
+caught by the user, not by us. Honest findings (2026-06-14):
+
+- **Dependencies were audited but not *updated*.** CI runs pip-audit + an npm
+  audit gate, but nothing opens fix PRs - so known-vulnerable pins sat in the
+  tree. The npm install prints **"5 vulnerabilities (1 moderate, 4 high)"**;
+  all are **Next.js 14** server advisories that were *triaged-as-accepted*
+  (static export) rather than fixed.
+- **A real CVE was missed.** `threat_api` pinned **flask-cors==4.0.1**, which
+  is vulnerable (CVE-2024-6221, CVE-2024-1681, plus the 5.x/6.x regex/path
+  fixes). The 2026-06-12 "security pass" bumped dashboard_api + log_api but
+  never touched threat_api's Flask stack. **Fixed 2026-06-14** (flask-cors
+  >=6.0.1, requests >=2.32.4); the rest of the audit-then-defer posture is the
+  systemic problem.
+- **Majors are well behind**, carrying the unfixed advisories: next 14→16,
+  react 18→19, three 0.167→0.184, framer-motion 11→12 (now `motion`),
+  @react-three/fiber 8→9. The Next.js advisories only truly clear at **next@16**.
+- **DONE 2026-06-14 (the auto-update feature):** `.github/dependabot.yml`
+  watches all four services (pip ×3 + npm) **and** the CI actions, opening
+  grouped weekly PRs (and security PRs immediately); `dependabot-auto-merge.yml`
+  auto-merges patch/minor bumps once the Tests/E2E/Security gates pass, leaving
+  majors for human review. **Still to do:** the actual major upgrades as tracked
+  units with full E2E (next@16 first - it clears the 5 npm advisories - then
+  react@19 + the R3F/three/motion set), and:
+  - **SBOM** per release (CycloneDX/SPDX) - buyers' procurement asks for it;
+  - **signed releases + provenance** (cosign / SLSA) and **digest-pinned** base
+    images (the Dockerfiles pin tags, not digests);
+  - **container image scanning** (Trivy/Grype) in CI, not just package audits;
+  - an **in-product "platform updates" notice**: a self-hosted instance should
+    check for a newer release and surface an upgrade prompt (it already has the
+    additive-migration contract), distinct from the **threat-intel / detection
+    content** auto-update channel below.
+
+### P0 — Event pipeline ceiling (the architectural truth)
+
+In-process detection over a single WAL-SQLite `events` table is fine for a
+laptop/small team and **will not** hold at enterprise EPS. Until this is
+re-architected, "large enterprise" is aspirational. Definition of done:
+separate **ingest from detection** (durable queue + worker pool), move events
+to a **columnar/search store** (ClickHouse or OpenSearch) behind the same hunt
+API with predicate push-down, add **backpressure** (bounded queue + 429 instead
+of best-effort inserts), and **publish measured load limits** (sustained EPS,
+alert volume, UI dataset ceilings) on reference hardware for SQLite vs Postgres.
+No numbers are published today, so we can't answer "how big can it go?".
+
+### P1 — Reliability, HA & disaster recovery
+
+- **Single-instance background services** (syslog listener, file watcher,
+  scheduler, engine tick) have no leader election - two app replicas would
+  double-run them. Either document the single-writer constraint loudly or add
+  leader election.
+- **No HA/DR story**: no k8s/Helm chart, no rolling upgrade with migration
+  gating, no RPO/RTO targets or tested failover, no multi-AZ Postgres guidance.
+- **Backups exist but aren't operationalised**: the online-backup endpoint +
+  CLI work, but there's no scheduled job, off-host shipping, or an automated
+  *restore* drill in CI - an untested backup is a hope, not a recovery plan.
+
+### P1 — Detection content, parsers & collectors (the actual SOC value)
+
+- **No curated detection-content library.** The Sigma importer exists but ships
+  empty; a real product ships a maintained rule pack with per-rule noise
+  ratings and a **content-update channel** so new detections arrive without a
+  code release.
+- **Parser/source breadth is thin** (apache/syslog/windows/generic). Enterprises
+  expect Windows Event/Sysmon, AWS CloudTrail, Azure AD / M365, GCP audit,
+  common EDR + firewall exports, and TLS syslog (RFC 5425). Publish a
+  supported-sources matrix.
+- **No collector ecosystem.** "POST your logs here" isn't an enterprise answer;
+  ship certified Beats/Fluent Bit/Vector configs or a light agent, with mTLS
+  enrolment and an agentless S3/blob pull option.
+
+### P1 — Identity, access & session depth
+
+- **SSO half-done**: OIDC shipped; **SAML** (still common in enterprise) and
+  **SCIM** (automated *deprovisioning* - the security-critical half) are
+  missing. An ex-employee who keeps access is a finding.
+- **RBAC is a fixed 4-role matrix.** Enterprises need custom roles,
+  per-workspace assignment, and a break-glass/audit-everything mode.
+- **Session management is shallow.** No "active sessions" list, no revoke-all /
+  revoke-on-password-change, no enforced idle timeout, no password policy /
+  rotation / breach-list check, and no MFA recovery codes (only TOTP).
+
+### P1 — Compliance & trust posture
+
+- **No third-party pentest yet** (honestly stated in SECURITY.md, but it's a
+  gating item before exposing to untrusted networks or selling).
+- **No compliance program**: SOC 2 Type II then ISO 27001, a DPA template,
+  GDPR data-subject tooling (per-user export/erase), and data-residency options.
+  These are asked for *before* the first enterprise PoC ends.
+- **Audit trail is in-DB only.** For tamper-evidence it should stream to an
+  external/immutable sink (the customer's SIEM, or object storage with object
+  lock); evidence bundles are signed but the live trail isn't externally shipped.
+
+### P1 — Multi-tenancy completion (for MSSP / SaaS)
+
+`DASHBOARD_MULTI_TENANT` is staged and the get-by-id IDOR was closed, but GA
+needs: org-scoping on **global search and the SSE stream**, **per-org
+engine/ingest** context (org-tagged sources), tenant lifecycle tooling
+(create/suspend/export/delete with purge), and per-tenant quotas + retention -
+*before* flipping it on by default.
+
+### P2 — API contract, platform SRE & data lifecycle
+
+- **No versioned API** (`/v1`), deprecation policy, per-release OpenAPI, or
+  **outbound webhook signing** (HMAC header) + idempotency keys - integrators
+  need a stable contract.
+- **Platform self-observability is partial**: `/metrics` exists, but there's no
+  distributed tracing, SLOs/error budgets, alerting on the platform's *own*
+  health, or synthetic checks.
+- **Retention is purge-only.** Add event-stream **archive/export** (compressed
+  NDJSON to object storage) before purge so compliance keeps raw logs cheaply,
+  plus PII handling/redaction policy in stored logs.
+
+### P2 — Product, UX & quality maturity
+
+- **Accessibility & i18n unproven**: no WCAG audit, keyboard-nav / screen-reader
+  pass, or localisation - real blockers for public-sector and EU buyers.
+- **Notification reliability is basic**: Slack/PagerDuty/webhook routing exists,
+  but no delivery retries/backoff, templating, digests, or escalation policies.
+- **Test depth gaps**: no load/performance or chaos/failure-injection tests, no
+  connector contract tests, and the security findings (SSRF/authz/XSS) should
+  become standing regression tests, not one-time fixes.
+- **GTM plumbing**: billing landed, but no trial/free-tier flow, usage metering,
+  in-product upgrade prompts, status page, or support/ticketing surface.
+
+---
+
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-14 · Automated dependency updates + fixed a missed CVE + honest gap
+  analysis.** Prompted by a fair user catch (the install prints "5
+  vulnerabilities" and a service was on an old version): (a) **fixed a real
+  miss** - `threat_api` pinned `flask-cors==4.0.1` (CVE-2024-6221 /
+  CVE-2024-1681); bumped to flask-cors >=6.0.1 + requests >=2.32.4 (threat_api
+  tests green). The earlier security pass had bumped dashboard_api/log_api but
+  not threat_api's Flask stack. (b) **Added the auto-update feature**:
+  `.github/dependabot.yml` watches all four services (pip ×3 + npm) and the CI
+  actions with grouped weekly PRs (security PRs immediately), and
+  `dependabot-auto-merge.yml` auto-merges patch/minor bumps once the
+  Tests/E2E/Security gates pass - majors stay manual. (c) Wrote a deep,
+  self-critical **"Honest gap analysis"** in plan.md (supply chain, event-pipeline
+  ceiling, HA/DR, detection content, identity depth, compliance, multi-tenancy,
+  API contract, UX/a11y, testing) with priorities and definitions of done. The
+  npm advisories (Next.js 14) and the major upgrades (next@16, react@19, …) are
+  now tracked as units to do with full E2E rather than left as silent triage.
 
 - **2026-06-14 · SSO via OIDC (Tier 2, opt-in).** Single sign-on against any
   OpenID Connect provider (Entra ID / Okta / Google / Auth0 / Keycloak):

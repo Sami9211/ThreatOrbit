@@ -1,0 +1,56 @@
+# Automated dependency updates for every service in the repo. Dependabot opens
+# grouped PRs on a schedule (and security PRs immediately); the Tests + E2E +
+# Security workflows run on each PR, and dependabot-auto-merge.yml merges the
+# safe (patch/minor) ones once those gates are green. Major bumps stay manual.
+version: 2
+updates:
+  # ── Python services ──────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /dashboard_api
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 6
+    groups:
+      dashboard-api: { patterns: ["*"] }
+    labels: ["dependencies", "backend"]
+    commit-message: { prefix: "deps(dashboard_api)" }
+
+  - package-ecosystem: pip
+    directory: /threat_api
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 6
+    groups:
+      threat-api: { patterns: ["*"] }
+    labels: ["dependencies", "backend"]
+    commit-message: { prefix: "deps(threat_api)" }
+
+  - package-ecosystem: pip
+    directory: /log_api
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 6
+    groups:
+      log-api: { patterns: ["*"] }
+    labels: ["dependencies", "backend"]
+    commit-message: { prefix: "deps(log_api)" }
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  # Minor/patch are grouped (low noise, auto-mergeable); majors (next 16,
+  # react 19, three, framer-motion, fiber) open separately for human review.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 10
+    groups:
+      frontend-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies", "frontend"]
+    commit-message: { prefix: "deps(frontend)" }
+
+  # ── CI workflow actions (clears the Node-20 action deprecation, etc.) ──
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      ci-actions: { patterns: ["*"] }
+    labels: ["dependencies", "ci"]
+    commit-message: { prefix: "deps(ci)" }
