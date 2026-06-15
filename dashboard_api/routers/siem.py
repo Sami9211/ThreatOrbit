@@ -581,6 +581,18 @@ def ingest(body: IngestBody, user: dict = Depends(current_user)):
         raise HTTPException(status_code=400, detail="Max 5000 lines per request")
     if body.format not in ("auto", "json", "apache", "nginx", "kv", "syslog", "generic"):
         raise HTTPException(status_code=400, detail="Unsupported format")
+    # Backpressure: shed load with 429 when the detection backlog is already too
+    # deep, rather than accepting events the pipeline can't keep up with.
+    from dashboard_api.config import INGEST_MAX_BACKLOG
+    from dashboard_api import event_queue
+    if INGEST_MAX_BACKLOG > 0:
+        with get_conn() as conn:
+            backlog = event_queue.depth(conn)
+        if backlog >= INGEST_MAX_BACKLOG:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Ingest backpressure: detection backlog {backlog} ≥ {INGEST_MAX_BACKLOG}. Retry shortly.",
+                headers={"Retry-After": "5"})
     from dashboard_api.ingest import ingest_lines
     result = ingest_lines(body.lines, body.format, body.source.strip() or "collector")
     with get_conn() as conn:

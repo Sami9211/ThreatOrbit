@@ -57,7 +57,10 @@ app.add_middleware(
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exc(request: Request, exc: StarletteHTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+    # Propagate any headers the raiser set (e.g. Retry-After on 429 backpressure,
+    # WWW-Authenticate on 401) so clients can honour them.
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail},
+                        headers=getattr(exc, "headers", None))
 
 
 @app.exception_handler(RequestValidationError)

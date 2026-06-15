@@ -301,7 +301,7 @@ class EngineControl(BaseModel):
 @router.get("/engine")
 def engine_status(_: dict = Depends(current_user)):
     """Live processing engine state + how much live data it has produced."""
-    from dashboard_api.config import DATA_MODE, ENGINE_TICK_SECONDS
+    from dashboard_api.config import DATA_MODE, ENGINE_TICK_SECONDS, INGEST_MAX_BACKLOG
     from dashboard_api import event_queue
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
@@ -309,6 +309,9 @@ def engine_status(_: dict = Depends(current_user)):
         total_alerts = conn.execute("SELECT COUNT(*) AS n FROM alerts").fetchone()["n"]
         dark = conn.execute("SELECT COUNT(*) AS n FROM dark_web_findings").fetchone()["n"]
         queue = event_queue.stats(conn)   # detection backlog + lag (backpressure)
+    # Bounded-queue backpressure: the ingest cap + whether we're shedding now.
+    queue["maxBacklog"] = INGEST_MAX_BACKLOG
+    queue["shedding"] = bool(INGEST_MAX_BACKLOG) and queue["depth"] >= INGEST_MAX_BACKLOG
     return {
         "mode": DATA_MODE,
         "running": DATA_MODE == "live" and (row is None or row["value"] != "false"),

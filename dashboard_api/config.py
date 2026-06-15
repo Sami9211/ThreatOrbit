@@ -204,6 +204,12 @@ CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", 
 ENGINE_TICK_SECONDS = int(os.environ.get("DASHBOARD_ENGINE_TICK_SECONDS", "20"))
 ENGINE_EVENTS_PER_TICK = int(os.environ.get("DASHBOARD_ENGINE_EVENTS_PER_TICK", "6"))
 
+# Ingest backpressure: the max detection backlog (pending events) before the
+# /siem/ingest endpoint sheds load with HTTP 429 instead of growing the queue
+# unboundedly. Generous by default so normal use never hits it; 0 disables the
+# guard. This is the bounded-queue half of the event-pipeline backpressure work.
+INGEST_MAX_BACKLOG = int(os.environ.get("DASHBOARD_INGEST_MAX_BACKLOG", "100000"))
+
 # --- Seed -------------------------------------------------------------------
 # Deterministic seed so generated demo data is stable across restarts.
 SEED_RANDOM = int(os.environ.get("DASHBOARD_SEED", "1337"))

@@ -461,10 +461,14 @@ but ready for a pool. **Backpressure is now observable**: queue depth + oldest-
 pending lag are exposed on `GET /config/engine` and as Prometheus gauges
 (`threatorbit_event_queue_depth` / `_lag_seconds`) - you can finally SEE the
 pipeline fall behind. 6 tests prove the lease semantics (exclusive claim,
-complete, stale re-queue). **Still ahead (the heavier lifts):** flip the engine
-to ingest-only + a real **multi-worker detection pool** (each worker its own
-`BEGIN IMMEDIATE`/`isolation_level=None` claim txn), a bounded ingest queue that
-returns 429, the columnar/search store, and published EPS limits.
+complete, stale re-queue). **Increment 2 DONE (2026-06-15): bounded ingest +
+429.** `POST /siem/ingest` now sheds load with **HTTP 429 + Retry-After** when
+the detection backlog hits `DASHBOARD_INGEST_MAX_BACKLOG` (default 100k, 0 to
+disable), instead of accepting events the pipeline can't keep up with; the cap +
+a live `shedding` flag are on `GET /config/engine`. **Still ahead (the heavier
+lifts):** flip the engine to ingest-only + a real **multi-worker detection
+pool** (each worker its own `BEGIN IMMEDIATE`/`isolation_level=None` claim txn),
+the columnar/search store, and published EPS limits.
 
 ### P1 — Reliability, HA & disaster recovery
 
@@ -563,6 +567,16 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Event pipeline, increment 2: bounded ingest queue (429
+  backpressure).** `POST /siem/ingest` now sheds load with **HTTP 429 +
+  `Retry-After`** once the detection backlog reaches `DASHBOARD_INGEST_MAX_BACKLOG`
+  (default 100 000; 0 disables), rather than unbounded best-effort inserts the
+  pipeline can't drain - the "bounded queue + 429" half of the backpressure
+  definition-of-done. The cap and a live `shedding` flag are on `GET
+  /config/engine`. Also fixed the `StarletteHTTPException` handler to **propagate
+  exception headers** (so `Retry-After` / `WWW-Authenticate` actually reach the
+  client). 2 tests (sheds over cap, accepts under). Suite 211 → **213**.
 
 - **2026-06-15 · Event pipeline, increment 1: the ingest/detection queue seam +
   backpressure visibility.** First safe step on the P0 EPS-ceiling gap.

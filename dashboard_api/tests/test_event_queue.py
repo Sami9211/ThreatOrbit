@@ -109,4 +109,27 @@ def test_detection_flows_through_the_queue(clean_queue):
 def test_engine_status_exposes_backpressure(client, auth):
     body = client.get("/config/engine", headers=auth).json()
     assert "queue" in body
-    assert set(body["queue"]) >= {"depth", "lagSeconds", "inFlight"}
+    assert set(body["queue"]) >= {"depth", "lagSeconds", "inFlight", "maxBacklog", "shedding"}
+
+
+# ── bounded ingest queue (429 backpressure) ──────────────────────────────────
+
+def test_ingest_sheds_load_with_429(clean_queue, client, auth, monkeypatch):
+    monkeypatch.setattr("dashboard_api.config.INGEST_MAX_BACKLOG", 3)
+    with get_conn() as conn:
+        _insert(conn, 5)  # backlog 5 ≥ cap 3 → ingest must shed
+        conn.commit()
+    r = client.post("/siem/ingest", headers=auth, json={
+        "lines": ['{"event_type":"failed_login","src_ip":"8.8.8.8"}'],
+        "format": "json", "source": "test"})
+    assert r.status_code == 429
+    assert r.headers.get("Retry-After") == "5"
+
+
+def test_ingest_accepts_under_backlog(clean_queue, client, auth, monkeypatch):
+    monkeypatch.setattr("dashboard_api.config.INGEST_MAX_BACKLOG", 100000)
+    r = client.post("/siem/ingest", headers=auth, json={
+        "lines": ['{"event_type":"failed_login","src_ip":"8.8.8.8","message":"failed login"}'],
+        "format": "json", "source": "test"})
+    assert r.status_code == 200, r.text
+    assert "ingested" in r.json()
