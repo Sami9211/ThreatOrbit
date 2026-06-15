@@ -518,10 +518,19 @@ export const createOrg = (body: { name: string; plan?: string; slug?: string }) 
   api<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) })
 
 export const authChangePassword = (currentPassword: string, newPassword: string) =>
-  api<{ ok: boolean }>('/auth/change-password', {
+  api<{ ok: boolean; token?: string }>('/auth/change-password', {
     method: 'POST',
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  }).then((r) => {
+    // The backend revokes the user's OTHER sessions and returns a fresh token
+    // for this one; persist it so this session continues without a re-login.
+    if (r.token && typeof window !== 'undefined') localStorage.setItem(TOKEN_KEY, r.token)
+    return r
   })
+
+// Sign out everywhere: invalidates all of the caller's tokens (this one too).
+export const authRevokeAllSessions = () =>
+  api<{ ok: boolean; revokedAt: number }>('/auth/sessions/revoke-all', { method: 'POST' })
 
 // ── Overview ─────────────────────────────────────────────────────────
 export const fetchKpis    = () => api<OverviewKpis>('/overview/kpis')

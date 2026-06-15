@@ -740,6 +740,10 @@ _MIGRATIONS = [
     # re-queued after the lease window.
     ("events", "claimed_by", "TEXT"),
     ("events", "claimed_at", "TEXT"),
+    # Session revocation (auth.py): a monotonic counter embedded in each JWT as
+    # `ep`. Bumping it invalidates every token issued earlier, so "sign out
+    # everywhere" + auto-logout-on-password-change work over stateless JWTs.
+    ("users", "token_epoch", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

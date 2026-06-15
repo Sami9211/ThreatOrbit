@@ -107,6 +107,18 @@ def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_pe
     return row_to_dict(row)
 
 
+@router.post("/{user_id}/revoke-sessions")
+def revoke_user_sessions(user_id: str, actor: dict = Depends(require_perm("users.manage"))):
+    """Admin: end all of a user's active sessions (e.g. suspected compromise)."""
+    with get_conn() as conn:
+        cur = conn.execute("UPDATE users SET token_epoch = token_epoch + 1 WHERE id=?", (user_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        audit(conn, actor["email"], "user.revoke_sessions", user_id)
+        conn.commit()
+    return {"ok": True}
+
+
 @router.delete("/{user_id}", status_code=204)
 def delete_user(user_id: str, actor: dict = Depends(require_perm("users.delete"))):
     if user_id == actor["id"]:

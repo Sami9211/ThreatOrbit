@@ -527,9 +527,13 @@ the columnar/search store, and published EPS limits.
   a **no-privilege-escalation** guard (you can't grant a capability you don't
   hold). See CHANGELOG. Still ahead: per-workspace role assignment and a
   break-glass / audit-everything mode.
-- **Session management is shallow.** No "active sessions" list, no revoke-all /
-  revoke-on-password-change, no enforced idle timeout, no password policy /
-  rotation / breach-list check, and no MFA recovery codes (only TOTP).
+- **Session management — revocation DONE (2026-06-15).** Stateless JWTs are now
+  revocable via a per-user **token-epoch** counter: `POST /auth/sessions/revoke-all`
+  (sign out everywhere), an admin `POST /users/{id}/revoke-sessions`, and
+  **auto-revoke on password change** (the current session continues on a fresh
+  token, the rest are signed out). See CHANGELOG. Still ahead: an **active
+  sessions list** (needs per-session rows), an **idle timeout** (sliding refresh),
+  password policy / breach-list check, and MFA recovery codes (only TOTP today).
 
 ### P1 — Compliance & trust posture
 
@@ -586,6 +590,20 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Revocable sessions (stateless JWTs you can actually kill).**
+  Closes the "can't sign out a stolen/old session" gap. Each JWT now carries a
+  monotonic **token-epoch** (`ep`); `current_user` rejects any token whose epoch
+  is behind the user's current `token_epoch` (a new `users` column). Bumping the
+  counter therefore invalidates every earlier token at once - **race-free** (a
+  counter, not a timestamp, so there's no same-second ambiguity). Endpoints:
+  `POST /auth/sessions/revoke-all` (sign out everywhere - this session too),
+  admin `POST /users/{id}/revoke-sessions` (`users.manage`, for suspected
+  compromise), and **password change auto-revokes** other sessions while issuing
+  a fresh token so the current one continues seamlessly (frontend persists it).
+  Backward-compatible: a pre-existing token with no `ep` reads as 0 and stays
+  valid until the first revoke. 4 tests (revoke-all + relogin, change-password
+  old-dies/new-lives, admin revoke, permission gate). Suite 244 → **248**.
 
 - **2026-06-15 · Custom RBAC roles (additive, no privilege escalation).** The
   fixed 4-role matrix gains operator-defined roles without touching the

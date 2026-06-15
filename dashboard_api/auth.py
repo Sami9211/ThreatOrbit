@@ -88,6 +88,7 @@ def create_token(user: dict) -> str:
         "email": user["email"],
         "role": user["role"],
         "name": user["name"],
+        "ep": int(user.get("token_epoch", 0)),   # session-revocation counter
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=JWT_TTL_MINUTES)).timestamp()),
     }
@@ -113,6 +114,10 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     user = row_to_dict(row)
     if user["status"] == "disabled":
         raise HTTPException(status_code=403, detail="Account disabled")
+    # Session revocation: a token whose epoch is behind the user's current
+    # token_epoch was issued before a "sign out" / password change / admin revoke.
+    if int(payload.get("ep", 0)) < int(user.get("token_epoch", 0) or 0):
+        raise HTTPException(status_code=401, detail="Session ended; please sign in again")
     user.pop("password_hash", None)
     user.pop("password_salt", None)
     # A personal Slack webhook URL is a quasi-secret: only its owner sees it,

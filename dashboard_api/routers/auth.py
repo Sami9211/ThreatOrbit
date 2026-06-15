@@ -318,7 +318,24 @@ def change_password(body: PasswordChange, user: dict = Depends(current_user)):
         if len(body.new_password) < 8:
             raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
         ph, salt = hash_password(body.new_password)
-        conn.execute("UPDATE users SET password_hash=?, password_salt=? WHERE id=?", (ph, salt, user["id"]))
-        audit(conn, user["email"], "auth.change_password", user["id"])
+        # Bumping the token epoch revokes every existing session for this user
+        # (security best practice on a credential change).
+        new_epoch = int(user.get("token_epoch", 0) or 0) + 1
+        conn.execute("UPDATE users SET password_hash=?, password_salt=?, token_epoch=? WHERE id=?",
+                     (ph, salt, new_epoch, user["id"]))
+        audit(conn, user["email"], "auth.change_password", user["id"], "other sessions revoked")
+        conn.commit()
+    # Issue a fresh token carrying the new epoch so THIS session continues
+    # seamlessly; every other (older-epoch) session is signed out.
+    return {"ok": True, "token": create_token({**user, "token_epoch": new_epoch})}
+
+
+@router.post("/sessions/revoke-all")
+def revoke_all_sessions(user: dict = Depends(current_user)):
+    """Sign out everywhere: invalidate all of the caller's tokens, including this
+    one (the client must re-authenticate)."""
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET token_epoch = token_epoch + 1 WHERE id=?", (user["id"],))
+        audit(conn, user["email"], "auth.revoke_all_sessions", user["id"])
         conn.commit()
     return {"ok": True}
