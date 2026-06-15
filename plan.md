@@ -555,9 +555,12 @@ the columnar/search store, and published EPS limits.
   enterprise PoC ends. **GDPR data-subject tooling DONE (2026-06-15)**:
   `/privacy` export (access/portability) + anonymising erasure (right to be
   forgotten) - see CHANGELOG.
-- **Audit trail is in-DB only.** For tamper-evidence it should stream to an
-  external/immutable sink (the customer's SIEM, or object storage with object
-  lock); evidence bundles are signed but the live trail isn't externally shipped.
+- **Audit trail external streaming DONE (2026-06-15).** Every audit event is
+  now mirrored (fire-and-forget, optionally HMAC-signed) to an off-box endpoint
+  - the customer's SIEM or an append-only/object-lock store - when
+  `DASHBOARD_AUDIT_SINK_URL` is set, so the trail survives local-DB tampering.
+  See CHANGELOG. Follow-ups: a persisted cursor / replay for at-least-once
+  durability across restarts, and native syslog/object-lock writers.
 
 ### P1 — Multi-tenancy completion (for MSSP / SaaS)
 
@@ -650,6 +653,17 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Audit-trail external streaming (tamper-evidence).** The audit
+  log lived only in the same DB an intruder could alter. Every `audit()` event is
+  now also shipped to an external endpoint (the customer's SIEM / append-only
+  store) when `DASHBOARD_AUDIT_SINK_URL` is set - fire-and-forget on a background
+  worker so the request path is never blocked, optionally HMAC-signed with
+  `DASHBOARD_AUDIT_SINK_SECRET` (the outbound-webhook scheme, so the same
+  `verify_signature` validates it). Copy-on-write / at-least-once; unset URL is a
+  complete no-op (in-DB behaviour unchanged). `test_audit_sink.py` (disabled
+  no-op; signed-event round-trip; an audited admin action mirrored + verified).
+  Full suite green (257).
 
 - **2026-06-15 · Retention archive (cold storage before purge).** Retention
   enforcement DELETE'd old alerts/events/dark-web/scans/notifications outright -

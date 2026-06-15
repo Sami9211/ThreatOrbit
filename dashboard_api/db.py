@@ -663,13 +663,19 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, revoked);
 
 def audit(conn: sqlite3.Connection, actor: str | None, action: str,
           target: str | None = None, detail: str | None = None):
-    """Write a row to audit_log inside an open connection (caller must commit)."""
+    """Write a row to audit_log inside an open connection (caller must commit).
+    Also mirrors the event to an external tamper-evident sink when configured."""
     import datetime
     ts = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
     conn.execute(
         "INSERT INTO audit_log (ts, actor, action, target, detail) VALUES (?,?,?,?,?)",
         (ts, actor, action, target, detail),
     )
+    try:
+        from dashboard_api.audit_sink import ship
+        ship({"ts": ts, "actor": actor, "action": action, "target": target, "detail": detail})
+    except Exception:  # the external mirror must never break an audited action
+        pass
 
 
 def record_job(conn: sqlite3.Connection, kind: str, status: str, meta: dict | None = None) -> str:

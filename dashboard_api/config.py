@@ -103,6 +103,14 @@ ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lowe
 # keep raw logs cheaply (sync the dir to object storage). Unset = purge-only.
 ARCHIVE_DIR = os.environ.get("DASHBOARD_ARCHIVE_DIR", "").strip()
 
+# --- Audit trail external sink (tamper-evidence) --------------------------------
+# When set, every audit event is also shipped (fire-and-forget) to this HTTP
+# endpoint - the customer's SIEM or an append-only/object-lock store - so the
+# trail survives even if the local DB is tampered with. Optionally HMAC-signed
+# with AUDIT_SINK_SECRET (same scheme as outbound webhooks). Unset = in-DB only.
+AUDIT_SINK_URL = os.environ.get("DASHBOARD_AUDIT_SINK_URL", "").strip()
+AUDIT_SINK_SECRET = os.environ.get("DASHBOARD_AUDIT_SINK_SECRET", "").strip()
+
 # --- Companion services ---------------------------------------------------------
 # The Threat API (ingestion engine) and Log API (anomaly analysis) are proxied
 # server-side so the browser never needs their X-API-Key credentials.
