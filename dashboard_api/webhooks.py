@@ -6,9 +6,13 @@ depends on a subscriber's endpoint. Each delivery POSTs a JSON envelope
 failed delivery marks the webhook `failing` (it keeps receiving future
 events until paused or deleted, so transient outages self-heal).
 """
+import hashlib
+import hmac
 import json
 import logging
 import threading
+import time
+import uuid
 from datetime import datetime, timezone
 
 import httpx
@@ -18,6 +22,43 @@ from dashboard_api.db import get_conn
 logger = logging.getLogger("dashboard_api.webhooks")
 
 _TIMEOUT = 5.0
+_SIG_HEADER = "X-ThreatOrbit-Signature"
+_ID_HEADER = "X-ThreatOrbit-Delivery"
+_EVENT_HEADER = "X-ThreatOrbit-Event"
+
+
+def new_webhook_secret() -> str:
+    """A signing secret an integrator stores to verify deliveries (shown once)."""
+    return "whsec_" + uuid.uuid4().hex + uuid.uuid4().hex
+
+
+def sign_payload(secret: str, body: bytes, ts: int | None = None) -> str:
+    """Build the `X-ThreatOrbit-Signature: t=<unix>,v1=<hex>` header value.
+    Same scheme as the inbound Stripe verifier (billing.verify_webhook): the
+    HMAC-SHA256 is taken over `"<t>.<body>"` so a captured delivery can't be
+    replayed with a different timestamp."""
+    ts = int(time.time()) if ts is None else ts
+    mac = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+    return f"t={ts},v1={mac}"
+
+
+def verify_signature(secret: str, body: bytes, sig_header: str, *, tolerance: int = 300) -> bool:
+    """Reference verifier for subscribers (and our tests): True iff the header
+    is a valid, in-tolerance signature of `body` under `secret`."""
+    if not (secret and sig_header):
+        return False
+    parts = [p.split("=", 1) for p in sig_header.split(",") if "=" in p]
+    ts = next((v for k, v in parts if k == "t"), None)
+    sigs = [v for k, v in parts if k == "v1"]
+    if not ts or not sigs:
+        return False
+    try:
+        if tolerance and abs(time.time() - int(ts)) > tolerance:
+            return False
+    except ValueError:
+        return False
+    expected = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, s) for s in sigs)
 
 # Tests flip this to True to deliver inline instead of on a thread.
 SYNC_DELIVERY = False
@@ -30,7 +71,7 @@ def _now() -> str:
 def _subscribers(event: str) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, url, events FROM webhooks WHERE status != 'paused'"
+            "SELECT id, url, events, secret FROM webhooks WHERE status != 'paused'"
         ).fetchall()
     subs = []
     for r in rows:
@@ -39,16 +80,26 @@ def _subscribers(event: str) -> list[dict]:
         except (ValueError, TypeError):
             events = []
         if event in events:
-            subs.append({"id": r["id"], "url": r["url"]})
+            subs.append({"id": r["id"], "url": r["url"], "secret": r["secret"]})
     return subs
 
 
 def _deliver(event: str, payload: dict, subs: list[dict]):
     envelope = {"event": event, "ts": _now(), "data": payload}
+    # Sign the EXACT bytes we send (compact, stable separators), so a subscriber
+    # recomputes the HMAC over the same body it received.
+    body = json.dumps(envelope, separators=(",", ":")).encode()
     for sub in subs:
+        headers = {
+            "Content-Type": "application/json",
+            _EVENT_HEADER: event,
+            _ID_HEADER: str(uuid.uuid4()),          # idempotency key (dedupe retries)
+        }
+        if sub.get("secret"):
+            headers[_SIG_HEADER] = sign_payload(sub["secret"], body)
         ok = False
         try:
-            r = httpx.post(sub["url"], json=envelope, timeout=_TIMEOUT)
+            r = httpx.post(sub["url"], content=body, headers=headers, timeout=_TIMEOUT)
             ok = r.status_code < 400
         except httpx.HTTPError:
             ok = False

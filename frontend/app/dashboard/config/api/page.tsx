@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   fetchApiKeys, createApiKey, revokeApiKey,
-  fetchWebhooks, createWebhook, patchWebhook, deleteWebhook, testWebhook,
+  fetchWebhooks, createWebhook, patchWebhook, deleteWebhook, testWebhook, rotateWebhookSecret,
   type ApiKey as RemoteApiKey, type Webhook as RemoteWebhook,
 } from '@/lib/api'
 import {
   Key, Plus, Copy, CheckCircle, Trash2, X, AlertTriangle, Webhook,
-  Activity, Clock, Terminal, Pause, Play,
+  Activity, Clock, Terminal, Pause, Play, RefreshCw, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -239,6 +239,8 @@ export default function ApiKeysPage() {
   const [newHookUrl, setNewHookUrl] = useState('')
   const [newHookEvent, setNewHookEvent] = useState('alert.created')
   const [hookError, setHookError] = useState<string | null>(null)
+  // The signing secret is returned once (on create / rotate); surface it then.
+  const [newSecret, setNewSecret] = useState<{ url: string; secret: string } | null>(null)
 
   useEffect(() => {
     fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => {})
@@ -256,10 +258,17 @@ export default function ApiKeysPage() {
       .then((created) => {
         setWebhooks((prev) => [remoteWebhookToRow(created), ...prev])
         setNewHookUrl('')
+        if (created.secret) setNewSecret({ url: created.url, secret: created.secret })
       })
       .catch((err) => setHookError(err instanceof Error && err.message.includes('http')
         ? 'URL must start with http:// or https://'
         : 'Could not add webhook - check the API is running and you have admin access.'))
+  }
+
+  function rotateSecret(id: string, url: string) {
+    rotateWebhookSecret(id)
+      .then((r) => setNewSecret({ url, secret: r.secret }))
+      .catch(() => setHookError('Could not rotate the signing secret.'))
   }
 
   function toggleWebhook(w: WebhookEndpoint) {
@@ -456,6 +465,31 @@ export default function ApiKeysPage() {
           </div>
           {hookError && <p className="text-[11px] text-threat mb-3" role="alert">{hookError}</p>}
 
+          {newSecret && (
+            <div className="mb-3 p-3 rounded-xl border border-safe/30 bg-safe/8">
+              <div className="flex items-center gap-1.5 mb-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-safe" />
+                <p className="text-[11px] font-semibold text-white">Signing secret for {newSecret.url}</p>
+              </div>
+              <p className="text-[10px] text-ink-400 mb-2">
+                Shown once. Store it, then verify each delivery&apos;s
+                <code className="font-mono text-ink-300"> X-ThreatOrbit-Signature</code> header
+                (HMAC-SHA256 over <code className="font-mono text-ink-300">&quot;&lt;t&gt;.&lt;body&gt;&quot;</code>, same scheme as Stripe).
+              </p>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-3 border border-white/8">
+                <code className="flex-1 font-mono text-xs text-safe break-all">{newSecret.secret}</code>
+                <button onClick={() => navigator.clipboard?.writeText(newSecret.secret)}
+                  className="p-1 rounded text-ink-400 hover:text-white transition-colors" title="Copy">
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setNewSecret(null)}
+                  className="text-[10px] px-2 py-1 rounded-lg bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 transition-colors">
+                  I&apos;ve saved it
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             {webhooks.length === 0 && (
               <p className="text-xs text-ink-600 py-4 text-center rounded-xl border border-white/8 bg-surface">
@@ -490,6 +524,13 @@ export default function ApiKeysPage() {
                         className="text-[10px] px-2 py-1 rounded-lg border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50"
                       >
                         {testing === w.id ? 'Testing…' : 'Test'}
+                      </button>
+                      <button
+                        onClick={() => rotateSecret(w.id, w.url)}
+                        title="Rotate signing secret (invalidates the old one)"
+                        className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => toggleWebhook(w)}

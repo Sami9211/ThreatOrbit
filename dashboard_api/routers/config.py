@@ -397,16 +397,23 @@ _WEBHOOK_EVENTS = {"alert.created", "incident.resolved", "ioc.confirmed", "case.
                    "darkweb.takedown"}
 
 
+def _public_webhook(d: dict) -> dict:
+    """The signing secret is shown ONCE (at create / rotate); never re-listed."""
+    d.pop("secret", None)
+    return d
+
+
 @router.get("/webhooks")
 def list_webhooks(_: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM webhooks ORDER BY created_at DESC").fetchall()
-    return rows_to_dicts(rows)
+    return [_public_webhook(d) for d in rows_to_dicts(rows)]
 
 
 @router.post("/webhooks", status_code=201)
 def create_webhook(body: WebhookCreate, user: dict = Depends(require_perm("config.manage"))):
     from dashboard_api.net_guard import validate_external_url, UnsafeUrlError
+    from dashboard_api.webhooks import new_webhook_secret
     try:
         url = validate_external_url(body.url)  # SSRF guard (blocks internal/reserved)
     except UnsafeUrlError as e:
@@ -415,16 +422,19 @@ def create_webhook(body: WebhookCreate, user: dict = Depends(require_perm("confi
     if bad or not body.events:
         raise HTTPException(status_code=400, detail=f"events must be a non-empty subset of {sorted(_WEBHOOK_EVENTS)}")
     wid = str(uuid.uuid4())
+    secret = new_webhook_secret()
     from dashboard_api.db import dumps
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO webhooks (id,url,events,status,last_delivery,created_at,created_by) "
-            "VALUES (?,?,?,'active',NULL,?,?)",
-            (wid, url, dumps(body.events), _now(), user["email"]),
+            "INSERT INTO webhooks (id,url,events,status,last_delivery,created_at,created_by,secret) "
+            "VALUES (?,?,?,'active',NULL,?,?,?)",
+            (wid, url, dumps(body.events), _now(), user["email"], secret),
         )
         audit(conn, user["email"], "webhook.create", wid, f"url={url}")
         conn.commit()
         row = conn.execute("SELECT * FROM webhooks WHERE id=?", (wid,)).fetchone()
+    # The secret is returned here ONCE so the integrator can configure signature
+    # verification; it is never exposed again by the list endpoint.
     return row_to_dict(row)
 
 
@@ -451,7 +461,7 @@ def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(re
         audit(conn, user["email"], "webhook.update", webhook_id)
         conn.commit()
         row = conn.execute("SELECT * FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
-    return row_to_dict(row)
+    return _public_webhook(row_to_dict(row))
 
 
 @router.post("/webhooks/{webhook_id}/test")
@@ -459,17 +469,31 @@ def test_webhook(webhook_id: str, actor: dict = Depends(require_perm("config.man
     """Deliver a synchronous test event so the operator can verify the endpoint."""
     from dashboard_api.webhooks import _deliver
     with get_conn() as conn:
-        row = conn.execute("SELECT id, url FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
+        row = conn.execute("SELECT id, url, secret FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Webhook not found")
     _deliver("webhook.test", {"message": "ThreatOrbit test delivery", "requestedBy": actor["email"]},
-             [{"id": row["id"], "url": row["url"]}])
+             [{"id": row["id"], "url": row["url"], "secret": row["secret"]}])
     with get_conn() as conn:
         updated = conn.execute("SELECT status, last_delivery FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
         audit(conn, actor["email"], "webhook.test", webhook_id, f"result={updated['status']}")
         conn.commit()
     return {"ok": updated["status"] == "active", "status": updated["status"],
             "last_delivery": updated["last_delivery"]}
+
+
+@router.post("/webhooks/{webhook_id}/rotate-secret")
+def rotate_webhook_secret(webhook_id: str, actor: dict = Depends(require_perm("config.manage"))):
+    """Issue a fresh signing secret (invalidating the old one). Returned once."""
+    from dashboard_api.webhooks import new_webhook_secret
+    secret = new_webhook_secret()
+    with get_conn() as conn:
+        cur = conn.execute("UPDATE webhooks SET secret=? WHERE id=?", (secret, webhook_id))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+        audit(conn, actor["email"], "webhook.rotate_secret", webhook_id)
+        conn.commit()
+    return {"id": webhook_id, "secret": secret}
 
 
 @router.delete("/webhooks/{webhook_id}", status_code=204)

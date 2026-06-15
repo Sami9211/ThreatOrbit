@@ -569,9 +569,12 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 
 ### P2 — API contract, platform SRE & data lifecycle
 
-- **No versioned API** (`/v1`), deprecation policy, per-release OpenAPI, or
-  **outbound webhook signing** (HMAC header) + idempotency keys - integrators
-  need a stable contract.
+- **Outbound webhook signing + idempotency DONE (2026-06-15).** Every delivery
+  is HMAC-SHA256 signed (`X-ThreatOrbit-Signature: t=…,v1=…`, Stripe scheme) with
+  a per-hook `whsec_` secret shown once at create/rotate, and carries an
+  `X-ThreatOrbit-Delivery` idempotency id. See CHANGELOG. Still open here: a
+  **versioned API** (`/v1`), deprecation policy, per-release OpenAPI, and
+  delivery **retries/backoff**.
 - **Platform self-observability is partial**: `/metrics` exists, but there's no
   distributed tracing, SLOs/error budgets, alerting on the platform's *own*
   health, or synthetic checks.
@@ -643,6 +646,21 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Outbound webhook signing + idempotency.** Subscribers had no
+  way to verify a delivery genuinely came from ThreatOrbit (anyone who learned
+  the URL could forge events). Each webhook now has a `whsec_` signing secret
+  (shown once at create, rotatable via `POST /config/webhooks/{id}/rotate-secret`,
+  never re-listed); every delivery is signed **`X-ThreatOrbit-Signature:
+  t=<unix>,v1=<hmac>`** — HMAC-SHA256 over `"<t>.<body>"`, the exact bytes sent,
+  the same scheme as the inbound Stripe verifier — and carries an
+  **`X-ThreatOrbit-Delivery`** uuid so consumers dedupe retries plus an
+  `X-ThreatOrbit-Event` header. `verify_signature()` is shipped as the reference
+  verifier (and the UI banner documents the scheme). Frontend: the API/webhooks
+  page reveals the secret once with copy + a rotate action. `test_webhook_signing.py`
+  (sign/verify round-trip incl. tamper/wrong-secret/stale-timestamp, secret
+  shown-once-then-hidden, signed+idempotent live delivery, rotate invalidates
+  the old secret); full suite, tsc and build green.
 
 - **2026-06-15 · Idle timeout (sliding inactivity sign-out).** The "Session
   Timeout (minutes)" setting was decorative — stored, shown, never enforced.

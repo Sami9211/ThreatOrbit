@@ -761,6 +761,9 @@ _MIGRATIONS = [
     # MFA recovery codes (auth.py): JSON array of SHA-256 hashes of one-time
     # backup codes, so a user who loses their authenticator can still get in.
     ("users", "mfa_recovery_codes", "TEXT"),
+    # Outbound webhook signing secret (webhooks.py): each delivery is HMAC-signed
+    # with this so subscribers can verify it genuinely came from ThreatOrbit.
+    ("webhooks", "secret", "TEXT"),
 ]
 
 

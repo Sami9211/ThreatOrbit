@@ -1191,12 +1191,15 @@ export interface Webhook {
   lastDelivery: string | null
   createdAt: string
   createdBy: string | null
+  secret?: string   // returned ONCE at create/rotate; never re-listed
 }
 export const fetchWebhooks = () => api<Webhook[]>('/config/webhooks')
 export const createWebhook = (url: string, events: string[]) =>
   api<Webhook>('/config/webhooks', { method: 'POST', body: JSON.stringify({ url, events }) })
 export const patchWebhook = (id: string, body: { status?: string; events?: string[] }) =>
   api<Webhook>(`/config/webhooks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const rotateWebhookSecret = (id: string) =>
+  api<{ id: string; secret: string }>(`/config/webhooks/${id}/rotate-secret`, { method: 'POST' })
 export const deleteWebhook = (id: string) =>
   api<void>(`/config/webhooks/${id}`, { method: 'DELETE' })
 export const testWebhook = (id: string) =>
