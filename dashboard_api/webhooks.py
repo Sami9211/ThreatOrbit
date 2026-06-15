@@ -183,12 +183,14 @@ def notify_slack_users(*, severity: str, title: str,
         threading.Thread(target=_fan, daemon=True).start()
 
 
-def dispatch(event: str, payload: dict):
-    """Deliver `event` to every active subscriber. Never raises."""
+def dispatch(event: str, payload: dict, org: str | None = None):
+    """Deliver `event` to every active subscriber. Never raises. `org` scopes the
+    in-process SSE push to one tenant when isolation is on (external webhook
+    subscribers are global config and unaffected)."""
     # Mirror to live SSE clients (in-process, independent of external webhooks).
     try:
         from dashboard_api.events_stream import publish
-        publish(event, payload)
+        publish(event, payload, org=org)
     except Exception:
         pass
     try:

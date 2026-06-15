@@ -145,7 +145,8 @@ def create_case(body: CaseCreate, user: dict = Depends(require_perm("soar.write"
         conn.commit()
         row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
     dispatch("case.created", {"id": case_id, "title": title, "severity": body.severity,
-                              "type": body.type or "Investigation", "owner": owner})
+                              "type": body.type or "Investigation", "owner": owner},
+             org=tenancy.org_of(user))
     return row_to_dict(row)
 
 
@@ -284,7 +285,8 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(require_per
             and prev and prev["status"] not in ("resolved", "closed")):
         dispatch("incident.resolved", {"id": case_id, "title": updated_case["title"],
                                        "severity": updated_case["severity"],
-                                       "status": body.status, "resolvedBy": user["email"]})
+                                       "status": body.status, "resolvedBy": user["email"]},
+                 org=tenancy.org_of(user))
     return updated_case
 
 

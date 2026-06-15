@@ -160,7 +160,8 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
     if imported:
         dispatch("ioc.confirmed", {"imported": imported, "source": body.source,
                                    "severity": body.severity, "actor": body.actor or None,
-                                   "importedBy": user["email"]})
+                                   "importedBy": user["email"]},
+                 org=tenancy.org_of(user))
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
             "total": len(body.indicators)}
 

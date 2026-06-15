@@ -181,7 +181,8 @@ def create_alert(body: AlertCreate, user: dict = Depends(require_perm("siem.writ
         conn.commit()
         row = conn.execute("SELECT * FROM alerts WHERE id=?", (aid,)).fetchone()
     dispatch("alert.created", {"id": aid, "title": title, "severity": body.severity,
-                               "srcIp": body.src_ip, "raisedBy": user["email"]})
+                               "srcIp": body.src_ip, "raisedBy": user["email"]},
+             org=tenancy.org_of(user))
     return row_to_dict(row)
 
 

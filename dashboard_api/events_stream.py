@@ -14,21 +14,23 @@ import queue
 import threading
 from datetime import datetime, timezone
 
-_subscribers: set[queue.Queue] = set()
+# queue -> the subscriber's org (None = untagged). A dict so publish can deliver
+# tenant events only to matching subscribers when isolation is enforced.
+_subscribers: dict[queue.Queue, str | None] = {}
 _lock = threading.Lock()
 _MAX_QUEUED = 200
 
 
-def subscribe() -> queue.Queue:
+def subscribe(org: str | None = None) -> queue.Queue:
     q: queue.Queue = queue.Queue(maxsize=_MAX_QUEUED)
     with _lock:
-        _subscribers.add(q)
+        _subscribers[q] = org
     return q
 
 
 def unsubscribe(q: queue.Queue) -> None:
     with _lock:
-        _subscribers.discard(q)
+        _subscribers.pop(q, None)
 
 
 def subscriber_count() -> int:
@@ -36,15 +38,26 @@ def subscriber_count() -> int:
         return len(_subscribers)
 
 
-def publish(event_type: str, data: dict | None = None) -> int:
-    """Fan a `{type, data, ts}` message out to every subscriber. Never raises;
-    returns how many subscribers it reached. Safe to call from any thread."""
+def publish(event_type: str, data: dict | None = None, org: str | None = None) -> int:
+    """Fan a `{type, data, ts}` message out to subscribers. Never raises; returns
+    how many it reached. Safe to call from any thread.
+
+    Tenant isolation: when it's enforced, an event with an org (passed explicitly
+    or carried as `data['org_id']`) is delivered only to subscribers in that org;
+    an event with no org (system-wide, e.g. engine ticks) still reaches everyone.
+    When isolation is off, every subscriber receives every event (unchanged)."""
     msg = {"type": event_type, "data": data or {},
            "ts": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+    from dashboard_api import tenancy
+    scoped = tenancy.enforced()
+    event_org = org if org is not None else (data or {}).get("org_id") if scoped else None
     with _lock:
-        subs = list(_subscribers)
+        subs = list(_subscribers.items())
     delivered = 0
-    for q in subs:
+    for q, sub_org in subs:
+        # Deliver unless isolation is on AND this is a tenant event for another org.
+        if scoped and event_org is not None and sub_org != event_org:
+            continue
         try:
             q.put_nowait(msg)
             delivered += 1

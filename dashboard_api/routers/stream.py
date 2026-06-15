@@ -30,19 +30,20 @@ def _validate(token: str) -> dict:
     except Exception:
         raise HTTPException(status_code=401, detail="invalid token")
     with get_conn() as conn:
-        row = conn.execute("SELECT id, status FROM users WHERE id=?", (payload.get("sub"),)).fetchone()
+        row = conn.execute("SELECT id, status, org_id FROM users WHERE id=?", (payload.get("sub"),)).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="user no longer exists")
     if row["status"] == "disabled":
         raise HTTPException(status_code=403, detail="account disabled")
-    return {"id": row["id"]}
+    from dashboard_api.tenancy import org_of
+    return {"id": row["id"], "org_id": org_of({"org_id": row["org_id"]})}
 
 
 @router.get("/stream")
 async def event_stream(request: Request, token: str = Query("")):
     """Stream live platform events to the authenticated browser via SSE."""
-    _validate(token)
-    q = subscribe()
+    principal = _validate(token)
+    q = subscribe(principal["org_id"])
 
     async def gen():
         # Comment line opens the stream; `retry` tells EventSource the backoff.

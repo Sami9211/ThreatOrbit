@@ -102,7 +102,8 @@ def takedown(finding_id: str, user: dict = Depends(require_perm("darkweb.write")
         conn.commit()
     dispatch("darkweb.takedown", {"id": finding_id, "title": updated["title"],
                                   "source": updated["source"], "url": updated["url"],
-                                  "requestedBy": user["email"]})
+                                  "requestedBy": user["email"]},
+             org=user.get("org_id"))
     return updated
 
 

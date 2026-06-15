@@ -567,13 +567,13 @@ the columnar/search store, and published EPS limits.
 
 ### P1 — Multi-tenancy completion (for MSSP / SaaS)
 
-`DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, and
-**global search is now org-scoped** (2026-06-15, see CHANGELOG). Still needed
-for GA: org-scoping the **SSE stream** (the in-process broker fans every event
-to all subscribers — needs the queue tagged with the subscriber's org and
-producers to publish with an org), **per-org engine/ingest** context (org-tagged
-sources), tenant lifecycle tooling (create/suspend/export/delete with purge),
-and per-tenant quotas + retention - *before* flipping it on by default.
+`DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, and both
+**global search** and the **SSE stream** are now org-scoped (2026-06-15, see
+CHANGELOG). Still needed for GA: **per-org engine/ingest** context (the
+background engine still publishes/ingests org-agnostically, so engine-path SSE
+events and notifications broadcast), tenant lifecycle tooling
+(create/suspend/export/delete with purge), and per-tenant quotas + retention -
+*before* flipping it on by default.
 
 ### P2 — API contract, platform SRE & data lifecycle
 
@@ -656,6 +656,21 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · SSE stream tenant-scoping (real-time leak closed).** The
+  in-process SSE broker fanned every event to every connected browser, so with
+  isolation on a user would see another tenant's alerts/cases stream in live -
+  the real-time half of the search leak. The broker now tags each subscriber
+  queue with its org (the SSE endpoint passes the validated user's org) and
+  `publish(...)`/`dispatch(..., org=)` deliver a tenant event only to that org's
+  subscribers when isolation is enforced; system events with no org (engine
+  ticks) still reach everyone, and with isolation off the broker broadcasts
+  exactly as before (default path unchanged). The five request-path producers
+  (alert.created, case.created, incident.resolved, ioc.confirmed,
+  darkweb.takedown) now publish with the actor's org. `test_stream_scope.py`
+  proves explicit-org and payload-`org_id` scoping, system-event broadcast, and
+  the off path. Engine-path events still broadcast (per-org engine context is the
+  remaining multi-tenancy item). Full suite green (260).
 
 - **2026-06-15 · Curated starter detection pack.** A fresh install had the Sigma
   importer but an empty rule list - nothing detecting until you authored content.
