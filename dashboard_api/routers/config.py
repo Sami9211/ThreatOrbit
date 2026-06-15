@@ -302,17 +302,21 @@ class EngineControl(BaseModel):
 def engine_status(_: dict = Depends(current_user)):
     """Live processing engine state + how much live data it has produced."""
     from dashboard_api.config import DATA_MODE, ENGINE_TICK_SECONDS
+    from dashboard_api import event_queue
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
         alerts = conn.execute("SELECT COUNT(*) AS n FROM alerts WHERE rule_id IN ('R-ENGINE','R-MANUAL')").fetchone()["n"]
         total_alerts = conn.execute("SELECT COUNT(*) AS n FROM alerts").fetchone()["n"]
         dark = conn.execute("SELECT COUNT(*) AS n FROM dark_web_findings").fetchone()["n"]
+        queue = event_queue.stats(conn)   # detection backlog + lag (backpressure)
     return {
         "mode": DATA_MODE,
         "running": DATA_MODE == "live" and (row is None or row["value"] != "false"),
         "enabled": (row is None or row["value"] != "false"),
         "tickSeconds": ENGINE_TICK_SECONDS,
         "alertsProduced": alerts, "totalAlerts": total_alerts, "darkWebFindings": dark,
+        # Pipeline backpressure: pending events, in-flight, and oldest-pending lag.
+        "queue": queue,
     }
 
 

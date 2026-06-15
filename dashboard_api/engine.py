@@ -368,20 +368,25 @@ def seed_builtin_rules():
 _RISK = {"critical": 92, "high": 76, "medium": 52, "low": 28, "info": 12}
 
 
-def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -> dict:
+def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
+                  worker_id: str = "engine-0") -> dict:
     """Evaluate enabled rules over unprocessed events → create alerts.
 
-    If preview_rule is given, evaluate ONLY that rule and return matches without
-    creating alerts (backtest). Returns a summary."""
+    Live events are pulled through the event-queue seam (claim → … → complete),
+    so the detection stage can later run as a pool of workers without
+    double-processing. `worker_id` identifies the claiming worker (single inline
+    worker today). If preview_rule is given, evaluate ONLY that rule and return
+    matches without creating alerts (backtest). Returns a summary."""
     import json
     from dashboard_api.rule_engine import evaluate
     from dashboard_api.detections import _insert_alert, _TACTIC  # reuse writer
+    from dashboard_api import event_queue
 
-    rows = conn.execute(
-        "SELECT * FROM events WHERE processed=0 ORDER BY ts DESC LIMIT ?", (limit,)
-    ).fetchall() if preview_rule is None else conn.execute(
-        "SELECT * FROM events ORDER BY ts DESC LIMIT ?", (limit,)
-    ).fetchall()
+    if preview_rule is None:
+        rows = event_queue.claim(conn, worker_id, limit)   # lease a batch off the queue
+    else:
+        rows = conn.execute(
+            "SELECT * FROM events ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
     events = [dict(e) for e in rows]
     if preview_rule is not None:
         matches = evaluate(preview_rule, events)
@@ -460,8 +465,7 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300) -
     for sid, n in supp_hits.items():
         conn.execute("UPDATE suppressions SET hits=hits+? WHERE id=?", (n, sid))
     event_ids = [e["id"] for e in events]
-    if event_ids:
-        conn.executemany("UPDATE events SET processed=1 WHERE id=?", [(i,) for i in event_ids])
+    event_queue.complete(conn, event_ids)   # mark the leased batch done, drop the lease
     return {"alerts": created, "events": len(events), "rules": len(rules),
             "suppressed": suppressed}
 

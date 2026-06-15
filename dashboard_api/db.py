@@ -722,6 +722,12 @@ _MIGRATIONS = [
     ("suppressions", "expires_at", "TEXT"),
     ("suppressions", "window_start", "TEXT"),
     ("suppressions", "window_end", "TEXT"),
+    # Event-queue lease (event_queue.py): a detection worker claims a batch of
+    # pending events by stamping its id + time, so a future worker POOL can split
+    # the load without double-processing. NULL = unclaimed; a stale claim is
+    # re-queued after the lease window.
+    ("events", "claimed_by", "TEXT"),
+    ("events", "claimed_at", "TEXT"),
 ]
 
 

@@ -451,7 +451,20 @@ to a **columnar/search store** (ClickHouse or OpenSearch) behind the same hunt
 API with predicate push-down, add **backpressure** (bounded queue + 429 instead
 of best-effort inserts), and **publish measured load limits** (sustained EPS,
 alert volume, UI dataset ceilings) on reference hardware for SQLite vs Postgres.
-No numbers are published today, so we can't answer "how big can it go?".
+
+**Increment 1 DONE (2026-06-15): the queue seam + backpressure visibility.**
+`event_queue.py` makes the `events` table a lease-based work queue
+(claim/complete/requeue-stale via `claimed_by`/`claimed_at`), and the engine's
+detection now flows through it (`run_detection` claims a batch as worker
+"engine-0", completes it) - behaviour-preserving for the single inline worker
+but ready for a pool. **Backpressure is now observable**: queue depth + oldest-
+pending lag are exposed on `GET /config/engine` and as Prometheus gauges
+(`threatorbit_event_queue_depth` / `_lag_seconds`) - you can finally SEE the
+pipeline fall behind. 6 tests prove the lease semantics (exclusive claim,
+complete, stale re-queue). **Still ahead (the heavier lifts):** flip the engine
+to ingest-only + a real **multi-worker detection pool** (each worker its own
+`BEGIN IMMEDIATE`/`isolation_level=None` claim txn), a bounded ingest queue that
+returns 429, the columnar/search store, and published EPS limits.
 
 ### P1 — Reliability, HA & disaster recovery
 
@@ -550,6 +563,23 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Event pipeline, increment 1: the ingest/detection queue seam +
+  backpressure visibility.** First safe step on the P0 EPS-ceiling gap.
+  `event_queue.py` turns the `events` table into a **lease-based work queue**
+  (`claim` a batch → process → `complete`; `requeue_stale` reclaims a dead
+  worker's lease) via two additive columns (`claimed_by`/`claimed_at`). The
+  engine's `run_detection` now pulls its batch through the queue as worker
+  "engine-0" - **behaviour-preserving** for the single inline worker (full suite
+  205 → 211, green) but the seam a worker *pool* needs. **Backpressure is now
+  observable** (it was invisible before): queue depth, in-flight, and oldest-
+  pending **lag** are on `GET /config/engine` and as Prometheus gauges
+  (`threatorbit_event_queue_depth` / `_lag_seconds`). 6 tests prove the lease
+  semantics (exclusive-within-lease claim, complete clears it, stale re-queue) +
+  that detection flows through the queue + the status surface. Deliberately
+  scoped: the multi-worker pool / ingest-only cutover (needs per-worker
+  `BEGIN IMMEDIATE` claim txns), a bounded 429 ingest queue, and the columnar
+  store are the next increments - not rushed into the load-bearing heartbeat.
 
 - **2026-06-15 · SAML 2.0 SP SSO (completes the SAML/SCIM unit).** SP-initiated
   Web Browser SSO for IdPs that speak SAML rather than OIDC (config `SAML_IDP_*`;

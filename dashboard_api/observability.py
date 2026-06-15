@@ -120,6 +120,21 @@ def render_metrics() -> str:
                     lines.append(f'threatorbit_table_rows{{table="{t}"}} {n}')
                 except Exception:
                     continue
+            # Event-queue backpressure: detection backlog + lag - the EPS-ceiling
+            # signal, so an operator can SEE the pipeline falling behind.
+            try:
+                from dashboard_api import event_queue
+                s = event_queue.stats(conn)
+                lines += [
+                    "# HELP threatorbit_event_queue_depth Pending (unprocessed) events",
+                    "# TYPE threatorbit_event_queue_depth gauge",
+                    f"threatorbit_event_queue_depth {s['depth']}",
+                    "# HELP threatorbit_event_queue_lag_seconds Age of the oldest pending event",
+                    "# TYPE threatorbit_event_queue_lag_seconds gauge",
+                    f"threatorbit_event_queue_lag_seconds {s['lagSeconds']}",
+                ]
+            except Exception:
+                pass
     except Exception:  # storage briefly unavailable - scrape still succeeds
         pass
     return "\n".join(lines) + "\n"
