@@ -539,6 +539,20 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-15 · Backend dependency groups (the three pip majors).** Cleared the
+  oldest waiting Dependabot PRs (#9/#11/#13), each held from auto-merge because
+  its group contained a major. Bumped across the three services: **cryptography
+  46→49** (dashboard_api - Fernet + the OIDC RS256 verify path), **numpy 1.26→2.4
+  + scikit-learn 1.5→1.9** (log_api ML anomaly detector), **pytest 8→9** (all
+  three), plus minor/patch on fastapi 0.118→0.137, uvicorn 0.30→0.49, pydantic
+  2.9→2.13, httpx, flask 3.0→3.1, flask-cors, requests, stix2, python-multipart,
+  pyyaml. Verified in a clean venv: **threat_api 1, log_api 1, dashboard_api 170
+  - all pass** (the SSO test exercises RS256 under cryptography 49; the ML test
+  imports numpy 2 / sklearn 1.9). Tracked tech debt surfaced by the run: FastAPI
+  `@app.on_event("startup")` is deprecated (dashboard_api/main.py, log_api) -
+  still works in 0.137 but should migrate to a `lifespan` handler before a future
+  FastAPI major removes it (own small unit).
+
 - **2026-06-14 · React 19 + the react-three-fiber v9 chain (last outdated major
   set).** Took the riskiest remaining upgrade as its own unit: react/react-dom
   18→**19.2.7**, @react-three/fiber 8→**9.6.1**, @react-three/drei 9→**10.7.7**,
