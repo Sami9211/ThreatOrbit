@@ -496,9 +496,12 @@ the columnar/search store, and published EPS limits.
   access-key creation T1098.001; **C2**: DNS tunneling T1071.004 + ingress tool
   transfer T1105; impossible-travel login T1078), each paired with a telemetry
   scenario so the detections fire on real engine events, and a test module that
-  asserts telemetry↔rule MITRE alignment (see CHANGELOG). Still ahead: per-rule
-  noise ratings, a **content-update channel** (rules without a code release),
-  growing the pack toward a Sigma community-pack import, and computing the SOAR
+  asserts telemetry↔rule MITRE alignment (see CHANGELOG). **Content-update
+  channel DONE (2026-06-15)**: versioned JSON packs in `content/rules/` apply via
+  `POST /siem/content/apply` (idempotent upsert, operator enable/disable
+  preserved) - new detections without a code release; first pack ships 4 Windows
+  persistence/defense-evasion rules. Still ahead: per-rule noise ratings, growing
+  the packs toward a Sigma community-pack import, and computing the SOAR
   page's **ATT&CK coverage from this library** instead of the current mock.
 - **Parser/source breadth is thin** (apache/syslog/windows/generic). Enterprises
   expect Windows Event/Sysmon, AWS CloudTrail, Azure AD / M365, GCP audit,
@@ -572,6 +575,22 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Detection-content update channel (rules without a code
+  release).** A real SIEM ships new detections as content, not code. Rules now
+  load from versioned JSON **packs** in `content/rules/*.json`; `content.py`
+  validates them (refusing a malformed pack whole), and `POST /siem/content/apply`
+  **upserts** them into `detection_rules` idempotently - refreshing the content
+  fields while **preserving an operator's enable/disable choice and hit stats** -
+  and records each pack's applied version in `settings`. `GET /siem/content`
+  shows available packs + what's pending. So updating detections = drop in a
+  newer pack file + apply, no redeploy. The built-in 15 stay code-shipped
+  (engine.py untouched); packs add to / refresh the library. First pack
+  (`threatorbit-windows-extras` v1) ships 4 real Windows detections - service
+  install (T1543.003), security-tool tampering (T1562.001), scheduled task
+  (T1053.005), event-log clear (T1070.001) - that fire on ingested Windows logs.
+  7 tests incl. an end-to-end (apply → ingest a matching event → alert with the
+  right MITRE). Suite 219 → **226**.
 
 - **2026-06-15 · HA/DR: full-stack backup + tooled restore + automated drill.**
   Operationalised the backup story (previously dashboard-only snapshots with a

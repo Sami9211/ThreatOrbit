@@ -1,0 +1,51 @@
+{
+  "name": "threatorbit-windows-extras",
+  "version": 1,
+  "description": "Windows persistence + defense-evasion detections that fire on ingested Windows event logs (Sysmon/Security). Demonstrates the content-update channel: drop in a newer version and POST /siem/content/apply - no code release.",
+  "rules": [
+    {
+      "id": "R-SVCINSTALL",
+      "name": "Suspicious service installation",
+      "category": "Endpoint",
+      "severity": "high",
+      "mitre_tactic": "Persistence",
+      "mitre_tactic_id": "TA0003",
+      "mitre_tech_id": "T1543.003",
+      "mitre_tech": "Create or Modify System Process: Windows Service",
+      "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "service_install"}], "logic": "and"}
+    },
+    {
+      "id": "R-AVTAMPER",
+      "name": "Security tooling tampering",
+      "category": "Endpoint",
+      "severity": "high",
+      "mitre_tactic": "Defense Evasion",
+      "mitre_tactic_id": "TA0005",
+      "mitre_tech_id": "T1562.001",
+      "mitre_tech": "Impair Defenses: Disable or Modify Tools",
+      "definition": {"conditions": [{"field": "action", "op": "equals", "value": "disable_av"}], "logic": "and"}
+    },
+    {
+      "id": "R-SCHTASK",
+      "name": "Scheduled task created",
+      "category": "Endpoint",
+      "severity": "medium",
+      "mitre_tactic": "Persistence",
+      "mitre_tactic_id": "TA0003",
+      "mitre_tech_id": "T1053.005",
+      "mitre_tech": "Scheduled Task/Job: Scheduled Task",
+      "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "scheduled_task"}], "logic": "and"}
+    },
+    {
+      "id": "R-LOGCLEAR",
+      "name": "Windows event log cleared",
+      "category": "Endpoint",
+      "severity": "high",
+      "mitre_tactic": "Defense Evasion",
+      "mitre_tactic_id": "TA0005",
+      "mitre_tech_id": "T1070.001",
+      "mitre_tech": "Indicator Removal: Clear Windows Event Logs",
+      "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "log_cleared"}], "logic": "and"}
+    }
+  ]
+}

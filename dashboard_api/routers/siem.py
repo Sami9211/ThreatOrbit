@@ -518,6 +518,30 @@ def create_rule(body: RuleCreate, user: dict = Depends(require_perm("siem.write"
     return row_to_dict(row)
 
 
+@router.get("/content")
+def content_status(user: dict = Depends(current_user)):
+    """Detection-content channel: which rule packs are available and pending."""
+    from dashboard_api import content
+    with get_conn() as conn:
+        return content.status(conn)
+
+
+@router.post("/content/apply")
+def content_apply(user: dict = Depends(require_perm("siem.write"))):
+    """Apply the available detection-content packs (idempotent upsert of rules).
+    This is how new detections land without a code release."""
+    from dashboard_api import content
+    try:
+        with get_conn() as conn:
+            res = content.apply(conn)
+            audit(conn, user["email"], "content.apply", "content-packs",
+                  f"packs={res['packs']} rules={res['rulesUpserted']}")
+            conn.commit()
+    except ValueError as e:  # a malformed pack - refuse the whole update
+        raise HTTPException(status_code=422, detail=f"content pack invalid: {e}")
+    return res
+
+
 class SigmaImport(BaseModel):
     yaml: str
 
