@@ -502,6 +502,10 @@ export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 // browser navigation to the backend, which redirects to the identity provider.
 export const fetchSsoStatus = () => api<{ configured: boolean; loginPath: string }>('/auth/sso/status')
 export const ssoLoginUrl = () => `${BASE}/auth/sso/login`
+// SAML SP - same callback contract as OIDC: the ACS lands on /login with the
+// session token in the URL fragment, read by the existing fragment handler.
+export const fetchSamlStatus = () => api<{ configured: boolean; loginPath: string }>('/auth/saml/status')
+export const samlLoginUrl = () => `${BASE}/auth/saml/login`
 
 // Workspaces (multi-tenancy foundation).
 export interface Org {

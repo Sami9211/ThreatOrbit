@@ -165,6 +165,31 @@ try:
 except ValueError:
     SCIM_ROLE_MAP = {}
 
+# --- SAML 2.0 SP (optional) -------------------------------------------------
+# SP-initiated SSO for IdPs that speak SAML rather than OIDC (ADFS, many
+# enterprise Okta/Entra setups). With no SAML_IDP_* the endpoints degrade to
+# "not configured". The assertion's XML signature is verified against the IdP's
+# X.509 cert (signxml); audience, recipient, timestamps, issuer, InResponseTo
+# and one-time-use are all enforced. Users are JIT-provisioned like OIDC.
+SAML_IDP_ENTITY_ID = os.environ.get("SAML_IDP_ENTITY_ID", "").strip()
+SAML_IDP_SSO_URL = os.environ.get("SAML_IDP_SSO_URL", "").strip()
+SAML_IDP_CERT = os.environ.get("SAML_IDP_CERT", "").strip()          # PEM or bare base64 DER
+SAML_SP_ENTITY_ID = os.environ.get("SAML_SP_ENTITY_ID", "threatorbit-dashboard").strip()
+SAML_SP_ACS_URL = os.environ.get("SAML_SP_ACS_URL",
+                                 "http://localhost:8002/auth/saml/acs").strip()
+# Attribute names carrying email / display name / groups (IdP-specific; sensible
+# defaults below also try the SAML NameID and common friendly names).
+SAML_EMAIL_ATTR = os.environ.get("SAML_EMAIL_ATTR", "").strip()
+SAML_NAME_ATTR = os.environ.get("SAML_NAME_ATTR", "").strip()
+SAML_GROUPS_ATTR = os.environ.get("SAML_GROUPS_ATTR", "groups").strip()
+try:
+    SAML_ROLE_MAP = _json.loads(os.environ.get("SAML_ROLE_MAP", "{}"))
+except ValueError:
+    SAML_ROLE_MAP = {}
+SAML_DEFAULT_ROLE = os.environ.get("SAML_DEFAULT_ROLE", "viewer").strip()
+SAML_ALLOWED_DOMAINS = [d.strip().lower() for d in
+                        os.environ.get("SAML_ALLOWED_DOMAINS", "").split(",") if d.strip()]
+
 # --- Data mode --------------------------------------------------------------
 # "demo" → seed realistic demo data on first boot (great for evaluation/sales).
 # "live" → start empty, bootstrap the admin + built-in connectors, and ingest

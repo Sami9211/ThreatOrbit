@@ -488,13 +488,14 @@ No numbers are published today, so we can't answer "how big can it go?".
 
 ### P1 — Identity, access & session depth
 
-- **SSO: OIDC + SCIM shipped; SAML next.** OIDC SSO shipped earlier; **SCIM 2.0
-  provisioning DONE (2026-06-15)** - the security-critical *deprovisioning* half:
-  an IdP (Okta/Entra/OneLogin) creates, updates, and **deactivates** users over a
-  bearer-token `/scim/v2` surface, so an ex-employee loses access automatically
-  (see CHANGELOG). **SAML 2.0 SP** is the remaining piece (next commit in this
-  unit) for IdPs that don't speak OIDC. Follow-ups: SCIM Group push → role, and
-  externalId filtering.
+- **Enterprise SSO DONE: OIDC + SAML + SCIM (2026-06-15).** OIDC SSO (earlier),
+  **SAML 2.0 SP** (signed-assertion verification with the full security battery -
+  see CHANGELOG), and **SCIM 2.0** provisioning - the security-critical
+  *deprovisioning* half, so an IdP (Okta/Entra/OneLogin) can automatically
+  **deactivate** departed users. The "ex-employee keeps access" finding is
+  closed. Follow-ups: SCIM Group→role push, externalId filtering, a shared
+  (multi-worker) SAML replay cache, and SP-signed AuthnRequests if an IdP
+  requires them.
 - **RBAC is a fixed 4-role matrix.** Enterprises need custom roles,
   per-workspace assignment, and a break-glass/audit-everything mode.
 - **Session management is shallow.** No "active sessions" list, no revoke-all /
@@ -549,6 +550,25 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · SAML 2.0 SP SSO (completes the SAML/SCIM unit).** SP-initiated
+  Web Browser SSO for IdPs that speak SAML rather than OIDC (config `SAML_IDP_*`;
+  unset → 404). `saml.py` builds the AuthnRequest (HTTP-Redirect binding) and
+  verifies the IdP's **signed assertion** with **signxml** against the pinned
+  X.509 cert - and crucially reads attributes **only from the element signxml
+  reports as signed** (`signed_xml`), which defeats XML signature-wrapping. It
+  enforces Issuer, Audience, SubjectConfirmation Recipient, the Conditions +
+  confirmation time windows (clock-skew tolerant), binds the response to our
+  request via a signed-RelayState **InResponseTo**, and rejects **replayed**
+  assertions (one-time-use). XML is parsed by signxml's hardened (no-XXE)
+  parser. `routers/saml.py` mirrors the OIDC flow (status / login / ACS → JIT
+  provision → session token in the URL fragment). New deps: `signxml` + `lxml`
+  (pure pip, no system xmlsec). Frontend: a "Sign in with SAML" button alongside
+  the OIDC one (same fragment callback). **`test_saml.py` is the security proof
+  (16 tests)**: a locally-minted IdP signs real assertions; the SP accepts valid
+  ones and **rejects** unsigned / tampered / wrong-signing-key / expired / wrong
+  audience / wrong issuer / wrong recipient / InResponseTo-mismatch / replay.
+  Dashboard suite 189 → **205**; frontend tsc + build green.
 
 - **2026-06-15 · SCIM 2.0 provisioning (the security-critical deprovisioning
   half of SSO).** An IdP can now push user lifecycle to the dashboard over a

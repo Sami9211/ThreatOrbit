@@ -9,7 +9,7 @@ import GithubIcon from '@/components/ui/GithubIcon'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 import { useAuth } from '@/lib/auth-context'
-import { fetchSsoStatus, ssoLoginUrl } from '@/lib/api'
+import { fetchSsoStatus, ssoLoginUrl, fetchSamlStatus, samlLoginUrl } from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -24,11 +24,14 @@ export default function LoginPage() {
   const [mfaRequired, setMfaRequired] = useState(false)
   const [mfaCode, setMfaCode] = useState('')
   const [ssoOn, setSsoOn] = useState(false)
+  const [samlOn, setSamlOn] = useState(false)
 
-  // SSO: discover whether it's enabled, and complete a callback that handed us
-  // a session token (or an error) back in the URL fragment.
+  // SSO: discover whether OIDC / SAML are enabled, and complete a callback that
+  // handed us a session token (or an error) back in the URL fragment. Both SSO
+  // methods use the same fragment contract, so one handler covers both.
   useEffect(() => {
     fetchSsoStatus().then((s) => setSsoOn(s.configured)).catch(() => {})
+    fetchSamlStatus().then((s) => setSamlOn(s.configured)).catch(() => {})
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const tok = hash.get('sso_token')
     const err = hash.get('sso_error')
@@ -178,6 +181,13 @@ export default function LoginPage() {
               <a href={ssoLoginUrl()}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-violet/30 bg-violet/10 text-sm text-violet font-medium hover:bg-violet/15 transition-colors mb-2.5">
                 <KeyRound className="w-4 h-4" /> Sign in with SSO
+              </a>
+            )}
+
+            {samlOn && (
+              <a href={samlLoginUrl()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-violet/30 bg-violet/10 text-sm text-violet font-medium hover:bg-violet/15 transition-colors mb-2.5">
+                <KeyRound className="w-4 h-4" /> Sign in with SAML
               </a>
             )}
 
