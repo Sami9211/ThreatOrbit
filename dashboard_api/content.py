@@ -64,8 +64,10 @@ def load_packs(pack_dir=None) -> list:
 
 def _applied_versions(conn) -> dict:
     out = {}
+    # The LIKE pattern is a *parameter*, not inline SQL: a literal '%' in the
+    # query string collides with psycopg's placeholder parsing on Postgres.
     for row in conn.execute(
-            "SELECT key, value FROM settings WHERE key LIKE 'content_pack:%'").fetchall():
+            "SELECT key, value FROM settings WHERE key LIKE ?", ("content_pack:%",)).fetchall():
         try:
             out[row["key"].split(":", 1)[1]] = int(row["value"])
         except (ValueError, TypeError):
