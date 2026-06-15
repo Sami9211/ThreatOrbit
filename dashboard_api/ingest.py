@@ -6,6 +6,12 @@ fire on them. This is how production logs stream into the SIEM (an agent or
 syslog forwarder POSTs lines to /siem/ingest), distinct from the deep-analysis
 path that hands a whole file to the Log API's ML detectors.
 
+JSON ingest additionally recognises two high-value source shapes and maps their
+distinctive fields onto the native vocabulary so the same rules fire on them:
+**Windows Security events** (raw EVTX-JSON or winlog/Beats; EventID → event_type,
+e.g. 4625 → failed_login, 4732 → group_change) and **AWS CloudTrail** records
+(eventName → event_type, e.g. CreateAccessKey → create_access_key).
+
 Every parser returns the same normalised event shape the rule engine reads:
 {category, event_type, src_ip, dest_ip, dest_port, username, hostname,
  process_name, action, bytes_out, severity_hint, mitre_tech_id, raw}.
@@ -49,6 +55,43 @@ def _infer(text: str) -> tuple[str, str, str, str | None]:
         if rx.search(text):
             return meta
     return ("log", "generic", "info", None)
+
+
+# Windows Security Event ID → normalised event_type (+ ATT&CK where notable), so
+# Windows logs land on the same vocabulary the detection rules read (e.g. 4625
+# → failed_login feeds the brute-force rule, 4728/4732 → group_change).
+_WIN_EVENTID = {
+    4624: ("login_success", "T1078"), 4625: ("failed_login", "T1110"),
+    4634: ("logoff", None), 4647: ("logoff", None), 4648: ("login_success", "T1078"),
+    4672: ("privileged_login", "T1078"), 4688: ("process_start", None),
+    4689: ("process_end", None), 4720: ("user_created", "T1136"),
+    4726: ("user_deleted", None), 4728: ("group_change", "T1098"),
+    4732: ("group_change", "T1098"), 4756: ("group_change", "T1098"),
+    4738: ("user_changed", None), 1102: ("log_cleared", "T1070.001"),
+    4719: ("policy_change", "T1562"), 7045: ("service_install", "T1543.003"),
+    4697: ("service_install", "T1543.003"),
+}
+
+# AWS CloudTrail eventName → normalised event_type (high-value control-plane
+# actions; CreateAccessKey feeds the cloud-persistence rule, StopLogging the
+# defense-evasion path).
+_CT_EVENTNAME = {
+    "CreateAccessKey": ("create_access_key", "T1098.001"),
+    "CreateLoginProfile": ("create_access_key", "T1098.001"),
+    "CreateUser": ("user_created", "T1136.003"), "DeleteUser": ("user_deleted", None),
+    "AttachUserPolicy": ("policy_change", "T1098.003"),
+    "PutUserPolicy": ("policy_change", "T1098.003"),
+    "AuthorizeSecurityGroupIngress": ("firewall_change", "T1562.007"),
+    "StopLogging": ("log_cleared", "T1562.008"), "DeleteTrail": ("log_cleared", "T1562.008"),
+    "RunInstances": ("instance_launch", None), "GetSecretValue": ("secret_access", "T1552.005"),
+}
+
+
+def _is_ip(s) -> bool:
+    s = str(s)
+    if _IPV4.fullmatch(s):
+        return True
+    return ":" in s and all(c in "0123456789abcdefABCDEF:." for c in s)  # rough IPv6
 
 
 def _base_event(raw: str) -> dict:
@@ -112,6 +155,79 @@ def _apply_ecs(ev: dict, obj: dict, weak: set[str]) -> None:
             ev[native] = v
 
 
+def _apply_windows(ev: dict, obj: dict) -> bool:
+    """Recognise a Windows Security event (raw EVTX-JSON or winlog/Beats shape)
+    and map its fields onto the native event. Returns True if it matched."""
+    winlog = obj.get("winlog") if isinstance(obj.get("winlog"), dict) else {}
+    data = winlog.get("event_data") if isinstance(winlog.get("event_data"), dict) else {}
+    eid = obj.get("EventID") or obj.get("event_id") or winlog.get("event_id")
+    try:
+        eid = int(eid)
+    except (ValueError, TypeError):
+        return False
+    # Distinguish a real Windows record from arbitrary JSON that happens to carry
+    # an "EventID": require a Windows-y companion field.
+    src = {**data, **winlog, **obj}
+    if not (winlog or any(k in src for k in ("Channel", "Computer", "TargetUserName",
+                                             "SubjectUserName", "provider_name"))):
+        return False
+
+    def g(*keys):
+        for k in keys:
+            v = src.get(k)
+            if v not in (None, "", "-"):
+                return v
+        return None
+
+    et, mitre = _WIN_EVENTID.get(eid, (f"windows_{eid}", None))
+    ev["event_type"] = et
+    ev["category"] = "windows"
+    if mitre:
+        ev["mitre_tech_id"] = mitre
+    user = g("TargetUserName", "SubjectUserName", "user", "AccountName")
+    if user:
+        ev["username"] = str(user)
+    host = g("Computer", "computer_name", "Workstation", "hostname")
+    if host:
+        ev["hostname"] = str(host)
+    ip = g("IpAddress", "ip_address", "SourceNetworkAddress")
+    if ip and _is_ip(ip):
+        ev["src_ip"] = str(ip)
+    proc = g("NewProcessName", "ProcessName", "Image")
+    if proc:
+        ev["process_name"] = str(proc)
+    return True
+
+
+def _apply_cloudtrail(ev: dict, obj: dict) -> bool:
+    """Recognise an AWS CloudTrail record and map it onto the native event.
+    Returns True if it matched."""
+    name = obj.get("eventName")
+    source = str(obj.get("eventSource") or "")
+    if not name or not (source.endswith("amazonaws.com") or "eventVersion" in obj):
+        return False
+    et, mitre = _CT_EVENTNAME.get(name, (None, None))
+    if et is None:  # an action we don't special-case → keep the AWS name, mark failures
+        et = "cloud_audit"
+    # Console-login outcome lives in responseElements; reflect failure explicitly.
+    resp = obj.get("responseElements") if isinstance(obj.get("responseElements"), dict) else {}
+    if name == "ConsoleLogin":
+        et = "failed_login" if str(resp.get("ConsoleLogin")).lower() == "failure" else "login_success"
+    ev["event_type"] = et
+    ev["category"] = "cloud_audit"
+    if mitre:
+        ev["mitre_tech_id"] = mitre
+    ev["action"] = "deny" if obj.get("errorCode") else "allow"
+    ip = obj.get("sourceIPAddress")
+    if ip and _is_ip(ip):
+        ev["src_ip"] = str(ip)
+    ident = obj.get("userIdentity") if isinstance(obj.get("userIdentity"), dict) else {}
+    user = ident.get("userName") or ident.get("arn") or ident.get("type")
+    if user:
+        ev["username"] = str(user).rsplit("/", 1)[-1]  # arn → trailing principal name
+    return True
+
+
 def _parse_json(line: str) -> dict | None:
     try:
         obj = json.loads(line)
@@ -148,6 +264,10 @@ def _parse_json(line: str) -> dict | None:
             pass
     if obj.get("event_type"):
         ev["event_type"] = str(obj["event_type"])
+    # Source-specific shapes (Windows Security / AWS CloudTrail) map their
+    # distinctive fields authoritatively onto the native vocabulary, so the same
+    # detection rules fire on them. Generic JSON/ECS handling fills the rest.
+    _apply_windows(ev, obj) or _apply_cloudtrail(ev, obj)
     # ECS documents (nested or dotted keys) normalise at ingest time too.
     # Entity fields still holding only the raw-line regex guess are "weak" -
     # the producer's ECS values are authoritative over them.

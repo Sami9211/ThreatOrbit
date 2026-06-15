@@ -331,10 +331,13 @@ that buying companies require. Realistic positioning today:
       OIDC provider, ID-token RS256 signature verified against the IdP JWKS,
       JIT user provisioning, and IdP-group→role mapping. Opt-in (degrades to
       "not configured"). Remaining: SAML, and SCIM for deprovisioning.
-- [ ] **Parser & source breadth** — Windows Event/Sysmon, AWS CloudTrail,
+- [~] **Parser & source breadth** — **Windows Security events + AWS CloudTrail
+      DONE** (2026-06-15, see CHANGELOG): JSON ingest recognises both shapes and
+      maps EventID/eventName → the native event_type vocabulary (so e.g. Windows
+      4625 → failed_login feeds the brute-force rule). Still ahead: Sysmon,
       Azure AD / M365, GCP audit, common EDR + firewall exports; TLS syslog
-      (RFC 5425) and an agentless-pull option (S3/blob bucket tail). Publish
-      a supported-sources matrix.
+      (RFC 5425) and an agentless-pull option (S3/blob bucket tail); publish a
+      supported-sources matrix.
 - [~] **Detection content library** — STARTER PACK SHIPPED (2026-06-15, see
       CHANGELOG): 10 curated Sigma rules (`detection_pack.py`) loadable via
       `POST /siem/rules/load-pack` + a one-click UI button, idempotent, each
@@ -656,6 +659,20 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Source breadth: Windows Security + AWS CloudTrail.** JSON ingest
+  was generic-only; the two sources every SOC actually onboards landed as
+  unclassified `log` rows. `ingest.py` now recognises **Windows Security events**
+  (raw EVTX-JSON and winlog/Beats nesting) and **AWS CloudTrail** records and maps
+  their distinctive fields onto the native vocabulary - crucially EventID/eventName
+  → `event_type` (4625→failed_login, 4732→group_change, 4688→process_start,
+  1102→log_cleared; CreateAccessKey→create_access_key, ConsoleLogin-failure→
+  failed_login, StopLogging→log_cleared) plus user/host/src_ip/process and an
+  ATT&CK id. So the **starter-pack rules fire on real Windows/AWS telemetry** with
+  no extra config. Guarded against false positives (arbitrary JSON carrying an
+  EventID isn't hijacked; service-principal "source IPs" are dropped).
+  `test_ingest_sources.py` (both shapes at parse level + an end-to-end ingest
+  storing the right event_type). Full suite green.
 
 - **2026-06-15 · SSE stream tenant-scoping (real-time leak closed).** The
   in-process SSE broker fanned every event to every connected browser, so with
