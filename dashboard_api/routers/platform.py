@@ -324,16 +324,34 @@ def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_p
 
 @router.post("/config/retention/enforce")
 def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
-    """Purge data older than the configured retention window (data_retention_days)."""
+    """Purge data older than the configured retention window (data_retention_days).
+    When an archive directory is configured, each batch is written to compressed
+    NDJSON cold storage BEFORE deletion (so compliance keeps raw logs cheaply);
+    if archival fails, that table is left intact rather than purged unarchived."""
+    from dashboard_api import archive, config
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='data_retention_days'").fetchone()
         days = int(row["value"]) if row and str(row["value"]).isdigit() else 90
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
-        purged = {}
+        purged, archived = {}, {}
         for table, col in (("alerts", "ts"), ("events", "ts"), ("dark_web_findings", "ts"),
                            ("scans", "ts"), ("notifications", "ts")):
+            if archive.enabled():
+                doomed = conn.execute(f"SELECT * FROM {table} WHERE {col} < ?", (cutoff,)).fetchall()
+                try:
+                    if archive.archive_rows(table, doomed):
+                        archived[table] = len(doomed)
+                except OSError:
+                    # Never delete what we failed to archive: skip this table.
+                    archived[table] = "error"
+                    continue
             cur = conn.execute(f"DELETE FROM {table} WHERE {col} < ?", (cutoff,))
             purged[table] = cur.rowcount
-        audit(conn, user["email"], "retention.enforce", None, f"days={days} purged={sum(purged.values())}")
+        audit(conn, user["email"], "retention.enforce", None,
+              f"days={days} purged={sum(v for v in purged.values())} archived={archive.enabled()}")
         conn.commit()
-    return {"retentionDays": days, "cutoff": cutoff, "purged": purged}
+    out = {"retentionDays": days, "cutoff": cutoff, "purged": purged}
+    if archive.enabled():
+        out["archived"] = archived
+        out["archiveDir"] = config.ARCHIVE_DIR
+    return out

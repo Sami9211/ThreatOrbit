@@ -1164,7 +1164,7 @@ function AuditTrail() {
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white hover:border-white/20 transition-colors">
             <Copy className="w-3 h-3" /> Export CSV
           </a>
-          <button onClick={() => { enforceRetention().then((r) => setRetentionMsg(`Purged ${Object.values(r.purged).reduce((a, b) => a + b, 0)} records older than ${r.retentionDays} days.`)).catch(() => {}) }}
+          <button onClick={() => { enforceRetention().then((r) => { const n = Object.values(r.purged).reduce((a, b) => a + b, 0); setRetentionMsg(`Purged ${n} records older than ${r.retentionDays} days.${r.archiveDir ? ` Archived to cold storage first (${r.archiveDir}).` : ''}`) }).catch(() => {}) }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white hover:border-white/20 transition-colors">
             Enforce retention
           </button>

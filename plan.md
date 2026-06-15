@@ -580,9 +580,11 @@ and per-tenant quotas + retention - *before* flipping it on by default.
 - **Platform self-observability is partial**: `/metrics` exists, but there's no
   distributed tracing, SLOs/error budgets, alerting on the platform's *own*
   health, or synthetic checks.
-- **Retention is purge-only.** Add event-stream **archive/export** (compressed
-  NDJSON to object storage) before purge so compliance keeps raw logs cheaply,
-  plus PII handling/redaction policy in stored logs.
+- **Retention archive DONE (2026-06-15).** Retention now writes each purged
+  batch to compressed NDJSON cold storage **before** deletion when
+  `DASHBOARD_ARCHIVE_DIR` is set (sync the dir to object storage); purge-only
+  when unset. See CHANGELOG. Still open: a direct object-storage (S3) writer and
+  a PII handling/redaction policy in stored logs.
 
 ### P2 — Product, UX & quality maturity
 
@@ -648,6 +650,18 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Retention archive (cold storage before purge).** Retention
+  enforcement DELETE'd old alerts/events/dark-web/scans/notifications outright -
+  regulated buyers need raw logs kept cheaply, not destroyed. With
+  `DASHBOARD_ARCHIVE_DIR` set, each batch is now written to compressed NDJSON
+  (`<table>-<YYYYMMDD>.ndjson.gz`, append-friendly) **before** deletion; if
+  archival fails the table is left intact rather than purged unarchived (data is
+  never lost silently). Unset = pure purge, so existing installs are unchanged.
+  The enforce response reports archived counts + the dir; the UI message notes
+  the cold-storage step. `test_retention_archive.py` (helper writes/reads gz +
+  disabled no-op; endpoint archives-then-purges and the rows survive only in the
+  archive). Full suite, tsc and build green.
 
 - **2026-06-15 · Global search is tenant-scoped.** The one search box queried
   alerts/IOCs/assets/cases/actors/dark-web with no org filter, so with isolation

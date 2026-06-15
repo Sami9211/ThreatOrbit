@@ -97,6 +97,12 @@ AUTH_FAILURE_WINDOW_SEC = int(os.environ.get("DASHBOARD_AUTH_FAILURE_WINDOW_SEC"
 # Public self-service signup can be disabled for closed deployments.
 ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lower() != "false"
 
+# --- Data lifecycle -------------------------------------------------------------
+# When set to a writable directory, retention enforcement archives each batch of
+# purged rows to compressed NDJSON there BEFORE deleting them, so compliance can
+# keep raw logs cheaply (sync the dir to object storage). Unset = purge-only.
+ARCHIVE_DIR = os.environ.get("DASHBOARD_ARCHIVE_DIR", "").strip()
+
 # --- Companion services ---------------------------------------------------------
 # The Threat API (ingestion engine) and Log API (anomaly analysis) are proxied
 # server-side so the browser never needs their X-API-Key credentials.

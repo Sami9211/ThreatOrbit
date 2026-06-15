@@ -730,7 +730,8 @@ export const createSavedView = (section: string, name: string, filters: Record<s
 export const deleteSavedView = (id: string) => api<void>(`/saved-views/${id}`, { method: 'DELETE' })
 
 export const enforceRetention = () =>
-  api<{ retentionDays: number; cutoff: string; purged: Record<string, number> }>('/config/retention/enforce', { method: 'POST' })
+  api<{ retentionDays: number; cutoff: string; purged: Record<string, number>
+        archived?: Record<string, number | string>; archiveDir?: string }>('/config/retention/enforce', { method: 'POST' })
 export const fetchSiemSources = () => api<LogSource[]>('/siem/sources')
 export const createLogSource = (body: { name: string; type?: string; host?: string; format?: string; tags?: string[] }) =>
   api<LogSource>('/siem/sources', { method: 'POST', body: JSON.stringify(body) })
