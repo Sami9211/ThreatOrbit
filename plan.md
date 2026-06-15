@@ -478,9 +478,14 @@ the columnar/search store, and published EPS limits.
   leader election.
 - **No HA/DR story**: no k8s/Helm chart, no rolling upgrade with migration
   gating, no RPO/RTO targets or tested failover, no multi-AZ Postgres guidance.
-- **Backups exist but aren't operationalised**: the online-backup endpoint +
-  CLI work, but there's no scheduled job, off-host shipping, or an automated
-  *restore* drill in CI - an untested backup is a hope, not a recovery plan.
+- **Backups operationalised (2026-06-15)**: `dashboard_api/backup.py` +
+  `scripts/backup.sh`/`restore.sh` snapshot **all three** service DBs into one
+  verified archive and perform a **tooled, integrity-checked restore** (was
+  documented-manual, dashboard-only). An **automated restore drill** runs in CI
+  (`test_backup.py` round-trips real data + catches corruption/zip-slip/clobber),
+  and `docs/BACKUP_RESTORE.md` covers scheduling, off-box shipping, RPO/RTO, and
+  encryption. Still ahead: a packaged scheduled job (cron/timer image) and
+  multi-AZ Postgres failover guidance.
 
 ### P1 — Detection content, parsers & collectors (the actual SOC value)
 
@@ -567,6 +572,21 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · HA/DR: full-stack backup + tooled restore + automated drill.**
+  Operationalised the backup story (previously dashboard-only snapshots with a
+  *manual* restore runbook and no restore test). `dashboard_api/backup.py` takes
+  a live-safe online-backup snapshot of **all three** service databases
+  (dashboard / threat / log), integrity-checks each, and bundles them into one
+  timestamped `tar.gz`; **restore** verifies every snapshot before it overwrites
+  a live file, refuses to clobber without `--force`, drops stale WAL/SHM
+  sidecars, and rejects path-traversal archive members. Thin `scripts/backup.sh`
+  / `restore.sh` wrappers (Docker `/data` defaults) + `docs/BACKUP_RESTORE.md`
+  runbook (scheduling, off-box shipping, RPO/RTO, encryption, Postgres note).
+  The gap this closes - **an automated restore drill** - is now `test_backup.py`
+  (6 tests: round-trip real data, corruption detection, force-guard, stale-WAL
+  cleanup, zip-slip block). Complements the existing dashboard-only
+  `GET /config/backup` (ops.py), which stays. Suite 213 → **219**.
 
 - **2026-06-15 · Event pipeline, increment 2: bounded ingest queue (429
   backpressure).** `POST /siem/ingest` now sheds load with **HTTP 429 +
