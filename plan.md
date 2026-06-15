@@ -539,6 +539,19 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-15 · FastAPI `on_event` → `lifespan` (tech debt the dep bump
+  surfaced).** Migrated both services off the deprecated `@app.on_event("startup")`
+  hook (which a future FastAPI major will remove) to the `lifespan`
+  async-context-manager passed to `FastAPI(lifespan=...)`. log_api's startup is a
+  one-liner (`init_db()`) inlined into the lifespan; dashboard_api's richer
+  startup (schema init, secret-at-rest migration, demo/live seeding, engine +
+  connector + log-listener threads) stays a `_startup()` the lifespan calls.
+  Verified: dashboard 170 + log 1 still pass (test-neutral - conftest inits the
+  DB itself with a bare `TestClient`), the `on_event` DeprecationWarning is gone
+  (log_api passes under `-W error::DeprecationWarning`), and a `with TestClient`
+  smoke confirms the **real** lifespan startup runs cleanly (dashboard seeds demo
+  data + `/ready` true; log_api `/health` ok).
+
 - **2026-06-15 · Docker image build-validation in CI (`docker-build.yml`).**
   Closed the supply-chain gap that nothing in CI built the images: the test gates
   run the app directly, so a base-image bump or a bad dependency pin could merge

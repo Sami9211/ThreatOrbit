@@ -6,6 +6,7 @@ and configuration. Backed by WAL-mode SQLite, seeded with realistic demo data
 on first run.
 """
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -31,7 +32,17 @@ from dashboard_api import observability  # noqa: E402 (needs logging configured 
 observability.configure_logging()
 observability.init_error_tracking()
 
-app = FastAPI(title="ThreatOrbit Dashboard API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup work lives in _startup() below (defined later so it can reach the
+    # engine/connector helpers); the name resolves at call time. Migrated off the
+    # deprecated @app.on_event("startup") hook. Background workers are daemon
+    # threads that exit with the process, so there's no shutdown teardown.
+    _startup()
+    yield
+
+
+app = FastAPI(title="ThreatOrbit Dashboard API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(observability.MetricsMiddleware)
 app.add_middleware(observability.SecurityHeadersMiddleware)
@@ -128,8 +139,7 @@ def _engine_loop():
         time.sleep(ENGINE_TICK_SECONDS)
 
 
-@app.on_event("startup")
-def startup():
+def _startup():
     import threading
     # JWT_SECRET is now always a strong value: an explicit env var, or a
     # per-install random secret generated and persisted by config.py (never the

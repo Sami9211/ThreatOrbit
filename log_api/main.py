@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from typing import List
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile
@@ -33,7 +34,15 @@ from log_api.db import init_db, get_conn
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Log Anomaly API", version="1.2.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure the schema exists. Migrated off the deprecated
+    # @app.on_event("startup") hook; no shutdown work today.
+    init_db()
+    yield
+
+
+app = FastAPI(title="Log Anomaly API", version="1.2.0", lifespan=lifespan)
 
 _cors_origins = [o.strip() for o in CORS_ORIGINS.split(",")]
 app.add_middleware(
@@ -90,9 +99,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Lifecycle
 # ---------------------------------------------------------------------------
 
-@app.on_event("startup")
-def startup():
-    init_db()
+# Startup moved to the `lifespan` handler above (FastAPI on_event is deprecated).
 
 
 # ---------------------------------------------------------------------------
