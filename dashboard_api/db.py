@@ -100,6 +100,18 @@ CREATE TABLE IF NOT EXISTS orgs (
     created_at TEXT NOT NULL
 );
 
+-- Custom RBAC roles (additive): the four built-in roles stay code-authoritative
+-- in permissions.py; rows here are operator-defined roles whose `capabilities`
+-- (JSON array drawn from permissions.CAPABILITIES) extend the model without code.
+CREATE TABLE IF NOT EXISTS roles (
+    id           TEXT PRIMARY KEY,             -- slug, also stored in users.role
+    name         TEXT NOT NULL,
+    description  TEXT,
+    capabilities TEXT NOT NULL DEFAULT '[]',   -- JSON array of capability strings
+    created_at   TEXT,
+    org_id       TEXT NOT NULL DEFAULT 'org-default'
+);
+
 CREATE TABLE IF NOT EXISTS assets (
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL,

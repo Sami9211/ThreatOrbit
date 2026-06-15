@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from dashboard_api.auth import current_user, hash_password, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.permissions import role_exists
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -43,8 +44,8 @@ def list_users(_: dict = Depends(current_user)):
 
 @router.post("", status_code=201)
 def create_user(body: UserCreate, actor: dict = Depends(require_perm("users.manage"))):
-    if body.role not in ROLES:
-        raise HTTPException(status_code=400, detail=f"Role must be one of {sorted(ROLES)}")
+    if not role_exists(body.role):
+        raise HTTPException(status_code=400, detail="Unknown role (built-in or a defined custom role)")
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     ph, salt = hash_password(body.password)
@@ -76,7 +77,7 @@ def update_user(user_id: str, body: UserUpdate, actor: dict = Depends(require_pe
     for col in ("name", "role", "status", "avatar_color", "mfa_enabled"):
         val = getattr(body, col)
         if val is not None:
-            if col == "role" and val not in ROLES:
+            if col == "role" and not role_exists(val):
                 raise HTTPException(status_code=400, detail="Invalid role")
             if col == "mfa_enabled":
                 # MFA turns ON only through the user's own TOTP enrolment

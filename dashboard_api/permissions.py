@@ -41,8 +41,43 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 
 
 def perms_for(role: str) -> set[str]:
-    return ROLE_PERMISSIONS.get(role, set())
+    if role in ROLE_PERMISSIONS:        # built-in role: authoritative, unchanged
+        return ROLE_PERMISSIONS[role]
+    return _custom_perms(role)          # operator-defined custom role
+
+
+def _custom_perms(role: str) -> set[str]:
+    """Capabilities for a custom role, read from the `roles` table. Validated
+    against the catalogue and fail-closed (empty set = deny) on any error, so a
+    missing/garbled role never grants access."""
+    import json
+    try:
+        from dashboard_api.db import get_conn
+        with get_conn() as conn:
+            row = conn.execute("SELECT capabilities FROM roles WHERE id=?", (role,)).fetchone()
+    except Exception:
+        return set()
+    if not row:
+        return set()
+    raw = row["capabilities"]
+    try:
+        caps = json.loads(raw) if isinstance(raw, str) else (raw or [])
+    except (ValueError, TypeError):
+        return set()
+    return {c for c in caps if c in CAPABILITIES}
 
 
 def has_perm(role: str, perm: str) -> bool:
-    return perm in ROLE_PERMISSIONS.get(role, set())
+    return perm in perms_for(role)
+
+
+def role_exists(role: str) -> bool:
+    """True if `role` is a built-in or a defined custom role (for assignment)."""
+    if role in ROLE_PERMISSIONS:
+        return True
+    try:
+        from dashboard_api.db import get_conn
+        with get_conn() as conn:
+            return conn.execute("SELECT 1 FROM roles WHERE id=?", (role,)).fetchone() is not None
+    except Exception:
+        return False

@@ -521,8 +521,12 @@ the columnar/search store, and published EPS limits.
   closed. Follow-ups: SCIM Group→role push, externalId filtering, a shared
   (multi-worker) SAML replay cache, and SP-signed AuthnRequests if an IdP
   requires them.
-- **RBAC is a fixed 4-role matrix.** Enterprises need custom roles,
-  per-workspace assignment, and a break-glass/audit-everything mode.
+- **RBAC: custom roles DONE (2026-06-15).** The four built-ins stay
+  code-authoritative; operators now define **custom roles** (capability bundles)
+  via `/roles`, resolved by `permissions.perms_for()` from a `roles` table, with
+  a **no-privilege-escalation** guard (you can't grant a capability you don't
+  hold). See CHANGELOG. Still ahead: per-workspace role assignment and a
+  break-glass / audit-everything mode.
 - **Session management is shallow.** No "active sessions" list, no revoke-all /
   revoke-on-password-change, no enforced idle timeout, no password policy /
   rotation / breach-list check, and no MFA recovery codes (only TOTP).
@@ -582,6 +586,20 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Custom RBAC roles (additive, no privilege escalation).** The
+  fixed 4-role matrix gains operator-defined roles without touching the
+  load-bearing path. The four built-ins stay **code-authoritative** in
+  `permissions.py` (zero behaviour change - the other 237 tests, all on built-in
+  roles, still pass); `perms_for()`/`has_perm()` now fall back to a `roles` table
+  for custom roles, **validated against the capability catalogue and fail-closed**
+  on any error so a missing/garbled role never grants access. `/roles` CRUD
+  (`users.manage`): list (built-ins + custom + the catalogue), create, edit,
+  delete (refused while users are assigned). A **no-privilege-escalation** guard
+  rejects granting a capability the creator doesn't hold (a manager can't mint a
+  `users.delete` role). `update_user`/`create_user` accept custom role ids via
+  `role_exists()`. 7 tests incl. require_perm honouring a custom role's caps
+  (grant AND deny) on the real auth path + the escalation guard. Suite 237 → **244**.
 
 - **2026-06-15 · GDPR data-subject tooling (access + erasure).** `/privacy`
   endpoints: `GET /privacy/me` (self-service export), `GET /privacy/export/{id}`
