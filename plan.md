@@ -488,9 +488,13 @@ No numbers are published today, so we can't answer "how big can it go?".
 
 ### P1 — Identity, access & session depth
 
-- **SSO half-done**: OIDC shipped; **SAML** (still common in enterprise) and
-  **SCIM** (automated *deprovisioning* - the security-critical half) are
-  missing. An ex-employee who keeps access is a finding.
+- **SSO: OIDC + SCIM shipped; SAML next.** OIDC SSO shipped earlier; **SCIM 2.0
+  provisioning DONE (2026-06-15)** - the security-critical *deprovisioning* half:
+  an IdP (Okta/Entra/OneLogin) creates, updates, and **deactivates** users over a
+  bearer-token `/scim/v2` surface, so an ex-employee loses access automatically
+  (see CHANGELOG). **SAML 2.0 SP** is the remaining piece (next commit in this
+  unit) for IdPs that don't speak OIDC. Follow-ups: SCIM Group push → role, and
+  externalId filtering.
 - **RBAC is a fixed 4-role matrix.** Enterprises need custom roles,
   per-workspace assignment, and a break-glass/audit-everything mode.
 - **Session management is shallow.** No "active sessions" list, no revoke-all /
@@ -545,6 +549,21 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · SCIM 2.0 provisioning (the security-critical deprovisioning
+  half of SSO).** An IdP can now push user lifecycle to the dashboard over a
+  bearer-token `/scim/v2` surface (config `SCIM_TOKEN`; unset → 404, feature
+  off). Implemented: `User` create / read / list with `userName eq` filter +
+  pagination / PUT replace / **PATCH active:false** (the deprovision path Okta &
+  Entra use) / DELETE (soft-disable so owned records aren't orphaned), plus the
+  ServiceProviderConfig / ResourceTypes / Schemas discovery docs IdPs probe.
+  Auth is a constant-time bearer compare; provisioned users land in the same
+  `users` table and sign in via the existing OIDC SSO; role defaults to
+  `SCIM_DEFAULT_ROLE` and maps from a SCIM role via `SCIM_ROLE_MAP`. Pure
+  mapping helpers in `scim.py`; 12 tests in `test_scim.py` (degradation, auth,
+  full lifecycle, role mapping, mappers). Dashboard suite 177 → **189**, green.
+  This closes the "ex-employee keeps access" finding. **SAML 2.0 SP is the next
+  commit in this unit.** Follow-ups: SCIM Group→role push, externalId filter.
 
 - **2026-06-15 · Detection content: built-in rule pack 7 → 15 across 8 ATT&CK
   tactics.** The first chunk of the curated detection-content gap (a SIEM's core

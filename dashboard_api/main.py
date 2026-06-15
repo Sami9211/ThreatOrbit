@@ -20,8 +20,8 @@ from dashboard_api.routers import (
     assets, assistant as assistant_router, auth, billing as billing_router,
     connectors as connectors_router, cti,
     config as config_router, darkweb, feeds, overview, platform as platform_router,
-    reports as reports_router, orgs, services, siem, soar, sso as sso_router,
-    stream, taxii, users,
+    reports as reports_router, orgs, scim as scim_router, services, siem, soar,
+    sso as sso_router, stream, taxii, users,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -217,7 +217,8 @@ for r in (auth.router, users.router, overview.router, siem.router, soar.router,
           cti.router, assets.router, feeds.router, config_router.router, services.router,
           connectors_router.router, darkweb.router, reports_router.router,
           platform_router.router, taxii.router, stream.router, orgs.router,
-          assistant_router.router, billing_router.router, sso_router.router):
+          assistant_router.router, billing_router.router, sso_router.router,
+          scim_router.router):
     app.include_router(r)
 
 

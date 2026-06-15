@@ -150,6 +150,21 @@ OIDC_ALLOWED_DOMAINS = [d.strip().lower() for d in
 # URL fragment so it never hits a server log).
 OIDC_POST_LOGIN_URL = os.environ.get("OIDC_POST_LOGIN_URL", "http://localhost:3000/login").rstrip("/")
 
+# --- SCIM 2.0 provisioning (optional) ---------------------------------------
+# Lets an IdP (Okta, Entra ID / Azure AD, OneLogin…) push user lifecycle -
+# create / update / deactivate - to the dashboard over SCIM 2.0. The IdP
+# authenticates with a long bearer token (SCIM_TOKEN); with no token set the
+# /scim/v2 endpoints degrade to "not configured" (404). Provisioned users sign
+# in through the existing OIDC SSO (or a set password). Role defaults to
+# SCIM_DEFAULT_ROLE and can be mapped from a SCIM role/group via SCIM_ROLE_MAP.
+SCIM_TOKEN = os.environ.get("SCIM_TOKEN", "").strip()
+SCIM_DEFAULT_ROLE = os.environ.get("SCIM_DEFAULT_ROLE", "viewer").strip()
+# JSON map of SCIM role/group value -> dashboard role (admin|manager|analyst|viewer).
+try:
+    SCIM_ROLE_MAP = _json.loads(os.environ.get("SCIM_ROLE_MAP", "{}"))
+except ValueError:
+    SCIM_ROLE_MAP = {}
+
 # --- Data mode --------------------------------------------------------------
 # "demo" → seed realistic demo data on first boot (great for evaluation/sales).
 # "live" → start empty, bootstrap the admin + built-in connectors, and ingest

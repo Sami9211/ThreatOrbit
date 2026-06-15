@@ -54,6 +54,11 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
 - Secrets encrypted at rest (Fernet, `DASHBOARD_ENCRYPTION_KEY`), TOTP MFA,
   capability-based RBAC with audited denials, login throttling, security
   headers on every API response, signed evidence bundles.
+- **Identity lifecycle**: optional OIDC SSO (ID-token RS256 verification) and
+  **SCIM 2.0 provisioning** (bearer-token `/scim/v2`) so an IdP can
+  automatically *deactivate* departed users — closing the "ex-employee keeps
+  access" gap. Both degrade to off when unconfigured; email+password is
+  unaffected.
 - **SSRF guard** (`net_guard.py`) on every user-supplied outbound URL
   (webhooks, custom connectors, personal Slack routing): http/https only, and
   the local host plus private / link-local / reserved ranges (incl. the cloud
