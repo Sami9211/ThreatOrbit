@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useDashboardTheme, useDashboardPrefs, hexToRgbTriplet } from '@/lib/useDashboardTheme'
 
 /**
@@ -11,27 +10,26 @@ import { useDashboardTheme, useDashboardPrefs, hexToRgbTriplet } from '@/lib/use
  *   data-theme   - colour palette (11 presets, values in globals.css)
  *   --magenta    - optional custom accent, overrides the theme's primary
  *   data-motion  - 'reduced' kills animations/transitions (CSS in globals.css)
- *   data-density - 'compact' is reflected as a tighter rem baseline (below)
- *   scale        - UI zoom, also applied through the rem baseline
+ *   data-density - 'compact' tightens spacing (folded into the zoom below)
+ *   scale        - UI zoom
  *
- * Scale + density both act on the root font-size so every rem-based spacing
- * and text token scales together (a genuine zoom / density change, not a
- * cosmetic flag). It is restored on unmount, so leaving the dashboard returns
- * the document to its default sizing.
+ * Scale + density are applied as CSS `zoom` on this wrapper. Unlike the old
+ * rem-baseline trick, zoom scales EVERYTHING in the subtree - including the
+ * dashboard's many pixel-pinned sizes (text-[10px], w-[120px], …) - and the
+ * browser RE-FLOWS at the zoomed size, so the layout grows proportionally
+ * without overlap (a genuine zoom, not a cosmetic flag). Default scale 1 ->
+ * zoom 1 -> no change. Scoped here so the public marketing site is untouched.
  */
 export default function ThemeScope({ children }: { children: React.ReactNode }) {
   const [theme] = useDashboardTheme()
   const [prefs] = useDashboardPrefs()
 
-  useEffect(() => {
-    const px = 16 * prefs.scale * (prefs.density === 'compact' ? 0.92 : 1)
-    const prev = document.documentElement.style.fontSize
-    document.documentElement.style.fontSize = `${px.toFixed(2)}px`
-    return () => { document.documentElement.style.fontSize = prev }
-  }, [prefs.scale, prefs.density])
-
+  const zoom = prefs.scale * (prefs.density === 'compact' ? 0.92 : 1)
   const accent = prefs.accent ? hexToRgbTriplet(prefs.accent) : null
-  const style = accent ? ({ ['--magenta']: accent } as React.CSSProperties) : undefined
+  const style: React.CSSProperties = {
+    ...(accent ? { ['--magenta']: accent } : {}),
+    ...(zoom !== 1 ? { zoom } : {}),
+  }
 
   return (
     <div

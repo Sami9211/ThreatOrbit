@@ -797,7 +797,7 @@ function ThemeCard({ saveTick }: { saveTick: number }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-ink-600 select-none">A</span>
-            <input type="range" min={0.9} max={1.1} step={0.05} value={dPrefs.scale}
+            <input type="range" min={0.9} max={1.4} step={0.1} value={dPrefs.scale}
               onChange={(e) => editPrefs({ scale: parseFloat(e.target.value) })}
               aria-label="UI scale"
               className="flex-1 h-1.5 accent-magenta cursor-pointer" />

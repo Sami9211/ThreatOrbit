@@ -43,7 +43,7 @@ export const THEMES: {
    density. Synced cross-tab like the theme. */
 export interface DashboardPrefs {
   accent: string | null   // hex like "#FF2E97" - overrides the theme primary
-  scale: number           // 0.9 .. 1.1 (UI zoom)
+  scale: number           // 0.9 .. 1.4 (UI zoom, applied as CSS zoom)
   motion: 'full' | 'reduced'
   density: 'comfortable' | 'compact'
 }
@@ -68,7 +68,7 @@ function clamp(n: number, lo: number, hi: number) {
 function sanitizePrefs(raw: unknown): DashboardPrefs {
   const p = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
   const accent = typeof p.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.accent) ? p.accent : null
-  const scale = typeof p.scale === 'number' ? clamp(p.scale, 0.9, 1.1) : 1
+  const scale = typeof p.scale === 'number' ? clamp(p.scale, 0.9, 1.4) : 1
   const motion = p.motion === 'reduced' ? 'reduced' : 'full'
   const density = p.density === 'compact' ? 'compact' : 'comfortable'
   return { accent, scale, motion, density }
