@@ -72,6 +72,40 @@ def test_delivery_is_signed_and_idempotent(client, auth, monkeypatch):
         server.shutdown()
 
 
+def test_delivery_retries_then_succeeds_with_stable_id(client, auth, monkeypatch):
+    """Transient failures are retried (same idempotency id) until one succeeds."""
+    monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
+    received: list = []
+    fail = {"n": 2}   # 500 on the first two attempts, then 200
+
+    class Receiver(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length", 0))
+            self.rfile.read(n)
+            received.append(self.headers.get("X-ThreatOrbit-Delivery"))
+            self.send_response(500 if fail["n"] > 0 else 200)
+            fail["n"] -= 1
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Receiver)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+    try:
+        hook = client.post("/config/webhooks", json={
+            "url": f"http://127.0.0.1:{port}/sink", "events": ["alert.created"]},
+            headers=auth).json()
+        out = client.post(f"/config/webhooks/{hook['id']}/test", headers=auth).json()
+        assert out["ok"] is True                       # eventually delivered
+        assert len(received) == 3                       # two failures, then success
+        assert len(set(received)) == 1                  # one stable idempotency id across retries
+        client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
+    finally:
+        server.shutdown()
+
+
 def test_rotate_secret_invalidates_old(client, auth, monkeypatch):
     monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
     server, received = _sink()

@@ -572,9 +572,9 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 - **Outbound webhook signing + idempotency DONE (2026-06-15).** Every delivery
   is HMAC-SHA256 signed (`X-ThreatOrbit-Signature: t=…,v1=…`, Stripe scheme) with
   a per-hook `whsec_` secret shown once at create/rotate, and carries an
-  `X-ThreatOrbit-Delivery` idempotency id. See CHANGELOG. Still open here: a
-  **versioned API** (`/v1`), deprecation policy, per-release OpenAPI, and
-  delivery **retries/backoff**.
+  `X-ThreatOrbit-Delivery` idempotency id, and **retries with exponential
+  backoff** (the stable id lets subscribers dedupe). See CHANGELOG. Still open
+  here: a **versioned API** (`/v1`), deprecation policy, and per-release OpenAPI.
 - **Platform self-observability is partial**: `/metrics` exists, but there's no
   distributed tracing, SLOs/error budgets, alerting on the platform's *own*
   health, or synthetic checks.
@@ -646,6 +646,15 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Webhook delivery retries (exponential backoff).** A transient
+  blip on the subscriber's side dropped events permanently (one attempt, then
+  marked `failing`). Delivery now retries up to 3 times with exponential backoff
+  (1s, 2s); the idempotency id + signature are computed once and **reused across
+  attempts**, so a subscriber sees the same delivery and dedupes it. Marked
+  `failing` only after all attempts fail; backoff sleeps are skipped under the
+  test sync-delivery path. `test_webhook_signing.py` proves retry-then-succeed
+  with a single stable delivery id; full suite green.
 
 - **2026-06-15 · Outbound webhook signing + idempotency.** Subscribers had no
   way to verify a delivery genuinely came from ThreatOrbit (anyone who learned

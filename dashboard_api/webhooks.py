@@ -84,6 +84,27 @@ def _subscribers(event: str) -> list[dict]:
     return subs
 
 
+# Delivery is retried on transient failure with exponential backoff. The
+# idempotency id + signature are computed once and reused across attempts, so a
+# subscriber sees the SAME delivery on every retry and can dedupe it. Backoff
+# sleeps are skipped under SYNC_DELIVERY (tests) so the suite stays fast.
+_MAX_ATTEMPTS = 3
+_BACKOFF_BASE = 1.0   # seconds; doubles each retry (1s, 2s)
+
+
+def _post_with_retry(url: str, body: bytes, headers: dict) -> bool:
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            r = httpx.post(url, content=body, headers=headers, timeout=_TIMEOUT)
+            if r.status_code < 400:
+                return True
+        except httpx.HTTPError:
+            pass
+        if attempt < _MAX_ATTEMPTS - 1 and not SYNC_DELIVERY:
+            time.sleep(_BACKOFF_BASE * (2 ** attempt))
+    return False
+
+
 def _deliver(event: str, payload: dict, subs: list[dict]):
     envelope = {"event": event, "ts": _now(), "data": payload}
     # Sign the EXACT bytes we send (compact, stable separators), so a subscriber
@@ -93,16 +114,11 @@ def _deliver(event: str, payload: dict, subs: list[dict]):
         headers = {
             "Content-Type": "application/json",
             _EVENT_HEADER: event,
-            _ID_HEADER: str(uuid.uuid4()),          # idempotency key (dedupe retries)
+            _ID_HEADER: str(uuid.uuid4()),          # idempotency key (stable across retries)
         }
         if sub.get("secret"):
             headers[_SIG_HEADER] = sign_payload(sub["secret"], body)
-        ok = False
-        try:
-            r = httpx.post(sub["url"], content=body, headers=headers, timeout=_TIMEOUT)
-            ok = r.status_code < 400
-        except httpx.HTTPError:
-            ok = False
+        ok = _post_with_retry(sub["url"], body, headers)
         with get_conn() as conn:
             if ok:
                 conn.execute(
