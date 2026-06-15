@@ -577,6 +577,20 @@ def import_sigma_rule(body: SigmaImport, user: dict = Depends(require_perm("siem
     return {**row_to_dict(row), "importNotes": mapped["notes"]}
 
 
+@router.post("/rules/load-pack", status_code=201)
+def load_detection_pack(user: dict = Depends(require_perm("siem.write"))):
+    """Load the curated starter detection pack (real Sigma rules mapped to the
+    platform's own event stream). Idempotent - rules already present (by name)
+    are skipped, so it's safe to re-run."""
+    from dashboard_api.detection_pack import load_pack
+    with get_conn() as conn:
+        result = load_pack(conn, user["email"], tenancy.org_of(user))
+        audit(conn, user["email"], "rule.load_pack", None,
+              f"created={len(result['created'])} skipped={len(result['skipped'])}")
+        conn.commit()
+    return result
+
+
 @router.get("/rules/{rule_id}/sigma")
 def export_sigma_rule(rule_id: str):
     """Export a rule as Sigma YAML - the original document for Sigma-imported

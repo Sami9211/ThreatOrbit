@@ -604,6 +604,9 @@ export const importSigmaRule = (yamlText: string) =>
   })
 export const exportSigmaRule = (id: string) =>
   api<{ yaml: string; source: 'original' | 'generated' }>(`/siem/rules/${id}/sigma`)
+// Load the curated starter detection pack (idempotent; returns created/skipped names).
+export const loadDetectionPack = () =>
+  api<{ created: string[]; skipped: string[] }>('/siem/rules/load-pack', { method: 'POST' })
 
 // ── Alert tuning: suppressions / allow-lists ─────────────────────────
 export interface Suppression {

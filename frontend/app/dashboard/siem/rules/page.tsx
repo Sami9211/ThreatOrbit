@@ -15,6 +15,7 @@ import { fetchRules, patchRule, deleteRule, exportSigmaRule } from '@/lib/api'
 import RuleEditor from '@/components/dashboard/RuleEditor'
 import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
 import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
+import StarterPackButton from '@/components/dashboard/StarterPackButton'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -738,6 +739,8 @@ export default function RulesEnginePage() {
         </div>
         {canWrite && (
           <div className="flex items-center gap-2">
+            <StarterPackButton onLoaded={() =>
+              fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
             <SigmaImportButton onImported={() =>
               fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
             <button

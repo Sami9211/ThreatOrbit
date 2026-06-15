@@ -335,9 +335,12 @@ that buying companies require. Realistic positioning today:
       Azure AD / M365, GCP audit, common EDR + firewall exports; TLS syslog
       (RFC 5425) and an agentless-pull option (S3/blob bucket tail). Publish
       a supported-sources matrix.
-- [ ] **Detection content library** — ship a curated Sigma pack (the
-      importer exists) with per-rule noise ratings, and a content-update
-      channel so new detections arrive without a product upgrade.
+- [~] **Detection content library** — STARTER PACK SHIPPED (2026-06-15, see
+      CHANGELOG): 10 curated Sigma rules (`detection_pack.py`) loadable via
+      `POST /siem/rules/load-pack` + a one-click UI button, idempotent, each
+      mapped to a real event field + ATT&CK technique. Still ahead: per-rule
+      noise ratings and a content-update channel (new detections without a
+      product upgrade).
 - [ ] **Published load limits** — benchmark and document sustained EPS,
       alert volume, and UI dataset ceilings on reference hardware (SQLite vs
       Postgres); add ingest backpressure (bounded queue + 429) instead of
@@ -653,6 +656,20 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Curated starter detection pack.** A fresh install had the Sigma
+  importer but an empty rule list - nothing detecting until you authored content.
+  `detection_pack.py` ships **10 real Sigma rules** (brute-force/spray, ransomware
+  mass-encrypt + shadow-copy deletion, DNS tunneling, large egress, LOLBin tool
+  transfer, C2 beacon, cloud access-key creation, impossible travel) that parse
+  through the existing importer onto evaluable definitions - and every selection
+  targets a field/value the platform's **own event stream actually produces**, so
+  they fire on real telemetry rather than being shelf-ware. Each carries an
+  ATT&CK technique + tactic. `POST /siem/rules/load-pack` (idempotent by name) +
+  a one-click "Starter pack" button on the rules page. `test_detection_pack.py`
+  (all 10 parse to non-`raw` precise conditions with ATT&CK tags; load creates
+  then fully skips on re-run; a loaded rule is live + evaluable). Full suite
+  green (259), tsc + build green.
 
 - **2026-06-15 · Audit-trail external streaming (tamper-evidence).** The audit
   log lived only in the same DB an intruder could alter. Every `audit()` event is
