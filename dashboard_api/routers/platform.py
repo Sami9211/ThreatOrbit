@@ -84,9 +84,15 @@ def mark_read(body: MarkRead, _: dict = Depends(current_user)):
 # ── Global search ────────────────────────────────────────────────────────────────
 
 @router.get("/search")
-def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25)):
-    """One box across alerts, IOCs, assets, cases, actors, and dark-web findings."""
+def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25),
+                  user: dict = Depends(current_user)):
+    """One box across alerts, IOCs, assets, cases, actors, and dark-web findings.
+    Tenant-scoped: when isolation is on, only the caller's workspace is searched
+    (every table here carries org_id), so the search box can't leak across orgs."""
     like = f"%{q}%"
+    # Scope clause is appended INSIDE the match group's parens, so it ANDs across
+    # the whole `LIKE ? OR LIKE ?` match rather than just the last term.
+    clause, sp = tenancy.scope_sql(tenancy.org_of(user))
     out: list[dict] = []
     with get_conn() as conn:
         def add(rows, kind, label_key, sub_key, link_fn, sev_key=None):
@@ -94,21 +100,23 @@ def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25
                 d = dict(r)
                 out.append({"kind": kind, "label": d.get(label_key), "sub": d.get(sub_key),
                             "severity": d.get(sev_key) if sev_key else None, "link": link_fn(d)})
-        add(conn.execute("SELECT id,title,src_ip,severity FROM alerts WHERE title LIKE ? OR src_ip LIKE ? LIMIT ?",
-                         (like, like, limit)).fetchall(), "alert", "title", "src_ip",
+        add(conn.execute(f"SELECT id,title,src_ip,severity FROM alerts WHERE (title LIKE ? OR src_ip LIKE ?) {clause} LIMIT ?",
+                         (like, like, *sp, limit)).fetchall(), "alert", "title", "src_ip",
             lambda d: f"/dashboard/siem?q={d['src_ip'] or d['title']}", "severity")
-        add(conn.execute("SELECT id,value,type,severity FROM iocs WHERE value LIKE ? LIMIT ?", (like, limit)).fetchall(),
+        add(conn.execute(f"SELECT id,value,type,severity FROM iocs WHERE (value LIKE ?) {clause} LIMIT ?",
+                         (like, *sp, limit)).fetchall(),
             "ioc", "value", "type", lambda d: f"/dashboard/scanner?q={d['value']}", "severity")
-        add(conn.execute("SELECT id,name,value,criticality FROM assets WHERE name LIKE ? OR value LIKE ? LIMIT ?",
-                         (like, like, limit)).fetchall(), "asset", "name", "value",
+        add(conn.execute(f"SELECT id,name,value,criticality FROM assets WHERE (name LIKE ? OR value LIKE ?) {clause} LIMIT ?",
+                         (like, like, *sp, limit)).fetchall(), "asset", "name", "value",
             lambda d: "/dashboard/assets", "criticality")
-        add(conn.execute("SELECT id,title,severity FROM cases WHERE title LIKE ? LIMIT ?", (like, limit)).fetchall(),
+        add(conn.execute(f"SELECT id,title,severity FROM cases WHERE (title LIKE ?) {clause} LIMIT ?",
+                         (like, *sp, limit)).fetchall(),
             "case", "title", "id", lambda d: "/dashboard/soar", "severity")
-        add(conn.execute("SELECT id,name,origin FROM threat_actors WHERE name LIKE ? OR aliases LIKE ? LIMIT ?",
-                         (like, like, limit)).fetchall(), "actor", "name", "origin",
+        add(conn.execute(f"SELECT id,name,origin FROM threat_actors WHERE (name LIKE ? OR aliases LIKE ?) {clause} LIMIT ?",
+                         (like, like, *sp, limit)).fetchall(), "actor", "name", "origin",
             lambda d: "/dashboard/cti/actors")
-        add(conn.execute("SELECT id,title,entity,severity FROM dark_web_findings WHERE title LIKE ? OR entity LIKE ? LIMIT ?",
-                         (like, like, limit)).fetchall(), "darkweb", "title", "entity",
+        add(conn.execute(f"SELECT id,title,entity,severity FROM dark_web_findings WHERE (title LIKE ? OR entity LIKE ?) {clause} LIMIT ?",
+                         (like, like, *sp, limit)).fetchall(), "darkweb", "title", "entity",
             lambda d: "/dashboard/darkweb", "severity")
     return {"query": q, "results": out}
 

@@ -561,11 +561,13 @@ the columnar/search store, and published EPS limits.
 
 ### P1 — Multi-tenancy completion (for MSSP / SaaS)
 
-`DASHBOARD_MULTI_TENANT` is staged and the get-by-id IDOR was closed, but GA
-needs: org-scoping on **global search and the SSE stream**, **per-org
-engine/ingest** context (org-tagged sources), tenant lifecycle tooling
-(create/suspend/export/delete with purge), and per-tenant quotas + retention -
-*before* flipping it on by default.
+`DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, and
+**global search is now org-scoped** (2026-06-15, see CHANGELOG). Still needed
+for GA: org-scoping the **SSE stream** (the in-process broker fans every event
+to all subscribers — needs the queue tagged with the subscriber's org and
+producers to publish with an org), **per-org engine/ingest** context (org-tagged
+sources), tenant lifecycle tooling (create/suspend/export/delete with purge),
+and per-tenant quotas + retention - *before* flipping it on by default.
 
 ### P2 — API contract, platform SRE & data lifecycle
 
@@ -646,6 +648,17 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Global search is tenant-scoped.** The one search box queried
+  alerts/IOCs/assets/cases/actors/dark-web with no org filter, so with isolation
+  on it would surface another workspace's hits - a cross-tenant leak. It now
+  applies `tenancy.scope_sql(org_of(user))` to every table (each carries
+  `org_id`), with the scope clause placed **inside** each match group's parens so
+  it ANDs across the whole `LIKE … OR LIKE …` rather than just the last term. A
+  no-op when isolation is off (single-tenant behaviour identical).
+  `test_search_scope.py` proves the foreign workspace's alert + IOC vanish with
+  the flag on and return with it off. Remaining tenancy gap: the SSE stream
+  (tracked above). Full suite green.
 
 - **2026-06-15 · Webhook delivery retries (exponential backoff).** A transient
   blip on the subscriber's side dropped events permanently (one attempt, then
