@@ -1689,7 +1689,7 @@ export default function ConfigPage() {
                     {/* SSO (OIDC/SAML) is on the roadmap (Tier 2) - options appear here when implemented */}
                   </select>
                 </div>
-                <Field label="Session Timeout (minutes)" type="number" value={settings.session_timeout_minutes ?? '720'} onChange={setSetting('session_timeout_minutes')} />
+                <Field label="Idle Timeout (minutes)" type="number" value={settings.session_timeout_minutes ?? '720'} onChange={setSetting('session_timeout_minutes')} hint="Sign out sessions left inactive this long. 0 disables it; the token's 12h hard expiry still applies." />
                 <Field label="Allowed IP Ranges" value={settings.allowed_ip_ranges ?? '0.0.0.0/0'} onChange={setSetting('allowed_ip_ranges')} hint="Comma-separated CIDR blocks. Use 0.0.0.0/0 to allow all." />
               </div>
               <MyMfaPanel />

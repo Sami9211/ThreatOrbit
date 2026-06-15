@@ -115,6 +115,30 @@ def record_session(conn, user_id: str, request=None, sid: str | None = None) -> 
     return sid
 
 
+def _seconds_since(iso: str | None) -> float:
+    """Seconds since an ISO-8601 timestamp (0 if missing/unparseable)."""
+    if not iso:
+        return 0.0
+    try:
+        prev = datetime.fromisoformat(iso)
+        if prev.tzinfo is None:
+            prev = prev.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - prev).total_seconds()
+    except ValueError:
+        return 0.0
+
+
+def _idle_timeout_minutes(conn) -> int:
+    """The configured idle window in minutes (the `session_timeout_minutes`
+    setting). Defaults to the JWT hard-expiry when unset (so the default is a
+    no-op); <=0 disables the idle check entirely."""
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key='session_timeout_minutes'").fetchone()
+        return int(row["value"]) if row and row["value"] not in (None, "") else JWT_TTL_MINUTES
+    except (ValueError, TypeError, KeyError):
+        return JWT_TTL_MINUTES
+
+
 def _touch_session(sid: str, last_seen: str | None) -> None:
     """Advance a session's last_seen for the "last active" column. Throttled to
     once a minute and best-effort: a telemetry write must never fail a request."""
@@ -151,6 +175,7 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
         row = conn.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()
         sess = conn.execute("SELECT revoked, last_seen FROM sessions WHERE id=?",
                             (sid,)).fetchone() if sid else None
+        idle_minutes = _idle_timeout_minutes(conn) if sid else 0
     if not row:
         raise HTTPException(status_code=401, detail="User no longer exists")
     user = row_to_dict(row)
@@ -166,6 +191,10 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     if sid:
         if sess is None or sess["revoked"]:
             raise HTTPException(status_code=401, detail="Session ended; please sign in again")
+        # Idle timeout (sliding): sign out a session left inactive longer than the
+        # configured window, even though its JWT hasn't hit its hard expiry yet.
+        if idle_minutes > 0 and _seconds_since(sess["last_seen"]) > idle_minutes * 60:
+            raise HTTPException(status_code=401, detail="Signed out after inactivity; please sign in again")
         _touch_session(sid, sess["last_seen"])
     user.pop("password_hash", None)
     user.pop("password_salt", None)

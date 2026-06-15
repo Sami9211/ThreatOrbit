@@ -152,3 +152,29 @@ def test_change_password_keeps_current_session_listed(client):
     assert client.get("/users", headers=_h(b)).status_code == 401         # other device dropped
     lst = client.get("/auth/sessions", headers=_h(fresh)).json()
     assert len(lst) == 1 and lst[0]["current"]            # this device continues, listed
+
+
+def test_idle_timeout_signs_out_inactive_session(client):
+    """A configured idle window signs out a session left inactive past it, even
+    though the JWT hasn't hit its hard expiry."""
+    import datetime as _dt
+    email = _email()
+    with get_conn() as conn:
+        _mkuser(conn, email)
+        conn.commit()
+    tok = _login(client, email)
+    with get_conn() as conn:
+        sess_id = conn.execute(
+            "SELECT id FROM sessions WHERE user_id=(SELECT id FROM users WHERE email=?)",
+            (email,)).fetchone()["id"]
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('session_timeout_minutes','30')")
+        stale = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=45)).replace(microsecond=0).isoformat()
+        conn.execute("UPDATE sessions SET last_seen=? WHERE id=?", (stale, sess_id))
+        conn.commit()
+    try:
+        assert client.get("/users", headers=_h(tok)).status_code == 401       # idle-timed-out
+        assert client.get("/users", headers=_h(_login(client, email))).status_code == 200  # fresh login ok
+    finally:
+        with get_conn() as conn:                                              # restore default window
+            conn.execute("DELETE FROM settings WHERE key='session_timeout_minutes'")
+            conn.commit()

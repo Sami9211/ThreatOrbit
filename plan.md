@@ -536,10 +536,10 @@ the columnar/search store, and published EPS limits.
   `POST /auth/sessions/{id}/revoke` signs out **one** device without touching the
   others. The `revoked` flag is kept honest across change-password (keeps the
   current device, drops the rest) / revoke-all / admin revoke. **MFA recovery
-  codes DONE** and **password screening DONE** (separate entries). Still ahead:
-  an **idle timeout** (sliding refresh — the per-device `last_seen` now makes
-  this cheap), and per-device rows for the SSO/SAML login paths (login +
-  self-service register are covered today).
+  codes DONE**, **password screening DONE**, and **idle timeout DONE** (separate
+  entries). Still ahead: per-device session rows for the SSO/SAML login paths
+  (login + self-service register are covered today). *This section is now
+  effectively closed for GA.*
 
 ### P1 — Compliance & trust posture
 
@@ -643,6 +643,17 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Idle timeout (sliding inactivity sign-out).** The "Session
+  Timeout (minutes)" setting was decorative — stored, shown, never enforced.
+  It's now a real **idle window**: `current_user` reads it (per-device
+  `last_seen` already tracked) and signs out a session left inactive longer than
+  the window, even though the JWT's 12h hard expiry hasn't fired. Defaults to the
+  hard-expiry (a no-op until an admin lowers it); `0` disables it. The setting is
+  read inside the existing auth connection (no extra round-trip), and only for
+  `sid`-bearing tokens. UI relabelled **Idle Timeout** with an honest hint.
+  `test_sessions.py` proves a back-dated session is rejected and a fresh login
+  works; full suite, tsc and build green.
 
 - **2026-06-15 · Password screening (NIST SP 800-63B aligned).** Every
   set-password path only enforced an 8-char floor — `password`, `12345678`,
