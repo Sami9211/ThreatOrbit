@@ -593,13 +593,15 @@ Items from the user batch that need design work / a browser to verify (the
 backend is headless here), tracked so they're not lost. Quick data/logic bugs
 from the same batch were fixed (see CHANGELOG).
 
-- [ ] **Asset network map - interaction + redesign.** Currently it *shakes* when
-  dragged, *zooms on scroll*, and feels boring. Wanted: pan should follow the
-  cursor 1:1 with no jitter; **zoom only on pinch / explicit zoom control** (not
-  raw wheel-scroll, which fights page scroll); and a **clean, smooth look like
-  the landing-page 3D object** (`components/effects/OrbitalScene`/`HeroScene` -
-  R3F, soft glow, easing). Likely re-implement on the same WebGL/force-graph
-  stack as the landing scenes rather than the current 2D SVG/DnD.
+- [~] **Asset network map - interaction FIXED (2026-06-15), redesign pending.**
+  Fixed the two concrete bugs: the **pan shake** (it measured the drag delta
+  against the *moving* viewBox, a feedback loop - now pans in screen pixels
+  against the original viewBox, 1:1 under the cursor) and **scroll-zoom** (now a
+  native non-passive wheel listener that zooms **only on pinch** (`ctrlKey`) and
+  lets a normal scroll pass through to the page). Still wanted (visual, needs a
+  browser): the **clean, smooth look of the landing-page 3D object**
+  (`components/effects/OrbitalScene`/`IOCNetworkScene` - R3F, soft glow, easing)
+  rather than the current 2D SVG.
 - [x] **Customization (settings) didn't scale text / layout - FIXED (2026-06-15).**
   The old approach scaled only the root rem baseline, but the dashboard is
   heavily pixel-pinned (`text-[10px]`, `w-[120px]`, …) so it barely moved, and

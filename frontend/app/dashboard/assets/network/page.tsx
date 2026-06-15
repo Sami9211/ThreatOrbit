@@ -202,7 +202,9 @@ export default function NetworkMapPage() {
   // Viewport (zoom + pan) expressed as an SVG viewBox.
   const [vb, setVb] = useState({ x: 0, y: 0, w: VB_W, h: VB_H })
   const svgRef = useRef<SVGSVGElement>(null)
-  const dragRef = useRef<{ kind: 'node' | 'pan'; id?: string; startX: number; startY: number; vb?: typeof vb; moved: boolean } | null>(null)
+  const vbRef = useRef(vb)
+  vbRef.current = vb   // mirror for the native wheel listener (stable ref)
+  const dragRef = useRef<{ kind: 'node' | 'pan'; id?: string; startX: number; startY: number; startClientX: number; startClientY: number; vb?: typeof vb; moved: boolean } | null>(null)
 
   /* Merge live inventory: update seed-node risk from matching assets and
    * place unknown assets into their zone as live nodes. */
@@ -311,12 +313,12 @@ export default function NetworkMapPage() {
     e.stopPropagation()
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
     const p = toSvg(e.clientX, e.clientY)
-    dragRef.current = { kind: 'node', id, startX: p.x, startY: p.y, moved: false }
+    dragRef.current = { kind: 'node', id, startX: p.x, startY: p.y, startClientX: e.clientX, startClientY: e.clientY, moved: false }
   }
 
   const onCanvasPointerDown = (e: React.PointerEvent) => {
-    const p = toSvg(e.clientX, e.clientY)
-    dragRef.current = { kind: 'pan', startX: p.x, startY: p.y, vb: { ...vb }, moved: false }
+    svgRef.current?.setPointerCapture?.(e.pointerId)   // keep the pan smooth past the edge
+    dragRef.current = { kind: 'pan', startX: 0, startY: 0, startClientX: e.clientX, startClientY: e.clientY, vb: { ...vb }, moved: false }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -330,7 +332,13 @@ export default function NetworkMapPage() {
         : n)))
     } else if (drag.kind === 'pan' && drag.vb) {
       drag.moved = true
-      setVb({ ...drag.vb, x: drag.vb.x - (p.x - drag.startX), y: drag.vb.y - (p.y - drag.startY) })
+      // Pan in SCREEN pixels against the ORIGINAL viewBox so the frame doesn't
+      // chase itself (that feedback was the "shake"); 1:1 follow under the cursor.
+      const rect = svgRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const dx = ((e.clientX - drag.startClientX) / rect.width) * drag.vb.w
+      const dy = ((e.clientY - drag.startClientY) / rect.height) * drag.vb.h
+      setVb({ ...drag.vb, x: drag.vb.x - dx, y: drag.vb.y - dy })
     }
   }
 
@@ -359,10 +367,25 @@ export default function NetworkMapPage() {
     })
   }, [])
 
-  const onWheel = (e: React.WheelEvent) => {
-    const p = toSvg(e.clientX, e.clientY)
-    zoomBy(e.deltaY > 0 ? 1.12 : 0.89, p.x, p.y)
-  }
+  // Wheel: zoom ONLY on a pinch gesture (ctrl+wheel - how trackpads report
+  // pinch). A normal scroll passes straight through to the page. Native,
+  // non-passive listener so preventDefault can stop the browser's own page
+  // pinch-zoom; reads the live viewBox via vbRef so it never re-subscribes.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const onWheelNative = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      const rect = svg.getBoundingClientRect()
+      const cur = vbRef.current
+      const px = cur.x + ((e.clientX - rect.left) / rect.width) * cur.w
+      const py = cur.y + ((e.clientY - rect.top) / rect.height) * cur.h
+      zoomBy(e.deltaY > 0 ? 1.08 : 0.92, px, py)
+    }
+    svg.addEventListener('wheel', onWheelNative, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheelNative)
+  }, [zoomBy])
 
   function toggleZone(z: Zone) {
     setZoneVisibility((prev) => ({ ...prev, [z]: !prev[z] }))
@@ -388,7 +411,7 @@ export default function NetworkMapPage() {
             <Network className="w-4 h-4 text-violet" />
             <h1 className="text-lg font-display font-semibold text-white">Network Map</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Asset topology · drag nodes, scroll to zoom, click for detail</p>
+          <p className="text-xs text-ink-500 mt-0.5">Asset topology · drag to pan, pinch to zoom, click for detail</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -434,7 +457,6 @@ export default function NetworkMapPage() {
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp()}
-          onWheel={onWheel}
           style={{ cursor: 'grab' }}
         >
           <defs>
@@ -630,7 +652,7 @@ export default function NetworkMapPage() {
         {/* Hint */}
         {!selected && (
           <div className="absolute bottom-4 right-4 flex items-center gap-1.5 text-[10px] text-ink-600 pointer-events-none">
-            <MousePointer2 className="w-3 h-3" /> drag to pan · scroll to zoom · drag nodes to rearrange
+            <MousePointer2 className="w-3 h-3" /> drag to pan · pinch to zoom · drag nodes to rearrange
           </div>
         )}
 
