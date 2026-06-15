@@ -21,10 +21,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Enable auto-merge for patch/minor
-        # Docker base-image bumps are excluded: nothing in CI builds the images,
-        # so a base-image change isn't exercised by the test gates - a human
-        # reviews those. (Dependabot is also configured to keep docker to
-        # digest-only refreshes; see dependabot.yml.)
+        # Docker base-image bumps stay excluded from auto-merge. There's now a
+        # build-validation job (docker-build.yml) that proves the images still
+        # build, but `gh pr merge --auto` only waits on *required* status checks
+        # - so re-enabling docker auto-merge safely needs docker-build added as a
+        # required check in branch protection first. Until then a human reviews
+        # docker PRs (with the build signal to look at). Dependabot also keeps
+        # docker to digest-only refreshes; see dependabot.yml.
         if: ${{ (steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor') && steps.meta.outputs.package-ecosystem != 'docker' }}
         run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
         env:

@@ -1,0 +1,75 @@
+name: Docker build
+
+# Build-validates every service image: the digest-pinned base + the pinned
+# requirements actually produce a working image. Nothing else in CI builds the
+# images (Tests/E2E run the app directly), so without this a base-image bump or a
+# bad dependency pin could merge green and only break at `docker build` / deploy.
+#
+# Build-only (no registry push). Scoped by paths to the things that affect the
+# image build, so it doesn't run on every source edit (frontend/Python builds are
+# already exercised by E2E/Tests). It DOES run on Dependabot's docker base-image
+# PRs (they touch a Dockerfile), giving a reviewer a real "it still builds"
+# signal - the prerequisite for ever re-enabling docker auto-merge.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/Dockerfile"
+      - "**/requirements.txt"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "frontend/nginx.conf"
+      - "docker-compose.yml"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    paths:
+      - "**/Dockerfile"
+      - "**/requirements.txt"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "frontend/nginx.conf"
+      - "docker-compose.yml"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: dashboard_api, context: dashboard_api, build_args: "" }
+          - { name: threat_api,    context: threat_api,    build_args: "" }
+          - { name: log_api,       context: log_api,       build_args: "" }
+          - { name: frontend,      context: frontend,      build_args: "NEXT_PUBLIC_API_URL=http://localhost:8002" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          load: false
+          build-args: ${{ matrix.build_args }}
+          tags: threatorbit/${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  compose-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml resolves
+        # Dummy values satisfy the `:?required` substitutions so config validation
+        # checks structure + references without needing real secrets.
+        env:
+          APP_API_KEY: ci-validate
+        run: docker compose config -q

@@ -539,6 +539,20 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-15 · Docker image build-validation in CI (`docker-build.yml`).**
+  Closed the supply-chain gap that nothing in CI built the images: the test gates
+  run the app directly, so a base-image bump or a bad dependency pin could merge
+  green and only break at `docker build` / deploy. The new workflow builds all
+  four service images (dashboard_api / threat_api / log_api / frontend, the last
+  with its `NEXT_PUBLIC_API_URL` arg) via a matrix - **build-only, no registry
+  push** - with GHA layer caching, plus a `compose-config` job that validates
+  `docker-compose.yml` resolves. Scoped by `paths` to the inputs that affect a
+  build (Dockerfiles, requirements, frontend package/nginx, compose, the workflow
+  itself) so it doesn't re-run on every source edit, but **does** run on
+  Dependabot's docker base-image PRs - giving a real "it still builds" signal.
+  Re-enabling docker digest auto-merge now only needs this job marked a
+  *required* check in branch protection (a repo setting).
+
 - **2026-06-15 · Backend dependency groups (the three pip majors).** Cleared the
   oldest waiting Dependabot PRs (#9/#11/#13), each held from auto-merge because
   its group contained a major. Bumped across the three services: **cryptography
@@ -611,9 +625,10 @@ _Move completed items here with the date so the roadmap stays honest._
     keeps the base-image **tags fixed** (python 3.11 / node 22 LTS / nginx 1.27)
     and only refreshes their `@sha256` **digests** (ignore semver major+minor),
     and `dependabot-auto-merge.yml` **excludes the docker ecosystem** so every
-    base-image PR gets human review. PR #24 closed. Tracked follow-up: add a
-    Dockerfile **image-build job** to CI so base-image bumps are actually
-    validated - which would let digest refreshes auto-merge safely again.
+    base-image PR gets human review. PR #24 closed. Follow-up **DONE
+    (2026-06-15)**: `docker-build.yml` now build-validates all four images in CI
+    (see CHANGELOG). Re-enabling docker digest auto-merge still needs that job
+    added as a *required* check in branch protection (a repo setting, not code).
 
 - **2026-06-14 · Automated dependency updates + fixed a missed CVE + honest gap
   analysis.** Prompted by a fair user catch (the install prints "5

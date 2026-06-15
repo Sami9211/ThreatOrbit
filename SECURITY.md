@@ -38,7 +38,9 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
   CycloneDX **SBOMs** (backend + frontend) published as artifacts on every run,
   **Trivy** scanning for vulnerable deps + committed secrets (fails on a fixable
   CRITICAL) and Docker/IaC misconfigurations, and Dependabot tracking the
-  container **base images**.
+  container **base images**. A separate `docker-build.yml` **build-validates all
+  four service images** (build-only, no push) so a base-image or dependency bump
+  can't merge green and break only at deploy.
 - **Digest-pinned base images + signed releases.** All four Dockerfiles pin
   their base image by immutable `@sha256:` digest, so a build can't silently
   inherit a re-pushed tag (Dependabot keeps the digests current). The
