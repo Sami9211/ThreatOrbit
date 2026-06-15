@@ -587,9 +587,61 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 
 ---
 
+## Frontend UX & polish backlog (user-reported 2026-06-15)
+
+Items from the user batch that need design work / a browser to verify (the
+backend is headless here), tracked so they're not lost. Quick data/logic bugs
+from the same batch were fixed (see CHANGELOG).
+
+- [ ] **Asset network map - interaction + redesign.** Currently it *shakes* when
+  dragged, *zooms on scroll*, and feels boring. Wanted: pan should follow the
+  cursor 1:1 with no jitter; **zoom only on pinch / explicit zoom control** (not
+  raw wheel-scroll, which fights page scroll); and a **clean, smooth look like
+  the landing-page 3D object** (`components/effects/OrbitalScene`/`HeroScene` -
+  R3F, soft glow, easing). Likely re-implement on the same WebGL/force-graph
+  stack as the landing scenes rather than the current 2D SVG/DnD.
+- [ ] **Customization (settings) doesn't scale text / layout.** Changing the
+  size setting has no visible effect; boxes stay rigid. The density/scale token
+  must actually drive font-size + spacing (CSS var on `:root`/`[data-density]`),
+  and **when enlarged, items must not overlap** (fluid/`clamp()` layout, min-
+  heights, wrap) - test at the largest setting.
+- [ ] **Exported reports still look the same.** The earlier report overhaul
+  didn't land for the user - the body past page 1 is still a flat vuln list.
+  Re-do the report so every section is laid out + summarised, easy to skim
+  (exec summary, per-domain sections, charts/tables, prioritised actions).
+- [ ] **Dead hyperlinks audit.** Many links across the app go nowhere. Sweep
+  every `href`/router push, then either wire to the real route or remove. Add a
+  test/lint that flags links to non-existent routes.
+- [ ] **Actor profiles page "dead".** Added a defensive guard on the live-data
+  mapping; if it's still blank, it's a render/route error (needs a browser to
+  repro) - check the detail panel + the `/dashboard/cti/actors` route boundary.
+- [ ] **Overview → SOC dashboard?** *Recommendation:* keep the Overview as the
+  executive/at-a-glance landing (health, top risks, recent activity) and add a
+  **dedicated, separate SOC/analyst dashboard** (real-time alert queue, triage
+  state, MITRE coverage, ingestion/EPS + queue-lag from the new backpressure
+  metrics, on-call/SLA timers) rather than overloading Overview. Two audiences,
+  two views; the SOC view reuses existing endpoints (`/siem/*`, `/config/engine`
+  queue stats, `/overview/*`).
+
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · UX bug-fix batch (user-reported).** (1) **Dashboard health
+  showed 0** in normal mode - the gauge bound to org *risk* but presented it as
+  *health*; inverted to `100 - risk` (see earlier entry). (2) **Asset delete
+  didn't persist** - there was *no* `DELETE /assets/{id}` endpoint, so the
+  frontend only filtered local state and the asset returned on refresh. Added
+  the org-scoped, audited endpoint (recomputes fleet risk) + a `deleteAsset`
+  client; the Remove button now calls it, optimistically updates, **confirms
+  first** (was no warning), and restores on failure. (3) **No logout / profile
+  menu** - the TopBar "user" block was static text ("Admin"/"SOC Analyst") with
+  no handler; replaced with a real account menu (avatar + name/role/email,
+  "Profile & settings" → /dashboard/config, and **Sign out** wired to
+  `logout()`). (4) **Actor mapping** guarded an unchecked `a.campaigns.map`
+  (live actor data could silently fall back to seed). Backend test for the
+  delete; tsc + build green. Remaining user-reported items tracked in the
+  "Frontend UX & polish backlog" below.
 
 - **2026-06-15 · Revocable sessions (stateless JWTs you can actually kill).**
   Closes the "can't sign out a stolen/old session" gap. Each JWT now carries a

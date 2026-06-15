@@ -1070,6 +1070,7 @@ export const createAsset = (body: {
   name: string; type: string; value: string; criticality: string
   os?: string; owner?: string; tags?: string[]
 }) => api<Asset>('/assets', { method: 'POST', body: JSON.stringify(body) })
+export const deleteAsset = (id: string) => api<void>(`/assets/${id}`, { method: 'DELETE' })
 export const fetchRiskDistribution = () => api<RiskDistribution>('/assets/risk-distribution')
 export const fetchAssetsSummary = () => api<AssetSummary>('/assets/summary')
 export const fetchVulns = () => api<Asset[]>('/assets/vulns')

@@ -632,7 +632,7 @@ export default function ActorProfilesPage() {
             ttps: a.ttps,
             recentActivity: seed?.recentActivity ?? a.description,
             description: a.description,
-            campaigns: seed?.campaigns ?? a.campaigns.map((c) => ({ year: '', name: c, note: '' })),
+            campaigns: seed?.campaigns ?? (Array.isArray(a.campaigns) ? a.campaigns : []).map((c) => ({ year: '', name: c, note: '' })),
             iocs: seed?.iocs ?? [],
           }
         })

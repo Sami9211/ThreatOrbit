@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, RefreshCw, AlertTriangle, X, Search, Command, Menu, Zap } from 'lucide-react'
+import { Bell, RefreshCw, AlertTriangle, X, Search, Command, Menu, Zap, LogOut, Settings } from 'lucide-react'
 import { fetchNotifications, markNotificationRead, type Notification } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
@@ -81,6 +82,9 @@ export default function TopBar() {
   const [unread, setUnread] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
+  const [userOpen, setUserOpen] = useState(false)
+  const userRef = useRef<HTMLDivElement>(null)
+  const { user, logout } = useAuth()
 
   const loadNotifs = useCallback(() => {
     fetchNotifications().then((d) => { setNotifs(d.items); setUnread(d.unread) }).catch(() => {})
@@ -108,6 +112,9 @@ export default function TopBar() {
     function handler(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false)
+      }
+      if (userRef.current && !userRef.current.contains(e.target as Node)) {
+        setUserOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -251,15 +258,53 @@ export default function TopBar() {
           <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin text-safe')} aria-hidden="true" />
         </button>
 
-        {/* User */}
-        <div className="flex items-center gap-2 sm:pl-2 sm:border-l border-white/8">
-          <div className="w-7 h-7 rounded-lg bg-plasma flex items-center justify-center shrink-0">
-            <span className="text-xs font-bold text-white">A</span>
-          </div>
-          <div className="hidden sm:block">
-            <div className="text-xs font-medium text-white">Admin</div>
-            <div className="text-[10px] text-ink-500">SOC Analyst</div>
-          </div>
+        {/* User menu */}
+        <div className="relative sm:pl-2 sm:border-l border-white/8" ref={userRef}>
+          <button
+            aria-label="Account menu"
+            aria-expanded={userOpen}
+            onClick={() => setUserOpen((o) => !o)}
+            className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-white/5 transition-colors"
+          >
+            <div className="w-7 h-7 rounded-lg bg-plasma flex items-center justify-center shrink-0">
+              <span className="text-xs font-bold text-white">
+                {(user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
+              </span>
+            </div>
+            <div className="hidden sm:block text-left">
+              <div className="text-xs font-medium text-white truncate max-w-[120px]">{user?.name ?? 'Account'}</div>
+              <div className="text-[10px] text-ink-500 capitalize">{user?.role ?? ''}</div>
+            </div>
+          </button>
+
+          <AnimatePresence>
+            {userOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-2 w-56 bg-[#100A1C] border border-white/8 rounded-xl shadow-2xl overflow-hidden z-50"
+              >
+                <div className="px-4 py-3 border-b border-white/5">
+                  <div className="text-xs font-semibold text-white truncate">{user?.name ?? 'Account'}</div>
+                  <div className="text-[10px] text-ink-500 truncate">{user?.email ?? ''}</div>
+                </div>
+                <button
+                  onClick={() => { setUserOpen(false); router.push('/dashboard/config') }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-ink-200 hover:bg-white/5 transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" /> Profile &amp; settings
+                </button>
+                <button
+                  onClick={() => { setUserOpen(false); logout(); router.push('/login') }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-threat hover:bg-threat/10 transition-colors border-t border-white/5"
+                >
+                  <LogOut className="w-3.5 h-3.5" aria-hidden="true" /> Sign out
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </header>

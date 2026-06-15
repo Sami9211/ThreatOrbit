@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import AttackSurfacePanel from '@/components/dashboard/AttackSurfacePanel'
-import { fetchAssets, fetchAsset, createAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
+import { fetchAssets, fetchAsset, createAsset, deleteAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
@@ -211,8 +211,14 @@ export default function AssetsPage() {
   function scanAll() { assets.forEach((a, i) => setTimeout(() => scanAsset(a.id), i * 250)) }
 
   function removeAsset(id: string) {
-    setAssets((p) => p.filter((a) => a.id !== id))
+    const asset = assets.find((a) => a.id === id)
+    if (!window.confirm(`Remove "${asset?.name ?? 'this asset'}"? This permanently deletes the asset and its findings.`)) return
+    setAssets((p) => p.filter((a) => a.id !== id))   // optimistic
     if (selectedId === id) setSelectedId(null)
+    deleteAsset(id).catch(() => {
+      // Delete failed (offline / permission) - restore so the UI matches the server.
+      if (asset) setAssets((p) => [asset, ...p])
+    })
   }
 
   const selectedAsset = assets.find((a) => a.id === selectedId) ?? null

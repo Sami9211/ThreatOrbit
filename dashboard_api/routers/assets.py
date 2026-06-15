@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
@@ -292,6 +292,20 @@ def scan_all_vulns(user: dict = Depends(require_perm("assets.write"))):
         audit(conn, user["email"], "asset.vuln_scan_all", None, f"findings={result['findings']}")
         conn.commit()
     return result
+
+
+@router.delete("/{asset_id}", status_code=204)
+def delete_asset(asset_id: str, user: dict = Depends(require_perm("assets.write"))):
+    """Delete an asset (org-scoped). Refreshes fleet risk afterwards."""
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    with get_conn() as conn:
+        cur = conn.execute(f"DELETE FROM assets WHERE id=? {sc}", (asset_id, *sp))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        recompute_asset_risk(conn)
+        audit(conn, user["email"], "asset.delete", asset_id)
+        conn.commit()
+    return Response(status_code=204)
 
 
 @router.get("/{asset_id}/vulns")
