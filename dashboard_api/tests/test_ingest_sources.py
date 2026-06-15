@@ -31,6 +31,30 @@ def test_windows_security_events_map_to_native_vocab():
     assert e["event_type"] != "windows_1" and e["src_ip"] == "10.0.0.1"
 
 
+def test_sysmon_events_map_to_native_vocab():
+    # EID 1 process create (winlog/Beats nesting), DOMAIN\\user is trimmed
+    e = parse_line(json.dumps({"winlog": {"channel": "Microsoft-Windows-Sysmon/Operational",
+                                          "event_id": 1, "computer_name": "WS-01",
+                                          "event_data": {"Image": r"C:\Windows\System32\powershell.exe",
+                                                         "User": r"CORP\alice"}}}))
+    assert e["event_type"] == "process_start" and e["category"] == "endpoint"
+    assert e["process_name"].endswith("powershell.exe") and e["username"] == "alice"
+    assert e["hostname"] == "WS-01" and e["mitre_tech_id"] == "T1059"
+
+    # EID 3 network connect (raw shape) - src/dest/port mapped
+    e = parse_line(json.dumps({"Channel": "Microsoft-Windows-Sysmon/Operational", "EventID": 3,
+                               "Computer": "WS-01", "Image": r"C:\evil.exe",
+                               "SourceIp": "10.0.0.5", "DestinationIp": "203.0.113.50",
+                               "DestinationPort": "4444"}))
+    assert e["event_type"] == "network_connect" and e["dest_ip"] == "203.0.113.50"
+    assert e["dest_port"] == 4444 and e["src_ip"] == "10.0.0.5"
+
+    # A plain Security record (no Sysmon channel) is NOT captured by the Sysmon path
+    e = parse_line(json.dumps({"EventID": 4625, "Computer": "DC-01", "TargetUserName": "bob",
+                               "IpAddress": "203.0.113.9", "Channel": "Security"}))
+    assert e["event_type"] == "failed_login" and e["category"] == "windows"
+
+
 def test_cloudtrail_records_map_to_native_vocab():
     e = parse_line(json.dumps({"eventVersion": "1.08", "eventSource": "iam.amazonaws.com",
                                "eventName": "CreateAccessKey", "sourceIPAddress": "198.51.100.7",

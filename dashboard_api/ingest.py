@@ -6,11 +6,13 @@ fire on them. This is how production logs stream into the SIEM (an agent or
 syslog forwarder POSTs lines to /siem/ingest), distinct from the deep-analysis
 path that hands a whole file to the Log API's ML detectors.
 
-JSON ingest additionally recognises two high-value source shapes and maps their
+JSON ingest additionally recognises high-value source shapes and maps their
 distinctive fields onto the native vocabulary so the same rules fire on them:
 **Windows Security events** (raw EVTX-JSON or winlog/Beats; EventID → event_type,
-e.g. 4625 → failed_login, 4732 → group_change) and **AWS CloudTrail** records
-(eventName → event_type, e.g. CreateAccessKey → create_access_key).
+e.g. 4625 → failed_login, 4732 → group_change), **Sysmon** operational events
+(EID 1 → process_start, 3 → network_connect, 22 → dns_query …), and **AWS
+CloudTrail** records (eventName → event_type, e.g. CreateAccessKey →
+create_access_key).
 
 Every parser returns the same normalised event shape the rule engine reads:
 {category, event_type, src_ip, dest_ip, dest_port, username, hostname,
@@ -87,6 +89,18 @@ _CT_EVENTNAME = {
 }
 
 
+# Sysmon (Microsoft-Windows-Sysmon/Operational) EventID → event_type. Sysmon is
+# the de-facto endpoint visibility source; its IDs and field names differ from
+# the Security log, so it gets its own map.
+_SYSMON_EVENTID = {
+    1: ("process_start", "T1059"), 3: ("network_connect", None),
+    7: ("image_load", "T1574"), 8: ("remote_thread", "T1055"),
+    10: ("process_access", "T1003"), 11: ("file_create", None),
+    12: ("registry_change", "T1112"), 13: ("registry_change", "T1112"),
+    22: ("dns_query", "T1071.004"), 23: ("file_delete", "T1070.004"),
+}
+
+
 def _is_ip(s) -> bool:
     s = str(s)
     if _IPV4.fullmatch(s):
@@ -153,6 +167,63 @@ def _apply_ecs(ev: dict, obj: dict, weak: set[str]) -> None:
             v = str(v)
         if native in weak or not ev.get(native) or ev[native] in ("log", "generic"):
             ev[native] = v
+
+
+def _win_source(obj: dict) -> tuple[dict, dict]:
+    """Merge the field-bearing layers of a Windows/Sysmon record (flat top-level,
+    winlog.*, winlog.event_data.*) into one lookup dict; also return winlog."""
+    winlog = obj.get("winlog") if isinstance(obj.get("winlog"), dict) else {}
+    data = winlog.get("event_data") if isinstance(winlog.get("event_data"), dict) else {}
+    return {**data, **winlog, **obj}, winlog
+
+
+def _apply_sysmon(ev: dict, obj: dict) -> bool:
+    """Recognise a Sysmon operational event and map it onto the native event.
+    Returns True if it matched."""
+    src, winlog = _win_source(obj)
+    channel = str(src.get("Channel") or winlog.get("channel")
+                  or src.get("provider_name") or winlog.get("provider_name") or "")
+    if "sysmon" not in channel.lower():
+        return False
+    eid = src.get("EventID") or src.get("event_id") or winlog.get("event_id")
+    try:
+        eid = int(eid)
+    except (ValueError, TypeError):
+        return False
+
+    def g(*keys):
+        for k in keys:
+            v = src.get(k)
+            if v not in (None, "", "-"):
+                return v
+        return None
+
+    et, mitre = _SYSMON_EVENTID.get(eid, (f"sysmon_{eid}", None))
+    ev["event_type"], ev["category"] = et, "endpoint"
+    if mitre:
+        ev["mitre_tech_id"] = mitre
+    img = g("Image", "SourceImage")
+    if img:
+        ev["process_name"] = str(img)
+    host = g("Computer", "computer_name", "hostname")
+    if host:
+        ev["hostname"] = str(host)
+    user = g("User", "SubjectUserName")
+    if user:
+        ev["username"] = str(user).split("\\")[-1]   # DOMAIN\\user → user
+    sip = g("SourceIp")
+    if sip and _is_ip(sip):
+        ev["src_ip"] = str(sip)
+    dip = g("DestinationIp")
+    if dip and _is_ip(dip):
+        ev["dest_ip"] = str(dip)
+    dport = g("DestinationPort")
+    if dport is not None:
+        try:
+            ev["dest_port"] = int(dport)
+        except (ValueError, TypeError):
+            pass
+    return True
 
 
 def _apply_windows(ev: dict, obj: dict) -> bool:
@@ -267,7 +338,7 @@ def _parse_json(line: str) -> dict | None:
     # Source-specific shapes (Windows Security / AWS CloudTrail) map their
     # distinctive fields authoritatively onto the native vocabulary, so the same
     # detection rules fire on them. Generic JSON/ECS handling fills the rest.
-    _apply_windows(ev, obj) or _apply_cloudtrail(ev, obj)
+    _apply_sysmon(ev, obj) or _apply_windows(ev, obj) or _apply_cloudtrail(ev, obj)
     # ECS documents (nested or dotted keys) normalise at ingest time too.
     # Entity fields still holding only the raw-line regex guess are "weak" -
     # the producer's ECS values are authoritative over them.
