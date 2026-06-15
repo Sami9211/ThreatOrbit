@@ -81,7 +81,7 @@ def verify_password(password: str, stored: str, salt: str) -> bool:
     return hmac.compare_digest(dk.hex(), expected)
 
 
-def create_token(user: dict) -> str:
+def create_token(user: dict, sid: str | None = None) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user["id"],
@@ -92,7 +92,46 @@ def create_token(user: dict) -> str:
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=JWT_TTL_MINUTES)).timestamp()),
     }
+    if sid:
+        payload["sid"] = sid     # per-device session row (listable + revocable)
     return _jwt_encode(payload)
+
+
+def record_session(conn, user_id: str, request=None, sid: str | None = None) -> str:
+    """Create a per-device session row and return its id (used as the JWT `sid`).
+    Best-effort device metadata (user-agent / client IP) for the "your sessions"
+    list; the row is the unit an individual sign-out revokes."""
+    sid = sid or os.urandom(16).hex()
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    ua, ip = None, None
+    if request is not None:
+        ua = (request.headers.get("user-agent") or "")[:300] or None
+        ip = getattr(getattr(request, "client", None), "host", None)
+    conn.execute(
+        "INSERT INTO sessions (id, user_id, created_at, last_seen, user_agent, ip, revoked) "
+        "VALUES (?,?,?,?,?,?,0)",
+        (sid, user_id, now, now, ua, ip),
+    )
+    return sid
+
+
+def _touch_session(sid: str, last_seen: str | None) -> None:
+    """Advance a session's last_seen for the "last active" column. Throttled to
+    once a minute and best-effort: a telemetry write must never fail a request."""
+    now = datetime.now(timezone.utc)
+    try:
+        if last_seen:
+            prev = datetime.fromisoformat(last_seen)
+            if prev.tzinfo is None:
+                prev = prev.replace(tzinfo=timezone.utc)
+            if (now - prev).total_seconds() < 60:
+                return
+        with get_conn() as conn:
+            conn.execute("UPDATE sessions SET last_seen=? WHERE id=?",
+                         (now.replace(microsecond=0).isoformat(), sid))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def decode_token(token: str) -> dict:
@@ -107,8 +146,11 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     if creds is None or not creds.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     payload = decode_token(creds.credentials)
+    sid = payload.get("sid")
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()
+        sess = conn.execute("SELECT revoked, last_seen FROM sessions WHERE id=?",
+                            (sid,)).fetchone() if sid else None
     if not row:
         raise HTTPException(status_code=401, detail="User no longer exists")
     user = row_to_dict(row)
@@ -118,6 +160,13 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     # token_epoch was issued before a "sign out" / password change / admin revoke.
     if int(payload.get("ep", 0)) < int(user.get("token_epoch", 0) or 0):
         raise HTTPException(status_code=401, detail="Session ended; please sign in again")
+    # Per-device session: tokens minted with a `sid` are killable individually
+    # ("sign out this device") via a row flag. Tokens without one (older sessions,
+    # SSO/SAML) fall through on the epoch check alone — backward compatible.
+    if sid:
+        if sess is None or sess["revoked"]:
+            raise HTTPException(status_code=401, detail="Session ended; please sign in again")
+        _touch_session(sid, sess["last_seen"])
     user.pop("password_hash", None)
     user.pop("password_salt", None)
     # A personal Slack webhook URL is a quasi-secret: only its owner sees it,
@@ -129,6 +178,18 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     from dashboard_api.tenancy import DEFAULT_ORG_ID
     user["org_id"] = user.get("org_id") or DEFAULT_ORG_ID
     return user
+
+
+def current_session_id(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> str | None:
+    """The caller's session id (JWT `sid`), so the sessions list can flag which
+    row is "this device". None for sid-less tokens. Never raises — the paired
+    `current_user` dependency already authenticates."""
+    if creds is None or not creds.credentials:
+        return None
+    try:
+        return decode_token(creds.credentials).get("sid")
+    except HTTPException:
+        return None
 
 
 def require_role(*roles: str):

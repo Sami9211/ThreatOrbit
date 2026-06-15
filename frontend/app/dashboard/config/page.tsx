@@ -7,6 +7,7 @@ import {
   Eye, Copy, CheckCircle, Save,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
   PanelLeftOpen, PanelLeftClose, ScrollText, Plus, RotateCcw, CreditCard, ExternalLink,
+  Monitor, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -20,6 +21,7 @@ import {
   fetchDatabaseInfo, type DatabaseInfo,
   fetchMySlackRouting, setMySlackRouting, testMySlackRouting,
   fetchMfaStatus, mfaEnroll, mfaVerify, mfaDisable, mfaRegenerateRecoveryCodes,
+  fetchSessions, revokeSession, type SessionInfo,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
@@ -1049,6 +1051,94 @@ function ChangePassword() {
   )
 }
 
+/* ── Active sessions (per-device): list & individually revoke ─────── */
+function describeAgent(ua: string | null): string {
+  if (!ua) return 'Unknown device'
+  const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
+    : /Android/.test(ua) ? 'Android' : /iPhone|iPad|iOS/.test(ua) ? 'iOS'
+    : /Linux/.test(ua) ? 'Linux' : ''
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera'
+    : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Safari\//.test(ua) ? 'Safari' : 'Browser'
+  return os ? `${browser} on ${os}` : browser
+}
+
+function timeAgo(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
+}
+
+function MySessions() {
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null)
+  const [error, setError] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = () => fetchSessions().then(setSessions).catch(() => setError(true))
+  useEffect(() => { load() }, [])
+
+  async function revoke(id: string) {
+    setBusy(id)
+    try { await revokeSession(id); setSessions((p) => p?.filter((s) => s.id !== id) ?? p) }
+    catch { /* leave the row; a reload reflects truth */ }
+    finally { setBusy(null) }
+  }
+
+  async function revokeOthers() {
+    const others = (sessions ?? []).filter((s) => !s.current)
+    if (!others.length || !window.confirm(`Sign out ${others.length} other device${others.length > 1 ? 's' : ''}? This device stays signed in.`)) return
+    setBusy('others')
+    try {
+      await Promise.all(others.map((s) => revokeSession(s.id).catch(() => {})))
+      setSessions((p) => p?.filter((s) => s.current) ?? p)
+    } finally { setBusy(null) }
+  }
+
+  const others = (sessions ?? []).filter((s) => !s.current)
+
+  return (
+    <Section title="Active Sessions" icon={Monitor} color="#3EE6C4">
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+        <p className="text-[11px] text-ink-500">
+          Every device signed in to your account. Sign out any you don&apos;t recognise - it takes effect on that device&apos;s next request.
+        </p>
+        {others.length > 0 && (
+          <button onClick={revokeOthers} disabled={busy === 'others'}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-threat hover:border-threat/30 disabled:opacity-50 transition-colors shrink-0">
+            <LogOut className="w-3 h-3" /> Sign out other devices
+          </button>
+        )}
+      </div>
+      {error && <p className="text-[11px] text-threat">Could not load sessions. Is the dashboard API running?</p>}
+      {sessions && sessions.length === 0 && <p className="text-[11px] text-ink-600">No active sessions.</p>}
+      <div className="space-y-2">
+        {sessions?.map((s) => (
+          <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/8 bg-surface-2">
+            <Monitor className="w-4 h-4 text-ink-500 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-white truncate">{describeAgent(s.userAgent)}</span>
+                {s.current && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold text-safe bg-safe/12">this device</span>}
+              </div>
+              <p className="text-[10px] text-ink-600 truncate">
+                {s.ip || 'unknown IP'} · started {new Date(s.createdAt).toLocaleDateString()} · active {timeAgo(s.lastSeen)}
+              </p>
+            </div>
+            {!s.current && (
+              <button onClick={() => revoke(s.id)} disabled={busy === s.id}
+                className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-surface-3 border border-white/10 text-ink-400 hover:text-threat hover:border-threat/30 disabled:opacity-50 transition-colors shrink-0">
+                {busy === s.id ? '…' : 'Sign out'}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
 function AuditTrail() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null)
   const [error, setError] = useState(false)
@@ -1608,6 +1698,8 @@ export default function ConfigPage() {
           )}
 
           {tab === 'security' && <ChangePassword />}
+
+          {tab === 'security' && <MySessions />}
 
           {tab === 'security' && <BackgroundJobs />}
 

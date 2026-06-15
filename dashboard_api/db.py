@@ -618,6 +618,19 @@ CREATE TABLE IF NOT EXISTS webhooks (
     created_by    TEXT
 );
 
+-- Active login sessions (per-device): the JWT carries this row's id as `sid`,
+-- so a single session can be listed and individually revoked without signing
+-- the user out everywhere (the coarse kill-switch is users.token_epoch).
+CREATE TABLE IF NOT EXISTS sessions (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    last_seen   TEXT NOT NULL,
+    user_agent  TEXT,
+    ip          TEXT,
+    revoked     INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_ts ON scans(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_sev ON alerts(severity);
@@ -644,6 +657,7 @@ CREATE INDEX IF NOT EXISTS idx_dw_cat ON dark_web_findings(category);
 CREATE INDEX IF NOT EXISTS idx_sightings_ioc ON ioc_sightings(ioc_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_enrich_value ON ioc_enrichments(ioc_value, provider, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, revoked);
 """
 
 

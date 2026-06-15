@@ -14,7 +14,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from dashboard_api.auth import create_token, current_user, hash_password, verify_password
+from dashboard_api.auth import (
+    create_token, current_session_id, current_user, hash_password,
+    record_session, verify_password,
+)
 from dashboard_api.config import ALLOW_REGISTRATION, AUTH_FAILURE_WINDOW_SEC, AUTH_MAX_FAILURES
 from dashboard_api.db import audit, get_conn, row_to_dict
 
@@ -118,9 +121,10 @@ def login(body: LoginRequest, request: Request):
                           f"remaining={len(remaining)}")
         now = _now()
         conn.execute("UPDATE users SET last_login=? WHERE id=?", (now, user["id"]))
+        sid = record_session(conn, user["id"], request)
         conn.commit()
     _clear_failures(key)
-    token = create_token(user)
+    token = create_token(user, sid=sid)
     user = _public(user)
     user["last_login"] = now
     return {"token": token, "user": user}
@@ -164,10 +168,11 @@ def register(body: RegisterRequest, request: Request):
         )
         detail = f"role={role}" + (f" company={body.company.strip()}" if body.company and body.company.strip() else "")
         audit(conn, email, "auth.register", uid, detail)
-        conn.commit()
         user = row_to_dict(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+        sid = record_session(conn, uid, request)
+        conn.commit()
     _clear_failures(key)
-    return {"token": create_token(user), "user": _public(user)}
+    return {"token": create_token(user, sid=sid), "user": _public(user)}
 
 
 @router.get("/me")
@@ -350,7 +355,8 @@ def my_permissions(user: dict = Depends(current_user)):
 
 
 @router.post("/change-password")
-def change_password(body: PasswordChange, user: dict = Depends(current_user)):
+def change_password(body: PasswordChange, user: dict = Depends(current_user),
+                    sid: str | None = Depends(current_session_id)):
     with get_conn() as conn:
         row = conn.execute("SELECT password_hash, password_salt FROM users WHERE id=?", (user["id"],)).fetchone()
         if not verify_password(body.current_password, row["password_hash"], row["password_salt"]):
@@ -363,11 +369,18 @@ def change_password(body: PasswordChange, user: dict = Depends(current_user)):
         new_epoch = int(user.get("token_epoch", 0) or 0) + 1
         conn.execute("UPDATE users SET password_hash=?, password_salt=?, token_epoch=? WHERE id=?",
                      (ph, salt, new_epoch, user["id"]))
+        # Keep the per-device list honest: revoke every OTHER device's session row
+        # (this one continues on the fresh token below).
+        if sid:
+            conn.execute("UPDATE sessions SET revoked=1 WHERE user_id=? AND revoked=0 AND id<>?",
+                         (user["id"], sid))
+        else:
+            conn.execute("UPDATE sessions SET revoked=1 WHERE user_id=? AND revoked=0", (user["id"],))
         audit(conn, user["email"], "auth.change_password", user["id"], "other sessions revoked")
         conn.commit()
     # Issue a fresh token carrying the new epoch so THIS session continues
-    # seamlessly; every other (older-epoch) session is signed out.
-    return {"ok": True, "token": create_token({**user, "token_epoch": new_epoch})}
+    # seamlessly (same sid); every other (older-epoch) session is signed out.
+    return {"ok": True, "token": create_token({**user, "token_epoch": new_epoch}, sid=sid)}
 
 
 @router.post("/sessions/revoke-all")
@@ -376,6 +389,41 @@ def revoke_all_sessions(user: dict = Depends(current_user)):
     one (the client must re-authenticate)."""
     with get_conn() as conn:
         conn.execute("UPDATE users SET token_epoch = token_epoch + 1 WHERE id=?", (user["id"],))
+        # Tidy the per-device list too (the epoch bump already kills the tokens).
+        conn.execute("UPDATE sessions SET revoked=1 WHERE user_id=? AND revoked=0", (user["id"],))
         audit(conn, user["email"], "auth.revoke_all_sessions", user["id"])
+        conn.commit()
+    return {"ok": True}
+
+
+@router.get("/sessions")
+def list_sessions(user: dict = Depends(current_user), sid: str | None = Depends(current_session_id)):
+    """The caller's active per-device sessions, most-recently-active first, with
+    the current one flagged. Each can be signed out individually below."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, created_at, last_seen, user_agent, ip FROM sessions "
+            "WHERE user_id=? AND revoked=0 ORDER BY last_seen DESC", (user["id"],)).fetchall()
+    return [{
+        "id": r["id"],
+        "createdAt": r["created_at"],
+        "lastSeen": r["last_seen"],
+        "userAgent": r["user_agent"],
+        "ip": r["ip"],
+        "current": r["id"] == sid,
+    } for r in rows]
+
+
+@router.post("/sessions/{session_id}/revoke")
+def revoke_session(session_id: str, user: dict = Depends(current_user)):
+    """Sign out one device: revoke a single session you own (404 if it isn't
+    yours or is already gone). Revoking the current session ends it immediately."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM sessions WHERE id=? AND user_id=? AND revoked=0",
+                           (session_id, user["id"])).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Session not found")
+        conn.execute("UPDATE sessions SET revoked=1 WHERE id=?", (session_id,))
+        audit(conn, user["email"], "auth.revoke_session", user["id"], f"session={session_id}")
         conn.commit()
     return {"ok": True}

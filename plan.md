@@ -527,13 +527,18 @@ the columnar/search store, and published EPS limits.
   a **no-privilege-escalation** guard (you can't grant a capability you don't
   hold). See CHANGELOG. Still ahead: per-workspace role assignment and a
   break-glass / audit-everything mode.
-- **Session management — revocation DONE (2026-06-15).** Stateless JWTs are now
-  revocable via a per-user **token-epoch** counter: `POST /auth/sessions/revoke-all`
-  (sign out everywhere), an admin `POST /users/{id}/revoke-sessions`, and
-  **auto-revoke on password change** (the current session continues on a fresh
-  token, the rest are signed out). See CHANGELOG. Still ahead: an **active
-  sessions list** (needs per-session rows), an **idle timeout** (sliding refresh),
-  password policy / breach-list check, and MFA recovery codes (only TOTP today).
+- **Session management — revocation + per-device list DONE (2026-06-15).**
+  Stateless JWTs are revocable via a per-user **token-epoch** counter
+  (`POST /auth/sessions/revoke-all`, admin `POST /users/{id}/revoke-sessions`,
+  auto-revoke on password change), AND each login is now a **listable per-device
+  session** (`sessions` table; JWT carries the row id as `sid`):
+  `GET /auth/sessions` lists your devices with the current one flagged, and
+  `POST /auth/sessions/{id}/revoke` signs out **one** device without touching the
+  others. The `revoked` flag is kept honest across change-password (keeps the
+  current device, drops the rest) / revoke-all / admin revoke. **MFA recovery
+  codes DONE** (separate entry). Still ahead: an **idle timeout** (sliding
+  refresh), a password policy / breach-list check, and per-device rows for the
+  SSO/SAML login paths (login + self-service register are covered today).
 
 ### P1 — Compliance & trust posture
 
@@ -637,6 +642,23 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Active sessions list (see your devices, sign out one).** The
+  token-epoch counter was an all-or-nothing kill switch; you couldn't see *which*
+  devices were logged in or drop a single suspicious one. Each login (and
+  self-service register) now writes a **per-device `sessions` row** and the JWT
+  carries its id as a `sid` claim. `current_user` checks the row isn't revoked
+  (sid-less tokens — older sessions, SSO/SAML — fall through on the epoch check,
+  so it's fully backward compatible) and advances a throttled `last_seen`.
+  New: `GET /auth/sessions` (your devices, the current one flagged, with
+  parsed device + IP + last-active) and `POST /auth/sessions/{id}/revoke` (sign
+  out one device — 404 if it isn't yours). The `revoked` flag stays consistent
+  with the coarse mechanism: change-password keeps the current device and drops
+  the rest, revoke-all and admin-revoke clear the list. Frontend: an **Active
+  Sessions** panel in Settings → Security (per-row Sign out + "Sign out other
+  devices"). `test_sessions.py` grew 4 tests (list/current-flag, individual
+  revoke kills only that token, cross-user revoke 404s, revoke-all + change-
+  password list consistency); full suite, tsc and build all green.
 
 - **2026-06-15 · MFA recovery codes (a lost authenticator is no longer a
   lockout).** TOTP-only meant losing the phone locked a user out for good - an

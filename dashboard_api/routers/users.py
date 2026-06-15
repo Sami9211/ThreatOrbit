@@ -114,6 +114,8 @@ def revoke_user_sessions(user_id: str, actor: dict = Depends(require_perm("users
         cur = conn.execute("UPDATE users SET token_epoch = token_epoch + 1 WHERE id=?", (user_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="User not found")
+        # Clear the per-device list too (the epoch bump already kills the tokens).
+        conn.execute("UPDATE sessions SET revoked=1 WHERE user_id=? AND revoked=0", (user_id,))
         audit(conn, actor["email"], "user.revoke_sessions", user_id)
         conn.commit()
     return {"ok": True}

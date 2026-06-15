@@ -2,8 +2,10 @@
 
 Sign-out-everywhere, auto-revoke-on-password-change (current session continues
 on the fresh token, others die), and admin revoke - all race-free (a monotonic
-counter, not a timestamp). `GET /users` is the authed probe (needs only a valid
-session).
+counter, not a timestamp). Plus the per-device session list: each login is a
+listable row, individually revocable ("sign out this one device"), with the
+list kept honest across change-password / revoke-all / admin revoke.
+`GET /users` is the authed probe (needs only a valid session).
 """
 import uuid
 
@@ -84,3 +86,69 @@ def test_admin_revoke_requires_users_manage(client):
         conn.commit()
     tok = _login(client, actor)
     assert client.post(f"/users/{vid}/revoke-sessions", headers=_h(tok)).status_code == 403
+
+
+# ── Per-device session list + individual revoke ──────────────────────────────
+
+def test_sessions_list_and_individual_revoke(client):
+    email = _email()
+    with get_conn() as conn:
+        _mkuser(conn, email)
+        conn.commit()
+    tok_a = _login(client, email)          # two devices = two logins = two rows
+    tok_b = _login(client, email)
+    sess = client.get("/auth/sessions", headers=_h(tok_a)).json()
+    assert len(sess) == 2
+    assert sum(1 for s in sess if s["current"]) == 1     # exactly one is "this device"
+    mine = next(s for s in sess if s["current"])
+    other = next(s for s in sess if not s["current"])
+
+    # sign out the OTHER device from A; A itself keeps working
+    assert client.post(f"/auth/sessions/{other['id']}/revoke", headers=_h(tok_a)).status_code == 200
+    assert client.get("/users", headers=_h(tok_b)).status_code == 401
+    assert client.get("/users", headers=_h(tok_a)).status_code == 200
+    after = client.get("/auth/sessions", headers=_h(tok_a)).json()
+    assert [s["id"] for s in after] == [mine["id"]]
+    # revoking an already-gone session 404s (idempotent-safe)
+    assert client.post(f"/auth/sessions/{other['id']}/revoke", headers=_h(tok_a)).status_code == 404
+
+
+def test_cannot_revoke_another_users_session(client):
+    e1, e2 = _email(), _email()
+    with get_conn() as conn:
+        _mkuser(conn, e1)
+        _mkuser(conn, e2)
+        conn.commit()
+    tok1, tok2 = _login(client, e1), _login(client, e2)
+    victim = client.get("/auth/sessions", headers=_h(tok2)).json()[0]["id"]
+    assert client.post(f"/auth/sessions/{victim}/revoke", headers=_h(tok1)).status_code == 404
+    assert client.get("/users", headers=_h(tok2)).status_code == 200      # untouched
+
+
+def test_revoke_all_clears_session_list(client):
+    email = _email()
+    with get_conn() as conn:
+        _mkuser(conn, email)
+        conn.commit()
+    tok = _login(client, email)
+    assert len(client.get("/auth/sessions", headers=_h(tok)).json()) == 1
+    assert client.post("/auth/sessions/revoke-all", headers=_h(tok)).status_code == 200
+    lst = client.get("/auth/sessions", headers=_h(_login(client, email))).json()
+    assert len(lst) == 1 and lst[0]["current"]            # only the fresh session
+
+
+def test_change_password_keeps_current_session_listed(client):
+    email = _email()
+    with get_conn() as conn:
+        _mkuser(conn, email)
+        conn.commit()
+    a = _login(client, email)
+    b = _login(client, email)
+    assert len(client.get("/auth/sessions", headers=_h(a)).json()) == 2
+    r = client.post("/auth/change-password", headers=_h(a),
+                    json={"current_password": PW, "new_password": "NewPassw0rd!"})
+    assert r.status_code == 200, r.text
+    fresh = r.json()["token"]
+    assert client.get("/users", headers=_h(b)).status_code == 401         # other device dropped
+    lst = client.get("/auth/sessions", headers=_h(fresh)).json()
+    assert len(lst) == 1 and lst[0]["current"]            # this device continues, listed

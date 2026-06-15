@@ -535,6 +535,19 @@ export const authChangePassword = (currentPassword: string, newPassword: string)
 export const authRevokeAllSessions = () =>
   api<{ ok: boolean; revokedAt: number }>('/auth/sessions/revoke-all', { method: 'POST' })
 
+// Per-device sessions: list your active logins and sign individual ones out.
+export interface SessionInfo {
+  id: string
+  createdAt: string
+  lastSeen: string
+  userAgent: string | null
+  ip: string | null
+  current: boolean
+}
+export const fetchSessions = () => api<SessionInfo[]>('/auth/sessions')
+export const revokeSession = (id: string) =>
+  api<{ ok: boolean }>(`/auth/sessions/${id}/revoke`, { method: 'POST' })
+
 // ── Overview ─────────────────────────────────────────────────────────
 export const fetchKpis    = () => api<OverviewKpis>('/overview/kpis')
 export const fetchVectors = () => api<ThreatVector[]>('/overview/threat-vectors')
