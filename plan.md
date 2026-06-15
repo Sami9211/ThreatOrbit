@@ -638,6 +638,20 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-15 · MFA recovery codes (a lost authenticator is no longer a
+  lockout).** TOTP-only meant losing the phone locked a user out for good - an
+  enterprise non-starter. On `mfa/verify` we now issue **10 one-time recovery
+  codes** (shown once, `xxxxx-xxxxx`), storing only their SHA-256 hashes
+  (`users.mfa_recovery_codes`, JSON). At login, a failed TOTP falls back to
+  consuming a recovery code (one-time, audited `auth.mfa_recovery_used`);
+  `mfa/status` reports `recoveryCodesRemaining`; `POST /auth/mfa/recovery-codes`
+  regenerates the set (TOTP-gated, invalidates the old one); `disable` clears
+  them. Hashes never leave the server (`_public` + `current_user` strip them).
+  Frontend: the config MFA panel shows the codes once at enrol with **Copy
+  all** / **I've saved them**, a remaining-count, and a **Regenerate** action.
+  `test_mfa_recovery.py` (4 tests: issue→consume→reuse-fails→regenerate→disable
+  + pure helpers); full suite green; tsc + build green.
+
 - **2026-06-15 · UX bug-fix batch (user-reported).** (1) **Dashboard health
   showed 0** in normal mode - the gauge bound to org *risk* but presented it as
   *health*; inverted to `100 - risk` (see earlier entry). (2) **Asset delete

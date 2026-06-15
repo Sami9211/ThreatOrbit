@@ -73,7 +73,7 @@ def _now() -> str:
 
 
 def _public(user: dict) -> dict:
-    for k in ("password_hash", "password_salt", "slack_webhook", "mfa_secret"):
+    for k in ("password_hash", "password_salt", "slack_webhook", "mfa_secret", "mfa_recovery_codes"):
         user.pop(k, None)
     return user
 
@@ -104,8 +104,18 @@ def login(body: LoginRequest, request: Request):
                 if not body.code:
                     raise HTTPException(status_code=401, detail="MFA code required")
                 if not verify_code(secret, body.code):
-                    _record_failure(key)
-                    raise HTTPException(status_code=401, detail="Invalid MFA code")
+                    # Fall back to a one-time recovery code (lost authenticator).
+                    from dashboard_api.mfa import consume_recovery_code
+                    import json
+                    remaining = consume_recovery_code(
+                        json.loads(user.get("mfa_recovery_codes") or "[]"), body.code)
+                    if remaining is None:
+                        _record_failure(key)
+                        raise HTTPException(status_code=401, detail="Invalid MFA code")
+                    conn.execute("UPDATE users SET mfa_recovery_codes=? WHERE id=?",
+                                 (json.dumps(remaining), user["id"]))
+                    audit(conn, user["email"], "auth.mfa_recovery_used", user["id"],
+                          f"remaining={len(remaining)}")
         now = _now()
         conn.execute("UPDATE users SET last_login=? WHERE id=?", (now, user["id"]))
         conn.commit()
@@ -175,11 +185,13 @@ class MfaCode(BaseModel):
 def mfa_status(user: dict = Depends(current_user)):
     """Whether the caller has MFA enabled, and whether an enrolment is pending
     verification. The secret itself never leaves the server after enrolment."""
+    import json
     with get_conn() as conn:
-        row = conn.execute("SELECT mfa_enabled, mfa_secret FROM users WHERE id=?",
+        row = conn.execute("SELECT mfa_enabled, mfa_secret, mfa_recovery_codes FROM users WHERE id=?",
                            (user["id"],)).fetchone()
     return {"enabled": bool(row["mfa_enabled"]),
-            "pending": bool(row["mfa_secret"]) and not row["mfa_enabled"]}
+            "pending": bool(row["mfa_secret"]) and not row["mfa_enabled"],
+            "recoveryCodesRemaining": len(json.loads(row["mfa_recovery_codes"] or "[]"))}
 
 
 @router.post("/mfa/enroll")
@@ -204,8 +216,9 @@ def mfa_enroll(user: dict = Depends(current_user)):
 def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
     """Prove the authenticator works (a valid current code) and switch MFA on.
     From the next login, the code is required."""
-    from dashboard_api.mfa import verify_code
+    from dashboard_api.mfa import verify_code, new_recovery_codes, hash_recovery_code
     from dashboard_api.secretstore import decrypt
+    import json
     with get_conn() as conn:
         row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
                            (user["id"],)).fetchone()
@@ -214,10 +227,14 @@ def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
             raise HTTPException(status_code=400, detail="No enrolment in progress - call /auth/mfa/enroll first")
         if not verify_code(secret, body.code):
             raise HTTPException(status_code=400, detail="Invalid MFA code")
-        conn.execute("UPDATE users SET mfa_enabled=1 WHERE id=?", (user["id"],))
+        # Issue one-time recovery codes (shown once now) so a lost authenticator
+        # isn't a lockout; only their hashes are stored.
+        codes = new_recovery_codes()
+        conn.execute("UPDATE users SET mfa_enabled=1, mfa_recovery_codes=? WHERE id=?",
+                     (json.dumps([hash_recovery_code(c) for c in codes]), user["id"]))
         audit(conn, user["email"], "auth.mfa_enabled", user["id"])
         conn.commit()
-    return {"enabled": True}
+    return {"enabled": True, "recoveryCodes": codes}
 
 
 @router.post("/mfa/disable")
@@ -233,10 +250,33 @@ def mfa_disable(body: MfaCode, user: dict = Depends(current_user)):
             raise HTTPException(status_code=400, detail="MFA is not enabled")
         if not verify_code(decrypt(row["mfa_secret"]), body.code):
             raise HTTPException(status_code=400, detail="Invalid MFA code")
-        conn.execute("UPDATE users SET mfa_enabled=0, mfa_secret=NULL WHERE id=?", (user["id"],))
+        conn.execute("UPDATE users SET mfa_enabled=0, mfa_secret=NULL, mfa_recovery_codes=NULL WHERE id=?",
+                     (user["id"],))
         audit(conn, user["email"], "auth.mfa_disabled", user["id"])
         conn.commit()
     return {"enabled": False}
+
+
+@router.post("/mfa/recovery-codes")
+def regenerate_recovery_codes(body: MfaCode, user: dict = Depends(current_user)):
+    """Issue a fresh set of one-time recovery codes (invalidating the old ones).
+    Requires a valid current TOTP code as possession proof."""
+    from dashboard_api.mfa import verify_code, new_recovery_codes, hash_recovery_code
+    from dashboard_api.secretstore import decrypt
+    import json
+    with get_conn() as conn:
+        row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
+                           (user["id"],)).fetchone()
+        if not row["mfa_enabled"]:
+            raise HTTPException(status_code=400, detail="MFA is not enabled")
+        if not verify_code(decrypt(row["mfa_secret"]), body.code):
+            raise HTTPException(status_code=400, detail="Invalid MFA code")
+        codes = new_recovery_codes()
+        conn.execute("UPDATE users SET mfa_recovery_codes=? WHERE id=?",
+                     (json.dumps([hash_recovery_code(c) for c in codes]), user["id"]))
+        audit(conn, user["email"], "auth.mfa_recovery_regenerated", user["id"])
+        conn.commit()
+    return {"recoveryCodes": codes}
 
 
 # ── Per-user Slack notification routing ─────────────────────────────────────────

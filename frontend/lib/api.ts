@@ -482,12 +482,15 @@ export const authLogin = (email: string, password: string, code?: string) =>
   })
 
 // TOTP MFA: enrolment is user-driven; the secret is shown once at enrol time.
-export const fetchMfaStatus = () => api<{ enabled: boolean; pending: boolean }>('/auth/mfa')
+export const fetchMfaStatus = () => api<{ enabled: boolean; pending: boolean; recoveryCodesRemaining: number }>('/auth/mfa')
 export const mfaEnroll = () => api<{ secret: string; otpauthUri: string }>('/auth/mfa/enroll', { method: 'POST' })
 export const mfaVerify = (code: string) =>
-  api<{ enabled: boolean }>('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ code }) })
+  api<{ enabled: boolean; recoveryCodes?: string[] }>('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ code }) })
 export const mfaDisable = (code: string) =>
   api<{ enabled: boolean }>('/auth/mfa/disable', { method: 'POST', body: JSON.stringify({ code }) })
+// One-time backup codes for a lost authenticator; regenerate invalidates the old set.
+export const mfaRegenerateRecoveryCodes = (code: string) =>
+  api<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { method: 'POST', body: JSON.stringify({ code }) })
 
 export const authRegister = (body: { name: string; email: string; password: string; company?: string }) =>
   api<{ token: string; user: User }>('/auth/register', {

@@ -53,3 +53,42 @@ def otpauth_uri(secret_b32: str, email: str, issuer: str = "ThreatOrbit") -> str
     return (f"otpauth://totp/{quote(issuer)}:{quote(email)}"
             f"?secret={secret_b32}&issuer={quote(issuer)}"
             f"&algorithm=SHA1&digits={DIGITS}&period={STEP_SECONDS}")
+
+
+# ── Recovery (backup) codes ───────────────────────────────────────────────────
+# One-time codes shown ONCE at enrolment so a lost authenticator isn't a lockout.
+# Only their SHA-256 hashes are stored; the high entropy (50 bits) makes a plain
+# hash safe (no fast-hash brute-force risk on a random code).
+_RC_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous 0/o/1/i/l
+
+
+def new_recovery_codes(n: int = 10) -> list[str]:
+    """`n` fresh human-friendly codes, formatted `xxxxx-xxxxx`."""
+    def one() -> str:
+        body = "".join(secrets.choice(_RC_ALPHABET) for _ in range(10))
+        return f"{body[:5]}-{body[5:]}"
+    return [one() for _ in range(n)]
+
+
+def _rc_normalize(code: str) -> str:
+    return "".join(c for c in (code or "").lower() if c.isalnum())
+
+
+def hash_recovery_code(code: str) -> str:
+    return hashlib.sha256(_rc_normalize(code).encode()).hexdigest()
+
+
+def consume_recovery_code(hashes: list, code: str):
+    """If `code` matches a stored hash, return the list WITHOUT it (consumed);
+    otherwise return None. Tolerant of spacing/hyphens/case in the input."""
+    if not code or not hashes:
+        return None
+    target = hash_recovery_code(code)
+    matched = None
+    for h in hashes:
+        if hmac.compare_digest(str(h), target):
+            matched = h
+    if matched is None:
+        return None
+    return [h for h in hashes if h != matched]
+

@@ -913,12 +913,12 @@ def test_totp_mfa_lifecycle(client, auth):
                                     "password": "Password123!"}, headers=auth).json()
     tok = client.post("/auth/login", json={"email": email, "password": "Password123!"}).json()["token"]
     hdr = {"Authorization": f"Bearer {tok}"}
-    assert client.get("/auth/mfa", headers=hdr).json() == {"enabled": False, "pending": False}
+    assert client.get("/auth/mfa", headers=hdr).json() == {"enabled": False, "pending": False, "recoveryCodesRemaining": 0}
 
     enr = client.post("/auth/mfa/enroll", headers=hdr).json()
     secret = enr["secret"]
     assert "otpauthUri" in enr and secret in enr["otpauthUri"]
-    assert client.get("/auth/mfa", headers=hdr).json() == {"enabled": False, "pending": True}
+    assert client.get("/auth/mfa", headers=hdr).json() == {"enabled": False, "pending": True, "recoveryCodesRemaining": 0}
     # stored encrypted; never on any user payload
     with get_conn() as conn:
         stored = conn.execute("SELECT mfa_secret FROM users WHERE email=?", (email,)).fetchone()[0]

@@ -124,6 +124,7 @@ def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dic
     # via GET /auth/me/slack - never on the general principal payload.
     user.pop("slack_webhook", None)
     user.pop("mfa_secret", None)  # the TOTP secret never leaves the server
+    user.pop("mfa_recovery_codes", None)  # recovery-code hashes stay server-side
     # Workspace membership (multi-tenancy foundation): default when unset.
     from dashboard_api.tenancy import DEFAULT_ORG_ID
     user["org_id"] = user.get("org_id") or DEFAULT_ORG_ID

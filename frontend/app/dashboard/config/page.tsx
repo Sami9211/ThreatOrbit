@@ -19,7 +19,7 @@ import {
   fetchBillingStatus, startCheckout, openBillingPortal, type BillingStatus,
   fetchDatabaseInfo, type DatabaseInfo,
   fetchMySlackRouting, setMySlackRouting, testMySlackRouting,
-  fetchMfaStatus, mfaEnroll, mfaVerify, mfaDisable,
+  fetchMfaStatus, mfaEnroll, mfaVerify, mfaDisable, mfaRegenerateRecoveryCodes,
   type AuditEntry, type ApiKey as RemoteApiKey, type Feed, type Integration, type JobEntry,
   type EngineStatus,
 } from '@/lib/api'
@@ -32,8 +32,9 @@ import { useCursorEffect } from '@/lib/useCursorEffect'
 
 /* ── Two-factor authentication (real TOTP, per-user) ─────────────── */
 function MyMfaPanel() {
-  const [status, setStatus] = useState<{ enabled: boolean; pending: boolean } | null>(null)
+  const [status, setStatus] = useState<{ enabled: boolean; pending: boolean; recoveryCodesRemaining: number } | null>(null)
   const [enrolment, setEnrolment] = useState<{ secret: string; otpauthUri: string } | null>(null)
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -53,8 +54,17 @@ function MyMfaPanel() {
     if (code.length < 6 || busy) return
     setBusy(true); setMsg(null)
     mfaVerify(code)
-      .then(() => { setEnrolment(null); setCode(''); setMsg('Two-factor authentication is ON - your next login will ask for a code.'); load() })
+      .then((r) => { setEnrolment(null); setCode(''); setRecoveryCodes(r.recoveryCodes ?? null); setMsg('Two-factor authentication is ON - your next login will ask for a code.'); load() })
       .catch(() => setMsg('That code did not verify - check your authenticator and try again.'))
+      .finally(() => setBusy(false))
+  }
+
+  function regenerate() {
+    if (code.length < 6 || busy) return
+    setBusy(true); setMsg(null)
+    mfaRegenerateRecoveryCodes(code)
+      .then((r) => { setCode(''); setRecoveryCodes(r.recoveryCodes); setMsg('New recovery codes generated - your old ones no longer work.'); load() })
+      .catch(() => setMsg('That code did not verify - codes unchanged.'))
       .finally(() => setBusy(false))
   }
 
@@ -125,6 +135,33 @@ function MyMfaPanel() {
               Disable MFA
             </button>
           )}
+        </div>
+      )}
+      {recoveryCodes && (
+        <div className="mt-3 p-3 rounded-lg border border-amber/30 bg-amber/8">
+          <p className="text-[11px] font-semibold text-amber mb-1">Save your recovery codes</p>
+          <p className="text-[10px] text-ink-400 mb-2">
+            Each works once if you lose your authenticator. They&apos;re stored hashed and can&apos;t be shown again.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5 mb-2">
+            {recoveryCodes.map((c) => (
+              <code key={c} className="text-[11px] font-mono text-ink-100 bg-surface-2 border border-white/8 rounded px-2 py-1 text-center tracking-wider">{c}</code>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigator.clipboard?.writeText(recoveryCodes.join('\n'))}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] bg-surface-2 border border-white/10 text-ink-300 hover:text-white transition-colors">Copy all</button>
+            <button onClick={() => setRecoveryCodes(null)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 transition-colors">I&apos;ve saved them</button>
+          </div>
+        </div>
+      )}
+      {status?.enabled && !recoveryCodes && (
+        <div className="flex items-center gap-2 mt-2 text-[10px] text-ink-500">
+          <span>{status.recoveryCodesRemaining} recovery code{status.recoveryCodesRemaining !== 1 ? 's' : ''} left</span>
+          <button onClick={regenerate} disabled={busy || code.length < 6}
+            title="Enter a current authenticator code above, then regenerate"
+            className="text-magenta hover:underline disabled:opacity-40 disabled:no-underline">Regenerate</button>
         </div>
       )}
       {msg && <p className="text-[11px] text-ink-400 mt-2" role="status">{msg}</p>}

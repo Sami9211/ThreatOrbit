@@ -744,6 +744,9 @@ _MIGRATIONS = [
     # `ep`. Bumping it invalidates every token issued earlier, so "sign out
     # everywhere" + auto-logout-on-password-change work over stateless JWTs.
     ("users", "token_epoch", "INTEGER NOT NULL DEFAULT 0"),
+    # MFA recovery codes (auth.py): JSON array of SHA-256 hashes of one-time
+    # backup codes, so a user who loses their authenticator can still get in.
+    ("users", "mfa_recovery_codes", "TEXT"),
 ]
 
 
