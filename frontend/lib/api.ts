@@ -52,7 +52,8 @@ async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   })
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
-    try { const j = await res.json(); msg = j.detail ?? msg } catch { /* ignore */ }
+    // The API wraps errors as {"error": ...}; older/3rd-party paths use {"detail": ...}.
+    try { const j = await res.json(); msg = j.detail ?? j.error ?? msg } catch { /* ignore */ }
     throw new Error(msg)
   }
   if (res.status === 204) return undefined as T

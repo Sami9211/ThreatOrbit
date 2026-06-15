@@ -536,9 +536,10 @@ the columnar/search store, and published EPS limits.
   `POST /auth/sessions/{id}/revoke` signs out **one** device without touching the
   others. The `revoked` flag is kept honest across change-password (keeps the
   current device, drops the rest) / revoke-all / admin revoke. **MFA recovery
-  codes DONE** (separate entry). Still ahead: an **idle timeout** (sliding
-  refresh), a password policy / breach-list check, and per-device rows for the
-  SSO/SAML login paths (login + self-service register are covered today).
+  codes DONE** and **password screening DONE** (separate entries). Still ahead:
+  an **idle timeout** (sliding refresh — the per-device `last_seen` now makes
+  this cheap), and per-device rows for the SSO/SAML login paths (login +
+  self-service register are covered today).
 
 ### P1 — Compliance & trust posture
 
@@ -642,6 +643,21 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Password screening (NIST SP 800-63B aligned).** Every
+  set-password path only enforced an 8-char floor — `password`, `12345678`,
+  `qwerty123` all sailed through. New `password_policy.validate_password`
+  screens length (8…256, the ceiling caps a PBKDF2 DoS lever), an offline
+  **common/breached-password list** (exact, case-insensitive — so strong
+  passphrases that merely contain a word still pass), and trivial
+  self-references (the password being your own name/email). Wired into
+  **register**, **admin create-user**, and **change-password** (400 with the
+  specific reason). Also fixed the frontend `api()` error extractor to read the
+  `{"error": …}` envelope (it only read `{"detail": …}`), so these messages —
+  and every other API error — now surface to the user instead of a generic
+  fallback; the change-password form shows the exact reason.
+  `test_password_policy.py` (helper + all three endpoints); full suite, tsc and
+  build green.
 
 - **2026-06-15 · Active sessions list (see your devices, sign out one).** The
   token-epoch counter was an all-or-nothing kill switch; you couldn't see *which*

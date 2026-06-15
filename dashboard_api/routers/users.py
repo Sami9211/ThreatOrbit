@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user, hash_password, require_perm
+from dashboard_api.password_policy import validate_password
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.permissions import role_exists
 
@@ -46,8 +47,10 @@ def list_users(_: dict = Depends(current_user)):
 def create_user(body: UserCreate, actor: dict = Depends(require_perm("users.manage"))):
     if not role_exists(body.role):
         raise HTTPException(status_code=400, detail="Unknown role (built-in or a defined custom role)")
-    if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    try:
+        validate_password(body.password, email=body.email, name=body.name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     ph, salt = hash_password(body.password)
     uid = str(uuid.uuid4())
     with get_conn() as conn:

@@ -20,6 +20,7 @@ from dashboard_api.auth import (
 )
 from dashboard_api.config import ALLOW_REGISTRATION, AUTH_FAILURE_WINDOW_SEC, AUTH_MAX_FAILURES
 from dashboard_api.db import audit, get_conn, row_to_dict
+from dashboard_api.password_policy import validate_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -148,9 +149,11 @@ def register(body: RegisterRequest, request: Request):
     if not _EMAIL_RE.match(email):
         _record_failure(key)
         raise HTTPException(status_code=400, detail="Enter a valid email address")
-    if len(body.password) < 8:
+    try:
+        validate_password(body.password, email=email, name=name)
+    except ValueError as e:
         _record_failure(key)
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        raise HTTPException(status_code=400, detail=str(e))
 
     ph, salt = hash_password(body.password)
     uid = str(uuid.uuid4())
@@ -361,8 +364,10 @@ def change_password(body: PasswordChange, user: dict = Depends(current_user),
         row = conn.execute("SELECT password_hash, password_salt FROM users WHERE id=?", (user["id"],)).fetchone()
         if not verify_password(body.current_password, row["password_hash"], row["password_salt"]):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
-        if len(body.new_password) < 8:
-            raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+        try:
+            validate_password(body.new_password, email=user.get("email"), name=user.get("name"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         ph, salt = hash_password(body.new_password)
         # Bumping the token epoch revokes every existing session for this user
         # (security best practice on a credential change).

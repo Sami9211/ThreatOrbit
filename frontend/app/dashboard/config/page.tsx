@@ -1025,8 +1025,11 @@ function ChangePassword() {
       setCurrent(''); setNext(''); setConfirm('')
     } catch (err) {
       setState('error')
-      setMessage(err instanceof Error && err.message.includes('incorrect')
-        ? 'Current password is incorrect.'
+      // Surface the API's specific reason (wrong current password, too common,
+      // too short, …); fall back only for opaque network/HTTP failures.
+      const m = err instanceof Error ? err.message : ''
+      setMessage(m && !m.startsWith('HTTP')
+        ? m
         : 'Could not update the password. Is the dashboard API running?')
     }
   }
