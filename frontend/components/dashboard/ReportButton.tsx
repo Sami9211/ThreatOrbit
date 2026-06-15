@@ -9,6 +9,20 @@ import { fetchReport, fetchIncidentReport, createReportSchedule, type ReportData
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
 }
+const SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info']
+
+/* Group findings by severity (critical → info) so the report reads by priority
+   instead of one flat list - each group gets a header + count. */
+function groupFindings(findings: ReportFinding[]): [string, ReportFinding[]][] {
+  const groups = new Map<string, ReportFinding[]>()
+  for (const f of findings) {
+    const s = (f.severity || 'info').toLowerCase()
+    ;(groups.get(s) ?? groups.set(s, []).get(s)!).push(f)
+  }
+  const known = SEV_ORDER.filter((s) => groups.has(s)).map((s) => [s, groups.get(s)!] as [string, ReportFinding[]])
+  const unknown = [...groups.entries()].filter(([s]) => !SEV_ORDER.includes(s)) as [string, ReportFinding[]][]
+  return [...known, ...unknown]
+}
 
 const PERIODS = [
   { id: 'daily', label: 'Today' },
@@ -207,27 +221,37 @@ function ReportBody({ report }: { report: ReportData }) {
         <h2 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">
           Detailed Findings <span className="text-ink-600">({report.findings.length})</span>
         </h2>
-        <div className="space-y-2">
+        <div className="space-y-4">
           {report.findings.length === 0 && <p className="text-xs text-ink-600">No findings in this window.</p>}
-          {report.findings.map((f, i) => (
-            <div key={i} className="rounded-lg border border-white/8 bg-surface-2/40 p-3">
-              <div className="flex items-start gap-2">
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 mt-0.5"
-                  style={{ color: SEV_COLOR[f.severity] ?? '#7A3CFF', background: `${SEV_COLOR[f.severity] ?? '#7A3CFF'}18` }}>
-                  {f.severity}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-white">{f.title}</p>
-                  <p className="text-[10px] text-ink-500 mt-0.5">
-                    {[f.entity, f.technique, f.tactic, f.rule, f.status].filter(Boolean).join(' · ')}
-                    {f.ts ? ` · ${new Date(f.ts).toLocaleString()}` : ''}
-                  </p>
-                  {f.detail && <p className="text-[10px] text-ink-400 mt-1 leading-snug">{f.detail}</p>}
-                </div>
-                {typeof f.score === 'number' && f.score > 0 && (
-                  <span className="text-[11px] font-mono text-ink-300 shrink-0">{f.score}</span>
-                )}
+          {groupFindings(report.findings).map(([sev, items]) => (
+            <div key={sev} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: SEV_COLOR[sev] ?? '#7A3CFF' }} />
+                <h3 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: SEV_COLOR[sev] ?? '#7A3CFF' }}>{sev}</h3>
+                <span className="text-[10px] text-ink-600">({items.length})</span>
+                <div className="flex-1 h-px bg-white/5" />
               </div>
+              {items.map((f, i) => (
+                <div key={i} className="rounded-lg border border-white/8 bg-surface-2/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 mt-0.5"
+                      style={{ color: SEV_COLOR[f.severity] ?? '#7A3CFF', background: `${SEV_COLOR[f.severity] ?? '#7A3CFF'}18` }}>
+                      {f.severity}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-white">{f.title}</p>
+                      <p className="text-[10px] text-ink-500 mt-0.5">
+                        {[f.entity, f.technique, f.tactic, f.rule, f.status].filter(Boolean).join(' · ')}
+                        {f.ts ? ` · ${new Date(f.ts).toLocaleString()}` : ''}
+                      </p>
+                      {f.detail && <p className="text-[10px] text-ink-400 mt-1 leading-snug">{f.detail}</p>}
+                    </div>
+                    {typeof f.score === 'number' && f.score > 0 && (
+                      <span className="text-[11px] font-mono text-ink-300 shrink-0">{f.score}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -270,6 +294,7 @@ function renderReportHtml(report: ReportData): string {
   .row{display:flex;align-items:center;gap:8px;margin:4px 0} .rl{width:150px;font-size:12px;color:#555;text-transform:capitalize} .rb{flex:1;height:12px;background:#eee;border-radius:6px;overflow:hidden} .rb i{display:block;height:100%} .rc{width:34px;text-align:right;font-size:12px;font-family:ui-monospace,monospace;color:#444}
   .finding{display:flex;gap:10px;border:1px solid #e8e8e8;border-radius:8px;padding:10px;margin:6px 0} .sev{font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:4px;height:fit-content}
   .ft{font-size:13px;font-weight:600} .fm{font-size:11px;color:#888;margin-top:2px} .fd{font-size:11px;color:#555;margin-top:4px}
+  .sevh{font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin:16px 0 6px} .sevh span{color:#aaa;font-weight:500}
   ul{padding-left:18px} li{font-size:13px;margin:4px 0}
   @media print{body{padding:20px}}
 </style></head><body>
@@ -281,7 +306,11 @@ function renderReportHtml(report: ReportData): string {
   <p class="narr">${esc(report.summary.narrative)}</p>
   ${report.breakdowns.map((b) => `<h2>${esc(b.heading)}</h2>${b.data.map(bar).join('')}`).join('')}
   <h2>Detailed Findings (${report.findings.length})</h2>
-  ${report.findings.map(finding).join('') || '<p style="font-size:12px;color:#888">No findings in this window.</p>'}
+  ${report.findings.length === 0
+    ? '<p style="font-size:12px;color:#888">No findings in this window.</p>'
+    : groupFindings(report.findings).map(([sev, items]) =>
+        `<h3 class="sevh" style="color:${SEV_COLOR[sev] ?? '#555'}">${esc(sev)} <span>(${items.length})</span></h3>${items.map(finding).join('')}`
+      ).join('')}
   <h2>Recommendations</h2>
   <ul>${report.recommendations.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
 </body></html>`

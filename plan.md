@@ -611,10 +611,15 @@ from the same batch were fixed (see CHANGELOG).
   (zoom is overlap-safe by construction). Range widened to 0.9–1.4. Default scale
   1 → zoom 1 → no change (E2E/layout unaffected). Needs a final visual eyeball at
   the largest setting, but the mechanism now genuinely zooms.
-- [ ] **Exported reports still look the same.** The earlier report overhaul
-  didn't land for the user - the body past page 1 is still a flat vuln list.
-  Re-do the report so every section is laid out + summarised, easy to skim
-  (exec summary, per-domain sections, charts/tables, prioritised actions).
+- [~] **Exported reports - findings now grouped (2026-06-15), more polish open.**
+  The body past page 1 was a flat findings dump. Both the on-screen preview and
+  the printable/PDF HTML (`ReportButton.renderReportHtml`) now **group findings
+  by severity** (Critical → Info) with a coloured header + count per group, so it
+  reads by priority instead of one list. The report already had an exec summary,
+  KPIs, severity breakdown bars, and recommendations. Still open (visual, needs a
+  browser): richer per-domain narrative in the overall report, charts beyond the
+  bars, and a tighter print layout - pending the user's eyeball on the grouped
+  version.
 - [ ] **Dead hyperlinks audit.** Many links across the app go nowhere. Sweep
   every `href`/router push, then either wire to the real route or remove. Add a
   test/lint that flags links to non-existent routes.
