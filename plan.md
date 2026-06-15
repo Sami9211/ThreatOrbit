@@ -467,10 +467,17 @@ No numbers are published today, so we can't answer "how big can it go?".
 
 ### P1 — Detection content, parsers & collectors (the actual SOC value)
 
-- **No curated detection-content library.** The Sigma importer exists but ships
-  empty; a real product ships a maintained rule pack with per-rule noise
-  ratings and a **content-update channel** so new detections arrive without a
-  code release.
+- **Curated detection-content library — first pass DONE (2026-06-15).** The
+  built-in pack went 7 → **15 rules across 8 ATT&CK tactics** (added **Impact**:
+  ransomware T1486 + shadow-copy deletion T1490; deeper **Credential Access**:
+  kerberoasting T1558.003 + password spraying T1110.003; **Persistence**: cloud
+  access-key creation T1098.001; **C2**: DNS tunneling T1071.004 + ingress tool
+  transfer T1105; impossible-travel login T1078), each paired with a telemetry
+  scenario so the detections fire on real engine events, and a test module that
+  asserts telemetry↔rule MITRE alignment (see CHANGELOG). Still ahead: per-rule
+  noise ratings, a **content-update channel** (rules without a code release),
+  growing the pack toward a Sigma community-pack import, and computing the SOAR
+  page's **ATT&CK coverage from this library** instead of the current mock.
 - **Parser/source breadth is thin** (apache/syslog/windows/generic). Enterprises
   expect Windows Event/Sysmon, AWS CloudTrail, Azure AD / M365, GCP audit,
   common EDR + firewall exports, and TLS syslog (RFC 5425). Publish a
@@ -538,6 +545,23 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Detection content: built-in rule pack 7 → 15 across 8 ATT&CK
+  tactics.** The first chunk of the curated detection-content gap (a SIEM's core
+  value). Added 8 high-fidelity rules with full MITRE mapping — ransomware mass
+  encryption (T1486) + shadow-copy deletion (T1490) bringing the **Impact**
+  tactic in for the first time, kerberoasting (T1558.003) + password spraying
+  (T1110.003) deepening **Credential Access**, cloud access-key creation
+  (T1098.001, **Persistence**), DNS tunneling (T1071.004) + ingress tool transfer
+  (T1105, **C2**), and impossible-travel login (T1078). Each ships with a paired
+  telemetry scenario in the live engine so the detection fires on real generated
+  events (not a dangling rule), with re-balanced scenario weights (sum 1.0).
+  New `test_detection_rules.py` (7 tests) enforces it: every rule well-formed
+  (Txxxx/TAxxxx, unique ids, real conditions), content breadth ≥15 rules / ≥6
+  tactics incl. Impact, **every telemetry scenario matched by a rule whose
+  technique agrees with the event** (caught a real T1098 vs T1098.001 mismatch
+  during dev), a benign event trips nothing, and the new rules seed + evaluate
+  through `run_detection`. Full dashboard suite 170 → **177**, green.
 
 - **2026-06-15 · FastAPI `on_event` → `lifespan` (tech debt the dep bump
   surfaced).** Migrated both services off the deprecated `@app.on_event("startup")`

