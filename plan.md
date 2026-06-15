@@ -537,8 +537,10 @@ the columnar/search store, and published EPS limits.
   evidence and **honest status** (implemented/partial/planned), so a buyer's
   security questionnaire can be answered from real artifacts. Still needed (the
   parts that aren't code): an **independent SOC 2 Type II** audit then ISO 27001,
-  a DPA template, GDPR data-subject tooling (per-user export/erase), and
-  data-residency options - asked for *before* the first enterprise PoC ends.
+  a DPA template, and data-residency options - asked for *before* the first
+  enterprise PoC ends. **GDPR data-subject tooling DONE (2026-06-15)**:
+  `/privacy` export (access/portability) + anonymising erasure (right to be
+  forgotten) - see CHANGELOG.
 - **Audit trail is in-DB only.** For tamper-evidence it should stream to an
   external/immutable sink (the customer's SIEM, or object storage with object
   lock); evidence bundles are signed but the live trail isn't externally shipped.
@@ -580,6 +582,19 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · GDPR data-subject tooling (access + erasure).** `/privacy`
+  endpoints: `GET /privacy/me` (self-service export), `GET /privacy/export/{id}`
+  (a DSAR response, `users.manage`), and `POST /privacy/erase/{id}` (right to be
+  forgotten, `users.delete`). Erasure **anonymises** rather than hard-deletes
+  (`privacy.py`): the user row's PII is replaced + the account disabled, and the
+  subject's email is rewritten to an `…@anonymized.invalid` placeholder
+  everywhere it appears as an identity (their audit trail + records they
+  own/authored). Each rewrite is `WHERE col = <subject email>`, so only this
+  subject's references change - never threat-actor attribution. Self-erasure is
+  refused (would lock out the operator). Added a `PR-DSAR` control to the
+  compliance matrix. 5 tests (export shape, anonymisation + login disabled +
+  audit-trail rewrite, permission gate, self-erase guard). Suite 232 → **237**.
 
 - **2026-06-15 · Compliance control mapping (SOC 2 / ISO 27001 self-assessment).**
   Procurement asks "map your controls" before the first PoC ends.

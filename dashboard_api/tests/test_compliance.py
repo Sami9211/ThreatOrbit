@@ -10,7 +10,7 @@ import re
 from dashboard_api import compliance
 
 _STATUSES = {"implemented", "partial", "planned"}
-_TSC = re.compile(r"^(CC\d\.\d|A\d\.\d|C\d\.\d|PI\d\.\d)$")          # SOC 2 TSC refs
+_TSC = re.compile(r"^(CC\d\.\d|A\d\.\d|C\d\.\d|PI\d\.\d|P\d\.\d)$")  # SOC 2 TSC refs (incl. Privacy)
 _ISO = re.compile(r"^A\.\d{1,2}\.\d{1,2}$")                          # ISO 27001:2022 Annex A
 
 
