@@ -674,7 +674,10 @@ function NormalDashboard({ count, alerts, incidents }: {
     .sort((a, b) => (sevRank[b.severity] ?? 0) - (sevRank[a.severity] ?? 0))
     .slice(0, 5)
   const openIncidents = incidents.filter((i) => !['resolved', 'closed'].includes(i.status))
-  const score = Math.round(Number(count.score ?? 0))
+  // `count.score` is the org RISK (higher = worse); this gauge shows security
+  // HEALTH (higher = better), so invert it. A healthy/empty org now reads as
+  // high health instead of the bogus 0 it showed before.
+  const score = Math.max(0, Math.min(100, 100 - Math.round(Number(count.score ?? 0))))
   const band = score >= 80 ? 'Strong' : score >= 60 ? 'Good' : score >= 40 ? 'At risk' : 'Critical'
   const bandColor = score >= 60 ? 'text-safe' : score >= 40 ? 'text-amber' : 'text-threat'
   return (
