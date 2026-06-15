@@ -531,9 +531,14 @@ the columnar/search store, and published EPS limits.
 
 - **No third-party pentest yet** (honestly stated in SECURITY.md, but it's a
   gating item before exposing to untrusted networks or selling).
-- **No compliance program**: SOC 2 Type II then ISO 27001, a DPA template,
-  GDPR data-subject tooling (per-user export/erase), and data-residency options.
-  These are asked for *before* the first enterprise PoC ends.
+- **Compliance program**: a **control self-assessment shipped (2026-06-15)** -
+  `dashboard_api/compliance.py` + `docs/COMPLIANCE.md` + `GET /compliance/controls`
+  map the implemented controls to SOC 2 TSC + ISO 27001:2022 Annex A with in-repo
+  evidence and **honest status** (implemented/partial/planned), so a buyer's
+  security questionnaire can be answered from real artifacts. Still needed (the
+  parts that aren't code): an **independent SOC 2 Type II** audit then ISO 27001,
+  a DPA template, GDPR data-subject tooling (per-user export/erase), and
+  data-residency options - asked for *before* the first enterprise PoC ends.
 - **Audit trail is in-DB only.** For tamper-evidence it should stream to an
   external/immutable sink (the customer's SIEM, or object storage with object
   lock); evidence bundles are signed but the live trail isn't externally shipped.
@@ -575,6 +580,21 @@ engine/ingest** context (org-tagged sources), tenant lifecycle tooling
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Compliance control mapping (SOC 2 / ISO 27001 self-assessment).**
+  Procurement asks "map your controls" before the first PoC ends.
+  `dashboard_api/compliance.py` is the single source of truth: 19 controls mapped
+  to SOC 2 Trust Services Criteria + ISO/IEC 27001:2022 Annex A, each citing
+  **real in-repo evidence** (MFA, RBAC, OIDC/SAML/SCIM, Fernet-at-rest, SSRF
+  guard, audit logging, signed evidence bundles, supply-chain, backups …), with
+  honest `status` (14 implemented, 2 partial, 3 planned). Served at
+  `GET /compliance/controls` for an in-product view / questionnaire auto-fill;
+  `docs/COMPLIANCE.md` is the human-readable matrix. Crucially **honest**: a
+  prominent disclaimer states this is a self-assessment, **not** a SOC 2 report
+  or certification, and the gaps (independent pen test, formal audit, HA) are
+  listed as `planned`, not hidden - `test_compliance.py` (6 tests) enforces that
+  honesty (disclaimer present, pen-test/audit stay `planned`, every control cites
+  evidence). Read-only, no DB writes. Suite 226 → **232**.
 
 - **2026-06-15 · Detection-content update channel (rules without a code
   release).** A real SIEM ships new detections as content, not code. Rules now
