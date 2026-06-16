@@ -72,6 +72,50 @@ def test_cloudtrail_records_map_to_native_vocab():
     assert e["event_type"] == "failed_login" and e["username"] == "eve" and e["src_ip"] is None
 
 
+def test_azure_ad_records_map_to_native_vocab():
+    # failed interactive sign-in
+    e = parse_line(json.dumps({"category": "SignInLogs",
+                               "properties": {"userPrincipalName": "alice@corp.com",
+                                              "ipAddress": "203.0.113.5",
+                                              "status": {"errorCode": 50126},
+                                              "location": {"countryOrRegion": "US"}}}))
+    assert e["event_type"] == "failed_login" and e["username"] == "alice@corp.com"
+    assert e["src_ip"] == "203.0.113.5" and e["country"] == "US" and e["mitre_tech_id"] == "T1110"
+
+    # successful sign-in (errorCode 0)
+    e = parse_line(json.dumps({"category": "SignInLogs",
+                               "properties": {"userPrincipalName": "bob@corp.com",
+                                              "status": {"errorCode": 0}}}))
+    assert e["event_type"] == "login_success"
+
+    # directory audit: add member to a role → group_change
+    e = parse_line(json.dumps({"category": "AuditLogs",
+                               "properties": {"activityDisplayName": "Add member to role",
+                                              "initiatedBy": {"user": {"userPrincipalName": "adm@corp.com"}}}}))
+    assert e["event_type"] == "group_change" and e["username"] == "adm@corp.com"
+
+    # generic JSON carrying a 'category' is not hijacked as Azure
+    e = parse_line(json.dumps({"category": "web", "message": "hello", "src_ip": "10.0.0.1"}))
+    assert e["event_type"] != "failed_login" and e["src_ip"] == "10.0.0.1"
+
+
+def test_gcp_audit_records_map_to_native_vocab():
+    e = parse_line(json.dumps({"protoPayload": {
+        "methodName": "google.iam.admin.v1.CreateServiceAccountKey",
+        "authenticationInfo": {"principalEmail": "svc@proj.iam"},
+        "requestMetadata": {"callerIp": "198.51.100.7"}, "status": {"code": 0}},
+        "logName": "projects/p/logs/cloudaudit.googleapis.com%2Factivity"}))
+    assert e["event_type"] == "create_access_key" and e["username"] == "svc@proj.iam"
+    assert e["src_ip"] == "198.51.100.7" and e["category"] == "cloud_audit" and e["mitre_tech_id"] == "T1098.001"
+
+    # denied SetIamPolicy → policy_change + action deny
+    e = parse_line(json.dumps({"protoPayload": {
+        "methodName": "google.cloud.resourcemanager.v1.SetIamPolicy",
+        "authenticationInfo": {"principalEmail": "eve@x"},
+        "requestMetadata": {"callerIp": "10.0.0.9"}, "status": {"code": 7}}}))
+    assert e["event_type"] == "policy_change" and e["action"] == "deny"
+
+
 def test_ingest_endpoint_stores_windows_and_cloudtrail(client, auth):
     tag = uuid.uuid4().hex[:8]
     win = json.dumps({"EventID": 4625, "Computer": "WIN-T", "TargetUserName": f"win-{tag}",

@@ -8,11 +8,12 @@ path that hands a whole file to the Log API's ML detectors.
 
 JSON ingest additionally recognises high-value source shapes and maps their
 distinctive fields onto the native vocabulary so the same rules fire on them:
-**Windows Security events** (raw EVTX-JSON or winlog/Beats; EventID → event_type,
-e.g. 4625 → failed_login, 4732 → group_change), **Sysmon** operational events
-(EID 1 → process_start, 3 → network_connect, 22 → dns_query …), and **AWS
-CloudTrail** records (eventName → event_type, e.g. CreateAccessKey →
-create_access_key).
+**Windows Security events** (EventID → event_type, e.g. 4625 → failed_login),
+**Sysmon** operational events (EID 1 → process_start, 3 → network_connect …),
+and the three major clouds' audit logs — **AWS CloudTrail** (eventName →
+event_type), **Microsoft Entra / Azure AD** sign-in + directory audit, and
+**GCP Cloud Audit** (methodName → event_type) — so e.g. a failed cloud sign-in
+lands as failed_login and a new key as create_access_key across all of them.
 
 Every parser returns the same normalised event shape the rule engine reads:
 {category, event_type, src_ip, dest_ip, dest_port, username, hostname,
@@ -86,6 +87,20 @@ _CT_EVENTNAME = {
     "AuthorizeSecurityGroupIngress": ("firewall_change", "T1562.007"),
     "StopLogging": ("log_cleared", "T1562.008"), "DeleteTrail": ("log_cleared", "T1562.008"),
     "RunInstances": ("instance_launch", None), "GetSecretValue": ("secret_access", "T1552.005"),
+}
+
+# Microsoft Entra / Azure AD sign-in + audit categories.
+_AAD_SIGNIN_CATEGORIES = {"signinlogs", "noninteractiveusersigninlogs",
+                          "managedidentitysigninlogs", "serviceprincipalsigninlogs"}
+
+# GCP Cloud Audit method (trailing segment) → normalised event_type.
+_GCP_METHOD = {
+    "CreateServiceAccountKey": ("create_access_key", "T1098.001"),
+    "CreateServiceAccount": ("user_created", "T1136"),
+    "SetIamPolicy": ("policy_change", "T1098"),
+    "DeleteSink": ("log_cleared", "T1562.008"), "UpdateSink": ("log_cleared", "T1562.008"),
+    "AccessSecretVersion": ("secret_access", "T1552.005"),
+    "SetFirewallPolicy": ("firewall_change", "T1562.007"),
 }
 
 
@@ -299,6 +314,72 @@ def _apply_cloudtrail(ev: dict, obj: dict) -> bool:
     return True
 
 
+def _apply_azure_ad(ev: dict, obj: dict) -> bool:
+    """Recognise a Microsoft Entra / Azure AD sign-in or audit record (as exported
+    via Event Hub / Log Analytics) and map it. Returns True if it matched."""
+    props = obj.get("properties") if isinstance(obj.get("properties"), dict) else {}
+    category = str(obj.get("category") or "").lower()
+    is_signin = category in _AAD_SIGNIN_CATEGORIES or "userPrincipalName" in props
+    if not (is_signin or category == "auditlogs"):
+        return False
+    ev["category"] = "cloud_audit"
+    if category == "auditlogs":
+        activity = str(props.get("activityDisplayName") or obj.get("operationName") or "").lower()
+        if "member" in activity and ("role" in activity or "group" in activity):
+            ev["event_type"], ev["mitre_tech_id"] = "group_change", "T1098"
+        else:
+            ev["event_type"] = "cloud_audit"
+        actor = (props.get("initiatedBy") or {}).get("user") if isinstance(props.get("initiatedBy"), dict) else None
+        upn = (actor or {}).get("userPrincipalName") if isinstance(actor, dict) else None
+        if upn:
+            ev["username"] = str(upn)
+        return True
+    # sign-in: status.errorCode 0 = success
+    status = props.get("status") if isinstance(props.get("status"), dict) else {}
+    try:
+        err = int(status.get("errorCode", 0))
+    except (ValueError, TypeError):
+        err = 0
+    ev["event_type"] = "login_success" if err == 0 else "failed_login"
+    if err != 0:
+        ev["mitre_tech_id"] = "T1110"
+    if props.get("userPrincipalName"):
+        ev["username"] = str(props["userPrincipalName"])
+    ip = props.get("ipAddress")
+    if ip and _is_ip(ip):
+        ev["src_ip"] = str(ip)
+    loc = props.get("location") if isinstance(props.get("location"), dict) else {}
+    if loc.get("countryOrRegion"):
+        ev["country"] = str(loc["countryOrRegion"])
+    return True
+
+
+def _apply_gcp_audit(ev: dict, obj: dict) -> bool:
+    """Recognise a GCP Cloud Audit Logging record and map it. Returns True if it
+    matched."""
+    proto = obj.get("protoPayload") if isinstance(obj.get("protoPayload"), dict) else {}
+    log_name = str(obj.get("logName") or "")
+    method = str(proto.get("methodName") or "")
+    if not (method or "cloudaudit.googleapis.com" in log_name):
+        return False
+    ev["category"] = "cloud_audit"
+    et, mitre = _GCP_METHOD.get(method.rsplit(".", 1)[-1], ("cloud_audit", None))
+    ev["event_type"] = et
+    if mitre:
+        ev["mitre_tech_id"] = mitre
+    auth = proto.get("authenticationInfo") if isinstance(proto.get("authenticationInfo"), dict) else {}
+    if auth.get("principalEmail"):
+        ev["username"] = str(auth["principalEmail"])
+    meta = proto.get("requestMetadata") if isinstance(proto.get("requestMetadata"), dict) else {}
+    ip = meta.get("callerIp")
+    if ip and _is_ip(ip):
+        ev["src_ip"] = str(ip)
+    status = proto.get("status") if isinstance(proto.get("status"), dict) else {}
+    if status.get("code"):  # gRPC status: 0/absent = OK, non-zero = error/denied
+        ev["action"] = "deny"
+    return True
+
+
 def _parse_json(line: str) -> dict | None:
     try:
         obj = json.loads(line)
@@ -338,7 +419,8 @@ def _parse_json(line: str) -> dict | None:
     # Source-specific shapes (Windows Security / AWS CloudTrail) map their
     # distinctive fields authoritatively onto the native vocabulary, so the same
     # detection rules fire on them. Generic JSON/ECS handling fills the rest.
-    _apply_sysmon(ev, obj) or _apply_windows(ev, obj) or _apply_cloudtrail(ev, obj)
+    (_apply_sysmon(ev, obj) or _apply_windows(ev, obj) or _apply_cloudtrail(ev, obj)
+     or _apply_azure_ad(ev, obj) or _apply_gcp_audit(ev, obj))
     # ECS documents (nested or dotted keys) normalise at ingest time too.
     # Entity fields still holding only the raw-line regex guess are "weak" -
     # the producer's ECS values are authoritative over them.

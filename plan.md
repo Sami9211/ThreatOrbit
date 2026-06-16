@@ -331,14 +331,14 @@ that buying companies require. Realistic positioning today:
       OIDC provider, ID-token RS256 signature verified against the IdP JWKS,
       JIT user provisioning, and IdP-group→role mapping. Opt-in (degrades to
       "not configured"). Remaining: SAML, and SCIM for deprovisioning.
-- [~] **Parser & source breadth** — **Windows Security + Sysmon + AWS CloudTrail
-      DONE** (2026-06-15, see CHANGELOG): JSON ingest recognises all three shapes
-      and maps EventID/eventName → the native event_type vocabulary (so e.g.
-      Windows 4625 → failed_login feeds the brute-force rule, Sysmon 1 →
-      process_start, 3 → network_connect). Still ahead: Azure AD / M365, GCP
-      audit, common EDR + firewall exports; TLS syslog (RFC 5425) and an
-      agentless-pull option (S3/blob bucket tail); publish a supported-sources
-      matrix.
+- [~] **Parser & source breadth** — **Windows Security + Sysmon + the three
+      major clouds (AWS CloudTrail, Azure AD/Entra, GCP Cloud Audit) DONE**
+      (2026-06-15, see CHANGELOG): JSON ingest recognises all of them and maps
+      EventID/eventName/methodName → the native event_type vocabulary (Windows
+      4625 → failed_login, Sysmon 1 → process_start, a failed cloud sign-in →
+      failed_login, a new key → create_access_key). Still ahead: M365/Defender,
+      common EDR + firewall exports; TLS syslog (RFC 5425) and an agentless-pull
+      option (S3/blob bucket tail); publish a supported-sources matrix.
 - [~] **Detection content library** — STARTER PACK SHIPPED (2026-06-15, see
       CHANGELOG): 10 curated Sigma rules (`detection_pack.py`) loadable via
       `POST /siem/rules/load-pack` + a one-click UI button, idempotent, each
@@ -660,6 +660,19 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Cloud source breadth: Azure AD/Entra + GCP Cloud Audit.**
+  Completes the three-major-clouds story (AWS CloudTrail shipped alongside the
+  Windows/Sysmon work). JSON ingest now recognises **Microsoft Entra / Azure AD**
+  sign-in logs (status.errorCode → login_success/failed_login, with UPN, IP and
+  country) and directory **AuditLogs** (add-member-to-role → group_change), and
+  **GCP Cloud Audit** records (methodName → event_type:
+  CreateServiceAccountKey→create_access_key, SetIamPolicy→policy_change, with
+  principalEmail, callerIp, and gRPC status → allow/deny). So a failed cloud
+  sign-in on any of the three lands as `failed_login` and feeds the brute-force /
+  spray rules; a new cloud key feeds the persistence rule. Guarded so generic
+  JSON carrying a `category` isn't hijacked. `test_ingest_sources.py` covers both.
+  Full suite green.
 
 - **2026-06-15 · Source breadth: Windows Security + Sysmon + AWS CloudTrail.**
   JSON ingest was generic-only; the sources every SOC actually onboards landed as
