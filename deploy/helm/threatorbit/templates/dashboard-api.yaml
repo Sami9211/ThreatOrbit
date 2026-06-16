@@ -1,0 +1,113 @@
+{{- $fn := include "threatorbit.fullname" . -}}
+{{- $name := printf "%s-dashboard-api" $fn -}}
+{{- $sel := dict "root" . "component" "dashboard-api" -}}
+{{- $pg := .Values.postgres.enabled -}}
+{{- $usePvc := and .Values.persistence.enabled (not $pg) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard-api
+spec:
+  # SQLite is single-writer, so stay at 1 replica unless Postgres is enabled.
+  replicas: {{ if $pg }}{{ .Values.dashboardApi.replicas }}{{ else }}1{{ end }}
+  strategy:
+    type: {{ if $pg }}RollingUpdate{{ else }}Recreate{{ end }}
+  selector:
+    matchLabels:
+      {{- include "threatorbit.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "threatorbit.selectorLabels" $sel | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "threatorbit.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: dashboard-api
+          image: {{ include "threatorbit.image" (dict "root" . "repo" .Values.images.dashboardApi) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - { name: http, containerPort: 8002 }
+          env:
+            - { name: THREAT_API_URL, value: "http://{{ $fn }}-threat-api:8000" }
+            - { name: LOG_API_URL, value: "http://{{ $fn }}-log-api:8000" }
+            {{- if $pg }}
+            - { name: DASHBOARD_DB_BACKEND, value: postgres }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: databaseUrl } }
+            {{- else }}
+            - { name: DASHBOARD_DB_PATH, value: /data/dashboard.db }
+            {{- end }}
+            - name: DASHBOARD_JWT_SECRET
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: jwtSecret } }
+            - name: DASHBOARD_ADMIN_EMAIL
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: adminEmail } }
+            - name: DASHBOARD_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: adminPassword } }
+            - name: SERVICES_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: appApiKey } }
+            - name: SERVICES_ADMIN_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: adminApiKey } }
+          envFrom:
+            - configMapRef: { name: {{ $fn }}-config }
+          {{- if $usePvc }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          {{- end }}
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: { path: /ready, port: http }   # /ready also checks the DB
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml (.Values.dashboardApi.resources | default .Values.resources) | nindent 12 }}
+      {{- if $usePvc }}
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: {{ $name }}-data }
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard-api
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "threatorbit.selectorLabels" $sel | nindent 4 }}
+  ports:
+    - { name: http, port: 8002, targetPort: http }
+{{- if $usePvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-data
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard-api
+spec:
+  accessModes: [{{ .Values.persistence.accessMode }}]
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+{{- end }}

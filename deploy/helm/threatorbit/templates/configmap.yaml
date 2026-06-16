@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "threatorbit.fullname" . }}-config
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+data:
+  # threat_api / log_api
+  CORS_ORIGINS: {{ default "*" .Values.config.corsOrigins | quote }}
+  RATE_LIMIT_PER_MINUTE: {{ .Values.config.rateLimitPerMinute | quote }}
+  ENABLE_SCHEDULER: {{ .Values.config.enableScheduler | quote }}
+  OPENCTI_ENABLED: {{ .Values.config.opencti.enabled | quote }}
+  OPENCTI_URL: {{ .Values.config.opencti.url | quote }}
+  # dashboard_api
+  DASHBOARD_DATA_MODE: {{ .Values.config.dataMode | quote }}
+  DASHBOARD_ALLOW_REGISTRATION: {{ .Values.config.allowRegistration | quote }}
+  DASHBOARD_CORS_ORIGINS: {{ default (printf "http://%s" .Values.ingress.host) .Values.config.corsOrigins | quote }}

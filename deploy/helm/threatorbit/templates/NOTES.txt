@@ -1,0 +1,34 @@
+ThreatOrbit {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}".
+
+Components: threat-api, log-api, dashboard-api, frontend.
+
+{{- if not .Values.secrets.existingSecret }}
+{{- if not .Values.secrets.appApiKey }}
+
+  ⚠  secrets.appApiKey is EMPTY — threat-api and log-api will not start.
+     Set it (and a strong secrets.adminPassword + secrets.jwtSecret) and upgrade:
+       helm upgrade {{ .Release.Name }} . --set secrets.appApiKey=... --set secrets.adminPassword=...
+{{- end }}
+{{- end }}
+{{- if and .Values.postgres.enabled (gt (int .Values.dashboardApi.replicas) 1) (not .Values.secrets.jwtSecret) }}
+
+  ⚠  Running {{ .Values.dashboardApi.replicas }} dashboard replicas without secrets.jwtSecret:
+     each pod would mint a different signing key and tokens would fail across pods.
+     Set a shared secrets.jwtSecret.
+{{- end }}
+
+Reach the UI:
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/
+  {{- if .Values.ingress.apiHost }}
+  API: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.apiHost }}/
+  {{- end }}
+{{- else }}
+  No ingress enabled — port-forward to try it locally:
+    kubectl port-forward svc/{{ include "threatorbit.fullname" . }}-frontend 3000:80
+    kubectl port-forward svc/{{ include "threatorbit.fullname" . }}-dashboard-api 8002:8002
+{{- end }}
+
+NOTE: the frontend's browser-facing API URL (NEXT_PUBLIC_API_URL) is baked into
+its image at build time. For a real deployment, build the frontend image with
+NEXT_PUBLIC_API_URL set to the dashboard API's public URL (ingress.apiHost).

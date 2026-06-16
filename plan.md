@@ -372,9 +372,13 @@ that buying companies require. Realistic positioning today:
       context (org-tagged sources), tenant lifecycle tooling (create/suspend/
       export/delete with data purge), and per-tenant quotas + retention.
       Then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
-- [ ] **HA / DR / zero-downtime** — k8s/Helm chart, rolling upgrades with
-      migration gating, RPO/RTO targets with tested failover, multi-AZ
-      Postgres guidance.
+- [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15, see
+      CHANGELOG): `deploy/helm/threatorbit` deploys all four services with health
+      probes, PVCs, a Secret/ConfigMap split, optional Postgres for a
+      multi-replica dashboard (rolling updates), and ingress. Still ahead:
+      migration-gating on upgrade, RPO/RTO targets with tested failover, and
+      multi-AZ Postgres guidance. (A full-stack backup + tooled restore + drill
+      already shipped — see the 2026-06-15 HA/DR entry.)
 - [ ] **Vendor compliance posture** — SOC 2 Type II (then ISO 27001)
       program, DPA template, GDPR data-subject tooling (export/erase per
       user), data-residency options. Enterprises ask for these before the
@@ -662,6 +666,22 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Kubernetes Helm chart.** Deployment was docker-compose only -
+  no story for the orchestrated, HA deployment an enterprise buyer runs.
+  `deploy/helm/threatorbit` (chart `0.1.0`) deploys all four services modelled
+  exactly on `docker-compose.yml` and the Dockerfiles: Deployments + ClusterIP
+  Services for threat-api/log-api/dashboard-api/frontend, HTTP liveness/readiness
+  probes (dashboard readiness hits `/ready`, which checks the DB), a
+  Secret/ConfigMap split (secrets overridable or via `existingSecret`), per-PVC
+  storage for the SQLite services with `Recreate` strategy (single-writer), and
+  an **optional Postgres** mode that flips the dashboard to multi-replica rolling
+  updates. Internal service DNS is wired (dashboard → `…-threat-api:8000` /
+  `…-log-api:8000`); ingress supports a web host + a dedicated API host. NOTES.txt
+  warns on missing required secrets and the multi-replica-needs-jwtSecret pitfall;
+  a chart README documents build/install/HA/ingress. Validated structurally
+  (brace/control balance + every manifest's YAML skeleton parses to the right
+  kinds); pure additive (`deploy/helm/**` only — no app code touched).
 
 - **2026-06-15 · Per-rule noise ratings.** Completes the detection-content item.
   A fresh pack rule's observed `fp_rate` is 0 (no fires yet), so analysts had no

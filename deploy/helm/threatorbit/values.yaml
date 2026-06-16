@@ -1,0 +1,109 @@
+# ThreatOrbit Helm values. Override the marked REQUIRED secrets before installing
+# in anything other than a throwaway demo.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  # Optional registry prefix, e.g. ghcr.io/yourorg. Empty = use the repo names below as-is.
+  registry: ""
+  tag: "latest"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Image repositories, one per service (built from the repo Dockerfiles).
+images:
+  threatApi: threatorbit/threat-api
+  logApi: threatorbit/log-api
+  dashboardApi: threatorbit/dashboard-api
+  frontend: threatorbit/frontend
+
+# Sensitive values. Either set them here (they land in a Secret this chart creates)
+# or point existingSecret at a Secret you manage with the same keys.
+secrets:
+  existingSecret: ""
+  # REQUIRED — threat_api and log_api refuse to start without it.
+  appApiKey: ""
+  adminApiKey: ""
+  # REQUIRED for a real deployment — a long random value. Empty falls back to a
+  # per-install generated secret inside dashboard_api (fine for a single replica).
+  jwtSecret: ""
+  adminEmail: "admin@threatorbit.space"
+  # REQUIRED — set a strong bootstrap password (changed on first login).
+  adminPassword: ""
+  otxApiKey: ""
+  virustotalApiKey: ""
+  openctiApiKey: ""
+
+# Non-secret configuration.
+config:
+  dataMode: "demo"            # demo = seeded showcase data; live = empty + real OSINT ingestion
+  allowRegistration: true
+  corsOrigins: ""             # dashboard CORS allowlist; defaults to the ingress host when set
+  rateLimitPerMinute: 120
+  enableScheduler: true
+  opencti:
+    enabled: false
+    url: "http://opencti:8080"
+
+# Persistent storage for the SQLite-backed services (threat/log/dashboard).
+persistence:
+  enabled: true
+  storageClass: ""
+  size: 5Gi
+  accessMode: ReadWriteOnce
+
+# Optional Postgres backend for the dashboard. When enabled, dashboard_api can run
+# multiple replicas (SQLite is single-writer, so it stays at 1 replica otherwise).
+postgres:
+  enabled: false
+  # postgresql://user:password@host:5432/threatorbit  (or supply via existingSecret key databaseUrl)
+  url: ""
+
+# Default container resources (overridable per component below).
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { cpu: "1", memory: 1Gi }
+
+# fsGroup lets the non-root dashboard_api ('app' user) write to its PVC. Per-image
+# hardening (runAsNonRoot) is intentionally NOT forced here: threat_api/log_api
+# currently run as root and the frontend nginx binds :80 — tighten per your images.
+podSecurityContext:
+  fsGroup: 1000
+containerSecurityContext: {}
+
+threatApi:
+  replicas: 1
+  resources: {}
+logApi:
+  replicas: 1
+  resources: {}
+dashboardApi:
+  replicas: 1                 # keep at 1 unless postgres.enabled (SQLite is single-writer)
+  resources: {}
+frontend:
+  replicas: 2                 # stateless static server — safe to scale
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  # The browser-facing API URL is baked into the frontend image at BUILD time
+  # (NEXT_PUBLIC_API_URL). This value is informational; to change it, rebuild the
+  # image with the right URL (typically the dashboard API's public ingress URL).
+  apiUrl: "http://localhost:8002"
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # The web UI is served at host/, the dashboard API under host/api (path rewrite
+  # handled by your controller) OR set apiHost for a dedicated API hostname.
+  host: "threatorbit.local"
+  apiHost: ""
+  tls:
+    enabled: false
+    secretName: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

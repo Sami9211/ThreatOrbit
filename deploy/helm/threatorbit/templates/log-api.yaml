@@ -1,0 +1,96 @@
+{{- $name := printf "%s-log-api" (include "threatorbit.fullname" .) -}}
+{{- $sel := dict "root" . "component" "log-api" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-api
+spec:
+  replicas: {{ .Values.logApi.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "threatorbit.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "threatorbit.selectorLabels" $sel | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "threatorbit.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: log-api
+          image: {{ include "threatorbit.image" (dict "root" . "repo" .Values.images.logApi) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - { name: http, containerPort: 8000 }
+          env:
+            - { name: LOG_DB_PATH, value: /data/log_api.db }
+            - { name: REPORT_OUTPUT_PATH, value: /data/report.html }
+            - name: APP_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: appApiKey } }
+            - name: ADMIN_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "threatorbit.secretName" . }}, key: adminApiKey } }
+          envFrom:
+            - configMapRef: { name: {{ include "threatorbit.fullname" . }}-config }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml (.Values.logApi.resources | default .Values.resources) | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim: { claimName: {{ $name }}-data }
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-api
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "threatorbit.selectorLabels" $sel | nindent 4 }}
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+{{- if .Values.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-data
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-api
+spec:
+  accessModes: [{{ .Values.persistence.accessMode }}]
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+{{- end }}
