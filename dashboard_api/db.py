@@ -770,6 +770,10 @@ _MIGRATIONS = [
     # Outbound webhook signing secret (webhooks.py): each delivery is HMAC-signed
     # with this so subscribers can verify it genuinely came from ThreatOrbit.
     ("webhooks", "secret", "TEXT"),
+    # Per-rule noise rating (content metadata, distinct from the observed fp_rate):
+    # an authored low|medium|high expectation of how chatty a rule is, so analysts
+    # can prioritise tuning before any real false-positive data accrues.
+    ("detection_rules", "noise", "TEXT"),
 ]
 
 

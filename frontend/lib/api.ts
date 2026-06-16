@@ -186,6 +186,7 @@ export interface Rule {
   fpRate: number
   description: string
   status: string
+  noise?: string | null   // authored noisiness hint (low|medium|high), distinct from observed fpRate
 }
 
 export interface Correlation {

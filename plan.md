@@ -339,16 +339,18 @@ that buying companies require. Realistic positioning today:
       failed_login, a new key → create_access_key). Still ahead: M365/Defender,
       common EDR + firewall exports; TLS syslog (RFC 5425) and an agentless-pull
       option (S3/blob bucket tail); publish a supported-sources matrix.
-- [~] **Detection content library** — STARTER PACK SHIPPED (2026-06-15, see
-      CHANGELOG): 10 curated Sigma rules (`detection_pack.py`) loadable via
-      `POST /siem/rules/load-pack` + a one-click UI button, idempotent, each
-      mapped to a real event field + ATT&CK technique. Still ahead: per-rule
-      noise ratings and a content-update channel (new detections without a
-      product upgrade).
-- [ ] **Published load limits** — benchmark and document sustained EPS,
-      alert volume, and UI dataset ceilings on reference hardware (SQLite vs
-      Postgres); add ingest backpressure (bounded queue + 429) instead of
-      best-effort inserts.
+- [~] **Detection content library** — STARTER PACK + **noise ratings** SHIPPED
+      (2026-06-15, see CHANGELOG): 10 curated Sigma rules (`detection_pack.py`)
+      loadable via `POST /siem/rules/load-pack` + a one-click UI button,
+      idempotent, each mapped to a real event field + ATT&CK technique and an
+      authored low|medium|high **noise rating** (content metadata, distinct from
+      the observed `fp_rate`; shown in the rule detail). Still ahead: a
+      content-update channel (new detections without a product upgrade).
+- [~] **Published load limits** — **ingest backpressure already shipped**
+      (`/siem/ingest` caps batches at 5000 lines and sheds with 429 +
+      `Retry-After` once the detection backlog passes `INGEST_MAX_BACKLOG`).
+      Still ahead: benchmark and *document* sustained EPS, alert volume, and UI
+      dataset ceilings on reference hardware (SQLite vs Postgres).
 - [ ] **Background-service HA story** — syslog listener, file watcher,
       scheduler and engine tick are single-instance; either document the
       single-writer constraint or add leader election so two app replicas
@@ -660,6 +662,16 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Per-rule noise ratings.** Completes the detection-content item.
+  A fresh pack rule's observed `fp_rate` is 0 (no fires yet), so analysts had no
+  signal for which rules to tune first. Each pack rule now carries an authored
+  **noise rating** (`low|medium|high`) - honest content metadata kept in a new
+  `detection_rules.noise` column, deliberately *distinct* from the observed
+  fp_rate (so it's not an invented statistic). E.g. Large Outbound Data Transfer
+  = high (backups), Ransomware mass-encrypt = low. Surfaced as a colour-coded
+  stat in the rule detail. `test_detection_pack.py` asserts every pack rule has a
+  valid rating. Full suite green.
 
 - **2026-06-15 · Cloud source breadth: Azure AD/Entra + GCP Cloud Audit.**
   Completes the three-major-clouds story (AWS CloudTrail shipped alongside the

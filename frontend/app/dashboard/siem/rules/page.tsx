@@ -42,6 +42,7 @@ interface DetectionRule {
   suppressionWindow: string
   severityOverride:  Severity | null
   tags:        string[]
+  noise?:      string | null
 }
 
 /* ─── Seed data ──────────────────────────────────────────────────────── */
@@ -460,6 +461,8 @@ function RulePanel({ rule, onClose, onToggle }: {
           {[
             { label: 'Hits (24h)',      value: rule.hits24h.toString(), color: rule.hits24h > 0 ? '#FF2E97' : '#665B7D' },
             { label: 'FP Rate',         value: `${rule.fpRate}%`,       color: rule.fpRate > 25 ? '#FFB23E' : '#34F5C5' },
+            ...(rule.noise ? [{ label: 'Noise', value: rule.noise,
+                color: rule.noise === 'high' ? '#FF6B6B' : rule.noise === 'medium' ? '#FFB23E' : '#34F5C5' }] : []),
             { label: 'Last Fired',      value: rule.lastFired,          color: '#8A7DA3' },
             { label: 'Status',          value: rule.status,             color: rule.status === 'enabled' ? '#34F5C5' : rule.status === 'suppressed' ? '#FFB23E' : '#665B7D' },
           ].map(({ label, value, color }) => (

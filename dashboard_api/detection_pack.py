@@ -181,6 +181,22 @@ tags:
 ]
 
 
+# Authored noise expectation per rule (content metadata, NOT observed fp_rate):
+# how chatty the rule tends to be, so analysts know what to tune first.
+_PACK_NOISE = {
+    "Authentication Brute Force or Password Spray": "low",
+    "Password Spray Detected": "low",
+    "Ransomware - Mass File Encryption": "low",
+    "Volume Shadow Copy Deletion": "low",
+    "DNS Tunneling or Exfiltration": "medium",
+    "Large Outbound Data Transfer": "high",
+    "Living-off-the-Land Ingress Tool Transfer": "medium",
+    "Suspected Command-and-Control Beacon": "medium",
+    "New Cloud Access Key Created": "medium",
+    "Impossible Travel Sign-In": "low",
+}
+
+
 def load_pack(conn, created_by: str, org_id: str) -> dict:
     """Import each pack rule that isn't already present (matched by name).
     Returns {created:[names], skipped:[names]}. Idempotent: a second run skips
@@ -201,12 +217,12 @@ def load_pack(conn, created_by: str, org_id: str) -> dict:
             "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tactic_id,"
             "mitre_tech_id,mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,"
             "created,updated_by,description,kql,suppression_window,severity_override,tags,definition,"
-            "org_id) "
-            "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','pack',NULL,?,?,?,?,0,NULL,?,?,?)",
+            "org_id,noise) "
+            "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','pack',NULL,?,?,?,?,0,NULL,?,?,?,?)",
             (rid, name, mapped["category"], mapped["severity"], mapped["mitre_tactic"],
              mapped["mitre_tactic_id"], mapped["mitre_tech_id"], now, created_by,
              mapped["description"], yaml_text.strip(), dumps(tags), dumps(mapped["definition"]),
-             org_id),
+             org_id, _PACK_NOISE.get(name)),
         )
         created.append(name)
     return {"created": created, "skipped": skipped}

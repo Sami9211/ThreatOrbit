@@ -39,3 +39,6 @@ def test_load_pack_creates_and_is_idempotent(client, auth):
     if isinstance(defn, str):
         defn = json.loads(defn)
     assert defn["conditions"] and sample["mitre_tech_id"] == "T1486"
+    # every pack rule carries an authored noise rating (content metadata)
+    assert sample["noise"] in ("low", "medium", "high")
+    assert all(r.get("noise") in ("low", "medium", "high") for r in pack)
