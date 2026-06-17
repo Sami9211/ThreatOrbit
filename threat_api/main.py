@@ -593,15 +593,33 @@ def _scheduled_fetch():
             _fetch_lock.release()
 
 
-if __name__ == "__main__":
+_started = False
+
+
+def _startup():
+    """Idempotent boot: init the DB, restore IOCs into the in-memory store, and
+    start the fetch scheduler. Called from __main__ (local dev) AND at import time
+    under a production WSGI server (gunicorn), which imports the module rather than
+    running it as __main__ — gated on THREAT_API_BOOT so tests/imports don't boot."""
+    global _store, _started
+    if _started:
+        return
+    _started = True
     init_db()
     restored = load_iocs_from_db()
     if restored:
         _store = restored
         logging.info("Restored %d IOCs from database", len(restored))
-
     if ENABLE_SCHEDULER and not FLASK_DEBUG:
-        scheduler = IntervalScheduler(SCHEDULE_FETCH_CRON_MINUTES * 60, _scheduled_fetch)
-        scheduler.start()
+        IntervalScheduler(SCHEDULE_FETCH_CRON_MINUTES * 60, _scheduled_fetch).start()
 
+
+# Under gunicorn the module is imported (not __main__); the Dockerfile sets
+# THREAT_API_BOOT=1 so startup still runs. Tests/plain imports leave it unset.
+if os.environ.get("THREAT_API_BOOT") == "1":
+    _startup()
+
+
+if __name__ == "__main__":
+    _startup()
     app.run(host=API_HOST, port=API_PORT, debug=FLASK_DEBUG)

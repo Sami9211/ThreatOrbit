@@ -65,11 +65,12 @@ resources:
   requests: { cpu: 100m, memory: 256Mi }
   limits: { cpu: "1", memory: 1Gi }
 
-# fsGroup lets the non-root dashboard_api ('app' user) write to its PVC. Per-image
-# hardening (runAsNonRoot) is intentionally NOT forced here: threat_api/log_api
-# currently run as root and the frontend nginx binds :80 — tighten per your images.
+# fsGroup must match the image's app user (uid/gid 10001 across all three Python
+# services) so a mounted PVC is writable. Per-image runAsNonRoot is not forced
+# here because the frontend nginx binds :80; the Python images already drop to
+# the non-root 'app' user via their Dockerfiles.
 podSecurityContext:
-  fsGroup: 1000
+  fsGroup: 10001
 containerSecurityContext: {}
 
 threatApi:
