@@ -346,11 +346,12 @@ that buying companies require. Realistic positioning today:
       authored low|medium|high **noise rating** (content metadata, distinct from
       the observed `fp_rate`; shown in the rule detail). Still ahead: a
       content-update channel (new detections without a product upgrade).
-- [~] **Published load limits** — **ingest backpressure already shipped**
-      (`/siem/ingest` caps batches at 5000 lines and sheds with 429 +
-      `Retry-After` once the detection backlog passes `INGEST_MAX_BACKLOG`).
-      Still ahead: benchmark and *document* sustained EPS, alert volume, and UI
-      dataset ceilings on reference hardware (SQLite vs Postgres).
+- [~] **Published load limits** — backpressure + a **measured EPS baseline**
+      shipped (2026-06-15): `dashboard_api/bench.py` is a repeatable benchmark and
+      `docs/LOAD_LIMITS.md` captures real numbers (~10k EPS ingest+detect, ~7k EPS
+      detection on 4 vCPU SQLite) with the honest finding that the worker pool
+      doesn't speed up SQLite (single-writer). Still ahead: a documented Postgres
+      baseline and UI dataset ceilings.
 - [ ] **Background-service HA story** — syslog listener, file watcher,
       scheduler and engine tick are single-instance; either document the
       single-writer constraint or add leader election so two app replicas
@@ -678,6 +679,17 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Measured load baseline (`bench.py` + `docs/LOAD_LIMITS.md`).**
+  "Load limits" were a guess; now there's a repeatable benchmark and a captured
+  baseline of **real measured throughput** on the host. On 4 vCPU + SQLite WAL it
+  sustains **~10k EPS ingest+detect** and **~7k EPS pure detection** (single
+  worker). The benchmark surfaced an **honest, valuable finding**: the detection
+  worker pool is *slightly slower* with more workers on SQLite (single-writer
+  contention) — so the pool is for correctness + Postgres scaling, not SQLite
+  throughput, and the doc says so plainly and points to Postgres / a columnar
+  store for higher EPS. `test_bench.py` runs the benchmark in an isolated
+  subprocess as a smoke check.
 
 - **2026-06-15 · Multi-worker detection pool (event-pipeline increment 3).** The
   queue seam (increment 1) and bounded ingest (increment 2) were in, but detection
