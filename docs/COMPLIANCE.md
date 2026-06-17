@@ -28,6 +28,7 @@ auto-fill.
 | HTTP security headers | CC6.6 | A.8.23 | `observability.py` |
 | Tamper-evident evidence bundles | CC7.3 | A.5.28 | `evidence.py` (HMAC-signed) |
 | Data-subject rights (GDPR export + erasure) | P5.1, P4.2 | A.5.34 | `privacy.py` (`/privacy` export + anonymising erase) |
+| Data Processing Agreement (Art. 28) | P-series | A.5.34 | `docs/DPA_TEMPLATE.md` (template — adapt + get legal review) |
 | Secure SDLC / supply chain | CC8.1 | A.8.28, A.8.30 | `supply-chain.yml`, `release.yml` (SBOM, signed + SLSA) |
 | Vulnerability/dependency mgmt | CC7.1 | A.8.8 | `security.yml`, `dependabot.yml` |
 | Backup + tested restore | A1.2 | A.8.13 | `backup.py`, `docs/BACKUP_RESTORE.md` (CI restore drill) |

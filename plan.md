@@ -379,10 +379,11 @@ that buying companies require. Realistic positioning today:
       migration-gating on upgrade, RPO/RTO targets with tested failover, and
       multi-AZ Postgres guidance. (A full-stack backup + tooled restore + drill
       already shipped — see the 2026-06-15 HA/DR entry.)
-- [ ] **Vendor compliance posture** — SOC 2 Type II (then ISO 27001)
-      program, DPA template, GDPR data-subject tooling (export/erase per
-      user), data-residency options. Enterprises ask for these before the
-      first PoC ends.
+- [~] **Vendor compliance posture** — **DPA template** + GDPR data-subject
+      tooling DONE (`docs/DPA_TEMPLATE.md`; export/erase per user). Still ahead
+      (external / can't self-certify): an independent **SOC 2 Type II** (then ISO
+      27001) program and data-residency options. Enterprises ask for these before
+      the first PoC ends.
 - [ ] **Collector ecosystem** — a lightweight agent or certified
       Beats/Fluent Bit/Vector configs, with mTLS enrolment — "POST your logs
       here" is not an enterprise answer.
@@ -564,8 +565,10 @@ the columnar/search store, and published EPS limits.
   evidence and **honest status** (implemented/partial/planned), so a buyer's
   security questionnaire can be answered from real artifacts. Still needed (the
   parts that aren't code): an **independent SOC 2 Type II** audit then ISO 27001,
-  a DPA template, and data-residency options - asked for *before* the first
-  enterprise PoC ends. **GDPR data-subject tooling DONE (2026-06-15)**:
+  and data-residency options - asked for *before* the first enterprise PoC ends.
+  **DPA template DONE (2026-06-15)**: `docs/DPA_TEMPLATE.md` (GDPR Art. 28,
+  grounded in the real controls + honest on the self-hosted-vs-SaaS roles and the
+  not-yet-certified items). **GDPR data-subject tooling DONE (2026-06-15)**:
   `/privacy` export (access/portability) + anonymising erasure (right to be
   forgotten) - see CHANGELOG.
 - **Audit trail external streaming DONE (2026-06-15).** Every audit event is
@@ -666,6 +669,17 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · DPA template (GDPR Art. 28).** Enterprise procurement asks for a
+  Data Processing Agreement before a PoC ends; there wasn't one. `docs/DPA_TEMPLATE.md`
+  is a complete, realistic template — roles, Art. 28(3) processor obligations,
+  sub-processor change/objection, data-subject assistance, breach notice, audit,
+  deletion/return, international transfers — with four annexes (processing
+  details, **TOMs grounded in the controls the product actually implements**,
+  the real optional sub-processors, SCCs). Honest throughout: it foregrounds the
+  **self-hosted vs managed** distinction (self-hosted = vendor isn't the
+  processor) and explicitly flags that no independent SOC 2 / pentest is done yet.
+  Referenced from `docs/COMPLIANCE.md`. Pure additive doc.
 
 - **2026-06-15 · Kubernetes Helm chart.** Deployment was docker-compose only -
   no story for the orchestrated, HA deployment an enterprise buyer runs.
