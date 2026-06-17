@@ -97,6 +97,12 @@ AUTH_FAILURE_WINDOW_SEC = int(os.environ.get("DASHBOARD_AUTH_FAILURE_WINDOW_SEC"
 # Public self-service signup can be disabled for closed deployments.
 ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lower() != "false"
 
+# --- Detection pipeline ---------------------------------------------------------
+# Worker count for a pooled backlog drain (detection_pool). The engine's inline
+# tick still uses a single worker; >1 lets an operator drain a large backlog with
+# a concurrency-safe pool (each claim is write-locked so workers never overlap).
+DETECTION_WORKERS = max(1, int(os.environ.get("DASHBOARD_DETECTION_WORKERS", "1")))
+
 # --- Data lifecycle -------------------------------------------------------------
 # When set to a writable directory, retention enforcement archives each batch of
 # purged rows to compressed NDJSON there BEFORE deleting them, so compliance can

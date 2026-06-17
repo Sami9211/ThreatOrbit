@@ -641,6 +641,21 @@ def ingest(body: IngestBody, user: dict = Depends(current_user)):
     return result
 
 
+@router.post("/detection/drain")
+def drain_detection(workers: int | None = Query(None, ge=1, le=16),
+                    user: dict = Depends(require_perm("siem.write"))):
+    """Drain the pending detection backlog with a concurrency-safe worker pool
+    (each claim is write-locked so workers never double-process). Useful for
+    catching up after an ingest burst. `workers` defaults to DASHBOARD_DETECTION_WORKERS."""
+    from dashboard_api.detection_pool import run_pool
+    result = run_pool(workers=workers)
+    with get_conn() as conn:
+        audit(conn, user["email"], "siem.detection_drain", None,
+              f"workers={result['workers']} batches={result['batches']} alerts={result['alerts']}")
+        conn.commit()
+    return result
+
+
 @router.get("/log-listeners")
 def log_listeners_status():
     """Status of the long-running log collectors (syslog UDP listener + file/dir

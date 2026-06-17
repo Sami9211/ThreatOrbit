@@ -369,24 +369,28 @@ _RISK = {"critical": 92, "high": 76, "medium": 52, "low": 28, "info": 12}
 
 
 def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
-                  worker_id: str = "engine-0") -> dict:
+                  worker_id: str = "engine-0", claimed: list | None = None) -> dict:
     """Evaluate enabled rules over unprocessed events → create alerts.
 
     Live events are pulled through the event-queue seam (claim → … → complete),
     so the detection stage can later run as a pool of workers without
     double-processing. `worker_id` identifies the claiming worker (single inline
-    worker today). If preview_rule is given, evaluate ONLY that rule and return
-    matches without creating alerts (backtest). Returns a summary."""
+    worker today). `claimed`, when given, is a batch a pool worker has ALREADY
+    leased (see detection_pool) — this function then only processes + completes
+    it, skipping its own claim. If preview_rule is given, evaluate ONLY that rule
+    and return matches without creating alerts (backtest). Returns a summary."""
     import json
     from dashboard_api.rule_engine import evaluate
     from dashboard_api.detections import _insert_alert, _TACTIC  # reuse writer
     from dashboard_api import event_queue
 
-    if preview_rule is None:
-        rows = event_queue.claim(conn, worker_id, limit)   # lease a batch off the queue
-    else:
+    if preview_rule is not None:
         rows = conn.execute(
             "SELECT * FROM events ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    elif claimed is not None:
+        rows = claimed                                   # pool pre-leased this batch
+    else:
+        rows = event_queue.claim(conn, worker_id, limit)   # lease a batch off the queue
     events = [dict(e) for e in rows]
     if preview_rule is not None:
         matches = evaluate(preview_rule, events)

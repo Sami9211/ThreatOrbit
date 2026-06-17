@@ -361,11 +361,13 @@ that buying companies require. Realistic positioning today:
 
 ### Tier 3 — large enterprise / MSSP
 
-- [ ] **Event pipeline at scale** — the events table + in-process detection
-      won't hold at enterprise EPS. Separate ingest from detection with a
-      queue/worker model, partition or externalise the event store (e.g.
-      ClickHouse/OpenSearch behind the same search API), and make the hunt
-      language push predicates down to it.
+- [~] **Event pipeline at scale** — the durable queue seam + a **concurrency-safe
+      multi-worker detection pool** are now in (2026-06-15, see CHANGELOG): a
+      pooled drain claims batches under write-locked transactions so workers never
+      double-process, proven by a multi-worker-equals-single-worker test. Still
+      ahead: flipping the engine to ingest-only by default, and partitioning or
+      externalising the event store (e.g. ClickHouse/OpenSearch behind the same
+      search API) with predicate push-down for the hunt language.
 - [ ] **Finish multi-tenancy for GA** — the documented limits must close
       before MSSP sale: org-scope get-by-id detail endpoints (404 cross-org),
       org-scope global search and the SSE stream, per-org engine/ingest
@@ -479,10 +481,17 @@ complete, stale re-queue). **Increment 2 DONE (2026-06-15): bounded ingest +
 429.** `POST /siem/ingest` now sheds load with **HTTP 429 + Retry-After** when
 the detection backlog hits `DASHBOARD_INGEST_MAX_BACKLOG` (default 100k, 0 to
 disable), instead of accepting events the pipeline can't keep up with; the cap +
-a live `shedding` flag are on `GET /config/engine`. **Still ahead (the heavier
-lifts):** flip the engine to ingest-only + a real **multi-worker detection
-pool** (each worker its own `BEGIN IMMEDIATE`/`isolation_level=None` claim txn),
-the columnar/search store, and published EPS limits.
+a live `shedding` flag are on `GET /config/engine`. **Increment 3 DONE
+(2026-06-15): the concurrency-safe multi-worker pool.** `detection_pool.py` runs
+a pool of workers that each `BEGIN IMMEDIATE`/`isolation_level=None` **claim a
+batch under a write lock** (so two workers never grab the same event) and process
+it via the existing `run_detection(claimed=…)` path; `POST /siem/detection/drain`
+exposes it (`DASHBOARD_DETECTION_WORKERS`). Proven by a test that a 6-worker
+drain produces **exactly the same alerts** as a 1-worker drain of identical input
+(no double-processing, none missed). The inline engine tick is untouched (still
+worker engine-0), so the default path is unchanged. **Still ahead (the heavier
+lifts):** flip the engine to ingest-only by default, the columnar/search store,
+and published EPS limits.
 
 ### P1 — Reliability, HA & disaster recovery
 
@@ -669,6 +678,22 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-15 · Multi-worker detection pool (event-pipeline increment 3).** The
+  queue seam (increment 1) and bounded ingest (increment 2) were in, but detection
+  was still a single inline worker — the documented P0 scale ceiling.
+  `detection_pool.py` adds the concurrency-safe pool: each worker claims a batch
+  under a **write-locked transaction** (SQLite `BEGIN IMMEDIATE` on an autocommit
+  connection — the lock is taken *before* the SELECT, so a concurrent claim blocks
+  then sees the rows already taken), then processes it through the unchanged
+  `run_detection` path (now accepting a pre-claimed `claimed=` batch). At-least-once
+  via the existing lease/`requeue_stale`. `POST /siem/detection/drain?workers=N`
+  exposes a pooled backlog drain (`DASHBOARD_DETECTION_WORKERS`). The **inline
+  engine tick is deliberately untouched** (worker engine-0), so the default path
+  is byte-for-byte unchanged. `test_detection_pool.py` proves the decisive
+  invariant — a 6-worker drain yields exactly the same alerts as a 1-worker drain
+  of identical input (no event claimed/alerted twice, none missed) — plus the
+  drain endpoint. Full suite green (268).
 
 - **2026-06-15 · DPA template (GDPR Art. 28).** Enterprise procurement asks for a
   Data Processing Agreement before a PoC ends; there wasn't one. `docs/DPA_TEMPLATE.md`
