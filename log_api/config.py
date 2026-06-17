@@ -50,4 +50,7 @@ MAX_EVENTS_PER_ALERT_IN_REPORT = int(os.getenv("MAX_EVENTS_PER_ALERT_IN_REPORT",
 
 SUPPORTED_FORMATS = ["syslog", "apache", "windows_event", "generic"]
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+# Explicit localhost origins by default (not '*'); set CORS_ORIGINS to your
+# dashboard origin(s) in production. A '*' here disables credentialed CORS
+# (see log_api/main.py) rather than silently shipping an invalid policy.
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")

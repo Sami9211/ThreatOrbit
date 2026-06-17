@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -44,11 +45,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Log Anomaly API", version="1.2.0", lifespan=lifespan)
 
-_cors_origins = [o.strip() for o in CORS_ORIGINS.split(",")]
+_cors_origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+# A wildcard origin with credentials is invalid per the CORS spec (browsers
+# reject it) and unsafe; if one is configured, drop credentials so the policy is
+# valid and explicit rather than silently broken. Mirrors dashboard_api's stance.
+_cors_credentials = "*" not in _cors_origins
+if not _cors_credentials:
+    logger.warning("CORS_ORIGINS is '*'; disabling allow_credentials. Set explicit origins in production.")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_credentials=_cors_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -63,15 +70,21 @@ metrics = LogMetrics()
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+def _key_matches(provided: str, *valid: str) -> bool:
+    """Constant-time API-key check (mirrors threat_api/dashboard_api) so the
+    comparison isn't a timing side channel."""
+    return any(provided and v and hmac.compare_digest(provided, v) for v in valid)
+
+
 def require_user_key(api_key: str = Security(_api_key_header)):
     """Standard analyst access: accepts USER key or ADMIN key."""
-    if not api_key or api_key not in (USER_API_KEY, ADMIN_API_KEY):
+    if not _key_matches(api_key, USER_API_KEY, ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def require_admin_key(api_key: str = Security(_api_key_header)):
     """Admin-only access: only the ADMIN key is accepted."""
-    if not api_key or api_key != ADMIN_API_KEY:
+    if not _key_matches(api_key, ADMIN_API_KEY):
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
@@ -91,8 +104,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500, content={"error": "Internal server error", "detail": str(exc)})
+    # Log the detail server-side with a correlation id; return only the id to the
+    # caller so internal paths/dependency errors aren't disclosed.
+    rid = uuid.uuid4().hex[:12]
+    logger.exception("Unhandled exception [%s] on %s %s", rid, request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "id": rid})
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +133,9 @@ def ready():
         with get_conn() as conn:
             conn.execute("SELECT 1")
         return {"ready": True}
-    except Exception as e:
-        return {"ready": False, "error": str(e)}
+    except Exception:
+        logger.exception("readiness check failed")
+        return {"ready": False}
 
 
 @app.get("/metrics")
@@ -178,9 +195,11 @@ async def analyse(
         metrics.mark_success(len(result.findings))
         return result
     except Exception as e:
-        _save_job(job_id, "failed", {"error": str(e)})
+        rid = uuid.uuid4().hex[:12]
+        logger.exception("analysis failed [%s] for job %s", rid, job_id)
+        _save_job(job_id, "failed", {"error": "analysis failed"})
         metrics.mark_failure()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Analysis failed (id={rid})")
 
 
 async def _analyse_background(job_id: str, lines: list, log_format: str, generate_report: bool):
