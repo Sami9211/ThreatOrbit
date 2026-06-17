@@ -24,9 +24,13 @@ _PBKDF2_ITERS_LEGACY = 260_000   # assumed for hashes stored before the cost mar
 
 
 # --- Minimal HS256 JWT (stdlib only) ---------------------------------------
-# We implement the JWT ourselves rather than depend on PyJWT, because PyJWT in
-# this environment imports `cryptography`'s Rust bindings (needed only for RSA/EC)
-# which are broken here. HS256 needs nothing beyond hmac/hashlib/base64.
+# Implemented from the stdlib (hmac/hashlib/base64) to demonstrate the mechanics
+# and keep this path dependency-free; HS256 needs nothing more. It is safe
+# against algorithm-confusion because it never branches on the header `alg` (it
+# only ever computes/verifies HS256). NOTE: `cryptography` IS a project
+# dependency (used by secretstore/oidc/saml), so for production a maintained JWT
+# library (PyJWT / Authlib / joserfc) would be the lower-assurance-risk choice;
+# this hand-rolled version is a deliberate, self-contained demonstration.
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 

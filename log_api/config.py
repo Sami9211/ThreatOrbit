@@ -1,3 +1,4 @@
+import logging
 import os
 
 
@@ -19,6 +20,10 @@ if not USER_API_KEY:
     )
 
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY") or USER_API_KEY
+if not os.getenv("ADMIN_API_KEY"):
+    logging.getLogger(__name__).warning(
+        "ADMIN_API_KEY is not set; admin access shares the user key. "
+        "Set a DISTINCT ADMIN_API_KEY in production.")
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))

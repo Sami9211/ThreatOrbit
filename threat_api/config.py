@@ -1,3 +1,4 @@
+import logging
 import os
 
 
@@ -20,6 +21,10 @@ if not APP_API_KEY:
     )
 
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY") or APP_API_KEY
+if not os.getenv("ADMIN_API_KEY"):
+    logging.getLogger(__name__).warning(
+        "ADMIN_API_KEY is not set; admin endpoints share the user key, so the "
+        "user/admin privilege split is cosmetic. Set a DISTINCT ADMIN_API_KEY in production.")
 
 # Server
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
