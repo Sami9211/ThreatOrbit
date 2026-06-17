@@ -1,8 +1,18 @@
+"""Unsupervised outlier RANKING (Isolation Forest) for analyst triage.
+
+This is deliberately *not* a ground-truth detector: there is no trained baseline
+of "normal", so a flagged source means "statistically unusual within this file",
+not "confirmed malicious". To keep it from labelling ~N% of every (even benign)
+log as anomalous, a statistical outlier is only surfaced when a CONCRETE signal
+corroborates it (real auth failures, a genuine rate/scan spike, a high error
+rate, off-hours bulk transfer), and the MITRE technique is derived from that
+signal rather than hardcoded. Treat the output as a ranked triage list.
+"""
 from collections import defaultdict
 from typing import List, Dict, Any
 from log_api.models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
 from log_api.config import (
-    ML_CONTAMINATION, ML_N_ESTIMATORS,
+    ML_N_ESTIMATORS,
     BUSINESS_HOURS_START, BUSINESS_HOURS_END,
     SEVERITY_CRITICAL_THRESHOLD, SEVERITY_HIGH_THRESHOLD, SEVERITY_MEDIUM_THRESHOLD, ENABLE_ML_DETECTOR
 )
@@ -44,9 +54,17 @@ def run_ml_detector(entries: List[ParsedLogEntry]) -> List[AnomalyFinding]:
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
+    # `contamination='auto'` instead of a fixed fraction: a fixed fraction would
+    # force ~N% of sources to be labelled "anomalous" even on a perfectly clean
+    # log. Even with 'auto', an isolation-forest outlier is only *statistical*, so
+    # we additionally require a CONCRETE corroborating signal (real auth failures,
+    # a true rate/scan spike, etc.) before surfacing it - so a benign log yields
+    # nothing, and the MITRE technique is derived from that signal rather than
+    # hardcoded. This is unsupervised outlier RANKING for triage, not a detection
+    # verdict (see the module docstring / report wording).
     model = IsolationForest(
         n_estimators=ML_N_ESTIMATORS,
-        contamination=ML_CONTAMINATION,
+        contamination="auto",
         random_state=42,
         n_jobs=-1,
     )
@@ -62,32 +80,59 @@ def run_ml_detector(entries: List[ParsedLogEntry]) -> List[AnomalyFinding]:
         if pred != -1:
             continue
 
-        ip = ip_list[idx]
         feat = features[idx]
+        tag, reason = _classify(feat)
+        if tag is None:
+            continue   # statistical outlier with no concrete signal → not surfaced
+
+        ip = ip_list[idx]
         ev = ip_entries[ip]
         normalised = int(((raw_score - min_score) / score_range) * 100)
         sev_score = max(25, 100 - normalised)
 
         findings.append(AnomalyFinding(
             detector="ML Detector (Isolation Forest)",
-            finding_type="ml_behavioural_anomaly",
-            description=_build_description(ip, feat, sev_score),
+            finding_type="behavioural_outlier",
+            description=_build_description(ip, feat, sev_score, reason),
             severity_score=sev_score,
             severity=_score_to_severity(sev_score),
             source_ip=ip if ip != "unknown" else None,
             timestamp=ev[0].timestamp if ev else None,
             evidence=[e.raw[:200] for e in ev[:5]],
-            mitre_tags=[MitreTag(
-                technique_id="T1595",
-                technique_name="Active Scanning",
-                tactic="Reconnaissance",
-                url="https://attack.mitre.org/techniques/T1595/",
-            )],
+            mitre_tags=[tag],
             count=int(feat[0]),
             extra=_feature_dict(feat),
         ))
 
+    # Highest-ranked (most unusual + corroborated) first — this is a triage
+    # ranking, not a ground-truth detection list.
+    findings.sort(key=lambda f: f.severity_score, reverse=True)
     return findings
+
+
+# Feature index map (see _build_feature_matrix): 0 total, 1 unique_paths,
+# 2 error_rate_pct, 3 avg_bytes, 4 unique_agents, 5 rpm, 6 auth_failures,
+# 7 off_hours_pct, 8 post_ratio_pct.
+def _mitre(tech_id: str, name: str, tactic: str) -> MitreTag:
+    return MitreTag(technique_id=tech_id, technique_name=name, tactic=tactic,
+                    url=f"https://attack.mitre.org/techniques/{tech_id}/")
+
+
+def _classify(feat: list):
+    """Map a flagged source's dominant concrete signal to a MITRE technique, or
+    return (None, None) when nothing concrete corroborates the outlier (so a
+    purely statistical wobble on benign data is not reported as a finding)."""
+    auth_fail, rpm, paths = feat[6], feat[5], feat[1]
+    err_pct, off_pct, avg_bytes = feat[2], feat[7], feat[3]
+    if auth_fail >= 5:
+        return _mitre("T1110", "Brute Force", "Credential Access"), f"{int(auth_fail)} authentication failures"
+    if rpm >= 120 or paths >= 100:
+        return _mitre("T1595", "Active Scanning", "Reconnaissance"), f"{int(rpm)} req/min over {int(paths)} paths"
+    if err_pct >= 40:
+        return _mitre("T1190", "Exploit Public-Facing Application", "Initial Access"), f"{err_pct:.0f}% error rate"
+    if off_pct >= 50 and avg_bytes >= 1_000_000:
+        return _mitre("T1041", "Exfiltration Over C2 Channel", "Exfiltration"), "off-hours high-volume transfer"
+    return None, None
 
 
 def _build_feature_matrix(entries: List[ParsedLogEntry]):
@@ -154,8 +199,10 @@ def _build_feature_matrix(entries: List[ParsedLogEntry]):
     return features, ip_list, ip_entries
 
 
-def _build_description(ip: str, feat: list, score: int) -> str:
-    parts = [f"ML anomaly detected for source {ip} (anomaly score: {score}/100)."]
+def _build_description(ip: str, feat: list, score: int, reason: str = "") -> str:
+    parts = [f"Unusual activity ranked from source {ip} (outlier score: {score}/100)."]
+    if reason:
+        parts.append(f"Corroborating signal: {reason}.")
     if feat[1] > 50:
         parts.append(f"Accessed {int(feat[1])} unique paths.")
     if feat[2] > 30:
@@ -164,6 +211,7 @@ def _build_description(ip: str, feat: list, score: int) -> str:
         parts.append(f"High request rate: {feat[5]:.0f} RPM.")
     if feat[6] > 3:
         parts.append(f"{int(feat[6])} authentication failures.")
+    parts.append("(Unsupervised outlier ranking for triage — not a confirmed detection.)")
     return " ".join(parts)
 
 
