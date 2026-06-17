@@ -52,3 +52,12 @@ def test_analyse_persists_result_report_and_stix():
 
 def test_results_require_api_key():
     assert client.get("/results/anything").status_code in (401, 403)
+
+
+def test_oversized_upload_rejected(monkeypatch):
+    """The byte cap is enforced at ingress BEFORE buffering the whole file (C4)."""
+    import log_api.main as m
+    monkeypatch.setattr(m, "MAX_UPLOAD_BYTES", 100)
+    r = client.post("/analyse?log_format=generic",
+                    files={"file": ("big.log", "x" * 500, "text/plain")}, headers=KEY)
+    assert r.status_code == 413

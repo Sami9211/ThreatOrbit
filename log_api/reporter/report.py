@@ -51,8 +51,12 @@ def _finding_card(f: AnomalyFinding, idx: int) -> str:
     fg, bg = SEVERITY_COLORS.get(sev, ("#374151", "#d1d5db"))
     emoji = SEVERITY_EMOJI.get(sev, "⚪")
 
+    # Escape MITRE fields too (latent sink): they're server-constant today, but a
+    # future data-driven technique mapping must not be able to break out of the
+    # single-quoted href / inject markup.
     mitre_html = " ".join(
-        f"<a href='{t.url}' target='_blank' style='color:#818cf8'>{t.technique_id} {t.technique_name}</a>"
+        f"<a href='{_esc(t.url)}' target='_blank' style='color:#818cf8'>"
+        f"{_esc(t.technique_id)} {_esc(t.technique_name)}</a>"
         for t in f.mitre_tags
     )
     evidence = "".join(f"<code>{_esc(e)}</code>" for e in f.evidence[:5])
@@ -80,6 +84,6 @@ def _finding_card(f: AnomalyFinding, idx: int) -> str:
 """
 
 
-def _esc(s: str) -> str:
-    return (s.replace("&", "&amp;").replace("<", "&lt;")
-             .replace(">", "&gt;").replace('"', "&quot;"))
+def _esc(s) -> str:
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+             .replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;"))

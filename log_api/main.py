@@ -62,6 +62,9 @@ app.add_middleware(
 
 metrics = LogMetrics()
 
+# Hard cap on an uploaded log file (anti-DoS); override via env if needed.
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))  # 50 MB
+
 # ---------------------------------------------------------------------------
 # Auth dependencies
 # ---------------------------------------------------------------------------
@@ -180,7 +183,14 @@ async def analyse(
     generate_report: bool = Query(True),
     run_async: bool = Query(False, alias="async"),
 ):
-    content = await file.read()
+    # Bound memory at ingress: read at most MAX_UPLOAD_BYTES+1 and reject if
+    # exceeded, BEFORE decoding/splitting - so a multi-GB upload (or one enormous
+    # line with no newlines) can't exhaust memory. (Was: read the whole file,
+    # then check the line count.)
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413,
+                            detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)")
     text = content.decode("utf-8", errors="replace")
     lines = text.splitlines()
     if not lines:
