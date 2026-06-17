@@ -41,8 +41,18 @@ def claim_locked(conn, worker_id: str, batch: int,
     """Atomically claim up to `batch` pending events under a write lock, so two
     workers never claim the same event. Returns the claimed rows (maybe empty)."""
     from dashboard_api.db_backend import is_postgres
-    if is_postgres():  # pragma: no cover - the adapter manages its own transaction
-        rows = event_queue.claim(conn, worker_id, batch, lease)
+    if is_postgres():  # pragma: no cover - exercised only by the backend-postgres CI job
+        # Postgres has no BEGIN IMMEDIATE; the idiomatic work-queue claim is a single
+        # atomic UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED), so concurrent
+        # workers skip rows another is already claiming (no overlap, no deadlock).
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        cutoff = (now - timedelta(seconds=lease)).isoformat()
+        rows = conn.execute(
+            "UPDATE events SET claimed_by=?, claimed_at=? WHERE id IN ("
+            "SELECT id FROM events WHERE processed=0 AND (claimed_by IS NULL OR claimed_at < ?) "
+            "ORDER BY ts DESC LIMIT ? FOR UPDATE SKIP LOCKED) RETURNING *",
+            (worker_id, now.isoformat(), cutoff, batch)).fetchall()
         try:
             conn.commit()
         except Exception:

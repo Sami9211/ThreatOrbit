@@ -434,7 +434,9 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
     created = 0
     suppressed = 0
     supp_hits: dict[str, int] = {}
+    fired_rule_ids: list = []
     for rule in rules:
+        rule_created = 0
         for m in evaluate(rule, events):
             ev = m["event"]
             sid = _suppressed(rule["id"], ev) if suppressions else None
@@ -464,10 +466,19 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
                 raw_log=ev.get("raw"), event_count=m["count"],
             )
             created += 1
-        # bump the rule's hit counter + last_fired
-        conn.execute("UPDATE detection_rules SET last_fired=? WHERE id=?", (_now(), rule["id"]))
-    for sid, n in supp_hits.items():
-        conn.execute("UPDATE suppressions SET hits=hits+? WHERE id=?", (n, sid))
+            rule_created += 1
+        if rule_created:
+            fired_rule_ids.append(rule["id"])
+    # Stamp last_fired ONLY for rules that actually fired (correct semantics), in a
+    # stable id order. The ordering is what makes concurrent detection-pool workers
+    # deadlock-safe on Postgres: they take the row locks in the same sequence, so
+    # there's no circular wait (SQLite serialises writes, so it never surfaced there).
+    if fired_rule_ids:
+        now_iso = _now()
+        for rid in sorted(fired_rule_ids):
+            conn.execute("UPDATE detection_rules SET last_fired=? WHERE id=?", (now_iso, rid))
+    for sid in sorted(supp_hits):   # stable order → deadlock-safe under the pool
+        conn.execute("UPDATE suppressions SET hits=hits+? WHERE id=?", (supp_hits[sid], sid))
     event_ids = [e["id"] for e in events]
     event_queue.complete(conn, event_ids)   # mark the leased batch done, drop the lease
     return {"alerts": created, "events": len(events), "rules": len(rules),
