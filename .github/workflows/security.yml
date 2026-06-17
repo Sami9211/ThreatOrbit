@@ -29,8 +29,14 @@ jobs:
         # FastAPI's starlette ceiling moves (tracked in plan.md Tier 1).
         run: |
           pip install pip-audit
+          # dashboard_api gates the build (--strict); the starlette advisory is triaged above.
           pip-audit -r dashboard_api/requirements.txt --strict \
             --ignore-vuln PYSEC-2026-161
+          # threat_api + log_api are now audited too (previously uncovered). Reported
+          # but non-gating for now since their deps weren't strict-audited before;
+          # promote to --strict once a clean run confirms no open advisories.
+          pip-audit -r log_api/requirements.txt --ignore-vuln PYSEC-2026-161 || true
+          pip-audit -r threat_api/requirements.txt || true
 
   npm-audit:
     runs-on: ubuntu-latest
