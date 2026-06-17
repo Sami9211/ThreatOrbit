@@ -134,11 +134,18 @@ def exchange_code(code: str) -> dict:
 
 
 def _rsa_key_for(kid: str | None):
-    keys = _jwks().get("keys", [])
-    jwk = next((k for k in keys if k.get("kid") == kid and k.get("kty") == "RSA"), None) \
-        or next((k for k in keys if k.get("kty") == "RSA"), None)
-    if not jwk:
-        raise ValueError("no usable RSA key in provider JWKS")
+    keys = [k for k in _jwks().get("keys", []) if k.get("kty") == "RSA"]
+    if kid:
+        # Require an exact kid match — do NOT silently fall back to another key,
+        # so a token can only be verified with the key its header points to.
+        jwk = next((k for k in keys if k.get("kid") == kid), None)
+        if not jwk:
+            raise ValueError("no JWKS key matches the token's kid")
+    else:
+        # No kid in the header: only unambiguous when the IdP publishes one RSA key.
+        if len(keys) != 1:
+            raise ValueError("token has no kid and the JWKS is ambiguous")
+        jwk = keys[0]
     e = int.from_bytes(_b64u_decode(jwk["e"]), "big")
     n = int.from_bytes(_b64u_decode(jwk["n"]), "big")
     return RSAPublicNumbers(e, n).public_key()
