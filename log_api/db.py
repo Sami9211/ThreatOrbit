@@ -29,6 +29,14 @@ def init_db():
         cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_jobs_created ON analysis_jobs (created_at)
         """)
+        # Additive columns: the full result + the rendered report are persisted
+        # per job, so results survive a restart and are visible to every worker
+        # (no in-memory result store, no single shared report file).
+        cols = {r[1] for r in cur.execute("PRAGMA table_info(analysis_jobs)").fetchall()}
+        if "result_json" not in cols:
+            cur.execute("ALTER TABLE analysis_jobs ADD COLUMN result_json TEXT")
+        if "report_html" not in cols:
+            cur.execute("ALTER TABLE analysis_jobs ADD COLUMN report_html TEXT")
         conn.commit()
 
 

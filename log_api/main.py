@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from log_api.config import ADMIN_API_KEY, CORS_ORIGINS, REPORT_OUTPUT_PATH, SUPPORTED_FORMATS, USER_API_KEY
+from log_api.config import ADMIN_API_KEY, CORS_ORIGINS, SUPPORTED_FORMATS, USER_API_KEY
 from log_api.models import AnomalyFinding, AnalysisResult, LogFormat
 from log_api.parsers.syslog import parse_syslog
 from log_api.parsers.apache import parse_apache
@@ -27,7 +27,7 @@ from log_api.detectors.statistical import run_statistical_detector
 from log_api.detectors.ml_detector import run_ml_detector
 from log_api.detectors.temporal import run_temporal_detector
 from log_api.alerts.alerter import process_findings, summarise, top_source_ips
-from log_api.reporter.report import generate_html_report
+from log_api.reporter.report import _build_html
 from log_api.stix_from_findings import findings_to_stix_bundle
 from log_api.metrics import LogMetrics
 from log_api.db import init_db, get_conn
@@ -60,7 +60,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_results: dict = {}
 metrics = LogMetrics()
 
 # ---------------------------------------------------------------------------
@@ -145,11 +144,23 @@ def get_metrics():
 
 @app.get("/trends/severity", dependencies=[Depends(require_user_key)])
 def severity_trends():
+    # Aggregated from persisted job summaries so it's correct across workers and
+    # survives restarts (not the serving worker's in-memory slice).
     buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
-    for r in _results.values():
-        for k, v in r.summary.items():
-            buckets[k] = buckets.get(k, 0) + v
-    return {"total_analyses": len(_results), "severity_totals": buckets}
+    n = 0
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT summary_json FROM analysis_jobs WHERE status='completed'").fetchall()
+    for (summary_json,) in rows:
+        if not summary_json:
+            continue
+        n += 1
+        try:
+            for k, v in json.loads(summary_json).items():
+                buckets[k] = buckets.get(k, 0) + v
+        except Exception:
+            pass
+    return {"total_analyses": n, "severity_totals": buckets}
 
 
 @app.get("/")
@@ -190,11 +201,11 @@ async def analyse(
     # Synchronous path: runs in thread pool so the event loop stays free
     try:
         result = await asyncio.to_thread(_run_analysis, lines, log_format.value, generate_report)
-        _results[job_id] = result
+        _persist_result(job_id, result, generate_report)
         _save_job(job_id, "completed", result.summary)
         metrics.mark_success(len(result.findings))
         return result
-    except Exception as e:
+    except Exception:
         rid = uuid.uuid4().hex[:12]
         logger.exception("analysis failed [%s] for job %s", rid, job_id)
         _save_job(job_id, "failed", {"error": "analysis failed"})
@@ -205,11 +216,11 @@ async def analyse(
 async def _analyse_background(job_id: str, lines: list, log_format: str, generate_report: bool):
     try:
         result = await asyncio.to_thread(_run_analysis, lines, log_format, generate_report)
-        _results[job_id] = result
+        _persist_result(job_id, result, generate_report)
         _save_job(job_id, "completed", result.summary)
         metrics.mark_success(len(result.findings))
-    except Exception as e:
-        _save_job(job_id, "failed", {"error": str(e)})
+    except Exception:
+        _save_job(job_id, "failed", {"error": "analysis failed"})
         metrics.mark_failure()
         logger.exception("Background analysis failed for job %s", job_id)
 
@@ -236,32 +247,53 @@ def job_status(job_id: str):
         except Exception:
             resp["summary"] = row[4]
 
-    if row[1] == "completed" and row[0] in _results:
+    if row[1] == "completed":
         resp["result_url"] = f"/results/{row[0]}"
+        resp["report_url"] = f"/results/{row[0]}/report"
 
     return resp
 
 
 @app.get("/report", response_class=HTMLResponse, dependencies=[Depends(require_user_key)])
 def report():
-    if not os.path.exists(REPORT_OUTPUT_PATH):
+    """The most recently completed analysis's report. Prefer the per-job
+    /results/{id}/report — this 'latest' view is kept for backward compatibility."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT report_html FROM analysis_jobs WHERE status='completed' AND report_html IS NOT NULL "
+            "ORDER BY updated_at DESC LIMIT 1").fetchone()
+    if not row or not row[0]:
         raise HTTPException(status_code=404, detail="No report generated yet.")
-    with open(REPORT_OUTPUT_PATH, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(content=row[0])
 
 
 @app.get("/results/{result_id}", dependencies=[Depends(require_user_key)])
 def get_result(result_id: str):
-    if result_id not in _results:
+    result = _load_result(result_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Result not found")
-    return _results[result_id]
+    return result
+
+
+@app.get("/results/{result_id}/report", response_class=HTMLResponse,
+         dependencies=[Depends(require_user_key)])
+def get_result_report(result_id: str):
+    """The report for ONE analysis (rendered from its stored result) — no shared
+    file, so concurrent analyses never overwrite each other's report."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT report_html FROM analysis_jobs WHERE id=?", (result_id,)).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return HTMLResponse(content=row[0])
 
 
 @app.get("/results/{result_id}/stix", dependencies=[Depends(require_user_key)])
 def export_result_stix(result_id: str):
-    if result_id not in _results:
+    result = _load_result(result_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Result not found")
-    bundle = findings_to_stix_bundle(_results[result_id])
+    bundle = findings_to_stix_bundle(result)
     resp = JSONResponse(content=bundle)
     resp.headers["Content-Type"] = "application/stix+json"
     return resp
@@ -301,11 +333,33 @@ def _run_analysis(lines: List[str], log_format: str, generate_report: bool) -> A
         analysed_at=datetime.now(timezone.utc),
         detectors_used=["Pattern", "Statistical", "ML", "Temporal"],
     )
+    return result   # report is rendered + persisted per-job by _persist_result
 
-    if generate_report:
-        generate_html_report(result, REPORT_OUTPUT_PATH)
 
-    return result
+def _persist_result(job_id: str, result: AnalysisResult, generate_report: bool):
+    """Store the full result (+ a per-job rendered report) on the job row, so it
+    survives restarts and is readable by any worker. Replaces the in-memory dict
+    and the single shared report file."""
+    report_html = _build_html(result) if generate_report else None
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE analysis_jobs SET result_json=?, report_html=? WHERE id=?",
+            (result.model_dump_json(), report_html, job_id))
+        conn.commit()
+
+
+def _load_result(job_id: str):
+    """Reconstruct a stored AnalysisResult, or None if absent."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT result_json FROM analysis_jobs WHERE id=?", (job_id,)).fetchone()
+    if not row or not row[0]:
+        return None
+    try:
+        return AnalysisResult.model_validate_json(row[0])
+    except Exception:
+        logger.exception("failed to parse stored result for %s", job_id)
+        return None
 
 
 def _save_job(job_id: str, status: str, summary: dict):
