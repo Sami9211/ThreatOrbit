@@ -20,6 +20,25 @@ def test_sign_verify_roundtrip():
     assert not wh.verify_signature(secret, body, wh.sign_payload(secret, body, ts=1))  # too old
 
 
+def test_webhook_delivery_is_org_scoped(client, auth, monkeypatch):
+    """With isolation on, a webhook only receives ITS org's events (audit B2)."""
+    from dashboard_api import tenancy
+    hook = client.post("/config/webhooks", json={"url": "https://example.com/h",
+                       "events": ["alert.created"]}, headers=auth).json()
+    try:
+        monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+        mine = [s["id"] for s in wh._subscribers("alert.created", "org-default")]
+        other = [s["id"] for s in wh._subscribers("alert.created", "org-other")]
+        assert hook["id"] in mine
+        assert hook["id"] not in other          # a different org's event never reaches it
+        monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+        # isolation off → prior global fan-out, unchanged
+        assert hook["id"] in [s["id"] for s in wh._subscribers("alert.created", "org-other")]
+    finally:
+        monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+        client.delete(f"/config/webhooks/{hook['id']}", headers=auth)
+
+
 def test_create_returns_secret_list_hides_it(client, auth):
     r = client.post("/config/webhooks", json={"url": "https://example.com/h",
                     "events": ["alert.created"]}, headers=auth)

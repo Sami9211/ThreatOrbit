@@ -68,11 +68,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _subscribers(event: str) -> list[dict]:
+def _subscribers(event: str, org: str | None = None) -> list[dict]:
+    # Tenant isolation: when it's enforced and the event belongs to an org, only
+    # that org's webhooks receive it (so a webhook can't siphon another tenant's
+    # events). Off / org-less events keep the prior global fan-out.
+    from dashboard_api import tenancy
+    clause, params = "", []
+    if tenancy.enforced() and org is not None:
+        clause, params = " AND org_id=?", [org]
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, url, events, secret FROM webhooks WHERE status != 'paused'"
-        ).fetchall()
+            f"SELECT id, url, events, secret FROM webhooks WHERE status != 'paused'{clause}",
+            params).fetchall()
     subs = []
     for r in rows:
         try:
@@ -184,9 +191,9 @@ def notify_slack_users(*, severity: str, title: str,
 
 
 def dispatch(event: str, payload: dict, org: str | None = None):
-    """Deliver `event` to every active subscriber. Never raises. `org` scopes the
-    in-process SSE push to one tenant when isolation is on (external webhook
-    subscribers are global config and unaffected)."""
+    """Deliver `event` to every active subscriber. Never raises. `org` scopes both
+    the in-process SSE push AND the external webhook fan-out to one tenant when
+    isolation is on, so a webhook can't receive another org's events."""
     # Mirror to live SSE clients (in-process, independent of external webhooks).
     try:
         from dashboard_api.events_stream import publish
@@ -194,7 +201,7 @@ def dispatch(event: str, payload: dict, org: str | None = None):
     except Exception:
         pass
     try:
-        subs = _subscribers(event)
+        subs = _subscribers(event, org)
     except Exception:  # storage unavailable - never break the request path
         logger.exception("Webhook subscriber lookup failed for %s", event)
         return

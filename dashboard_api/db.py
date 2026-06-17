@@ -774,6 +774,9 @@ _MIGRATIONS = [
     # an authored low|medium|high expectation of how chatty a rule is, so analysts
     # can prioritise tuning before any real false-positive data accrues.
     ("detection_rules", "noise", "TEXT"),
+    # Webhook tenant ownership: deliveries + CRUD scope to this org when isolation
+    # is on, so one org's webhook can't receive (or be managed across) another's.
+    ("webhooks", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
 ]
 
 

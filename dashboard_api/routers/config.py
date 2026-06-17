@@ -403,10 +403,21 @@ def _public_webhook(d: dict) -> dict:
     return d
 
 
+def _wh_scope(user: dict):
+    """(sql_fragment, params) restricting webhook rows to the caller's org when
+    tenant isolation is on; a no-op otherwise."""
+    from dashboard_api import tenancy
+    if tenancy.enforced():
+        return " AND org_id=?", [tenancy.org_of(user)]
+    return "", []
+
+
 @router.get("/webhooks")
-def list_webhooks(_: dict = Depends(require_perm("config.manage"))):
+def list_webhooks(user: dict = Depends(require_perm("config.manage"))):
+    clause, params = _wh_scope(user)
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM webhooks ORDER BY created_at DESC").fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM webhooks WHERE 1=1{clause} ORDER BY created_at DESC", params).fetchall()
     return [_public_webhook(d) for d in rows_to_dicts(rows)]
 
 
@@ -424,11 +435,12 @@ def create_webhook(body: WebhookCreate, user: dict = Depends(require_perm("confi
     wid = str(uuid.uuid4())
     secret = new_webhook_secret()
     from dashboard_api.db import dumps
+    from dashboard_api import tenancy
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO webhooks (id,url,events,status,last_delivery,created_at,created_by,secret) "
-            "VALUES (?,?,?,'active',NULL,?,?,?)",
-            (wid, url, dumps(body.events), _now(), user["email"], secret),
+            "INSERT INTO webhooks (id,url,events,status,last_delivery,created_at,created_by,secret,org_id) "
+            "VALUES (?,?,?,'active',NULL,?,?,?,?)",
+            (wid, url, dumps(body.events), _now(), user["email"], secret, tenancy.org_of(user)),
         )
         audit(conn, user["email"], "webhook.create", wid, f"url={url}")
         conn.commit()
@@ -453,9 +465,11 @@ def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(re
         fields.append("events=?"); values.append(dumps(body.events))
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
+    clause, sp = _wh_scope(user)
     values.append(webhook_id)
+    values.extend(sp)
     with get_conn() as conn:
-        cur = conn.execute(f"UPDATE webhooks SET {','.join(fields)} WHERE id=?", values)
+        cur = conn.execute(f"UPDATE webhooks SET {','.join(fields)} WHERE id=?{clause}", values)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Webhook not found")
         audit(conn, user["email"], "webhook.update", webhook_id)
@@ -468,8 +482,10 @@ def update_webhook(webhook_id: str, body: WebhookUpdate, user: dict = Depends(re
 def test_webhook(webhook_id: str, actor: dict = Depends(require_perm("config.manage"))):
     """Deliver a synchronous test event so the operator can verify the endpoint."""
     from dashboard_api.webhooks import _deliver
+    clause, sp = _wh_scope(actor)
     with get_conn() as conn:
-        row = conn.execute("SELECT id, url, secret FROM webhooks WHERE id=?", (webhook_id,)).fetchone()
+        row = conn.execute(f"SELECT id, url, secret FROM webhooks WHERE id=?{clause}",
+                           (webhook_id, *sp)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Webhook not found")
     _deliver("webhook.test", {"message": "ThreatOrbit test delivery", "requestedBy": actor["email"]},
@@ -487,8 +503,9 @@ def rotate_webhook_secret(webhook_id: str, actor: dict = Depends(require_perm("c
     """Issue a fresh signing secret (invalidating the old one). Returned once."""
     from dashboard_api.webhooks import new_webhook_secret
     secret = new_webhook_secret()
+    clause, sp = _wh_scope(actor)
     with get_conn() as conn:
-        cur = conn.execute("UPDATE webhooks SET secret=? WHERE id=?", (secret, webhook_id))
+        cur = conn.execute(f"UPDATE webhooks SET secret=? WHERE id=?{clause}", (secret, webhook_id, *sp))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Webhook not found")
         audit(conn, actor["email"], "webhook.rotate_secret", webhook_id)
@@ -498,8 +515,9 @@ def rotate_webhook_secret(webhook_id: str, actor: dict = Depends(require_perm("c
 
 @router.delete("/webhooks/{webhook_id}", status_code=204)
 def delete_webhook(webhook_id: str, actor: dict = Depends(require_perm("config.manage"))):
+    clause, sp = _wh_scope(actor)
     with get_conn() as conn:
-        cur = conn.execute("DELETE FROM webhooks WHERE id=?", (webhook_id,))
+        cur = conn.execute(f"DELETE FROM webhooks WHERE id=?{clause}", (webhook_id, *sp))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Webhook not found")
         audit(conn, actor["email"], "webhook.delete", webhook_id)
