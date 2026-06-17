@@ -32,6 +32,26 @@ it - without standing up a heavyweight SIEM and a separate SOAR and a separate
 TIP. The three backend services run independently or together, locally or in
 containers. See [§13 Intended users](#13-intended-users) for the honest scope.
 
+### Project status — read this first
+
+An ambitious, security-aware platform — **not a production-audited product.** The
+honest framing (the strong parts stand on their own without inflating the rest):
+
+* **Single-node by default.** WAL-mode SQLite with an opt-in, staged Postgres
+  backend. Measured ~10k EPS ingest / ~7k EPS detection on 4 vCPU
+  ([`docs/LOAD_LIMITS.md`](docs/LOAD_LIMITS.md)); for higher sustained load, move
+  to Postgres / externalise the event store.
+* **The ML layer is unsupervised outlier _ranking_ for triage**, not trained
+  ground-truth detection — it surfaces the most unusual sources (corroborated by
+  a concrete signal), it doesn't assert "this is an attack".
+* **OSINT is OTX + abuse.ch + a pluggable RSS layer.** The "dark-web" and
+  "social" feeds are RSS slots that are **empty by default** until you add
+  sources — extensible ingestion, not live dark-web/social collection.
+* **Enterprise features (SSO/SCIM/SAML, billing, multi-tenancy)** are implemented
+  and tested but **exploratory / not independently security-audited** — no SOC 2
+  or third-party pentest yet ([`docs/COMPLIANCE.md`](docs/COMPLIANCE.md),
+  [`SECURITY.md`](SECURITY.md)). Full caveats in [§15](#15-limitations--honest-caveats).
+
 ### Table of contents
 
 | Getting started | Using it | Reference | Direction |
@@ -43,9 +63,9 @@ containers. See [§13 Intended users](#13-intended-users) for the honest scope.
 ThreatOrbit is made of three backend services and a Next.js frontend (marketing site + full operator dashboard):
 
 * **Threat API** (`threat_api`, Flask, port 8000)
-  Ingests external threat feeds (OTX, abuse.ch, RSS, dark-web OSINT, social OSINT) in parallel, normalizes and trust-scores indicators, enriches with VirusTotal, exports STIX 2.1, and reads from / pushes to OpenCTI.
+  Ingests external threat feeds (OTX, abuse.ch, RSS — plus a pluggable dark-web/social RSS layer that is empty until you add sources) in parallel, normalizes and trust-scores indicators, enriches with VirusTotal, exports STIX 2.1, and reads from / pushes to OpenCTI.
 * **Log API** (`log_api`, FastAPI, port 8001)
-  Parses logs (Apache, Syslog, Windows Event, Generic), detects anomalies via four engines (Pattern, Statistical, ML, Temporal), generates HTML reports, and exports STIX 2.1 from findings.
+  Parses logs (Apache, Syslog, Windows Event, Generic), detects anomalies via four engines (Pattern, Statistical, an unsupervised ML outlier-_ranking_ layer, Temporal), generates HTML reports, and exports STIX 2.1 from findings.
 * **Dashboard API** (`dashboard_api`, FastAPI, port 8002)
   The unified backend powering the operator dashboard: JWT auth (login + self-service registration with brute-force throttling) and role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR), a correlation engine and a live hunt-query engine, SOAR case lifecycle (create, war-room notes, task workflow), CTI actors/IOCs with lookup + bulk import + scanner history, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, webhooks, a full audit trail — and a **service bridge** that proxies the Threat API and Log API server-side so the browser never handles their API keys. See [`dashboard_api/README.md`](dashboard_api/README.md).
 * **Frontend** (`frontend`, Next.js 14 + TypeScript)

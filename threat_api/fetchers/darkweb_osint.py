@@ -1,3 +1,11 @@
+"""'Dark-web OSINT' source — an RSS/Atom feed reader, NOT a Tor/onion crawler.
+
+It reads whatever feeds are listed in `darkweb_sources.txt` via the shared RSS
+fetcher and tags the resulting indicators as leak-related. There is no dark-web
+collection here: treat it as a pluggable slot for curated leak/breach RSS feeds.
+It is **empty by default** (no feeds listed), so it contributes nothing until you
+add sources — see the README's "Project status" section for the honest framing.
+"""
 from datetime import datetime, timezone
 from typing import List
 import os
