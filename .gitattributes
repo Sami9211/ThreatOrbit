@@ -1,2 +1,9 @@
 # Batch files must keep Windows line endings or cmd.exe misparses them.
 *.bat text eol=crlf
+
+# Language statistics (GitHub Linguist): this is a Python platform with a large
+# Next.js frontend. Mark the frontend + generated artefacts as vendored/docs so
+# the language bar reflects the backend services, not the bundled UI.
+frontend/** linguist-vendored
+docs/** linguist-documentation
+*.pyc linguist-generated
