@@ -76,6 +76,22 @@ def test_disable_clears_recovery_codes(client):
     assert _login(client, email).status_code == 200
 
 
+def test_totp_replay_rejected_at_login(client):
+    email, h, secret, _ = _enrol(client)
+    code = mfa.totp_code(secret)
+    assert _login(client, email, code=code).status_code == 200      # first use accepted
+    assert _login(client, email, code=code).status_code == 401      # same code reused → replayed
+
+
+def test_verify_code_counter_anti_replay():
+    secret = mfa.new_secret()
+    code = mfa.totp_code(secret)
+    c = mfa.verify_code_counter(secret, code)
+    assert isinstance(c, int)
+    assert mfa.verify_code_counter(secret, code, after=c) is None    # already-used step rejected
+    assert mfa.verify_code_counter(secret, code, after=c - 1) == c   # an older watermark still ok
+
+
 def test_recovery_helpers():
     codes = mfa.new_recovery_codes(5)
     assert len(codes) == 5 and all("-" in c for c in codes)

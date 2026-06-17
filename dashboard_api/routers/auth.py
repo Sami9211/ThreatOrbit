@@ -101,13 +101,20 @@ def login(body: LoginRequest, request: Request):
         # password is verified FIRST, so this never becomes a user-enumeration
         # oracle; wrong codes count against the same login throttle.
         if user.get("mfa_enabled"):
-            from dashboard_api.mfa import verify_code
+            from dashboard_api.mfa import verify_code_counter
             from dashboard_api.secretstore import decrypt
             secret = decrypt(user.get("mfa_secret"))
             if secret:  # enabled-but-secretless (admin reset) falls through
                 if not body.code:
                     raise HTTPException(status_code=401, detail="MFA code required")
-                if not verify_code(secret, body.code):
+                # Anti-replay: a code only counts if its time-step is newer than the
+                # last one we accepted, so a captured code can't be reused.
+                last = int(user.get("mfa_last_counter") or -1)
+                matched = verify_code_counter(secret, body.code, after=last)
+                if matched is not None:
+                    conn.execute("UPDATE users SET mfa_last_counter=? WHERE id=?",
+                                 (matched, user["id"]))
+                else:
                     # Fall back to a one-time recovery code (lost authenticator).
                     from dashboard_api.mfa import consume_recovery_code
                     import json

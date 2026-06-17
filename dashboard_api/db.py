@@ -777,6 +777,9 @@ _MIGRATIONS = [
     # Webhook tenant ownership: deliveries + CRUD scope to this org when isolation
     # is on, so one org's webhook can't receive (or be managed across) another's.
     ("webhooks", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    # MFA anti-replay: the last accepted TOTP time-step counter at login, so a
+    # still-valid code can't be reused inside its ±1-step window.
+    ("users", "mfa_last_counter", "INTEGER"),
 ]
 
 

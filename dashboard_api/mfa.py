@@ -48,6 +48,27 @@ def verify_code(secret_b32: str, code: str, window: int = 1) -> bool:
         return False
 
 
+def verify_code_counter(secret_b32: str, code: str, window: int = 1, after: int = -1) -> int | None:
+    """Like `verify_code` but returns the time-step counter the code matched (for
+    replay protection), or None. A counter <= `after` is rejected as already-used,
+    so a still-valid code can't be replayed within its window."""
+    cleaned = (code or "").strip().replace(" ", "")
+    if not cleaned or not secret_b32:
+        return None
+    now = time.time()
+    try:
+        for i in range(-window, window + 1):
+            t = now + i * STEP_SECONDS
+            counter = int(t // STEP_SECONDS)
+            if counter <= after:
+                continue
+            if hmac.compare_digest(totp_code(secret_b32, t), cleaned):
+                return counter
+    except (ValueError, TypeError):
+        return None
+    return None
+
+
 def otpauth_uri(secret_b32: str, email: str, issuer: str = "ThreatOrbit") -> str:
     """The otpauth:// provisioning URI authenticator apps scan as a QR."""
     return (f"otpauth://totp/{quote(issuer)}:{quote(email)}"
