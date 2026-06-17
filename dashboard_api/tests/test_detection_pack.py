@@ -22,9 +22,11 @@ def test_every_pack_rule_parses_and_is_evaluable():
 
 
 def test_load_pack_creates_and_is_idempotent(client, auth):
+    # Order-independent: another test may have already loaded the pack, so we
+    # assert the invariant (all 10 accounted for) + full idempotency, not a fresh
+    # "created >= 1".
     first = client.post("/siem/rules/load-pack", headers=auth).json()
     assert len(first["created"]) + len(first["skipped"]) == 10
-    assert len(first["created"]) >= 1
 
     # a second load skips everything (idempotent by rule name)
     second = client.post("/siem/rules/load-pack", headers=auth).json()

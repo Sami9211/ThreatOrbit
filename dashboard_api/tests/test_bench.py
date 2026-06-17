@@ -8,7 +8,11 @@ import sys
 
 
 def test_bench_quick_runs():
-    env = {k: v for k, v in os.environ.items() if k != "DASHBOARD_DB_PATH"}
+    # Strip ALL backend-selecting env vars so the benchmark uses its own SQLite
+    # temp DB - otherwise it would inherit the CI's Postgres DSN (or the test DB
+    # path) and pollute the shared test database.
+    _drop = {"DASHBOARD_DB_PATH", "DASHBOARD_DB_BACKEND", "DATABASE_URL"}
+    env = {k: v for k, v in os.environ.items() if k not in _drop}
     r = subprocess.run([sys.executable, "-m", "dashboard_api.bench", "--quick"],
                        capture_output=True, text=True, timeout=180, env=env)
     assert r.returncode == 0, r.stderr
