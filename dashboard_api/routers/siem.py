@@ -391,8 +391,10 @@ def soc_triage(user: dict = Depends(current_user)):
             "mitre_tech_id, src_ip, hostname, rule_name FROM alerts "
             f"WHERE status IN ('new','assigned','in-progress','pending') {sc}", sp
         ).fetchall()
+        # Parameterise the LIKE pattern: a literal % in inline SQL is parsed as a
+        # placeholder by psycopg and raises (SQLite tolerates it, Postgres doesn't).
         sla_settings = {r["key"]: r["value"] for r in conn.execute(
-            "SELECT key, value FROM settings WHERE key LIKE 'sla_%'").fetchall()}
+            "SELECT key, value FROM settings WHERE key LIKE ?", ("sla_%",)).fetchall()}
 
     def _thr(kind: str, sev: str, default: int) -> int:
         try:
