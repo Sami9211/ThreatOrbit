@@ -422,14 +422,16 @@ that buying companies require. Realistic positioning today:
       (`scripts/openapi_snapshot.py` + live `/openapi.json` + `/docs`), and a
       **contract test** that fails if a documented path is removed without a
       version bump.
-- [~] **Scale-grade RBAC** — **custom roles DONE** (capability bundles via
-      `/roles`, fail-closed, no-privilege-escalation guard) **and break-glass /
-      audit-everything DONE** (2026-06-18, see CHANGELOG): a time-boxed emergency
-      elevation gated by a `break_glass.use` capability (admin + manager only, so
-      analyst/viewer can never self-elevate); while live it grants any capability
-      the base role lacks and **audits each elevated use individually**
-      (`rbac.break_glass`), plus a critical notification on activate. Still open:
-      per-workspace role assignment.
+- [x] **Scale-grade RBAC** — DONE (see CHANGELOG): **custom roles** (capability
+      bundles via `/roles`, fail-closed, no-privilege-escalation guard),
+      **break-glass / audit-everything** (a time-boxed emergency elevation gated
+      by `break_glass.use` — admin + manager only — that grants any capability the
+      base role lacks and audits each elevated use individually), **and
+      per-workspace role assignment** (a user can be granted a distinct role
+      *within* another workspace via `/orgs/{id}/members`; under multi-tenancy,
+      acting there with `X-Org-Id` takes that role + data scope, and a non-member
+      gets 403). The broader "act fully in another tenant's engine/ingest context"
+      remains under *Finish multi-tenancy for GA*.
 
 ---
 
@@ -724,6 +726,22 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Scale-grade RBAC: per-workspace role assignment.** Completes the
+  Scale-grade RBAC item. A `user_org_roles` table + new `/orgs/{id}/members`
+  endpoints (`PUT`/`GET`/`DELETE`, gated by `users.manage`) let an operator grant
+  a user a **distinct role within another workspace** (MSSP/SaaS), with the same
+  no-privilege-escalation guard as custom roles (you can't grant a role beyond
+  your own). `permissions.workspace_role(user, org)` resolves the effective role
+  (home → base role; elsewhere → the grant, or None = no access). `current_user`
+  now reads an optional `X-Org-Id` header: under multi-tenancy, a member acting in
+  another workspace takes their **granted role AND data scope** there (resolved
+  once, so `org_of`/scoping/stamping and `require_perm` all follow consistently);
+  asking for a workspace you're not in is a 403. Single-tenant installs ignore the
+  header entirely — byte-for-byte unchanged. Tests in `test_workspace_roles.py`
+  (7): grant/list/resolve, acting-org role+scope switch, non-member 403,
+  require_perm honouring the acting role, no-priv-escalation, revoke, and the
+  single-tenant no-op. Note: the engine/ingest background context is still
+  home-scoped (tracked under *Finish multi-tenancy for GA*). Full suite green.
 - **2026-06-18 · Scale-grade RBAC: break-glass / audit-everything mode.** Added
   time-boxed **emergency RBAC elevation** for the case where the normal approver
   is unavailable. New `dashboard_api/break_glass.py` + a `break_glass` table:

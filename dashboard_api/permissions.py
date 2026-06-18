@@ -72,6 +72,25 @@ def has_perm(role: str, perm: str) -> bool:
     return perm in perms_for(role)
 
 
+def workspace_role(user_id: str, org_id: str) -> str | None:
+    """The role a user effectively holds **in** `org_id` (scale-grade RBAC,
+    per-workspace assignment): their base role in their home workspace, a
+    per-workspace grant (`user_org_roles`) elsewhere, or None when they have no
+    access to that workspace. Fail-closed (None) on any error."""
+    from dashboard_api.tenancy import DEFAULT_ORG_ID
+    try:
+        from dashboard_api.db import get_conn
+        with get_conn() as conn:
+            u = conn.execute("SELECT role, org_id FROM users WHERE id=?", (user_id,)).fetchone()
+            if u and (u["org_id"] or DEFAULT_ORG_ID) == org_id:
+                return u["role"]                       # home workspace → base role
+            g = conn.execute("SELECT role FROM user_org_roles WHERE user_id=? AND org_id=?",
+                             (user_id, org_id)).fetchone()
+            return g["role"] if g else None
+    except Exception:
+        return None
+
+
 def role_exists(role: str) -> bool:
     """True if `role` is a built-in or a defined custom role (for assignment)."""
     if role in ROLE_PERMISSIONS:

@@ -650,6 +650,15 @@ CREATE TABLE IF NOT EXISTS break_glass (
     org_id         TEXT NOT NULL DEFAULT 'org-default'
 );
 
+CREATE TABLE IF NOT EXISTS user_org_roles (
+    user_id    TEXT NOT NULL,
+    org_id     TEXT NOT NULL,
+    role       TEXT NOT NULL,
+    granted_by TEXT,
+    granted_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, org_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_ts ON scans(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_sev ON alerts(severity);
@@ -678,6 +687,7 @@ CREATE INDEX IF NOT EXISTS idx_enrich_value ON ioc_enrichments(ioc_value, provid
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, revoked);
 CREATE INDEX IF NOT EXISTS idx_break_glass_user ON break_glass(user_id, deactivated_at);
+CREATE INDEX IF NOT EXISTS idx_user_org_roles_org ON user_org_roles(org_id);
 """
 
 

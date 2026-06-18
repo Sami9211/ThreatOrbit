@@ -211,6 +211,7 @@ def _principal_from_api_key(token: str) -> dict | None:
 def current_user(
     creds: HTTPAuthorizationCredentials = Security(_bearer),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
 ) -> dict:
     """Resolve the authenticated principal. Accepts either a human JWT (Bearer)
     or a machine API key (Bearer or X-API-Key header), fresh from the DB."""
@@ -256,7 +257,21 @@ def current_user(
     user.pop("mfa_recovery_codes", None)  # recovery-code hashes stay server-side
     # Workspace membership (multi-tenancy foundation): default when unset.
     from dashboard_api.tenancy import DEFAULT_ORG_ID
-    user["org_id"] = user.get("org_id") or DEFAULT_ORG_ID
+    home_org = user.get("org_id") or DEFAULT_ORG_ID
+    user["org_id"] = home_org
+    # Per-workspace acting org (scale-grade RBAC): under multi-tenancy a member of
+    # another workspace may act in it via X-Org-Id, taking their granted role AND
+    # data scope there. Requesting a workspace you're not a member of is a 403.
+    if x_org_id and x_org_id != home_org:
+        from dashboard_api import tenancy
+        if tenancy.enforced():
+            from dashboard_api.permissions import workspace_role
+            wr = workspace_role(user["id"], x_org_id)
+            if wr is None:
+                raise HTTPException(status_code=403, detail="No access to that workspace")
+            user["org_id"] = x_org_id
+            user["role"] = wr
+            user["acting_org"] = x_org_id
     return user
 
 
