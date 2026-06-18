@@ -390,11 +390,12 @@ that buying companies require. Realistic positioning today:
 - [ ] **Collector ecosystem** — a lightweight agent or certified
       Beats/Fluent Bit/Vector configs, with mTLS enrolment — "POST your logs
       here" is not an enterprise answer.
-- [ ] **API stability contract** — versioned REST API (`/v1`), deprecation
-      policy, webhook signing (HMAC header on outbound webhooks), and
-      OpenAPI docs published per release.
-- [ ] **Scale-grade RBAC** — custom roles (the matrix is fixed today),
-      per-workspace role assignment, and break-glass/audit-everything mode.
+- [~] **API stability contract** — **outbound webhook signing DONE** (HMAC +
+      idempotency + retries, see CHANGELOG). Still open: a versioned REST API
+      (`/v1`), deprecation policy, and per-release OpenAPI docs.
+- [~] **Scale-grade RBAC** — **custom roles DONE** (capability bundles via
+      `/roles`, fail-closed, no-privilege-escalation guard). Still open:
+      per-workspace role assignment and a break-glass/audit-everything mode.
 
 ---
 
@@ -679,6 +680,22 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-17 · External code-review remediation (audit_fixes.md).** Worked
+  through a deep third-party review across ~17 commits: persisted log_api results
+  + per-job reports (no in-memory leak / shared file), tenant-scoped webhooks
+  (cross-tenant leak), log_api constant-time keys + safe CORS + no exception-text
+  leakage, CSP/HSTS, non-root + healthcheck + gunicorn for threat_api/log_api, MFA
+  TOTP-replay rejection, OIDC exact-kid match, ingress byte cap + report escaping,
+  and the **ML detector** fixed (no by-construction false positives on benign
+  logs; MITRE technique derived from the real signal, not hardcoded T1595). Added
+  the first real unit tests to threat_api + log_api (1→8 each: parsers, detectors,
+  normalisation, correlation, trust-scoring, STIX). Honest positioning (README
+  "Project status", OSINT/ML framing), MIT LICENSE, untracked `.pyc`, language
+  bar. **Also caught a real Postgres deadlock + claim-overlap in the multi-worker
+  detection pool** (invisible on SQLite) that had been failing the backend-postgres
+  CI job — fixed via fired-rules-only / sorted `last_fired` updates and a
+  `FOR UPDATE SKIP LOCKED` claim; the Tests workflow is green again.
 
 - **2026-06-15 · Measured load baseline (`bench.py` + `docs/LOAD_LIMITS.md`).**
   "Load limits" were a guess; now there's a repeatable benchmark and a captured
