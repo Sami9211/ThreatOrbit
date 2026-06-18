@@ -639,6 +639,17 @@ CREATE TABLE IF NOT EXISTS sessions (
     revoked     INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS break_glass (
+    id             TEXT PRIMARY KEY,
+    user_id        TEXT NOT NULL,
+    reason         TEXT NOT NULL,
+    activated_by   TEXT NOT NULL,
+    activated_at   TEXT NOT NULL,
+    expires_at     TEXT NOT NULL,
+    deactivated_at TEXT,
+    org_id         TEXT NOT NULL DEFAULT 'org-default'
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_ts ON scans(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_sev ON alerts(severity);
@@ -666,6 +677,7 @@ CREATE INDEX IF NOT EXISTS idx_sightings_ioc ON ioc_sightings(ioc_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_enrich_value ON ioc_enrichments(ioc_value, provider, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, revoked);
+CREATE INDEX IF NOT EXISTS idx_break_glass_user ON break_glass(user_id, deactivated_at);
 """
 
 

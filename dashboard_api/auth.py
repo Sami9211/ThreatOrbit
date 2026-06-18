@@ -293,16 +293,26 @@ def require_perm(*perms: str):
 
     def dep(user: dict = Depends(current_user)) -> dict:
         role = user.get("role", "")
-        if not any(has_perm(role, p) for p in perms):
-            try:
-                from dashboard_api.db import audit, get_conn
-                with get_conn() as conn:
-                    audit(conn, user.get("email", "?"), "rbac.denied", ",".join(perms),
-                          f"role={role}")
-                    conn.commit()
-            except Exception:
-                pass
-            raise HTTPException(status_code=403,
-                                detail=f"Requires permission: {' or '.join(perms)}")
-        return user
+        if any(has_perm(role, p) for p in perms):
+            return user
+        # Base role lacks it. A live break-glass session grants any capability -
+        # but each such elevated use is audited individually so the trail shows
+        # exactly what the emergency access was used for.
+        from dashboard_api import break_glass
+        if break_glass.is_active(user.get("id")):
+            _audit_rbac(user, "rbac.break_glass", perms, f"role={role} (emergency elevation)")
+            return user
+        _audit_rbac(user, "rbac.denied", perms, f"role={role}")
+        raise HTTPException(status_code=403,
+                            detail=f"Requires permission: {' or '.join(perms)}")
     return dep
+
+
+def _audit_rbac(user: dict, action: str, perms, detail: str) -> None:
+    try:
+        from dashboard_api.db import audit, get_conn
+        with get_conn() as conn:
+            audit(conn, user.get("email", "?"), action, ",".join(perms), detail)
+            conn.commit()
+    except Exception:
+        pass

@@ -423,8 +423,13 @@ that buying companies require. Realistic positioning today:
       **contract test** that fails if a documented path is removed without a
       version bump.
 - [~] **Scale-grade RBAC** — **custom roles DONE** (capability bundles via
-      `/roles`, fail-closed, no-privilege-escalation guard). Still open:
-      per-workspace role assignment and a break-glass/audit-everything mode.
+      `/roles`, fail-closed, no-privilege-escalation guard) **and break-glass /
+      audit-everything DONE** (2026-06-18, see CHANGELOG): a time-boxed emergency
+      elevation gated by a `break_glass.use` capability (admin + manager only, so
+      analyst/viewer can never self-elevate); while live it grants any capability
+      the base role lacks and **audits each elevated use individually**
+      (`rbac.break_glass`), plus a critical notification on activate. Still open:
+      per-workspace role assignment.
 
 ---
 
@@ -719,6 +724,25 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Scale-grade RBAC: break-glass / audit-everything mode.** Added
+  time-boxed **emergency RBAC elevation** for the case where the normal approver
+  is unavailable. New `dashboard_api/break_glass.py` + a `break_glass` table:
+  a user whose **base** role holds the new `break_glass.use` capability (admin +
+  manager by default - analyst/viewer can never self-elevate) calls
+  `POST /auth/break-glass` with a reason; while the session is live, `require_perm`
+  grants any capability the base role lacks **and audits each such elevated use
+  individually** (`rbac.break_glass`, target = the capability), so the trail shows
+  exactly what the emergency access did. Activation/deactivation are audited and
+  raise a **critical notification**; sessions auto-expire
+  (`DASHBOARD_BREAK_GLASS_MAX_MINUTES`, default cap 240) and can be ended early
+  (`POST /auth/break-glass/deactivate`); `GET /auth/break-glass` shows your state,
+  `GET /auth/break-glass/active` (users.manage) lists all live sessions, and
+  `/auth/permissions` reflects the elevation so the UI unlocks. The default
+  install is byte-for-byte unaffected (no session = ordinary RBAC); the change to
+  `require_perm` only touches the would-be-denial path. Tests in
+  `test_break_glass.py` (5): no self-elevation for viewer, manager gains
+  license.manage only while active + per-use audit, expiry, endpoint lifecycle,
+  admin session list. Full suite green.
 - **2026-06-18 · Retention cold-storage: object-storage (S3) writer.** Closed the
   last open piece of Retention tiering — cold storage no longer has to be a local
   disk. `dashboard_api/archive.py` grew a second, independently-enableable sink:

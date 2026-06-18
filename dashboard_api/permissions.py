@@ -27,6 +27,7 @@ CAPABILITIES = {
     "license.manage": "Activate, issue and clear license keys",
     "users.manage": "Create and update users",
     "users.delete": "Delete users",
+    "break_glass.use": "Activate emergency break-glass elevation (time-boxed, fully audited)",
 }
 
 _ALL = set(CAPABILITIES)

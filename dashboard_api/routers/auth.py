@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from dashboard_api.auth import (
     create_token, current_session_id, current_user, hash_password,
-    record_session, verify_password,
+    record_session, require_perm, verify_password,
 )
 from dashboard_api.config import ALLOW_REGISTRATION, AUTH_FAILURE_WINDOW_SEC, AUTH_MAX_FAILURES
 from dashboard_api.db import audit, get_conn, row_to_dict
@@ -357,11 +357,69 @@ def test_slack_routing(user: dict = Depends(current_user)):
 @router.get("/permissions")
 def my_permissions(user: dict = Depends(current_user)):
     """The caller's effective capabilities - the UI uses this to hide controls
-    the role can't use (RBAC depth)."""
+    the role can't use (RBAC depth). While a break-glass session is live the
+    effective set is every capability (the server enforces the same)."""
     from dashboard_api.permissions import CAPABILITIES, perms_for
-    granted = sorted(perms_for(user["role"]))
-    return {"role": user["role"], "permissions": granted,
+    from dashboard_api import break_glass
+    elevated = break_glass.is_active(user.get("id"))
+    granted = sorted(CAPABILITIES) if elevated else sorted(perms_for(user["role"]))
+    return {"role": user["role"], "permissions": granted, "breakGlass": elevated,
             "capabilities": {p: p in granted for p in CAPABILITIES}}
+
+
+class BreakGlassRequest(BaseModel):
+    reason: str
+    minutes: int | None = None
+
+
+@router.get("/break-glass")
+def break_glass_status(user: dict = Depends(current_user)):
+    """The caller's current break-glass state."""
+    from dashboard_api import break_glass
+    return break_glass.status(user.get("id"))
+
+
+@router.post("/break-glass")
+def break_glass_activate(body: BreakGlassRequest,
+                         user: dict = Depends(require_perm("break_glass.use"))):
+    """Activate emergency elevation for the caller (time-boxed, audited, and
+    surfaced as a critical notification). Requires the base role to hold
+    `break_glass.use`, so a viewer/analyst can never self-elevate."""
+    from dashboard_api import break_glass, tenancy
+    from dashboard_api.routers.platform import notify
+    reason = (body.reason or "").strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail="A reason (>=3 chars) is required")
+    with get_conn() as conn:
+        st = break_glass.activate(conn, user_id=user["id"], reason=reason,
+                                  minutes=body.minutes or break_glass.DEFAULT_MINUTES,
+                                  activated_by=user["email"], org_id=tenancy.org_of(user))
+        audit(conn, user["email"], "break_glass.activate", user["id"],
+              f"reason={reason} until={st['expiresAt']}")
+        notify(conn, type="security", severity="critical",
+               title=f"Break-glass activated: {user['email']}",
+               detail=f"{reason} (until {st['expiresAt']})", link="/dashboard/config")
+        conn.commit()
+    return st
+
+
+@router.post("/break-glass/deactivate")
+def break_glass_deactivate(user: dict = Depends(current_user)):
+    """End the caller's break-glass session early."""
+    from dashboard_api import break_glass
+    with get_conn() as conn:
+        closed = break_glass.deactivate(conn, user["id"])
+        if closed:
+            audit(conn, user["email"], "break_glass.deactivate", user["id"], "ended early")
+        conn.commit()
+    return {"active": False, "closed": closed}
+
+
+@router.get("/break-glass/active")
+def break_glass_active(user: dict = Depends(require_perm("users.manage"))):
+    """All currently-live break-glass sessions (admin/manager visibility)."""
+    from dashboard_api import break_glass
+    return {"sessions": break_glass.active_sessions()}
 
 
 @router.post("/change-password")
