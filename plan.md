@@ -411,9 +411,15 @@ that buying companies require. Realistic positioning today:
       authentication** (scoped keys now authenticate as service principals);
       per-collector keys are individually revocable, with mTLS enrolment
       documented for transport identity.
-- [~] **API stability contract** — **outbound webhook signing DONE** (HMAC +
-      idempotency + retries, see CHANGELOG). Still open: a versioned REST API
-      (`/v1`), deprecation policy, and per-release OpenAPI docs.
+- [x] **API stability contract** — DONE (see CHANGELOG): outbound webhook
+      signing (HMAC + idempotency + retries), **and a versioned REST API** — every
+      route is served under `/v1` as an exact alias (pure-ASGI rewrite, single
+      route table, `X-API-Version` header), a written **deprecation policy**
+      (`docs/API_VERSIONING.md`, RFC 8594 `Deprecation`/`Sunset` via
+      `mark_deprecated`), **per-release OpenAPI** snapshots
+      (`scripts/openapi_snapshot.py` + live `/openapi.json` + `/docs`), and a
+      **contract test** that fails if a documented path is removed without a
+      version bump.
 - [~] **Scale-grade RBAC** — **custom roles DONE** (capability bundles via
       `/roles`, fail-closed, no-privilege-escalation guard). Still open:
       per-workspace role assignment and a break-glass/audit-everything mode.
@@ -629,8 +635,9 @@ events and notifications broadcast), tenant lifecycle tooling
   is HMAC-SHA256 signed (`X-ThreatOrbit-Signature: t=…,v1=…`, Stripe scheme) with
   a per-hook `whsec_` secret shown once at create/rotate, and carries an
   `X-ThreatOrbit-Delivery` idempotency id, and **retries with exponential
-  backoff** (the stable id lets subscribers dedupe). See CHANGELOG. Still open
-  here: a **versioned API** (`/v1`), deprecation policy, and per-release OpenAPI.
+  backoff** (the stable id lets subscribers dedupe). See CHANGELOG. The
+  **versioned API (`/v1`) + deprecation policy + per-release OpenAPI** are now
+  DONE too (2026-06-18, see CHANGELOG) — this P2 line is fully closed.
 - **Platform self-observability is partial**: `/metrics` exists, but there's no
   distributed tracing, SLOs/error budgets, alerting on the platform's *own*
   health, or synthetic checks.
@@ -710,6 +717,34 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · API stability contract: versioned `/v1` + deprecation policy +
+  per-release OpenAPI.** Closed the last open piece of the API-stability item.
+  Added `dashboard_api/api_versioning.py`: a pure-ASGI `ApiVersionMiddleware`
+  (added outermost) rewrites a leading `/v1` off the request path before routing,
+  so **every** endpoint is served under `/v1` as an exact alias of the canonical
+  path (`/v1/siem/alerts` == `/siem/alerts`) with one route table and no
+  duplicated OpenAPI operations; `/v1` responses carry `X-API-Version: v1`. The
+  bundled frontend keeps using the unversioned (legacy-alias) paths unchanged.
+  Wrote the **deprecation policy** (`docs/API_VERSIONING.md`): URL-versioning,
+  the additive-only stability guarantee within a major, RFC 8594 `Deprecation`/
+  `Sunset` signalling via a new tested `mark_deprecated()` helper, and a ≥6-month
+  grace process. **Per-release OpenAPI**: `scripts/openapi_snapshot.py` emits the
+  stable path surface (`docs/api/v1-paths.json`, 220 paths) and, with `--full`,
+  the complete schema (FastAPI also serves `/openapi.json` + `/docs` live).
+  Enforced by `test_api_contract.py` (7 tests: `/v1` alias parity inc. login +
+  meta, version header present/absent, unknown-path 404, `mark_deprecated`
+  headers, and **a contract gate that fails if a documented path is removed
+  without a version bump**). No behaviour change to existing clients.
+- **2026-06-18 · Roadmap honesty pass (stale `[~]` → `[x]`).** Audited the
+  in-progress markers against the actual code/CHANGELOG and corrected six whose
+  stated "Remaining:" work had already shipped: **Billing** (Stripe self-serve
+  done — `billing.py`/`routers/billing.py`/`test_billing.py`), **Postgres option**
+  (validated against live PG 16 + a CI service-container job), **E2E suite** and
+  **Mobile-responsive** (34 Playwright tests green across desktop-chromium +
+  mobile-safari in CI), **SSO** (OIDC + SAML 2.0 + SCIM 2.0 all shipped, incl.
+  deprovisioning), and **Detection content library** (content-update channel via
+  `POST /siem/content/apply`). No code change — roadmap accuracy only; genuine
+  follow-ups were re-noted on each item.
 - **2026-06-18 · Parser & source breadth: EDR + M365 + firewalls + TLS syslog.**
   The ingest pipeline recognised Windows/Sysmon and the three clouds; this closes
   the rest of the enterprise source list. New `_apply_*` mappers in
@@ -739,16 +774,6 @@ _Move completed items here with the date so the roadmap stays honest._
   `test_ingest_sources.py` (per-vendor mappings, anti-hijack guards, an
   ingest-endpoint round-trip, and deframer framing); full suite green. Still
   ahead: agentless S3/blob pull and CEF/LEEF decoding.
-- **2026-06-18 · Roadmap honesty pass (stale `[~]` → `[x]`).** Audited the
-  in-progress markers against the actual code/CHANGELOG and corrected six whose
-  stated "Remaining:" work had already shipped: **Billing** (Stripe self-serve
-  done — `billing.py`/`routers/billing.py`/`test_billing.py`), **Postgres option**
-  (validated against live PG 16 + a CI service-container job), **E2E suite** and
-  **Mobile-responsive** (34 Playwright tests green across desktop-chromium +
-  mobile-safari in CI), **SSO** (OIDC + SAML 2.0 + SCIM 2.0 all shipped, incl.
-  deprovisioning), and **Detection content library** (content-update channel via
-  `POST /siem/content/apply`). No code change — roadmap accuracy only; genuine
-  follow-ups were re-noted on each item.
 - **2026-06-18 · Background-service HA (leader election).** The engine tick,
   connector/report scheduler and file-watcher were single-instance — two app
   replicas would double-generate telemetry, double-import connectors,

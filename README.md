@@ -222,8 +222,9 @@ ThreatOrbit-V2/
 `docs/` ships deeper references: `architecture.md`, `opencti_integration.md`,
 `api_examples.md`, **`DEPLOYMENT.md`** (proxy/TLS topology, nginx + Caddy
 configs, env checklist), **`OPERATIONS.md`** (backup/restore, retention,
-runbook) and **`SUPPORTED_SOURCES.md`** (the parser/source matrix — which
-vendor log shapes normalise onto the detection vocabulary).
+runbook), **`SUPPORTED_SOURCES.md`** (the parser/source matrix — which vendor
+log shapes normalise onto the detection vocabulary) and **`API_VERSIONING.md`**
+(the `/v1` contract + deprecation policy).
 
 ---
 

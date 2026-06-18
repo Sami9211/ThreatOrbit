@@ -54,6 +54,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added last → outermost: rewrite the stable `/v1` alias to the canonical path
+# before routing/metrics see it. See dashboard_api/api_versioning.py.
+from dashboard_api.api_versioning import ApiVersionMiddleware  # noqa: E402
+app.add_middleware(ApiVersionMiddleware)
 
 
 @app.exception_handler(StarletteHTTPException)
