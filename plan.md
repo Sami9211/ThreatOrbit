@@ -664,12 +664,16 @@ from the same batch were fixed (see CHANGELOG).
   browser): richer per-domain narrative in the overall report, charts beyond the
   bars, and a tighter print layout - pending the user's eyeball on the grouped
   version.
-- [ ] **Dead hyperlinks audit.** Many links across the app go nowhere. Sweep
-  every `href`/router push, then either wire to the real route or remove. Add a
-  test/lint that flags links to non-existent routes.
-- [ ] **Actor profiles page "dead".** Added a defensive guard on the live-data
-  mapping; if it's still blank, it's a render/route error (needs a browser to
-  repro) - check the detail panel + the `/dashboard/cti/actors` route boundary.
+- [x] **Dead hyperlinks audit** — DONE (see CHANGELOG): every internal
+  `href`/`router.push` was swept and **all 222 navigation targets resolve to a
+  real App-Router route** (no code-level dead links). A permanent gate
+  (`scripts/check-routes.mjs`, wired into the frontend CI job) now derives the
+  route set from the filesystem and fails the build on any link to a
+  non-existent route, so this can't regress.
+- [x] **Actor profiles page "dead"** — DONE (see CHANGELOG): the live-data
+  mapping now guards `aliases`/`sectors`/`ttps` (it already guarded
+  `campaigns`/`malware`/`motivations`), so an API actor missing those arrays no
+  longer crashes the detail panel's `.map()` render.
 - [ ] **Overview → SOC dashboard?** *Recommendation:* keep the Overview as the
   executive/at-a-glance landing (health, top risks, recent activity) and add a
   **dedicated, separate SOC/analyst dashboard** (real-time alert queue, triage
@@ -681,6 +685,21 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-18 · Dead-link gate + actor-profile crash fix.** Two frontend
+  roadmap items closed. (1) **Dead hyperlinks**: swept every internal
+  `href`/`href:`/`link:`/`router.push` target in `app|components|lib`; all 222
+  resolve to a real route (the only leading-slash literals that *aren't* routes
+  are the `path:` keys documenting backend REST endpoints on the docs page,
+  which are correctly excluded). Added `frontend/scripts/check-routes.mjs` — it
+  discovers the route set by walking the App Router tree (handling route groups
+  and `@slots`), validates template-literal links on their literal prefix, and
+  fails the build on any link to a non-existent route; wired into the frontend
+  CI job (`npm run check:routes`) so dead links can't regress. (2) **Actor
+  profiles "dead"**: the live-actor mapping in `cti/actors/page.tsx` guarded
+  `campaigns`/`malware`/`motivations` but not `aliases`/`sectors`/`ttps`, so a
+  live actor missing any of those arrays crashed the detail panel's `.map()`
+  render. Now all three are `Array.isArray(…) ? … : []` guarded.
 
 - **2026-06-17 · Per-table retention windows.** Retention used one global
   `data_retention_days` for every table; now each table reads its own

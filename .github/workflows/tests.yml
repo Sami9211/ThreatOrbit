@@ -77,4 +77,5 @@ jobs:
         run: |
           npm ci
           npx tsc --noEmit
+          npm run check:routes
           npm run build
