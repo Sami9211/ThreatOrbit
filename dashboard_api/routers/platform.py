@@ -364,5 +364,6 @@ def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
     out = {"retentionDays": default_days, "perTableDays": windows, "purged": purged}
     if archive.enabled():
         out["archived"] = archived
-        out["archiveDir"] = config.ARCHIVE_DIR
+        out["archiveDir"] = config.ARCHIVE_DIR          # kept for back-compat
+        out["archiveTargets"] = archive.targets()        # {dir?, s3?}
     return out

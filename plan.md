@@ -372,10 +372,12 @@ that buying companies require. Realistic positioning today:
       Failover within one TTL; `/config/leader` exposes the holder. The syslog
       UDP listener stays single-writer by deployment (bind one node / VIP),
       documented.
-- [~] **Retention tiering** — archive/export before purge **and per-table
-      retention windows DONE** (a `retention_days_<table>` setting per table,
-      falling back to the global default; see CHANGELOG). Still open: a direct
-      object-storage (S3) writer (cold storage is a local dir today).
+- [x] **Retention tiering** — DONE (see CHANGELOG): archive/export before purge,
+      per-table retention windows (`retention_days_<table>`), **and a direct
+      object-storage (S3) writer** — each purged batch is also written as an
+      immutable gzip object via a stdlib SigV4-signed PUT (AWS or S3-compatible:
+      MinIO/R2/B2), gating the purge like the local sink. Cold storage is no
+      longer tied to a local disk.
 
 ### Tier 3 — large enterprise / MSSP
 
@@ -717,6 +719,22 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Retention cold-storage: object-storage (S3) writer.** Closed the
+  last open piece of Retention tiering — cold storage no longer has to be a local
+  disk. `dashboard_api/archive.py` grew a second, independently-enableable sink:
+  alongside the local gzip-NDJSON dir, setting `DASHBOARD_ARCHIVE_S3_BUCKET`
+  (+ `_PREFIX`/`_REGION`/`_ENDPOINT`) writes each purged batch as an **immutable
+  gzip object** via an **AWS SigV4-signed `PUT`** — stdlib-only (hmac/hashlib),
+  no boto3 — that works against S3 and S3-compatible stores (MinIO, Cloudflare R2,
+  Backblaze B2 via the path-style `_ENDPOINT`). Credentials come from the standard
+  AWS environment. Both sinks gate the purge: any sink failure raises `OSError`,
+  so rows are never deleted unarchived (the existing retention guard, unchanged).
+  The retention response now reports `archiveTargets` ({dir?, s3?}). The SigV4
+  signer is factored into a testable `_sign()`; `test_retention_archive.py` adds a
+  **known-answer test against AWS's published S3 GET-Object example**
+  (cross-verified against botocore, then botocore removed so tests stay
+  stdlib-only), plus signed-PUT structure, path-style endpoint, dual-sink, and
+  fail-closed-on-error cases. Full suite green.
 - **2026-06-18 · API stability contract: versioned `/v1` + deprecation policy +
   per-release OpenAPI.** Closed the last open piece of the API-stability item.
   Added `dashboard_api/api_versioning.py`: a pure-ASGI `ApiVersionMiddleware`

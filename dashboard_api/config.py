@@ -106,8 +106,16 @@ DETECTION_WORKERS = max(1, int(os.environ.get("DASHBOARD_DETECTION_WORKERS", "1"
 # --- Data lifecycle -------------------------------------------------------------
 # When set to a writable directory, retention enforcement archives each batch of
 # purged rows to compressed NDJSON there BEFORE deleting them, so compliance can
-# keep raw logs cheaply (sync the dir to object storage). Unset = purge-only.
+# keep raw logs cheaply. Unset = purge-only (unless an object store is set below).
 ARCHIVE_DIR = os.environ.get("DASHBOARD_ARCHIVE_DIR", "").strip()
+# Direct object-storage archival (S3 / S3-compatible): set a bucket to write each
+# purged batch as an immutable gzip object via a SigV4-signed PUT. Credentials
+# come from the standard AWS environment. _ENDPOINT enables path-style for
+# MinIO/R2/B2; leave unset for AWS. Independent of (and combinable with) the dir.
+ARCHIVE_S3_BUCKET = os.environ.get("DASHBOARD_ARCHIVE_S3_BUCKET", "").strip()
+ARCHIVE_S3_PREFIX = os.environ.get("DASHBOARD_ARCHIVE_S3_PREFIX", "").strip()
+ARCHIVE_S3_REGION = os.environ.get("DASHBOARD_ARCHIVE_S3_REGION", "").strip()
+ARCHIVE_S3_ENDPOINT = os.environ.get("DASHBOARD_ARCHIVE_S3_ENDPOINT", "").strip()
 
 # --- Audit trail external sink (tamper-evidence) --------------------------------
 # When set, every audit event is also shipped (fire-and-forget) to this HTTP
