@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Search, Activity, Zap, Brain, Radio, Settings, Home,
   ChevronRight, AlertTriangle, Wifi, Server, EyeOff,
-  PanelLeftOpen, PanelLeftClose, X, ChevronDown,
+  PanelLeftOpen, PanelLeftClose, X, ChevronDown, Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
@@ -29,7 +29,10 @@ type NavGroup = {
 const NAV: NavGroup[] = [
   {
     section: null,
-    items: [{ href: '/dashboard', label: 'Overview', icon: Globe }],
+    items: [
+      { href: '/dashboard', label: 'Overview', icon: Globe },
+      { href: '/dashboard/soc', label: 'SOC Console', icon: Gauge },
+    ],
   },
   {
     section: 'Intelligence',

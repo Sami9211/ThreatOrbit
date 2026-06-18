@@ -587,6 +587,26 @@ export const createAlert = (body: {
     }),
   })
 export const fetchSiemKpis = () => api<SiemKpis>('/siem/kpis')
+
+export interface SlaBreach {
+  id: string; title: string; severity: 'critical' | 'high' | 'medium' | 'low' | 'info'; status: string
+  owner: string | null; ageMinutes: number; riskScore: number
+  mitreTactic: string; mitreTechId: string; srcIp: string; hostname: string | null
+  ruleName: string; slaType: 'ack' | 'resolve'; thresholdMinutes: number
+}
+export interface SocTriage {
+  open: { total: number; critical: number; high: number; medium: number; low: number; info: number; unassigned: number }
+  byStatus: Record<string, number>
+  oldestOpenMinutes: number
+  sla: {
+    breachCount: number
+    breaches: SlaBreach[]
+    ackThresholds: Record<string, number>
+    resolveThresholds: Record<string, number>
+  }
+}
+export const fetchTriage = () => api<SocTriage>('/siem/triage')
+
 export const fetchRules    = () => api<Rule[]>('/siem/rules')
 export const patchRule     = (id: string, body: { status?: string; severityOverride?: string; suppressionWindow?: number }) =>
   api<Rule>(`/siem/rules/${id}`, {
@@ -1357,6 +1377,13 @@ export const dismissOnboarding = () =>
   api<{ dismissed: boolean }>('/config/onboarding/dismiss', { method: 'POST' })
 
 // ── Live engine control ──────────────────────────────────────────────
+export interface EngineQueue {
+  depth: number
+  inFlight: number
+  lagSeconds: number
+  maxBacklog: number
+  shedding: boolean
+}
 export interface EngineStatus {
   mode: string
   running: boolean
@@ -1365,6 +1392,7 @@ export interface EngineStatus {
   alertsProduced: number
   totalAlerts: number
   darkWebFindings: number
+  queue?: EngineQueue
 }
 export const fetchEngineStatus = () => api<EngineStatus>('/config/engine')
 export const controlEngine = (body: { enabled?: boolean; generate?: number }) =>

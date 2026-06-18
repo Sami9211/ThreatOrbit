@@ -674,18 +674,33 @@ from the same batch were fixed (see CHANGELOG).
   mapping now guards `aliases`/`sectors`/`ttps` (it already guarded
   `campaigns`/`malware`/`motivations`), so an API actor missing those arrays no
   longer crashes the detail panel's `.map()` render.
-- [ ] **Overview → SOC dashboard?** *Recommendation:* keep the Overview as the
-  executive/at-a-glance landing (health, top risks, recent activity) and add a
-  **dedicated, separate SOC/analyst dashboard** (real-time alert queue, triage
-  state, MITRE coverage, ingestion/EPS + queue-lag from the new backpressure
-  metrics, on-call/SLA timers) rather than overloading Overview. Two audiences,
-  two views; the SOC view reuses existing endpoints (`/siem/*`, `/config/engine`
-  queue stats, `/overview/*`).
+- [x] **Overview → SOC dashboard** — DONE (see CHANGELOG): the Overview stays
+  the executive landing; a **dedicated SOC Console** (`/dashboard/soc`) was added
+  for analysts — live open-alert queue, SLA-breach timers (ack vs resolve, ages
+  from real alert timestamps), triage-state breakdown, MITRE coverage, and
+  pipeline backpressure (queue depth/in-flight/lag, load-shedding). Backed by a
+  new `/siem/triage` endpoint plus the existing `/siem/kpis`,
+  `/config/engine`, `/siem/attack-coverage`, `/siem/log-listeners`; 20s live
+  refresh; every number is real data.
 
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · SOC Console (analyst dashboard).** Split the two audiences:
+  Overview stays the executive at-a-glance; a new **SOC Console**
+  (`/dashboard/soc`, top-level nav under Overview) is the analyst's live
+  operational surface. New backend endpoint **`GET /siem/triage`** returns the
+  open-alert queue rolled up by severity, the unassigned load, the status
+  breakdown, the oldest-open age, and **SLA breaches classified ack-vs-resolve**
+  — ages computed from real alert timestamps, thresholds admin-tunable via
+  `sla_ack_<sev>_mins` / `sla_resolve_<sev>_mins` settings (sane per-severity
+  defaults). The page composes that with the existing `/siem/kpis` (MTTA/MTTR/
+  EPS), `/config/engine` queue backpressure (depth/in-flight/lag, load-shedding
+  bar), `/siem/attack-coverage` (coverage ring), and `/siem/log-listeners`, on a
+  20s live refresh. Worst-first breach rows deep-link into the SIEM queue.
+  Tests: `test_soc_triage.py` (open rollup, ack/resolve classification,
+  unassigned count, threshold override). No synthesised numbers.
 - **2026-06-18 · Dead-link gate + actor-profile crash fix.** Two frontend
   roadmap items closed. (1) **Dead hyperlinks**: swept every internal
   `href`/`href:`/`link:`/`router.push` target in `app|components|lib`; all 222

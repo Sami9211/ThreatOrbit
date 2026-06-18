@@ -357,6 +357,90 @@ def siem_kpis(user: dict = Depends(current_user)):
     }
 
 
+# ── SOC triage queue + SLA ─────────────────────────────────────────────────────
+
+# SLA policy in minutes, by severity. Ack = first move off 'new'; resolve =
+# reaching resolved/closed. Admin-tunable via settings keys sla_ack_<sev>_mins
+# and sla_resolve_<sev>_mins. These are policy thresholds, not data.
+_OPEN_STATUSES = ("new", "assigned", "in-progress", "pending")
+_SLA_ACK_DEFAULTS = {"critical": 15, "high": 60, "medium": 240, "low": 1440, "info": 1440}
+_SLA_RESOLVE_DEFAULTS = {"critical": 240, "high": 1440, "medium": 4320, "low": 10080, "info": 10080}
+
+
+def _age_minutes(ts_str, now: datetime) -> float:
+    try:
+        ts = datetime.fromisoformat(str(ts_str))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return max(0.0, (now - ts).total_seconds() / 60)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+@router.get("/triage")
+def soc_triage(user: dict = Depends(current_user)):
+    """Operational SOC snapshot for the analyst console: the open-alert queue by
+    severity, unassigned load, status breakdown, queue age, and SLA breaches -
+    all computed from real alert timestamps. Only the SLA thresholds are policy
+    (admin-tunable); every count and age is live from the alerts table."""
+    now = datetime.now(timezone.utc)
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, ts, title, severity, status, owner, risk_score, mitre_tactic, "
+            "mitre_tech_id, src_ip, hostname, rule_name FROM alerts "
+            f"WHERE status IN ('new','assigned','in-progress','pending') {sc}", sp
+        ).fetchall()
+        sla_settings = {r["key"]: r["value"] for r in conn.execute(
+            "SELECT key, value FROM settings WHERE key LIKE 'sla_%'").fetchall()}
+
+    def _thr(kind: str, sev: str, default: int) -> int:
+        try:
+            return int(sla_settings.get(f"sla_{kind}_{sev}_mins", default))
+        except (ValueError, TypeError):
+            return default
+
+    by_sev = {s: 0 for s in ("critical", "high", "medium", "low", "info")}
+    by_status = {s: 0 for s in _OPEN_STATUSES}
+    unassigned = 0
+    oldest = 0.0
+    breaches = []
+    for r in rows:
+        sev = r["severity"]
+        by_sev[sev] = by_sev.get(sev, 0) + 1
+        by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+        if not (r["owner"] or "").strip():
+            unassigned += 1
+        age = _age_minutes(r["ts"], now)
+        oldest = max(oldest, age)
+        ack_thr = _thr("ack", sev, _SLA_ACK_DEFAULTS.get(sev, 1440))
+        res_thr = _thr("resolve", sev, _SLA_RESOLVE_DEFAULTS.get(sev, 10080))
+        kind = "ack" if (r["status"] == "new" and age > ack_thr) else ("resolve" if age > res_thr else None)
+        if kind:
+            breaches.append({
+                "id": r["id"], "title": r["title"], "severity": sev, "status": r["status"],
+                "owner": r["owner"] or None, "ageMinutes": round(age, 1),
+                "riskScore": r["risk_score"], "mitreTactic": r["mitre_tactic"],
+                "mitreTechId": r["mitre_tech_id"], "srcIp": r["src_ip"], "hostname": r["hostname"],
+                "ruleName": r["rule_name"], "slaType": kind,
+                "thresholdMinutes": ack_thr if kind == "ack" else res_thr,
+            })
+    breaches.sort(key=lambda b: -b["ageMinutes"])
+    return {
+        "open": {"total": sum(by_sev.values()),
+                 **{k: by_sev[k] for k in ("critical", "high", "medium", "low", "info")},
+                 "unassigned": unassigned},
+        "byStatus": by_status,
+        "oldestOpenMinutes": round(oldest, 1),
+        "sla": {
+            "breachCount": len(breaches),
+            "breaches": breaches[:25],
+            "ackThresholds": {s: _thr("ack", s, d) for s, d in _SLA_ACK_DEFAULTS.items()},
+            "resolveThresholds": {s: _thr("resolve", s, d) for s, d in _SLA_RESOLVE_DEFAULTS.items()},
+        },
+    }
+
+
 # ── MITRE distribution ────────────────────────────────────────────────────────
 
 _SEV_WEIGHT = {"critical": 25, "high": 15, "medium": 7, "low": 3, "info": 1}
