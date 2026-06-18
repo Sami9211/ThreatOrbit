@@ -1,0 +1,33 @@
+# systemd unit for the ThreatOrbit log collector.
+#
+# Install:
+#   sudo install -m744 threatorbit_collector.py /usr/local/bin/threatorbit-collector
+#   sudo install -m640 collector.env /etc/threatorbit/collector.env   # see collector.env.example
+#   sudo cp threatorbit-collector.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now threatorbit-collector
+#
+# The checkpoint (THREATORBIT_STATE) lives under /var/lib/threatorbit so reads
+# resume cleanly across restarts.
+
+[Unit]
+Description=ThreatOrbit log collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/threatorbit/collector.env
+ExecStart=/usr/bin/python3 /usr/local/bin/threatorbit-collector
+Restart=on-failure
+RestartSec=5
+# Run unprivileged; grant read on the log paths via supplementary groups (e.g. adm).
+DynamicUser=yes
+SupplementaryGroups=adm
+StateDirectory=threatorbit
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

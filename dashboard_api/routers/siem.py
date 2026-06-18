@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
@@ -693,17 +693,19 @@ def export_sigma_rule(rule_id: str):
     return {"yaml": rule_to_sigma(rule), "source": "generated"}
 
 
-@router.post("/ingest")
-def ingest(body: IngestBody, user: dict = Depends(current_user)):
-    """Native log collector: POST raw log lines (syslog/apache/json/kv/auto),
-    they're parsed into events and the detection rules + threat-intel matching
-    fire on them. This is how production logs stream into the SIEM."""
-    if not body.lines:
+_INGEST_FORMATS = ("auto", "json", "apache", "nginx", "kv", "syslog", "generic")
+
+
+def _ingest_core(lines: list[str], fmt: str, source: str, actor_email: str) -> dict:
+    """Shared ingest path for the structured and raw collector endpoints: validate,
+    apply backpressure, parse → events → detection, and audit. One implementation
+    so both entry points behave identically."""
+    if not lines:
         raise HTTPException(status_code=400, detail="No log lines supplied")
-    if len(body.lines) > 5000:
+    if len(lines) > 5000:
         raise HTTPException(status_code=400, detail="Max 5000 lines per request")
-    if body.format not in ("auto", "json", "apache", "nginx", "kv", "syslog", "generic"):
-        raise HTTPException(status_code=400, detail="Unsupported format")
+    if fmt not in _INGEST_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format (one of {list(_INGEST_FORMATS)})")
     # Backpressure: shed load with 429 when the detection backlog is already too
     # deep, rather than accepting events the pipeline can't keep up with.
     from dashboard_api.config import INGEST_MAX_BACKLOG
@@ -717,12 +719,59 @@ def ingest(body: IngestBody, user: dict = Depends(current_user)):
                 detail=f"Ingest backpressure: detection backlog {backlog} ≥ {INGEST_MAX_BACKLOG}. Retry shortly.",
                 headers={"Retry-After": "5"})
     from dashboard_api.ingest import ingest_lines
-    result = ingest_lines(body.lines, body.format, body.source.strip() or "collector")
+    source = (source or "collector").strip() or "collector"
+    result = ingest_lines(lines, fmt, source)
     with get_conn() as conn:
-        audit(conn, user["email"], "siem.ingest", body.source,
+        audit(conn, actor_email, "siem.ingest", source,
               f"lines={result['parsed']} alerts={result['alerts']}")
         conn.commit()
     return result
+
+
+@router.post("/ingest")
+def ingest(body: IngestBody, user: dict = Depends(current_user)):
+    """Native log collector: POST raw log lines (syslog/apache/json/kv/auto),
+    they're parsed into events and the detection rules + threat-intel matching
+    fire on them. This is how production logs stream into the SIEM."""
+    return _ingest_core(body.lines, body.format, body.source, user["email"])
+
+
+def _lines_from_raw(raw: bytes, content_type: str) -> list[str]:
+    """Coerce a vendor collector's native payload into log lines. Accepts
+    text/plain & ndjson (newline-split) and application/json (a string array, an
+    object array → one JSON line each, or a single object). This is what lets
+    Fluent Bit / Vector / Filebeat ship to us with no custom shaping."""
+    ctype = (content_type or "").split(";")[0].strip().lower()
+    text = raw.decode("utf-8", "replace")
+    if ctype == "application/json":
+        import json as _json
+        try:
+            doc = _json.loads(text)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+        items = doc if isinstance(doc, list) else [doc]
+        out = []
+        for it in items:
+            out.append(it if isinstance(it, str) else _json.dumps(it, separators=(",", ":")))
+        return [ln for ln in out if ln.strip()]
+    # text/plain, application/x-ndjson, or unspecified → split on newlines
+    return [ln.rstrip("\r") for ln in text.split("\n") if ln.strip()]
+
+
+@router.post("/ingest/raw")
+async def ingest_raw(
+    request: Request,
+    format: str = Query("auto", description=f"one of {list(_INGEST_FORMATS)}"),
+    source: str = Query("collector"),
+    user: dict = Depends(current_user),
+):
+    """Vendor-friendly ingest for certified Fluent Bit / Vector / Filebeat
+    configs: POST raw text (newline-delimited), NDJSON, or a JSON array — no
+    `{lines:[…]}` envelope required. Same parsing, detection, backpressure and
+    audit as /siem/ingest."""
+    raw = await request.body()
+    lines = _lines_from_raw(raw, request.headers.get("content-type", ""))
+    return _ingest_core(lines, format, source, user["email"])
 
 
 @router.post("/detection/drain")

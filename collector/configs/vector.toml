@@ -1,0 +1,41 @@
+# Certified Vector → ThreatOrbit SIEM configuration.
+#
+# File source → http sink. Vector batches and checkpoints reads on disk
+# (data_dir), so restarts resume cleanly. The http sink with JSON encoding posts
+# a JSON array, which /siem/ingest/raw accepts directly.
+#
+# Provide the key via env:  export THREATORBIT_API_KEY=to_sk_live_xxxxxxxx
+# then:  vector --config vector.toml
+
+data_dir = "/var/lib/vector"           # checkpoint store: resume after restart
+
+[sources.host_logs]
+type = "file"
+include = ["/var/log/auth.log", "/var/log/syslog", "/var/log/nginx/*.log"]
+read_from = "beginning"
+
+[sinks.threatorbit]
+type = "http"
+inputs = ["host_logs"]
+uri = "https://soc.example.com:8002/siem/ingest/raw?format=json&source=vector"
+method = "post"
+compression = "none"
+encoding.codec = "json"               # emits a JSON array of events
+
+[sinks.threatorbit.request.headers]
+Authorization = "Bearer ${THREATORBIT_API_KEY}"
+X-API-Key = "${THREATORBIT_API_KEY}"
+
+[sinks.threatorbit.batch]
+max_events = 500                       # stay under the 5000 lines/request cap
+
+# Backpressure: Vector retries on the 429 ThreatOrbit returns when its detection
+# backlog is full, so you never overrun the pipeline.
+[sinks.threatorbit.request]
+retry_attempts = 10
+
+# TLS (recommended). For mTLS enrolment, add a client cert/key:
+# [sinks.threatorbit.tls]
+# ca_file = "/etc/ssl/certs/threatorbit-ca.pem"
+# crt_file = "/etc/threatorbit/collector.crt"
+# key_file = "/etc/threatorbit/collector.key"

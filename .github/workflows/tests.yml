@@ -29,6 +29,8 @@ jobs:
         run: cd threat_api && python -m pytest -q
       - name: log_api
         run: cd log_api && python -m pytest -q
+      - name: collector (stdlib agent)
+        run: python -m pytest collector/tests -q
 
   backend-postgres:
     runs-on: ubuntu-latest

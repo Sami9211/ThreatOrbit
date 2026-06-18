@@ -388,9 +388,13 @@ that buying companies require. Realistic positioning today:
       (external / can't self-certify): an independent **SOC 2 Type II** (then ISO
       27001) program and data-residency options. Enterprises ask for these before
       the first PoC ends.
-- [ ] **Collector ecosystem** — a lightweight agent or certified
-      Beats/Fluent Bit/Vector configs, with mTLS enrolment — "POST your logs
-      here" is not an enterprise answer.
+- [x] **Collector ecosystem** — DONE (see CHANGELOG): a stdlib-only first-party
+      agent (tail + checkpoint + rotation + at-least-once + backpressure) **and**
+      certified Fluent Bit / Vector / Beats→Logstash configs, all shipping to a
+      new vendor-friendly `/siem/ingest/raw`. Unblocked by real **API-key
+      authentication** (scoped keys now authenticate as service principals);
+      per-collector keys are individually revocable, with mTLS enrolment
+      documented for transport identity.
 - [~] **API stability contract** — **outbound webhook signing DONE** (HMAC +
       idempotency + retries, see CHANGELOG). Still open: a versioned REST API
       (`/v1`), deprecation policy, and per-release OpenAPI docs.
@@ -687,6 +691,26 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Collector ecosystem + API-key authentication.** Two gaps
+  closed together. **(1) API-key auth** — issued keys (`to_sk_live_…` etc.) were
+  minted and stored but nothing actually *accepted* them on requests, so no
+  non-interactive client could authenticate. `auth.current_user` now resolves a
+  presented API key (Bearer **or** `X-API-Key`) into a synthetic service
+  principal, verified against `api_keys` (sha256, revocation-checked,
+  last_used-stamped); scope maps onto the role matrix (read→viewer,
+  write→analyst, admin→admin) so every `require_perm` gate works unchanged.
+  Tests in `test_api_key_auth.py` (both headers, scope→permission, revocation,
+  forged-key rejection). **(2) Collector ecosystem** — a single-file stdlib
+  agent `collector/threatorbit_collector.py` that tails files, **checkpoints
+  read offsets** (atomic state file → restart never re-ships or drops a line),
+  handles rotation/truncation, batches, and honours ingest backpressure (429 +
+  Retry-After); plus **certified configs** for Fluent Bit, Vector, and
+  Filebeat→Logstash. To accept what those agents emit natively, added
+  **`POST /siem/ingest/raw`** (plain text / NDJSON / JSON array → lines), sharing
+  one `_ingest_core` with `/siem/ingest` (validation, backpressure, audit).
+  systemd unit + env template + README (install, scoped-key enrolment, mTLS).
+  Tests: `collector/tests/test_collector.py` (tail/checkpoint/rotation/at-least-
+  once, wired into CI) and `test_ingest_raw.py` (all vendor shapes + auth).
 - **2026-06-18 · SOC Console (analyst dashboard).** Split the two audiences:
   Overview stays the executive at-a-glance; a new **SOC Console**
   (`/dashboard/soc`, top-level nav under Overview) is the analyst's live

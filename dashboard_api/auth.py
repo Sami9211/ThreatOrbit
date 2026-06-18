@@ -13,7 +13,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException, Security
+from fastapi import Depends, Header, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from dashboard_api.config import JWT_SECRET, JWT_TTL_MINUTES
@@ -168,12 +168,59 @@ def decode_token(token: str) -> dict:
 
 _bearer = HTTPBearer(auto_error=False)
 
+# Non-interactive service credentials. Issued API keys carry a scope-encoding
+# prefix (see config.create_api_key); a presented token starting with one of
+# these is a machine credential (collectors, CI, integrations) and is verified
+# against the api_keys table rather than JWT-decoded. Scope maps onto the
+# built-in role matrix so every require_perm gate works unchanged.
+_API_KEY_PREFIXES = ("to_ak_live_", "to_sk_live_", "to_rk_live_")
+_API_KEY_SCOPE_ROLE = {"admin": "admin", "write": "analyst", "read": "viewer"}
 
-def current_user(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> dict:
-    """Resolve the authenticated user from the Bearer token, fresh from the DB."""
-    if creds is None or not creds.credentials:
+
+def _principal_from_api_key(token: str) -> dict | None:
+    """If `token` is a ThreatOrbit API key, verify it and return a synthetic
+    service principal; None if it isn't key-shaped (so the JWT path takes over).
+    A key-shaped but invalid/revoked token raises 401 — it never falls through."""
+    if not any(token.startswith(p) for p in _API_KEY_PREFIXES):
+        return None
+    # The stored secret_hash is sha256 of the full secret; look the key up by
+    # that hash directly (the high-entropy digest is the lookup key, GitHub-PAT
+    # style — no plaintext secret is ever stored or compared).
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, name, scope, revoked, secret_hash FROM api_keys WHERE secret_hash=?",
+            (digest,)).fetchone()
+        if row is None or not hmac.compare_digest(str(row["secret_hash"]), digest):
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        if row["revoked"]:
+            raise HTTPException(status_code=401, detail="API key revoked")
+        conn.execute("UPDATE api_keys SET last_used=? WHERE id=?", (now, row["id"]))
+        conn.commit()
+    from dashboard_api.tenancy import DEFAULT_ORG_ID
+    role = _API_KEY_SCOPE_ROLE.get(str(row["scope"]), "viewer")
+    # A complete principal so downstream code (audit, tenancy, RBAC) is happy.
+    return {
+        "id": row["id"], "email": f"apikey:{row['name']}", "name": row["name"],
+        "role": role, "status": "active", "org_id": DEFAULT_ORG_ID,
+        "is_service": True, "api_key_scope": row["scope"],
+    }
+
+
+def current_user(
+    creds: HTTPAuthorizationCredentials = Security(_bearer),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+) -> dict:
+    """Resolve the authenticated principal. Accepts either a human JWT (Bearer)
+    or a machine API key (Bearer or X-API-Key header), fresh from the DB."""
+    token = (creds.credentials if creds and creds.credentials else None) or x_api_key
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    payload = decode_token(creds.credentials)
+    service = _principal_from_api_key(token)
+    if service is not None:
+        return service
+    payload = decode_token(token)
     sid = payload.get("sid")
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()
