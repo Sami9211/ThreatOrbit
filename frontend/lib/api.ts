@@ -836,6 +836,7 @@ export const runScheduledHunts = () =>
   api<{ ran: number; alerts: number }>('/siem/hunts/run-scheduled', { method: 'POST' })
 export interface LogListenerStatus {
   syslogPort: number | null; syslogEnabled: boolean
+  syslogTlsPort?: number | null; syslogTlsEnabled?: boolean; syslogTlsMtls?: boolean
   watchDir: string | null; watchEnabled: boolean; watchIntervalSeconds: number
 }
 export const fetchLogListeners = () => api<LogListenerStatus>('/siem/log-listeners')

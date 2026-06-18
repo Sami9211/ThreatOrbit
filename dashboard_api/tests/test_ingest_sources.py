@@ -1,13 +1,16 @@
-"""Source breadth: Windows Security events and AWS CloudTrail records normalise
-onto the native event vocabulary at ingest, so the same detection rules fire on
-them (e.g. Windows 4625 -> failed_login, CloudTrail CreateAccessKey ->
-create_access_key).
+"""Source breadth: high-value vendor shapes normalise onto the native event
+vocabulary at ingest, so the same detection rules fire on them - Windows
+Security, Sysmon, the three clouds (CloudTrail / Entra / GCP), endpoint EDR
+(CrowdStrike Falcon, SentinelOne), Microsoft 365 (Defender AH + Office audit),
+and firewalls (Palo Alto PAN-OS, Fortinet FortiGate). Plus RFC 5425 (TLS
+syslog) stream deframing.
 """
 import json
 import uuid
 
 from dashboard_api.db import get_conn
 from dashboard_api.ingest import parse_line
+from dashboard_api.log_listeners import deframe_syslog
 
 
 def test_windows_security_events_map_to_native_vocab():
@@ -114,6 +117,172 @@ def test_gcp_audit_records_map_to_native_vocab():
         "authenticationInfo": {"principalEmail": "eve@x"},
         "requestMetadata": {"callerIp": "10.0.0.9"}, "status": {"code": 7}}}))
     assert e["event_type"] == "policy_change" and e["action"] == "deny"
+
+
+def test_crowdstrike_falcon_records_map_to_native_vocab():
+    # Streaming-API envelope: failed user logon (event_simpleName)
+    e = parse_line(json.dumps({"metadata": {"eventType": "EpDetectionEvent"},
+                               "event": {"event_simpleName": "UserLogonFailed2", "ComputerName": "WS-9",
+                                         "UserName": r"CORP\bob"}}))
+    assert e["event_type"] == "failed_login" and e["username"] == "bob"
+    assert e["hostname"] == "WS-9" and e["category"] == "auth" and e["mitre_tech_id"] == "T1110"
+
+    # DetectionSummaryEvent → malware_detected, technique + severity + IP mapped
+    e = parse_line(json.dumps({"metadata": {"eventType": "DetectionSummaryEvent"},
+                               "event": {"ComputerName": "WS-1", "UserName": "alice", "FileName": "evil.exe",
+                                         "TechniqueId": "T1059", "SeverityName": "Critical",
+                                         "LocalAddressIP4": "10.1.1.1"}}))
+    assert e["event_type"] == "malware_detected" and e["severity_hint"] == "critical"
+    assert e["mitre_tech_id"] == "T1059" and e["process_name"] == "evil.exe" and e["src_ip"] == "10.1.1.1"
+
+    # network connect (flattened, no envelope) → remote ip/port
+    e = parse_line(json.dumps({"event_simpleName": "NetworkConnectIP4", "ComputerName": "WS-2",
+                               "RemoteAddressIP4": "203.0.113.5", "RemotePort": "443"}))
+    assert e["event_type"] == "network_connect" and e["dest_ip"] == "203.0.113.5" and e["dest_port"] == 443
+
+    # arbitrary JSON without CrowdStrike markers is not hijacked
+    e = parse_line(json.dumps({"event": {"foo": 1}, "src_ip": "10.0.0.1"}))
+    assert e["event_type"] != "falcon_event" and e["src_ip"] == "10.0.0.1"
+
+
+def test_sentinelone_threat_maps_to_native_vocab():
+    e = parse_line(json.dumps({
+        "threatInfo": {"classification": "Ransomware", "threatName": "Conti", "processName": "conti.exe"},
+        "agentRealtimeInfo": {"agentComputerName": "FIN-7"},
+        "agentDetectionInfo": {"agentLastLoggedInUserName": r"CORP\svc", "externalIp": "198.51.100.9"}}))
+    assert e["event_type"] == "malware_detected" and e["mitre_tech_id"] == "T1486"
+    assert e["hostname"] == "FIN-7" and e["username"] == "svc" and e["src_ip"] == "198.51.100.9"
+    assert e["process_name"] == "conti.exe" and e["category"] == "endpoint"
+
+    # generic malware classification → T1204
+    e = parse_line(json.dumps({"threatInfo": {"classification": "Malware", "threatName": "x"},
+                               "agentRealtimeInfo": {"agentComputerName": "H1"}}))
+    assert e["event_type"] == "malware_detected" and e["mitre_tech_id"] == "T1204"
+
+    # plain JSON without S1 nested objects is not hijacked
+    e = parse_line(json.dumps({"classification": "Malware", "src_ip": "10.0.0.1"}))
+    assert e["event_type"] != "malware_detected" and e["src_ip"] == "10.0.0.1"
+
+
+def test_m365_defender_advanced_hunting_maps_to_native_vocab():
+    # logon failed → failed_login (feeds the brute-force rule)
+    e = parse_line(json.dumps({"ActionType": "LogonFailed", "DeviceName": "LT-3",
+                               "AccountName": "alice", "RemoteIP": "203.0.113.7"}))
+    assert e["event_type"] == "failed_login" and e["username"] == "alice"
+    assert e["src_ip"] == "203.0.113.7" and e["hostname"] == "LT-3" and e["mitre_tech_id"] == "T1110"
+
+    # AV detection → malware_detected (critical)
+    e = parse_line(json.dumps({"ActionType": "AntivirusDetection", "DeviceName": "LT-4",
+                               "FileName": "bad.dll", "InitiatingProcessAccountName": "svc"}))
+    assert e["event_type"] == "malware_detected" and e["severity_hint"] == "critical"
+    assert e["process_name"] == "bad.dll" and e["mitre_tech_id"] == "T1204" and e["username"] == "svc"
+
+    # network connection → dest ip/port from Remote*, src from LocalIP
+    e = parse_line(json.dumps({"ActionType": "ConnectionSuccess", "DeviceId": "abc",
+                               "RemoteIP": "8.8.8.8", "RemotePort": 53, "LocalIP": "10.0.0.4"}))
+    assert e["event_type"] == "network_connect" and e["dest_ip"] == "8.8.8.8"
+    assert e["dest_port"] == 53 and e["src_ip"] == "10.0.0.4"
+
+    # ActionType without a Defender companion field is NOT hijacked
+    e = parse_line(json.dumps({"ActionType": "Something", "src_ip": "10.0.0.1"}))
+    assert e["event_type"] != "defender_something" and e["src_ip"] == "10.0.0.1"
+
+
+def test_m365_office_audit_maps_to_native_vocab():
+    # failed sign-in; ClientIP carries a :port that must be stripped
+    e = parse_line(json.dumps({"Operation": "UserLoginFailed", "Workload": "AzureActiveDirectory",
+                               "UserId": "bob@corp.com", "ClientIP": "203.0.113.8:51000"}))
+    assert e["event_type"] == "failed_login" and e["username"] == "bob@corp.com"
+    assert e["src_ip"] == "203.0.113.8" and e["mitre_tech_id"] == "T1110"
+
+    # inbox-rule creation (Exchange) → mailbox_rule
+    e = parse_line(json.dumps({"Operation": "New-InboxRule", "Workload": "Exchange",
+                               "UserId": "eve@corp.com", "RecordType": 1}))
+    assert e["event_type"] == "mailbox_rule" and e["mitre_tech_id"] == "T1114.003"
+
+    # add-member-to-role → group_change
+    e = parse_line(json.dumps({"Operation": "Add member to role.", "Workload": "AzureActiveDirectory",
+                               "UserId": "adm@corp.com"}))
+    assert e["event_type"] == "group_change" and e["mitre_tech_id"] == "T1098"
+
+    # generic JSON carrying an 'Operation' but no M365 companion is not hijacked
+    e = parse_line(json.dumps({"Operation": "noop", "src_ip": "10.0.0.1"}))
+    assert e["event_type"] != "m365_audit" and e["src_ip"] == "10.0.0.1"
+
+
+def test_panos_firewall_maps_to_native_vocab():
+    # THREAT / vulnerability → ips_alert, action normalised to deny
+    e = parse_line(json.dumps({"type": "THREAT", "subtype": "vulnerability", "src": "45.9.1.2",
+                               "dst": "10.0.0.5", "dport": 443, "action": "reset-both",
+                               "rule": "inbound-web", "sessionid": 1234, "app": "web-browsing"}))
+    assert e["event_type"] == "ips_alert" and e["src_ip"] == "45.9.1.2" and e["dest_ip"] == "10.0.0.5"
+    assert e["dest_port"] == 443 and e["action"] == "deny" and e["mitre_tech_id"] == "T1190"
+
+    # TRAFFIC allow (carries "src", a PA-specific field set) → firewall_allow
+    e = parse_line(json.dumps({"type": "TRAFFIC", "src": "10.0.0.9", "dst": "8.8.8.8",
+                               "dport": 53, "action": "allow", "app": "dns", "rule": "egress"}))
+    assert e["event_type"] == "firewall_allow" and e["action"] == "allow"
+
+    # a bare {"type":"TRAFFIC"} with no PA-specific field is not hijacked
+    e = parse_line(json.dumps({"type": "TRAFFIC", "message": "x", "src_ip": "10.0.0.1"}))
+    assert e["event_type"] != "firewall_allow" and e["src_ip"] == "10.0.0.1"
+
+
+def test_fortigate_firewall_json_and_kv_map_to_native_vocab():
+    # JSON, UTM/IPS → ips_alert
+    e = parse_line(json.dumps({"devname": "FGT-1", "type": "utm", "subtype": "ips",
+                               "srcip": "45.9.1.2", "dstip": "10.0.0.5", "dstport": 80,
+                               "action": "blocked", "user": "bob"}))
+    assert e["event_type"] == "ips_alert" and e["src_ip"] == "45.9.1.2" and e["mitre_tech_id"] == "T1190"
+    assert e["action"] == "deny" and e["hostname"] == "FGT-1" and e["username"] == "bob"
+
+    # key=value syslog (FortiGate's native format) with a quoted msg, denied traffic
+    kv = ('date=2026-06-18 type=traffic subtype=forward devname="FGT-2" '
+          'srcip=10.0.0.7 dstip=8.8.8.8 dstport=443 action=deny user="alice" '
+          'msg="connection blocked by policy"')
+    e = parse_line(kv)
+    assert e["event_type"] == "firewall_deny" and e["src_ip"] == "10.0.0.7"
+    assert e["dest_ip"] == "8.8.8.8" and e["dest_port"] == 443 and e["username"] == "alice"
+    assert e["action"] == "deny" and e["hostname"] == "FGT-2"
+
+    # virus subtype → malware_detected
+    e = parse_line(json.dumps({"logid": "0211", "type": "utm", "subtype": "virus",
+                               "srcip": "10.0.0.8", "action": "blocked"}))
+    assert e["event_type"] == "malware_detected" and e["mitre_tech_id"] == "T1204"
+
+
+def test_deframe_syslog_octet_counting_and_newline():
+    # octet-counting framing (RFC 5425): "<len> <msg>"
+    msg = "<34>1 2026-06-18T00:00:00Z host app - - - hello"
+    msgs, rem = deframe_syslog(f"{len(msg)} {msg}".encode())
+    assert msgs == [msg] and rem == b""
+
+    # two octet frames back to back, no remainder
+    a, b = "first message", "second"
+    msgs, rem = deframe_syslog(f"{len(a)} {a}{len(b)} {b}".encode())
+    assert msgs == [a, b] and rem == b""
+
+    # partial octet frame → carried as remainder, nothing emitted yet
+    msgs, rem = deframe_syslog(b"20 only-ten")
+    assert msgs == [] and rem == b"20 only-ten"
+
+    # non-transparent (newline) framing, trailing partial line preserved
+    msgs, rem = deframe_syslog(b"line one\nline two\npartial")
+    assert msgs == ["line one", "line two"] and rem == b"partial"
+
+
+def test_ingest_endpoint_stores_edr_and_firewall(client, auth):
+    tag = uuid.uuid4().hex[:8]
+    cs = json.dumps({"event_simpleName": "UserLogonFailed2", "ComputerName": "WS-9",
+                     "UserName": f"cs-{tag}"})
+    fw = ('type=traffic subtype=forward devname="FGT-X" '
+          f'srcip=10.9.9.9 dstip=8.8.8.8 dstport=53 action=deny user="fw-{tag}"')
+    r = client.post("/siem/ingest", json={"lines": [cs, fw], "format": "auto"}, headers=auth)
+    assert r.status_code == 200 and r.json()["parsed"] == 2
+    with get_conn() as conn:
+        a = conn.execute("SELECT event_type FROM events WHERE username=?", (f"cs-{tag}",)).fetchone()
+        b = conn.execute("SELECT event_type FROM events WHERE username=?", (f"fw-{tag}",)).fetchone()
+    assert a["event_type"] == "failed_login" and b["event_type"] == "firewall_deny"
 
 
 def test_ingest_endpoint_stores_windows_and_cloudtrail(client, auth):

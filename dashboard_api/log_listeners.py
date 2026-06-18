@@ -6,11 +6,15 @@ watched directory, and the lines flow through the same `ingest_lines` pipeline
 (parse → events → detection + threat-intel matching → alerts).
 
 Both are off by default and enabled by env in live mode:
-  DASHBOARD_SYSLOG_PORT   (e.g. 5514; 0/unset = disabled)
-  DASHBOARD_LOG_WATCH_DIR (a directory to tail; unset = disabled)
+  DASHBOARD_SYSLOG_PORT      (UDP, e.g. 5514; 0/unset = disabled)
+  DASHBOARD_SYSLOG_TLS_PORT  (TLS, RFC 5425, e.g. 6514; needs cert+key below)
+  DASHBOARD_SYSLOG_TLS_CERT  (PEM server certificate)
+  DASHBOARD_SYSLOG_TLS_KEY   (PEM private key)
+  DASHBOARD_SYSLOG_TLS_CA    (optional PEM CA → require client certs = mTLS)
+  DASHBOARD_LOG_WATCH_DIR    (a directory to tail; unset = disabled)
 
 The core is socket/thread-free and unit-tested (`ingest_datagram`,
-`scan_log_dir`); the listeners are thin loops around it.
+`deframe_syslog`, `scan_log_dir`); the listeners are thin loops around it.
 """
 import logging
 import os
@@ -21,6 +25,10 @@ import time
 logger = logging.getLogger("dashboard_api.log_listeners")
 
 SYSLOG_PORT = int(os.environ.get("DASHBOARD_SYSLOG_PORT", "0") or "0")
+SYSLOG_TLS_PORT = int(os.environ.get("DASHBOARD_SYSLOG_TLS_PORT", "0") or "0")
+SYSLOG_TLS_CERT = os.environ.get("DASHBOARD_SYSLOG_TLS_CERT", "")
+SYSLOG_TLS_KEY = os.environ.get("DASHBOARD_SYSLOG_TLS_KEY", "")
+SYSLOG_TLS_CA = os.environ.get("DASHBOARD_SYSLOG_TLS_CA", "")
 WATCH_DIR = os.environ.get("DASHBOARD_LOG_WATCH_DIR", "")
 WATCH_INTERVAL = int(os.environ.get("DASHBOARD_LOG_WATCH_SECONDS", "10") or "10")
 
@@ -33,6 +41,42 @@ def ingest_datagram(data: bytes, source: str = "syslog-udp") -> dict:
     if not lines:
         return {"parsed": 0, "alerts": 0}
     return ingest_lines(lines, "auto", source)
+
+
+def deframe_syslog(buf: bytes) -> tuple[list[str], bytes]:
+    """Split a TCP/TLS syslog byte stream into complete messages (RFC 6587).
+
+    Supports **octet-counting** framing (``MSGLEN SP MSG`` - the method RFC 5425
+    mandates for syslog over TLS) AND **non-transparent** newline framing, so it
+    accepts both well-behaved RFC 5425 senders and simpler newline emitters.
+    Returns ``(messages, remainder)`` where remainder is the incomplete trailing
+    bytes to carry into the next read (a frame may span TCP segments)."""
+    messages: list[str] = []
+    while buf:
+        # Octet-counting: leading ASCII digits, a single space, then exactly
+        # that many bytes of message.
+        i = 0
+        while i < len(buf) and 0x30 <= buf[i] <= 0x39:   # '0'-'9'
+            i += 1
+        if 0 < i < len(buf) and buf[i] == 0x20:
+            length = int(buf[:i])
+            start, end = i + 1, i + 1 + length
+            if end > len(buf):
+                break                                    # frame not fully arrived
+            messages.append(buf[start:end].decode("utf-8", errors="replace"))
+            buf = buf[end:]
+            continue
+        if i > 0 and i == len(buf):
+            break                                        # digits only so far - wait
+        # Non-transparent framing: up to the next newline.
+        nl = buf.find(b"\n")
+        if nl < 0:
+            break                                        # line not yet terminated
+        line = buf[:nl].decode("utf-8", errors="replace").strip()
+        if line:
+            messages.append(line)
+        buf = buf[nl + 1:]
+    return messages, buf
 
 
 def scan_log_dir(directory: str, offsets: dict[str, int], source: str = "file-watch") -> dict:
@@ -82,6 +126,61 @@ def _syslog_loop(port: int):
             time.sleep(0.5)
 
 
+def _handle_tls_conn(ctx, raw_sock, addr):
+    """Wrap an accepted socket in TLS and ingest its octet/newline-framed
+    messages until the peer closes. One thread per connection."""
+    from dashboard_api.ingest import ingest_lines
+    try:
+        conn = ctx.wrap_socket(raw_sock, server_side=True)
+    except Exception:
+        try:
+            raw_sock.close()
+        except Exception:
+            pass
+        return
+    buf = b""
+    try:
+        while True:
+            chunk = conn.recv(65535)
+            if not chunk:
+                break
+            buf += chunk
+            messages, buf = deframe_syslog(buf)
+            lines = [m for m in messages if m.strip()]
+            if lines:
+                ingest_lines(lines, "auto", "syslog-tls")
+    except Exception:
+        logger.exception("syslog TLS connection from %s failed", addr)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _syslog_tls_loop(port: int, certfile: str, keyfile: str, cafile: str = ""):
+    import ssl
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(certfile=certfile, keyfile=keyfile)
+    if cafile:                                    # mutual TLS: require a client cert
+        ctx.load_verify_locations(cafile)
+        ctx.verify_mode = ssl.CERT_REQUIRED
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("0.0.0.0", port))
+    srv.listen(64)
+    logger.info("Syslog TLS listener bound on :%d (RFC 5425%s)", port,
+                ", mTLS" if cafile else "")
+    while True:
+        try:
+            raw_sock, addr = srv.accept()
+            threading.Thread(target=_handle_tls_conn, args=(ctx, raw_sock, addr),
+                             daemon=True).start()
+        except Exception:
+            logger.exception("syslog TLS accept failed")
+            time.sleep(0.5)
+
+
 def _watch_loop(directory: str, interval: int):
     offsets: dict[str, int] = {}
     # Prime offsets to current end-of-file so we only ingest NEW appends.
@@ -108,10 +207,17 @@ def _watch_loop(directory: str, interval: int):
 
 def start_listeners() -> dict:
     """Start whichever collectors are configured (live mode). Returns what ran."""
-    started = {"syslog": False, "fileWatch": False}
+    started = {"syslog": False, "syslogTls": False, "fileWatch": False}
     if SYSLOG_PORT > 0:
         threading.Thread(target=_syslog_loop, args=(SYSLOG_PORT,), daemon=True).start()
         started["syslog"] = True
+    if SYSLOG_TLS_PORT > 0 and SYSLOG_TLS_CERT and SYSLOG_TLS_KEY:
+        threading.Thread(target=_syslog_tls_loop,
+                         args=(SYSLOG_TLS_PORT, SYSLOG_TLS_CERT, SYSLOG_TLS_KEY, SYSLOG_TLS_CA),
+                         daemon=True).start()
+        started["syslogTls"] = True
+    elif SYSLOG_TLS_PORT > 0:
+        logger.warning("DASHBOARD_SYSLOG_TLS_PORT set but cert/key missing - TLS listener not started")
     if WATCH_DIR:
         threading.Thread(target=_watch_loop, args=(WATCH_DIR, WATCH_INTERVAL), daemon=True).start()
         started["fileWatch"] = True
@@ -119,6 +225,9 @@ def start_listeners() -> dict:
 
 
 def listener_status() -> dict:
+    tls_ready = bool(SYSLOG_TLS_PORT > 0 and SYSLOG_TLS_CERT and SYSLOG_TLS_KEY)
     return {"syslogPort": SYSLOG_PORT or None, "syslogEnabled": SYSLOG_PORT > 0,
+            "syslogTlsPort": SYSLOG_TLS_PORT or None, "syslogTlsEnabled": tls_ready,
+            "syslogTlsMtls": bool(tls_ready and SYSLOG_TLS_CA),
             "watchDir": WATCH_DIR or None, "watchEnabled": bool(WATCH_DIR),
             "watchIntervalSeconds": WATCH_INTERVAL}

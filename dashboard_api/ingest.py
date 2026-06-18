@@ -10,10 +10,17 @@ JSON ingest additionally recognises high-value source shapes and maps their
 distinctive fields onto the native vocabulary so the same rules fire on them:
 **Windows Security events** (EventID → event_type, e.g. 4625 → failed_login),
 **Sysmon** operational events (EID 1 → process_start, 3 → network_connect …),
-and the three major clouds' audit logs — **AWS CloudTrail** (eventName →
+the three major clouds' audit logs — **AWS CloudTrail** (eventName →
 event_type), **Microsoft Entra / Azure AD** sign-in + directory audit, and
-**GCP Cloud Audit** (methodName → event_type) — so e.g. a failed cloud sign-in
-lands as failed_login and a new key as create_access_key across all of them.
+**GCP Cloud Audit** (methodName → event_type); **endpoint EDR** — **CrowdStrike
+Falcon** (event_simpleName / DetectionSummaryEvent) and **SentinelOne** (threat
+alerts); **Microsoft 365** — **Defender for Endpoint** Advanced-Hunting
+(ActionType) and the **Office 365 / M365 unified audit log** (Operation); and
+**firewalls** — **Palo Alto PAN-OS** (TRAFFIC/THREAT) and **Fortinet FortiGate**
+(JSON or key=value) — so e.g. a failed cloud/EDR/M365 sign-in lands as
+failed_login, a new key as create_access_key, and an AV/IPS hit as
+malware_detected / ips_alert across all of them. TLS syslog (RFC 5425) streams
+in through the same pipeline (see `log_listeners.deframe_syslog`).
 
 Every parser returns the same normalised event shape the rule engine reads:
 {category, event_type, src_ip, dest_ip, dest_port, username, hostname,
@@ -380,6 +387,325 @@ def _apply_gcp_audit(ev: dict, obj: dict) -> bool:
     return True
 
 
+# ── CrowdStrike Falcon (Streaming API / FDR) ──
+# event_simpleName keys most telemetry; DetectionSummaryEvent carries the
+# detection verdict. Mapped onto the native endpoint/network/auth vocabulary.
+_CS_SEV = {"critical": "critical", "high": "high", "medium": "medium",
+           "low": "low", "informational": "info", "info": "info"}
+_CROWDSTRIKE_SIMPLENAME = {
+    "ProcessRollup2": ("process_start", "endpoint", "medium", "T1059"),
+    "SyntheticProcessRollup2": ("process_start", "endpoint", "medium", "T1059"),
+    "DnsRequest": ("dns_query", "network", "low", "T1071.004"),
+    "NetworkConnectIP4": ("network_connect", "network", "low", None),
+    "NetworkReceiveAcceptIP4": ("network_connect", "network", "low", None),
+    "UserLogonFailed2": ("failed_login", "auth", "high", "T1110"),
+    "UserLogon": ("login_success", "auth", "low", "T1078"),
+    "UserLogon2": ("login_success", "auth", "low", "T1078"),
+}
+
+# ── Microsoft 365 Defender / Defender for Endpoint (Advanced Hunting) ──
+# Every Advanced-Hunting row is keyed by ActionType across the Device* tables.
+_DEFENDER_ACTIONTYPE = {
+    "LogonFailed": ("failed_login", "auth", "high", "T1110"),
+    "LogonSuccess": ("login_success", "auth", "low", "T1078"),
+    "ProcessCreated": ("process_start", "endpoint", "medium", "T1059"),
+    "CreateProcess": ("process_start", "endpoint", "medium", "T1059"),
+    "ProcessCreatedUsingWmiQuery": ("process_start", "endpoint", "high", "T1047"),
+    "PowerShellCommand": ("process_start", "endpoint", "high", "T1059.001"),
+    "ConnectionSuccess": ("network_connect", "network", "low", None),
+    "ConnectionRequest": ("network_connect", "network", "low", None),
+    "DnsQueryResponse": ("dns_query", "network", "low", "T1071.004"),
+    "AntivirusDetection": ("malware_detected", "endpoint", "critical", "T1204"),
+    "AntivirusReport": ("malware_detected", "endpoint", "critical", "T1204"),
+    "SmartScreenUrlWarning": ("malware_detected", "endpoint", "high", "T1204"),
+    "FileCreated": ("file_create", "endpoint", "low", None),
+    "RegistryValueSet": ("registry_change", "endpoint", "low", "T1112"),
+}
+
+# ── Microsoft 365 / Office 365 Unified Audit Log (Management Activity API) ──
+# Keyed by Operation across Workloads (AzureActiveDirectory, Exchange, …).
+_M365_OPERATION = {
+    "UserLoggedIn": ("login_success", "auth", "low", "T1078"),
+    "UserLoginFailed": ("failed_login", "auth", "high", "T1110"),
+    "Add member to role.": ("group_change", "identity", "high", "T1098"),
+    "Add member to group.": ("group_change", "identity", "medium", "T1098"),
+    "New-InboxRule": ("mailbox_rule", "email", "high", "T1114.003"),
+    "Set-InboxRule": ("mailbox_rule", "email", "high", "T1114.003"),
+    "UpdateInboxRules": ("mailbox_rule", "email", "high", "T1114.003"),
+    "Add-MailboxPermission": ("mailbox_permission", "email", "high", "T1098.002"),
+    "FileDownloaded": ("file_download", "cloud", "low", "T1567.002"),
+    "FileDeleted": ("file_delete", "cloud", "low", "T1485"),
+    "Add service principal.": ("app_registration", "identity", "high", "T1098.001"),
+    "Add application.": ("app_registration", "identity", "high", "T1098.001"),
+    "Consent to application.": ("app_consent", "identity", "high", "T1528"),
+    "Disable Strong Authentication.": ("mfa_disabled", "identity", "high", "T1556.006"),
+}
+
+# ── Palo Alto PAN-OS THREAT subtype → native type ──
+_PANOS_SUBTYPE = {
+    "vulnerability": ("ips_alert", "high", "T1190"),
+    "spyware": ("malware_detected", "high", "T1071"),
+    "virus": ("malware_detected", "critical", "T1204"),
+    "wildfire": ("malware_detected", "critical", "T1204"),
+    "wildfire-virus": ("malware_detected", "critical", "T1204"),
+    "file": ("ips_alert", "medium", "T1190"),
+    "flood": ("ips_alert", "high", "T1498"),
+    "scan": ("port_scan", "medium", "T1046"),
+}
+
+_FW_DENY = ("deny", "drop", "blocked", "block", "reset", "reset-both",
+            "reset-client", "reset-server", "close")
+
+
+def _apply_crowdstrike(ev: dict, obj: dict) -> bool:
+    """CrowdStrike Falcon Streaming-API record: {"metadata": {"eventType": …},
+    "event": {…}} - or a flattened event carrying event_simpleName. Maps it onto
+    the native vocabulary. Returns True if matched."""
+    meta = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+    event = obj.get("event") if isinstance(obj.get("event"), dict) else {}
+    etype = str(meta.get("eventType") or "")
+    src = {**event, **obj}              # event sub-object, with envelope fallback
+    simple = src.get("event_simpleName") or src.get("EventSimpleName")
+    if not etype and not simple:
+        return False
+
+    def g(*keys):
+        for k in keys:
+            v = src.get(k)
+            if v not in (None, "", "-"):
+                return v
+        return None
+
+    if etype == "DetectionSummaryEvent" or src.get("DetectName") or src.get("Technique"):
+        ev["event_type"], ev["category"], ev["severity_hint"] = "malware_detected", "endpoint", "critical"
+        tid = g("TechniqueId")
+        ev["mitre_tech_id"] = str(tid) if tid and re.match(r"T\d{4}", str(tid)) else "T1204"
+        sev = g("SeverityName", "Severity")
+        if sev:
+            ev["severity_hint"] = _CS_SEV.get(str(sev).lower(), "high")
+    elif simple:
+        et, cat, sev, mitre = _CROWDSTRIKE_SIMPLENAME.get(
+            str(simple), (f"falcon_{simple}".lower(), "endpoint", "info", None))
+        ev["event_type"], ev["category"], ev["severity_hint"] = et, cat, sev
+        if mitre:
+            ev["mitre_tech_id"] = mitre
+    elif etype == "AuthActivityAuditEvent":
+        ev["event_type"], ev["category"] = "login_success", "auth"
+        if "fail" in str(g("OperationName") or "").lower():
+            ev["event_type"], ev["mitre_tech_id"], ev["severity_hint"] = "failed_login", "T1110", "high"
+    else:
+        ev["event_type"], ev["category"] = (f"falcon_{etype}".lower() if etype else "falcon_event"), "endpoint"
+
+    host = g("ComputerName", "Hostname", "hostname")
+    if host:
+        ev["hostname"] = str(host)
+    user = g("UserName", "UserPrincipal", "AccountName")
+    if user:
+        ev["username"] = str(user).split("\\")[-1]
+    proc = g("FileName", "ImageFileName", "CommandLine")
+    if proc:
+        ev["process_name"] = str(proc)
+    rip = g("RemoteAddressIP4", "RemoteIP", "RemoteAddress")
+    if rip and _is_ip(rip):
+        ev["dest_ip"] = str(rip)
+    lip = g("LocalAddressIP4", "LocalIP")
+    if lip and _is_ip(lip):
+        ev["src_ip"] = str(lip)
+    rport = g("RemotePort")
+    if rport is not None:
+        try:
+            ev["dest_port"] = int(rport)
+        except (ValueError, TypeError):
+            pass
+    return True
+
+
+def _apply_sentinelone(ev: dict, obj: dict) -> bool:
+    """SentinelOne threat / Deep-Visibility alert - distinctive nested objects
+    threatInfo / agentRealtimeInfo / agentDetectionInfo. Returns True if matched."""
+    ti = obj.get("threatInfo") if isinstance(obj.get("threatInfo"), dict) else {}
+    rt = obj.get("agentRealtimeInfo") if isinstance(obj.get("agentRealtimeInfo"), dict) else {}
+    di = obj.get("agentDetectionInfo") if isinstance(obj.get("agentDetectionInfo"), dict) else {}
+    if not (ti or rt or di):
+        return False
+    classification = str(ti.get("classification") or "").lower()
+    ev["category"] = "endpoint"
+    if "ransom" in classification:
+        ev["event_type"], ev["severity_hint"], ev["mitre_tech_id"] = "malware_detected", "critical", "T1486"
+    elif "malware" in classification or "trojan" in classification or ti.get("threatName"):
+        ev["event_type"], ev["severity_hint"], ev["mitre_tech_id"] = "malware_detected", "critical", "T1204"
+    else:
+        ev["event_type"], ev["severity_hint"] = "edr_alert", "high"
+    host = rt.get("agentComputerName") or di.get("agentComputerName") or obj.get("agentComputerName")
+    if host:
+        ev["hostname"] = str(host)
+    user = di.get("agentLastLoggedInUserName") or rt.get("agentLastLoggedInUserName")
+    if user:
+        ev["username"] = str(user).split("\\")[-1]
+    proc = ti.get("processName") or ti.get("threatName") or obj.get("sourceProcessName")
+    if proc:
+        ev["process_name"] = str(proc)
+    ip = di.get("externalIp") or rt.get("externalIp")
+    if ip and _is_ip(ip):
+        ev["src_ip"] = str(ip)
+    return True
+
+
+def _apply_m365_defender(ev: dict, obj: dict) -> bool:
+    """Microsoft 365 Defender / Defender for Endpoint Advanced-Hunting record
+    (DeviceLogonEvents, DeviceProcessEvents, DeviceNetworkEvents, …), keyed by
+    ActionType. Returns True if matched."""
+    action_type = obj.get("ActionType")
+    if not action_type:
+        return False
+    # ActionType alone is generic; require a Defender device/AH companion field.
+    if not any(k in obj for k in ("DeviceName", "DeviceId", "ReportId",
+                                  "InitiatingProcessFileName", "InitiatingProcessAccountName")):
+        return False
+    et, cat, sev, mitre = _DEFENDER_ACTIONTYPE.get(
+        str(action_type), (f"defender_{action_type}".lower(), "endpoint", "info", None))
+    ev["event_type"], ev["category"], ev["severity_hint"] = et, cat, sev
+    if mitre:
+        ev["mitre_tech_id"] = mitre
+
+    def g(*keys):
+        for k in keys:
+            v = obj.get(k)
+            if v not in (None, "", "-"):
+                return v
+        return None
+
+    host = g("DeviceName", "DeviceId")
+    if host:
+        ev["hostname"] = str(host)
+    user = g("AccountName", "AccountUpn", "InitiatingProcessAccountName", "InitiatingProcessAccountUpn")
+    if user:
+        ev["username"] = str(user).split("\\")[-1]
+    proc = g("FileName", "InitiatingProcessFileName")
+    if proc:
+        ev["process_name"] = str(proc)
+    rip = g("RemoteIP")
+    if et == "network_connect":
+        if rip and _is_ip(rip):
+            ev["dest_ip"] = str(rip)
+        lip = g("LocalIP")
+        if lip and _is_ip(lip):
+            ev["src_ip"] = str(lip)
+        rport = g("RemotePort")
+        if rport is not None:
+            try:
+                ev["dest_port"] = int(rport)
+            except (ValueError, TypeError):
+                pass
+    elif rip and _is_ip(rip):       # logon / process: RemoteIP is the origin
+        ev["src_ip"] = str(rip)
+    return True
+
+
+def _apply_m365_audit(ev: dict, obj: dict) -> bool:
+    """Microsoft 365 / Office 365 unified-audit-log record (Management Activity
+    API), keyed by Operation across Workloads. Returns True if matched."""
+    op = obj.get("Operation")
+    if not op:
+        return False
+    if not any(k in obj for k in ("Workload", "RecordType", "OrganizationId", "UserKey", "ResultStatus")):
+        return False
+    et, cat, sev, mitre = _M365_OPERATION.get(str(op), ("m365_audit", "cloud", "info", None))
+    if str(obj.get("ResultStatus") or "").lower() in ("failed", "failure") and et == "login_success":
+        et, sev, mitre = "failed_login", "high", "T1110"
+    ev["event_type"], ev["category"], ev["severity_hint"] = et, cat, sev
+    if mitre:
+        ev["mitre_tech_id"] = mitre
+    user = obj.get("UserId") or obj.get("UserKey")
+    if user:
+        ev["username"] = str(user)
+    ip = obj.get("ClientIP") or obj.get("ClientIPAddress") or obj.get("ActorIpAddress")
+    if ip:
+        m = _IPV4.search(str(ip))       # M365 ClientIP often carries :port / brackets
+        if m:
+            ev["src_ip"] = m.group(0)
+    return True
+
+
+def _fortigate_classify(ev: dict, type_, subtype, action) -> None:
+    """Map a FortiGate log's type/subtype/action onto the native vocabulary."""
+    t, st, act = (type_ or "").lower(), (subtype or "").lower(), (action or "").lower()
+    if "virus" in (t, st):
+        ev["event_type"], ev["category"], ev["severity_hint"], ev["mitre_tech_id"] = \
+            "malware_detected", "network", "critical", "T1204"
+    elif t in ("utm", "attack", "ips", "anomaly"):
+        ev["event_type"], ev["category"], ev["severity_hint"], ev["mitre_tech_id"] = \
+            "ips_alert", "network", "high", ("T1498" if st == "anomaly" else "T1190")
+    elif t in ("traffic", "forward", "local"):
+        denied = act in _FW_DENY
+        ev["event_type"] = "firewall_deny" if denied else "firewall_allow"
+        ev["category"], ev["severity_hint"] = "network", ("low" if denied else "info")
+    else:
+        ev["event_type"], ev["category"] = "firewall_log", "network"
+    if act:
+        ev["action"] = "deny" if act in _FW_DENY else "allow"
+
+
+def _apply_firewall(ev: dict, obj: dict) -> bool:
+    """Palo Alto PAN-OS or Fortinet FortiGate firewall log exported as JSON.
+    Returns True if matched. (FortiGate key=value syslog is handled in _parse_kv.)"""
+    # FortiGate uses srcip/dstip/devname; PAN-OS uses src/dst. Keep them distinct
+    # so a PAN-OS TRAFFIC log (which carries "src") is not mis-routed to Fortinet.
+    forti = ("devname" in obj or "devid" in obj or "logid" in obj or
+             (str(obj.get("type") or "").lower() in
+              ("traffic", "utm", "attack", "virus", "anomaly", "forward", "local")
+              and "srcip" in obj))
+    pa_type = str(obj.get("type") or obj.get("log_type") or "").upper()
+    panos = (pa_type in ("TRAFFIC", "THREAT") and
+             any(k in obj for k in ("sessionid", "threatid", "serial", "vsys",
+                                    "app", "rule", "subtype", "devicename")))
+    if not (forti or panos):
+        return False
+
+    def g(*keys):
+        for k in keys:
+            v = obj.get(k)
+            if v not in (None, "", "-"):
+                return v
+        return None
+
+    if panos and not forti:
+        subtype = str(g("subtype") or "").lower()
+        action = str(g("action") or "").lower()
+        if pa_type == "THREAT":
+            et, sev, mitre = _PANOS_SUBTYPE.get(subtype, ("ips_alert", "high", "T1190"))
+            ev["event_type"], ev["category"], ev["severity_hint"], ev["mitre_tech_id"] = et, "network", sev, mitre
+        else:
+            denied = action in _FW_DENY
+            ev["event_type"] = "firewall_deny" if denied else "firewall_allow"
+            ev["category"], ev["severity_hint"] = "network", ("low" if denied else "info")
+        if action:
+            ev["action"] = "deny" if action in _FW_DENY else "allow"
+        sip, dip = g("src", "srcip", "source"), g("dst", "dstip", "destination")
+        dport = g("dport", "dstport")
+        user = g("srcuser", "source_user", "user")
+    else:
+        _fortigate_classify(ev, g("type"), g("subtype"), g("action"))
+        sip, dip = g("srcip", "src"), g("dstip", "dst")
+        dport = g("dstport", "dport")
+        user = g("user", "srcuser", "unauthuser")
+    if sip and _is_ip(sip):
+        ev["src_ip"] = str(sip)
+    if dip and _is_ip(dip):
+        ev["dest_ip"] = str(dip)
+    if dport is not None:
+        try:
+            ev["dest_port"] = int(dport)
+        except (ValueError, TypeError):
+            pass
+    if user:
+        ev["username"] = str(user)
+    host = g("devname", "devicename", "dvc")
+    if host:
+        ev["hostname"] = str(host)
+    return True
+
+
 def _parse_json(line: str) -> dict | None:
     try:
         obj = json.loads(line)
@@ -416,11 +742,16 @@ def _parse_json(line: str) -> dict | None:
             pass
     if obj.get("event_type"):
         ev["event_type"] = str(obj["event_type"])
-    # Source-specific shapes (Windows Security / AWS CloudTrail) map their
-    # distinctive fields authoritatively onto the native vocabulary, so the same
-    # detection rules fire on them. Generic JSON/ECS handling fills the rest.
-    (_apply_sysmon(ev, obj) or _apply_windows(ev, obj) or _apply_cloudtrail(ev, obj)
-     or _apply_azure_ad(ev, obj) or _apply_gcp_audit(ev, obj))
+    # Source-specific shapes map their distinctive fields authoritatively onto
+    # the native vocabulary, so the same detection rules fire on them. First
+    # match wins; discriminators are tight so generic JSON falls through to the
+    # ECS/heuristic handling below. Order: most-specific envelopes first,
+    # broad-discriminator firewall logs last.
+    (_apply_sysmon(ev, obj) or _apply_windows(ev, obj)
+     or _apply_crowdstrike(ev, obj) or _apply_sentinelone(ev, obj)
+     or _apply_m365_defender(ev, obj) or _apply_m365_audit(ev, obj)
+     or _apply_cloudtrail(ev, obj) or _apply_azure_ad(ev, obj) or _apply_gcp_audit(ev, obj)
+     or _apply_firewall(ev, obj))
     # ECS documents (nested or dotted keys) normalise at ingest time too.
     # Entity fields still holding only the raw-line regex guess are "weak" -
     # the producer's ECS values are authoritative over them.
@@ -432,21 +763,35 @@ def _parse_json(line: str) -> dict | None:
 
 def _parse_kv(line: str) -> dict:
     ev = _base_event(line)
-    for m in re.finditer(r"(\w+)=([^\s]+)", line):
-        k, v = m.group(1).lower(), m.group(2).strip('"')
+    # Collect every key=value pair first (quoted values may contain spaces, as
+    # FortiGate's msg="..." does), then map.
+    fields = {m.group(1).lower(): m.group(2).strip('"')
+              for m in re.finditer(r'(\w+)=("[^"]*"|[^\s]+)', line)}
+    for k, v in fields.items():
         if k in ("src", "src_ip", "srcip", "client"):
             ev["src_ip"] = v
         elif k in ("dst", "dest_ip", "dstip"):
             ev["dest_ip"] = v
-        elif k in ("user", "username", "account"):
+        elif k in ("user", "username", "account", "srcuser"):
             ev["username"] = v
-        elif k in ("host", "hostname", "computer"):
+        elif k in ("host", "hostname", "computer", "devname"):
             ev["hostname"] = v
-        elif k in ("dport", "dest_port", "port"):
+        elif k in ("dport", "dest_port", "port", "dstport"):
             try:
                 ev["dest_port"] = int(v)
             except ValueError:
                 pass
+        elif k in ("bytes_out", "bytes_sent", "sentbyte"):
+            try:
+                ev["bytes_out"] = int(v)
+            except ValueError:
+                pass
+    # FortiGate key=value syslog: classify by type/subtype/action so a denied
+    # session / IPS / AV hit lands on the native vocabulary the rules read.
+    if ("devname" in fields or "devid" in fields or "logid" in fields or
+            (fields.get("type") in ("traffic", "utm", "attack", "virus", "anomaly")
+             and "srcip" in fields)):
+        _fortigate_classify(ev, fields.get("type"), fields.get("subtype"), fields.get("action"))
     return ev
 
 

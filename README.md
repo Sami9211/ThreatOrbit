@@ -221,8 +221,9 @@ ThreatOrbit-V2/
 
 `docs/` ships deeper references: `architecture.md`, `opencti_integration.md`,
 `api_examples.md`, **`DEPLOYMENT.md`** (proxy/TLS topology, nginx + Caddy
-configs, env checklist) and **`OPERATIONS.md`** (backup/restore, retention,
-runbook).
+configs, env checklist), **`OPERATIONS.md`** (backup/restore, retention,
+runbook) and **`SUPPORTED_SOURCES.md`** (the parser/source matrix — which
+vendor log shapes normalise onto the detection vocabulary).
 
 ---
 
@@ -1047,9 +1048,15 @@ it. You can feed genuine logs at any time and they flow through the identical
 pipeline:
 
 * **Upload** a log file (SIEM → Sources → Log Collector, or the Log API).
-* **Syslog**: point a forwarder at the UDP listener (`DASHBOARD_SYSLOG_PORT`).
+* **Syslog**: point a forwarder at the UDP listener (`DASHBOARD_SYSLOG_PORT`)
+  or the TLS listener (`DASHBOARD_SYSLOG_TLS_PORT`, RFC 5425, optional mTLS).
 * **File watcher**: drop/append files into `DASHBOARD_LOG_WATCH_DIR`.
 * **Connectors / TAXII push** for indicators.
+
+Windows/Sysmon, AWS/Azure/GCP audit, CrowdStrike & SentinelOne EDR, Microsoft
+365 (Defender + Office audit), and Palo Alto / FortiGate firewall logs are all
+recognised and normalised onto the detection vocabulary at ingest — see
+[`docs/SUPPORTED_SOURCES.md`](docs/SUPPORTED_SOURCES.md) for the full matrix.
 
 **How do I run it on fully real data?**
 Set `DASHBOARD_DATA_MODE=live` (starts empty, no generated stream), enable

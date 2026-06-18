@@ -333,12 +333,16 @@ that buying companies require. Realistic positioning today:
       "not configured"). Remaining: SAML, and SCIM for deprovisioning.
 - [~] **Parser & source breadth** — **Windows Security + Sysmon + the three
       major clouds (AWS CloudTrail, Azure AD/Entra, GCP Cloud Audit) DONE**
-      (2026-06-15, see CHANGELOG): JSON ingest recognises all of them and maps
-      EventID/eventName/methodName → the native event_type vocabulary (Windows
-      4625 → failed_login, Sysmon 1 → process_start, a failed cloud sign-in →
-      failed_login, a new key → create_access_key). Still ahead: M365/Defender,
-      common EDR + firewall exports; TLS syslog (RFC 5425) and an agentless-pull
-      option (S3/blob bucket tail); publish a supported-sources matrix.
+      (2026-06-15), and **endpoint EDR (CrowdStrike Falcon, SentinelOne),
+      Microsoft 365 (Defender Advanced-Hunting + the Office 365 unified audit
+      log), Palo Alto PAN-OS + Fortinet FortiGate firewalls, TLS syslog
+      (RFC 5425, optional mTLS), and a published supported-sources matrix DONE**
+      (2026-06-18, see CHANGELOG): JSON/key=value ingest recognises all of them
+      and maps their distinctive fields → the native event_type vocabulary
+      (e.g. a failed login from Windows / cloud / EDR / M365 / firewall all land
+      as `failed_login`, AV/IPS hits as `malware_detected`/`ips_alert`).
+      `docs/SUPPORTED_SOURCES.md` is the matrix. Still ahead: an agentless-pull
+      option (S3/blob bucket tail) and CEF/LEEF envelope decoding.
 - [~] **Detection content library** — STARTER PACK + **noise ratings** SHIPPED
       (2026-06-15, see CHANGELOG): 10 curated Sigma rules (`detection_pack.py`)
       loadable via `POST /siem/rules/load-pack` + a one-click UI button,
@@ -538,10 +542,13 @@ and published EPS limits.
   persistence/defense-evasion rules. Still ahead: per-rule noise ratings, growing
   the packs toward a Sigma community-pack import, and computing the SOAR
   page's **ATT&CK coverage from this library** instead of the current mock.
-- **Parser/source breadth is thin** (apache/syslog/windows/generic). Enterprises
-  expect Windows Event/Sysmon, AWS CloudTrail, Azure AD / M365, GCP audit,
-  common EDR + firewall exports, and TLS syslog (RFC 5425). Publish a
-  supported-sources matrix.
+- **Parser/source breadth — DONE (2026-06-18).** Windows Event/Sysmon, AWS
+  CloudTrail, Azure AD/Entra + M365 (Defender AH + Office audit), GCP audit,
+  EDR (CrowdStrike Falcon, SentinelOne), and firewall exports (Palo Alto
+  PAN-OS, Fortinet FortiGate) all normalise onto the detection vocabulary at
+  ingest; TLS syslog (RFC 5425, optional mTLS) streams through the same
+  pipeline; and `docs/SUPPORTED_SOURCES.md` publishes the matrix. Still ahead:
+  an agentless S3/blob pull and CEF/LEEF envelope decoding.
 - **No collector ecosystem.** "POST your logs here" isn't an enterprise answer;
   ship certified Beats/Fluent Bit/Vector configs or a light agent, with mTLS
   enrolment and an agentless S3/blob pull option.
@@ -696,6 +703,35 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Parser & source breadth: EDR + M365 + firewalls + TLS syslog.**
+  The ingest pipeline recognised Windows/Sysmon and the three clouds; this closes
+  the rest of the enterprise source list. New `_apply_*` mappers in
+  `dashboard_api/ingest.py` normalise five more vendor shapes onto the native
+  event vocabulary so the same detection rules fire on them: **CrowdStrike
+  Falcon** (Streaming-API `metadata.eventType` / `event_simpleName`, and
+  DetectionSummaryEvent → `malware_detected` carrying its `TechniqueId`/
+  `SeverityName`), **SentinelOne** (nested `threatInfo`/`agentRealtimeInfo` →
+  `malware_detected`, ransomware → T1486), **Microsoft 365 Defender** Advanced
+  Hunting (`ActionType`: LogonFailed → `failed_login`, AntivirusDetection →
+  `malware_detected`, ConnectionSuccess → `network_connect`), the **Office 365 /
+  M365 unified audit log** (`Operation`: UserLoginFailed → `failed_login`,
+  New-InboxRule → `mailbox_rule`, Consent-to-application → `app_consent`,
+  Disable-Strong-Auth → `mfa_disabled`), and **firewalls** — **Palo Alto PAN-OS**
+  (TRAFFIC/THREAT, subtype → `ips_alert`/`malware_detected`/`firewall_deny`) and
+  **Fortinet FortiGate** (JSON *and* its native key=value syslog, with quoted-value
+  support added to `_parse_kv`). Discriminators are tight (each requires a
+  vendor-distinctive companion field) so arbitrary JSON still falls through to the
+  ECS/heuristic path — proven by "not hijacked" cases. Auth failures from **every**
+  source now land as `failed_login`, so the brute-force/spray detection fires
+  uniformly. **TLS syslog (RFC 5425)** also lands: `log_listeners.deframe_syslog`
+  is a unit-tested octet-counting + newline deframer (carries frames that span TCP
+  segments), behind an env-gated TLS listener (`DASHBOARD_SYSLOG_TLS_PORT` +
+  cert/key, optional `…_TLS_CA` for mTLS); `/siem/log-listeners` reports its state.
+  Published the **supported-sources matrix** (`docs/SUPPORTED_SOURCES.md`) and
+  wired README + the frontend `LogListenerStatus` type. 22 new assertions in
+  `test_ingest_sources.py` (per-vendor mappings, anti-hijack guards, an
+  ingest-endpoint round-trip, and deframer framing); full suite green. Still
+  ahead: agentless S3/blob pull and CEF/LEEF decoding.
 - **2026-06-18 · Background-service HA (leader election).** The engine tick,
   connector/report scheduler and file-watcher were single-instance — two app
   replicas would double-generate telemetry, double-import connectors,
