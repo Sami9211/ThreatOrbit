@@ -209,18 +209,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       computed from real platform state (org, admin password rotated, team,
       connector, log source + events, rules, webhook, first report) with deep
       links, progress, and a persisted dismiss — on the overview.
-- [~] **Billing/licensing** — DONE (see CHANGELOG): HMAC-signed license keys,
+- [x] **Billing/licensing** — DONE (see CHANGELOG): HMAC-signed license keys,
       plan tiers (starter/pro/enterprise) with seat + connector limits enforced
       server-side (402), activate/issue/clear endpoints + a License card with
-      usage bars. Remaining: payment-processor integration (Stripe) for
-      self-serve purchase.
-- [~] **Postgres option** — ADAPTER IMPLEMENTED (see CHANGELOG): the opt-in
-      path is now functional end-to-end in code — `PgConnection` translates
-      every statement through the tested dialect layer, `PgRow` supports dict
-      AND positional access, `executescript` splits literals-safely, and
-      migrations introspect `information_schema` instead of PRAGMA. SQLite
-      default untouched (full suite proves it). Remaining: validate against a
-      live Postgres (not reachable from this environment) before cutover.
+      usage bars — **and Stripe self-serve** (checkout + billing portal +
+      signature-verified webhook that mints the plan's license key; opt-in,
+      degrades to not-configured). `billing.py` + `routers/billing.py` +
+      `test_billing.py`.
+- [x] **Postgres option** — DONE (see CHANGELOG): the opt-in path translates
+      every statement through the tested dialect layer (`PgConnection`/`PgRow`,
+      literals-safe `executescript`, `information_schema` migrations) **and was
+      validated against a live Postgres 16** — real dialect gaps fixed and a CI
+      job now runs the full suite on a Postgres service container every change
+      (`.github/workflows/tests.yml`). SQLite stays the default by design.
 - [x] **Performance** — DONE (see CHANGELOG): hot-path indexes on every
       dashboard-refresh query (verified with EXPLAIN QUERY PLAN) with a safe
       upgrade path for migrated columns; server-side pagination/filtering on
@@ -228,14 +229,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
       dependency-free `useWindowedRows` hook windows the SIEM queue above
       150 rows (spacer padding preserves scrollbar geometry; a no-op below
       the threshold, so small queues render exactly as before).
-- [~] **E2E test suite** (Playwright) — DONE (see CHANGELOG): a 36-test suite
-      (auth, every section's critical workflow, responsive) across desktop +
-      mobile projects, parse-validated, with a CI workflow that boots the real
-      stack and runs it. Executes in CI (browsers + stack provisioned there).
-- [~] **Mobile-responsive** — the contract is now executable: `responsive.spec.ts`
-      asserts no horizontal overflow + reachable content on a phone viewport
-      across the six core pages, run by the mobile-safari project in CI.
-      Remaining: fix any overflow the CI run flags.
+- [x] **E2E test suite** (Playwright) — DONE (see CHANGELOG): the suite was
+      root-caused and fixed after failing on every run; **34 passing across
+      desktop-chromium + mobile-safari**, booting the real stack in CI.
+- [x] **Mobile-responsive** — DONE (see CHANGELOG): `responsive.spec.ts` asserts
+      no horizontal overflow + reachable content on a phone viewport across the
+      six core pages, and the **mobile-safari project is green in CI**, so the
+      contract is enforced on every change. (Residual visual polish is tracked
+      in the Frontend UX backlog below.)
 
 ---
 
@@ -327,10 +328,13 @@ that buying companies require. Realistic positioning today:
 
 ### Tier 2 — mid-size deployments
 
-- [~] **SSO** — OIDC DONE (see CHANGELOG): authorization-code flow against any
-      OIDC provider, ID-token RS256 signature verified against the IdP JWKS,
-      JIT user provisioning, and IdP-group→role mapping. Opt-in (degrades to
-      "not configured"). Remaining: SAML, and SCIM for deprovisioning.
+- [x] **SSO** — DONE (see CHANGELOG): **OIDC** (authorization-code flow, ID-token
+      RS256 verified against the IdP JWKS, JIT provisioning, group→role mapping),
+      **SAML 2.0 SP** (signed-assertion verification with the full security
+      battery), and **SCIM 2.0** provisioning incl. the security-critical
+      *deprovisioning* (an IdP can auto-deactivate departed users). All opt-in
+      (degrade to "not configured"). Follow-ups (SCIM Group→role push, a shared
+      multi-worker SAML replay cache) are tracked under P1 — Identity.
 - [~] **Parser & source breadth** — **Windows Security + Sysmon + the three
       major clouds (AWS CloudTrail, Azure AD/Entra, GCP Cloud Audit) DONE**
       (2026-06-15), and **endpoint EDR (CrowdStrike Falcon, SentinelOne),
@@ -343,13 +347,16 @@ that buying companies require. Realistic positioning today:
       as `failed_login`, AV/IPS hits as `malware_detected`/`ips_alert`).
       `docs/SUPPORTED_SOURCES.md` is the matrix. Still ahead: an agentless-pull
       option (S3/blob bucket tail) and CEF/LEEF envelope decoding.
-- [~] **Detection content library** — STARTER PACK + **noise ratings** SHIPPED
-      (2026-06-15, see CHANGELOG): 10 curated Sigma rules (`detection_pack.py`)
+- [x] **Detection content library** — DONE (see CHANGELOG): a curated starter
+      pack (`detection_pack.py`, grown to 15 rules across 8 ATT&CK tactics)
       loadable via `POST /siem/rules/load-pack` + a one-click UI button,
       idempotent, each mapped to a real event field + ATT&CK technique and an
-      authored low|medium|high **noise rating** (content metadata, distinct from
-      the observed `fp_rate`; shown in the rule detail). Still ahead: a
-      content-update channel (new detections without a product upgrade).
+      authored low|medium|high **noise rating** — **plus a content-update
+      channel**: versioned JSON packs in `content/rules/` apply via
+      `POST /siem/content/apply` (idempotent upsert, operator enable/disable
+      preserved) so new detections ship without a code release. Still ahead
+      (enhancements): Sigma community-pack import and SOAR ATT&CK coverage
+      computed from this library.
 - [~] **Published load limits** — backpressure + a **measured EPS baseline**
       shipped (2026-06-15): `dashboard_api/bench.py` is a repeatable benchmark and
       `docs/LOAD_LIMITS.md` captures real numbers (~10k EPS ingest+detect, ~7k EPS
@@ -732,6 +739,16 @@ _Move completed items here with the date so the roadmap stays honest._
   `test_ingest_sources.py` (per-vendor mappings, anti-hijack guards, an
   ingest-endpoint round-trip, and deframer framing); full suite green. Still
   ahead: agentless S3/blob pull and CEF/LEEF decoding.
+- **2026-06-18 · Roadmap honesty pass (stale `[~]` → `[x]`).** Audited the
+  in-progress markers against the actual code/CHANGELOG and corrected six whose
+  stated "Remaining:" work had already shipped: **Billing** (Stripe self-serve
+  done — `billing.py`/`routers/billing.py`/`test_billing.py`), **Postgres option**
+  (validated against live PG 16 + a CI service-container job), **E2E suite** and
+  **Mobile-responsive** (34 Playwright tests green across desktop-chromium +
+  mobile-safari in CI), **SSO** (OIDC + SAML 2.0 + SCIM 2.0 all shipped, incl.
+  deprovisioning), and **Detection content library** (content-update channel via
+  `POST /siem/content/apply`). No code change — roadmap accuracy only; genuine
+  follow-ups were re-noted on each item.
 - **2026-06-18 · Background-service HA (leader election).** The engine tick,
   connector/report scheduler and file-watcher were single-instance — two app
   replicas would double-generate telemetry, double-import connectors,
