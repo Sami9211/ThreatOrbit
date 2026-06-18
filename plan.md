@@ -356,9 +356,10 @@ that buying companies require. Realistic positioning today:
       scheduler and engine tick are single-instance; either document the
       single-writer constraint or add leader election so two app replicas
       don't double-run them.
-- [ ] **Retention tiering** — per-table retention exists; add event-stream
-      archive/export (compressed NDJSON to object storage) before purge, so
-      compliance teams keep raw logs cheaply.
+- [~] **Retention tiering** — archive/export before purge **and per-table
+      retention windows DONE** (a `retention_days_<table>` setting per table,
+      falling back to the global default; see CHANGELOG). Still open: a direct
+      object-storage (S3) writer (cold storage is a local dir today).
 
 ### Tier 3 — large enterprise / MSSP
 
@@ -680,6 +681,14 @@ from the same batch were fixed (see CHANGELOG).
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-06-17 · Per-table retention windows.** Retention used one global
+  `data_retention_days` for every table; now each table reads its own
+  `retention_days_<table>` setting (falling back to the global default), so noisy
+  raw `events` can be kept shorter than `alerts`. The enforce response reports the
+  per-table windows; archival-before-purge still applies per table.
+  `test_retention_archive.py` proves a 20-day-old event is purged under a 7-day
+  window while a same-age alert survives a 90-day one.
 
 - **2026-06-17 · External code-review remediation (audit_fixes.md).** Worked
   through a deep third-party review across ~17 commits: persisted log_api results

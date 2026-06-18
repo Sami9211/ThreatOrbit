@@ -324,18 +324,29 @@ def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_p
 
 @router.post("/config/retention/enforce")
 def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
-    """Purge data older than the configured retention window (data_retention_days).
-    When an archive directory is configured, each batch is written to compressed
-    NDJSON cold storage BEFORE deletion (so compliance keeps raw logs cheaply);
-    if archival fails, that table is left intact rather than purged unarchived."""
+    """Purge data older than its retention window. The window is per-table
+    (a `retention_days_<table>` setting), falling back to the global
+    `data_retention_days` (default 90) - so e.g. noisy raw events can be kept
+    shorter than alerts. When an archive directory is configured, each batch is
+    written to compressed NDJSON cold storage BEFORE deletion; if archival fails,
+    that table is left intact rather than purged unarchived."""
     from dashboard_api import archive, config
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='data_retention_days'").fetchone()
-        days = int(row["value"]) if row and str(row["value"]).isdigit() else 90
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
-        purged, archived = {}, {}
+        default_days = int(row["value"]) if row and str(row["value"]).isdigit() else 90
+
+        def _days_for(table: str) -> int:
+            r = conn.execute("SELECT value FROM settings WHERE key=?",
+                             (f"retention_days_{table}",)).fetchone()
+            return int(r["value"]) if r and str(r["value"]).isdigit() else default_days
+
+        now = datetime.now(timezone.utc)
+        purged, archived, windows = {}, {}, {}
         for table, col in (("alerts", "ts"), ("events", "ts"), ("dark_web_findings", "ts"),
                            ("scans", "ts"), ("notifications", "ts")):
+            days = _days_for(table)
+            windows[table] = days
+            cutoff = (now - timedelta(days=days)).replace(microsecond=0).isoformat()
             if archive.enabled():
                 doomed = conn.execute(f"SELECT * FROM {table} WHERE {col} < ?", (cutoff,)).fetchall()
                 try:
@@ -348,9 +359,9 @@ def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
             cur = conn.execute(f"DELETE FROM {table} WHERE {col} < ?", (cutoff,))
             purged[table] = cur.rowcount
         audit(conn, user["email"], "retention.enforce", None,
-              f"days={days} purged={sum(v for v in purged.values())} archived={archive.enabled()}")
+              f"default_days={default_days} purged={sum(v for v in purged.values())} archived={archive.enabled()}")
         conn.commit()
-    out = {"retentionDays": days, "cutoff": cutoff, "purged": purged}
+    out = {"retentionDays": default_days, "perTableDays": windows, "purged": purged}
     if archive.enabled():
         out["archived"] = archived
         out["archiveDir"] = config.ARCHIVE_DIR

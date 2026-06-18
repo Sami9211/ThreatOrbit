@@ -54,3 +54,35 @@ def test_retention_archives_before_purge(client, auth, tmp_path, monkeypatch):
     with gzip.open(files[0], "rt", encoding="utf-8") as fh:
         titles = [json.loads(line).get("title", "") for line in fh]
     assert sum(1 for t in titles if marker in t) == 3
+
+
+def test_per_table_retention_windows(client, auth):
+    """Each table can have its own retention window (retention_days_<table>),
+    falling back to the global default - so events can be kept shorter than alerts."""
+    import datetime as _dt
+    marker = "TIER-" + uuid.uuid4().hex[:6]
+    old = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=20)).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        conn.execute("INSERT INTO events (id,ts,category,event_type,raw,processed) VALUES (?,?,?,?,?,1)",
+                     (f"ev-{marker}", old, "test", "log", marker))
+        conn.execute(
+            "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,"
+            "rule_id,rule_name,description,raw_log,event_count,ti_hits,org_id) "
+            "VALUES (?,?,?, 'low','new','undetermined','',10,'R','r',?, '',1,0,'org-default')",
+            (f"al-{marker}", old, marker, marker))
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('retention_days_events','7')")
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('data_retention_days','90')")
+        conn.commit()
+    try:
+        out = client.post("/config/retention/enforce", headers=auth).json()
+        assert out["perTableDays"]["events"] == 7 and out["perTableDays"]["alerts"] == 90
+        with get_conn() as conn:
+            ev = conn.execute("SELECT COUNT(*) c FROM events WHERE raw=?", (marker,)).fetchone()["c"]
+            al = conn.execute("SELECT COUNT(*) c FROM alerts WHERE title=?", (marker,)).fetchone()["c"]
+        assert ev == 0   # 20-day-old event purged under the 7-day window
+        assert al == 1   # 20-day-old alert kept under the 90-day window
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM settings WHERE key='retention_days_events'")
+            conn.execute("DELETE FROM alerts WHERE title=?", (marker,))
+            conn.commit()
