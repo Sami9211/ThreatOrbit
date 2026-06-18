@@ -298,6 +298,15 @@ class EngineControl(BaseModel):
     generate: int | None = None   # run N immediate ticks (seed a fresh install)
 
 
+@router.get("/leader")
+def leader_status(_: dict = Depends(current_user)):
+    """Background-work leader-election state: which replica currently holds the
+    singleton lease (engine tick + scheduler), and this node's own identity.
+    On a single-replica install this node is always the leader."""
+    from dashboard_api import leader
+    return leader.status()
+
+
 @router.get("/engine")
 def engine_status(_: dict = Depends(current_user)):
     """Live processing engine state + how much live data it has produced."""

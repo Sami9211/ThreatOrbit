@@ -477,6 +477,14 @@ CREATE TABLE IF NOT EXISTS settings (
     value      TEXT NOT NULL
 );
 
+-- Leader election: a node holds a named lease (integer epoch expiry) and renews
+-- it each tick, so singleton background loops run on exactly one app replica.
+CREATE TABLE IF NOT EXISTS leader_lease (
+    name        TEXT PRIMARY KEY,
+    holder      TEXT NOT NULL DEFAULT '',
+    expires_at  INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     id          TEXT PRIMARY KEY,
     kind        TEXT NOT NULL,

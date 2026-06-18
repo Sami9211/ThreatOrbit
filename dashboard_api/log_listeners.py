@@ -94,9 +94,13 @@ def _watch_loop(directory: str, interval: int):
                 except OSError:
                     pass
     logger.info("Log directory watcher started on %s (every %ds)", directory, interval)
+    from dashboard_api import leader
     while True:
         try:
-            scan_log_dir(directory, offsets)
+            # HA: if several replicas watch a shared directory, only the leader
+            # ingests, or every appended line would be ingested N times.
+            if leader.is_leader():
+                scan_log_dir(directory, offsets)
         except Exception:
             logger.exception("log dir scan failed")
         time.sleep(max(2, interval))

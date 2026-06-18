@@ -352,10 +352,15 @@ that buying companies require. Realistic positioning today:
       detection on 4 vCPU SQLite) with the honest finding that the worker pool
       doesn't speed up SQLite (single-writer). Still ahead: a documented Postgres
       baseline and UI dataset ceilings.
-- [ ] **Background-service HA story** — syslog listener, file watcher,
-      scheduler and engine tick are single-instance; either document the
-      single-writer constraint or add leader election so two app replicas
-      don't double-run them.
+- [x] **Background-service HA story** — DONE (see CHANGELOG): a DB-backed
+      **leader lease** (`leader.py` + `leader_lease` table) now gates the
+      singleton loops — the engine tick drives election (acquire/renew), the
+      connector/report scheduler and the file-watcher run only on the leader, so
+      two app replicas never double-generate telemetry, double-import
+      connectors, double-deliver reports, or double-ingest a shared dir.
+      Failover within one TTL; `/config/leader` exposes the holder. The syslog
+      UDP listener stays single-writer by deployment (bind one node / VIP),
+      documented.
 - [~] **Retention tiering** — archive/export before purge **and per-table
       retention windows DONE** (a `retention_days_<table>` setting per table,
       falling back to the global default; see CHANGELOG). Still open: a direct
@@ -691,6 +696,22 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Background-service HA (leader election).** The engine tick,
+  connector/report scheduler and file-watcher were single-instance — two app
+  replicas would double-generate telemetry, double-import connectors,
+  double-deliver scheduled reports and double-ingest a shared watch dir. Added
+  `dashboard_api/leader.py`, a DB-backed lease (`leader_lease` table, integer
+  epoch expiry): a node takes/renews a named lease via one atomic conditional
+  `UPDATE` (`WHERE holder=self OR expires_at<now`), which is single-winner on
+  both SQLite (global write serialisation) and Postgres (row lock). The engine
+  loop drives election (acquire/renew each 20s tick); the scheduler and
+  file-watcher check `is_leader()` and idle on followers. Failover happens within
+  one TTL (default 60s, `DASHBOARD_LEASE_TTL`); graceful `release()` hands off
+  immediately; `DASHBOARD_LEADER_ELECTION=0` opts out (single-node by
+  construction). New `GET /config/leader` shows the holder. The syslog UDP
+  listener remains single-writer by deployment (bind one node/VIP). Tests in
+  `test_leader.py` (single-holder contention, renew, post-expiry takeover,
+  release, endpoint) pass on **both** backends.
 - **2026-06-18 · Collector ecosystem + API-key authentication.** Two gaps
   closed together. **(1) API-key auth** — issued keys (`to_sk_live_…` etc.) were
   minted and stored but nothing actually *accepted* them on requests, so no

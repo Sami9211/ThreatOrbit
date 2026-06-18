@@ -96,9 +96,16 @@ def _connector_scheduler():
     keeps flowing in without anyone pressing a button."""
     import time
     from dashboard_api.connectors import run_due_connectors
+    from dashboard_api import leader
     # Small initial delay so the companion services have time to come up.
     time.sleep(8)
     while True:
+        # HA: only the leader replica runs scheduled work, or two nodes would
+        # double-import connectors and double-deliver reports. (is_leader, not
+        # acquire — the engine loop renews the shared lease.)
+        if not leader.is_leader():
+            time.sleep(CONNECTOR_TICK_SECONDS)
+            continue
         try:
             from dashboard_api.routers.platform import run_due_report_schedules
             run_due_report_schedules()
@@ -124,9 +131,16 @@ def _engine_loop():
     import time
     from dashboard_api.engine import process_tick
     from dashboard_api.config import ENGINE_TICK_SECONDS, ENGINE_EVENTS_PER_TICK
+    from dashboard_api import leader
     time.sleep(5)
     while True:
         try:
+            # HA: the engine loop also drives leader election — acquire/renew the
+            # shared lease each tick. A follower (someone else holds a live lease)
+            # idles, so exactly one replica generates telemetry.
+            if not leader.acquire():
+                time.sleep(ENGINE_TICK_SECONDS)
+                continue
             with get_conn() as conn:
                 row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
             enabled = (row is None) or (row["value"] != "false")
