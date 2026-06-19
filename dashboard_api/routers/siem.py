@@ -695,7 +695,7 @@ def export_sigma_rule(rule_id: str):
     return {"yaml": rule_to_sigma(rule), "source": "generated"}
 
 
-_INGEST_FORMATS = ("auto", "json", "apache", "nginx", "kv", "syslog", "generic")
+_INGEST_FORMATS = ("auto", "json", "apache", "nginx", "kv", "cef", "leef", "syslog", "generic")
 
 
 def _ingest_core(lines: list[str], fmt: str, source: str, actor_email: str,

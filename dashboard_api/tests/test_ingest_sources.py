@@ -251,6 +251,53 @@ def test_fortigate_firewall_json_and_kv_map_to_native_vocab():
     assert e["event_type"] == "malware_detected" and e["mitre_tech_id"] == "T1204"
 
 
+def test_cef_envelope_maps_to_native_vocab():
+    # CEF auth-failure → failed_login (feeds the brute-force rule), fields mapped,
+    # header severity 7 → high.
+    line = ("CEF:0|Fortinet|FortiGate|2.0|0100|authentication failure for bob|7|"
+            "src=203.0.113.7 dst=10.0.0.5 dpt=443 suser=bob act=deny shost=fw-1")
+    e = parse_line(line)
+    assert e["event_type"] == "failed_login" and e["username"] == "bob"
+    assert e["src_ip"] == "203.0.113.7" and e["dest_ip"] == "10.0.0.5" and e["dest_port"] == 443
+    assert e["action"] == "deny" and e["severity_hint"] == "high"
+
+    # generic CEF (no signature) → cef_event, severity from the header, fields mapped
+    e2 = parse_line("CEF:0|Palo Alto|PAN-OS|10|traffic|Traffic allowed|2|"
+                    "src=10.0.0.9 dst=8.8.8.8 dpt=53 act=allow")
+    assert e2["event_type"] == "cef_event" and e2["category"] == "cef"
+    assert e2["src_ip"] == "10.0.0.9" and e2["dest_port"] == 53 and e2["severity_hint"] == "low"
+    assert e2["action"] == "allow"
+
+    # malware CEF → classified via the content signature; process + host mapped
+    e3 = parse_line("CEF:0|McAfee|EPO|5|0|Virus detected: malware found|9|shost=WS-1 fname=evil.exe")
+    assert e3["event_type"] == "process_start" and e3["severity_hint"] == "critical"
+    assert e3["process_name"] == "evil.exe" and e3["hostname"] == "WS-1"
+
+
+def test_leef_envelope_maps_to_native_vocab():
+    # LEEF 1.0 (tab-delimited extension), login failed
+    line = ("LEEF:1.0|IBM|QRadar|1.0|authFail|src=198.51.100.9\tdst=10.0.0.2\t"
+            "dstPort=22\tusrName=alice\tcat=login failed\tsev=8")
+    e = parse_line(line)
+    assert e["event_type"] == "failed_login" and e["username"] == "alice"
+    assert e["src_ip"] == "198.51.100.9" and e["dest_port"] == 22 and e["severity_hint"] == "high"
+
+    # LEEF 2.0 with a caret delimiter declared in the 6th header field
+    e2 = parse_line("LEEF:2.0|Cisco|ASA|9|deny|^|src=45.9.1.2^dst=10.0.0.5^dstPort=3389^action=deny^cat=traffic")
+    assert e2["src_ip"] == "45.9.1.2" and e2["dest_port"] == 3389 and e2["action"] == "deny"
+    assert e2["event_type"] == "leef_event"
+
+
+def test_ingest_endpoint_accepts_cef(client, auth):
+    tag = uuid.uuid4().hex[:8]
+    cef = f"CEF:0|Vendor|Prod|1|sig|authentication failure|6|src=203.0.113.4 suser=cef-{tag}"
+    r = client.post("/siem/ingest", json={"lines": [cef], "format": "auto"}, headers=auth)
+    assert r.status_code == 200 and r.json()["parsed"] == 1
+    with get_conn() as conn:
+        row = conn.execute("SELECT event_type FROM events WHERE username=?", (f"cef-{tag}",)).fetchone()
+    assert row["event_type"] == "failed_login"
+
+
 def test_deframe_syslog_octet_counting_and_newline():
     # octet-counting framing (RFC 5425): "<len> <msg>"
     msg = "<34>1 2026-06-18T00:00:00Z host app - - - hello"

@@ -40,6 +40,8 @@ through the same alias map.
 | **Microsoft 365 / Office 365 audit** | `Operation` + `Workload`/`RecordType`/`OrganizationId` | UserLoginFailed→`failed_login`, New-InboxRule→`mailbox_rule`, Add-member-to-role→`group_change`, Consent-to-application→`app_consent`, Disable-Strong-Auth→`mfa_disabled` | T1110, T1114.003, T1098, T1528, T1556.006 |
 | **Palo Alto PAN-OS** | `type` TRAFFIC/THREAT + a PA field (`sessionid`/`threatid`/`app`/`rule`/`subtype`) | THREAT/vulnerability→`ips_alert`, THREAT/virus→`malware_detected`, TRAFFIC deny→`firewall_deny` | T1190, T1204 |
 | **Fortinet FortiGate** | `devname`/`devid`/`logid`, or forti `type` + `srcip` (JSON **or** key=value syslog) | utm/ips→`ips_alert`, utm/virus→`malware_detected`, traffic deny→`firewall_deny` | T1190, T1204 |
+| **CEF** (ArcSight) | line starts `CEF:` | header `Name`+`Severity` classify (auth-failure→`failed_login`, virus→malware), extension `src`/`dst`/`dpt`/`suser`/`shost`/`act` mapped | T1110, T1204 |
+| **LEEF** (IBM QRadar) | line starts `LEEF:` | EventID/`cat` classify; `src`/`dst`/`dstPort`/`usrName`/`sev` mapped (1.0 tab / 2.0 declared delimiter) | T1110 |
 | **Apache / Nginx** | combined/common access-log line | access line→`web_request` (+ SQLi/traversal signatures) | T1190, T1083 |
 | **Generic syslog / key=value / free text** | fallback | content signatures (brute force, C2 beacon, PowerShell, malware) + IP/user/host extraction | T1110, T1071.001, T1059.001 |
 
@@ -72,8 +74,6 @@ deployment — bind it on one node (or a VIP) per cluster.
 - **Agentless pull** (tail an S3 / Azure Blob / GCS bucket on a schedule) — use
   the file watcher or a shipper today; a native bucket-pull connector is on the
   roadmap.
-- **CEF / LEEF** envelope parsing — many appliances can emit JSON or key=value
-  instead; native CEF decoding is not yet implemented.
 - **Vendors beyond the matrix** (other EDR/firewall brands, NDR, WAF). The
   generic key=value and JSON paths still extract IP/user/host and content
   signatures; add a mapper in `ingest.py` (see the `_apply_*` functions) to

@@ -345,8 +345,9 @@ that buying companies require. Realistic positioning today:
       and maps their distinctive fields → the native event_type vocabulary
       (e.g. a failed login from Windows / cloud / EDR / M365 / firewall all land
       as `failed_login`, AV/IPS hits as `malware_detected`/`ips_alert`).
-      `docs/SUPPORTED_SOURCES.md` is the matrix. Still ahead: an agentless-pull
-      option (S3/blob bucket tail) and CEF/LEEF envelope decoding.
+      `docs/SUPPORTED_SOURCES.md` is the matrix. **CEF (ArcSight) + LEEF (IBM
+      QRadar) envelope decoding DONE** (2026-06-18). Still ahead: an
+      agentless-pull option (S3/blob bucket tail).
 - [x] **Detection content library** — DONE (see CHANGELOG): a curated starter
       pack (`detection_pack.py`, grown to 15 rules across 8 ATT&CK tactics)
       loadable via `POST /siem/rules/load-pack` + a one-click UI button,
@@ -580,9 +581,10 @@ and published EPS limits.
   CloudTrail, Azure AD/Entra + M365 (Defender AH + Office audit), GCP audit,
   EDR (CrowdStrike Falcon, SentinelOne), and firewall exports (Palo Alto
   PAN-OS, Fortinet FortiGate) all normalise onto the detection vocabulary at
-  ingest; TLS syslog (RFC 5425, optional mTLS) streams through the same
-  pipeline; and `docs/SUPPORTED_SOURCES.md` publishes the matrix. Still ahead:
-  an agentless S3/blob pull and CEF/LEEF envelope decoding.
+  ingest; **CEF (ArcSight) + LEEF (IBM QRadar)** envelopes are decoded; TLS
+  syslog (RFC 5425, optional mTLS) streams through the same pipeline; and
+  `docs/SUPPORTED_SOURCES.md` publishes the matrix. Still ahead: an agentless
+  S3/blob pull.
 - **No collector ecosystem.** "POST your logs here" isn't an enterprise answer;
   ship certified Beats/Fluent Bit/Vector configs or a light agent, with mTLS
   enrolment and an agentless S3/blob pull option.
@@ -742,6 +744,20 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · CEF + LEEF envelope decoding.** The two ubiquitous security-
+  appliance log envelopes now decode natively (no longer mis-parsed as generic
+  key=value). `ingest.py` gained `_parse_cef` (ArcSight
+  `CEF:Ver|Vendor|Product|Ver|SigID|Name|Severity|ext`, escape-aware header split
+  + extension parser) and `_parse_leef` (QRadar `LEEF:` 1.0 tab / 2.0
+  declared-delimiter), dispatched in `parse_line` **before** the kv path. A shared
+  `_apply_envelope` classifies by the human Name/EventID via the content
+  signatures (so an auth-failure envelope still feeds the brute-force rule),
+  applies the device severity (numeric 0-10 or word), and maps the extension
+  fields (`src`/`dst`/`dpt`/`suser`/`shost`/`act` for CEF; `src`/`dst`/`dstPort`/
+  `usrName`/`sev` for LEEF) onto the native event. `cef`/`leef` added to the
+  ingest format whitelist (auto-detected by prefix). Tests in
+  `test_ingest_sources.py` (3): CEF auth/generic/malware mapping, LEEF 1.0 + 2.0,
+  and an end-to-end CEF ingest. Matrix + docstring updated. Full suite green.
 - **2026-06-18 · Org-scoped API keys (per-tenant collectors).** Closes the last
   optional multi-tenancy piece: a non-interactive collector now ingests into the
   right workspace. Added `api_keys.org_id` (migration; `SCHEMA_VERSION` 1→2, which

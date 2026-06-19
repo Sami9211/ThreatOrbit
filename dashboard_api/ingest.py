@@ -19,7 +19,9 @@ alerts); **Microsoft 365** — **Defender for Endpoint** Advanced-Hunting
 **firewalls** — **Palo Alto PAN-OS** (TRAFFIC/THREAT) and **Fortinet FortiGate**
 (JSON or key=value) — so e.g. a failed cloud/EDR/M365 sign-in lands as
 failed_login, a new key as create_access_key, and an AV/IPS hit as
-malware_detected / ips_alert across all of them. TLS syslog (RFC 5425) streams
+malware_detected / ips_alert across all of them. The two ubiquitous appliance
+envelopes — **CEF** (ArcSight) and **LEEF** (IBM QRadar) — are decoded too
+(header classification + extension field mapping). TLS syslog (RFC 5425) streams
 in through the same pipeline (see `log_listeners.deframe_syslog`).
 
 Every parser returns the same normalised event shape the rule engine reads:
@@ -811,12 +813,175 @@ def _parse_apache(line: str) -> dict | None:
     return ev
 
 
+# ── CEF (ArcSight) and LEEF (IBM QRadar) - the two ubiquitous appliance envelopes ──
+_CEF_KV = re.compile(r"([A-Za-z][A-Za-z0-9_.]*)=(.*?)(?=(?:\s+[A-Za-z][A-Za-z0-9_.]*=)|$)")
+_WORD_SEV = {"low": "low", "medium": "medium", "high": "high",
+             "very-high": "critical", "critical": "critical", "unknown": "info"}
+
+
+def _sev_norm(s) -> str | None:
+    """Normalise a numeric (0-10) or word severity onto our scale; None if absent."""
+    if s in (None, ""):
+        return None
+    sl = str(s).strip().lower()
+    if sl in _WORD_SEV:
+        return _WORD_SEV[sl]
+    try:
+        v = int(float(sl))
+    except (ValueError, TypeError):
+        return None
+    return "critical" if v >= 9 else "high" if v >= 7 else "medium" if v >= 4 else "low"
+
+
+def _cef_split(body: str) -> list[str]:
+    """Split a CEF body into 7 header fields + the extension (≤8 parts), honouring
+    backslash escapes; pipes after the 7th are literal (part of the extension)."""
+    out, cur, i, n = [], [], 0, len(body)
+    while i < n:
+        c = body[i]
+        if c == "\\" and i + 1 < n:
+            cur.append(body[i + 1]); i += 2; continue
+        if c == "|" and len(out) < 7:
+            out.append("".join(cur)); cur = []; i += 1; continue
+        cur.append(c); i += 1
+    out.append("".join(cur))
+    return out
+
+
+def _cef_ext(ext: str) -> dict:
+    return {m.group(1): m.group(2).replace("\\=", "=").replace("\\\\", "\\")
+            for m in _CEF_KV.finditer(ext)}
+
+
+def _apply_envelope(ev: dict, name_text: str, sev_raw, f: dict, fallback_type: str,
+                    fallback_cat: str, field_map: dict) -> None:
+    """Shared CEF/LEEF mapping: classify by the human name via the content
+    signatures (so an auth-failure envelope still feeds the brute-force rule),
+    apply the device severity, then map the extension fields → native event."""
+    et, cat, sev, mitre = _infer(name_text)
+    if et == "log":
+        ev["event_type"], ev["category"] = fallback_type, fallback_cat
+    else:
+        ev["event_type"], ev["category"], ev["mitre_tech_id"] = et, cat, mitre
+        ev["severity_hint"] = sev
+    sv = _sev_norm(sev_raw)
+    if sv:
+        ev["severity_hint"] = sv
+
+    def g(*keys):
+        for k in keys:
+            v = f.get(k)
+            if v not in (None, ""):
+                return v
+        return None
+
+    sip = g(*field_map["src"])
+    if sip and _is_ip(sip):
+        ev["src_ip"] = str(sip)
+    dip = g(*field_map["dst"])
+    if dip and _is_ip(dip):
+        ev["dest_ip"] = str(dip)
+    user = g(*field_map["user"])
+    if user:
+        ev["username"] = str(user)
+    host = g(*field_map["host"])
+    if host:
+        ev["hostname"] = str(host)
+    dpt = g(*field_map["dport"])
+    if dpt is not None:
+        try:
+            ev["dest_port"] = int(dpt)
+        except (ValueError, TypeError):
+            pass
+    act = g(*field_map["act"])
+    if act:
+        ev["action"] = "deny" if str(act).lower() in _FW_DENY else str(act).lower()
+    if "proc" in field_map:
+        proc = g(*field_map["proc"])
+        if proc:
+            ev["process_name"] = str(proc)
+
+
+def _parse_cef(line: str) -> dict | None:
+    """ArcSight CEF: ``CEF:Ver|Vendor|Product|Ver|SigID|Name|Severity|extension``."""
+    if not line.startswith("CEF:"):
+        return None
+    parts = _cef_split(line[4:])
+    if len(parts) < 7:
+        return None
+    name, severity = parts[5], parts[6]
+    f = _cef_ext(parts[7] if len(parts) > 7 else "")
+    ev = _base_event(line)
+    _apply_envelope(ev, f"{name} {f.get('msg', '')}", severity, f, "cef_event", "cef", {
+        "src": ("src", "sourceAddress"), "dst": ("dst", "destinationAddress"),
+        "user": ("suser", "sourceUserName", "duser", "destinationUserName"),
+        "host": ("shost", "sourceHostName", "dhost", "destinationHostName", "dvchost"),
+        "dport": ("dpt", "destinationPort"), "act": ("act", "deviceAction"),
+        "proc": ("fname", "deviceProcessName", "sproc"),
+    })
+    return ev
+
+
+def _leef_delim(spec: str) -> str:
+    spec = (spec or "").strip()
+    if spec.lower().startswith("0x"):
+        try:
+            return chr(int(spec, 16))
+        except ValueError:
+            return "\t"
+    if spec in ("\\t", "tab", ""):
+        return "\t"
+    return spec
+
+
+def _parse_leef(line: str) -> dict | None:
+    """IBM QRadar LEEF: ``LEEF:Ver|Vendor|Product|Ver|EventID|[Delim|]extension``.
+    1.0 defaults to a tab delimiter; 2.0 declares it in the 6th header field."""
+    if not line.startswith("LEEF:"):
+        return None
+    parts = line.split("|")
+    if len(parts) < 6:
+        return None
+    ver = parts[0][5:].strip()
+    if ver.startswith("2") and len(parts) >= 7:
+        delim, ext = _leef_delim(parts[5]), "|".join(parts[6:])
+    else:
+        delim, ext = "\t", "|".join(parts[5:])
+    event_id = parts[4]
+    chunks = ext.split(delim) if delim in ext else re.split(r"\t|\s{2,}", ext)
+    f = {}
+    for pair in chunks:
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            f[k.strip()] = v.strip()
+    ev = _base_event(line)
+    _apply_envelope(ev, f"{event_id} {f.get('cat', '')} {f.get('msg', '')}",
+                    f.get("sev") or f.get("severity"), f, "leef_event",
+                    (f.get("cat") or "leef"), {
+                        "src": ("src", "srcIP"), "dst": ("dst", "dstIP"),
+                        "user": ("usrName", "user", "srcUserName"),
+                        "host": ("identHostName", "srcHostName", "dstHostName"),
+                        "dport": ("dstPort", "dstport"), "act": ("action", "act"),
+                    })
+    return ev
+
+
 def parse_line(line: str, fmt: str = "auto") -> dict | None:
     line = line.strip()
     if not line or line.startswith("#"):
         return None
     if fmt in ("json", "auto") and line[:1] in "{[":
         ev = _parse_json(line)
+        if ev:
+            return ev
+    # CEF/LEEF envelopes must be tried before the key=value path (they contain
+    # "key=value" pairs that would otherwise be mis-parsed as generic kv).
+    if fmt in ("cef", "auto") and line.startswith("CEF:"):
+        ev = _parse_cef(line)
+        if ev:
+            return ev
+    if fmt in ("leef", "auto") and line.startswith("LEEF:"):
+        ev = _parse_leef(line)
         if ev:
             return ev
     if fmt in ("apache", "nginx", "auto"):
