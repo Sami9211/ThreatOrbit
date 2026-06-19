@@ -795,10 +795,11 @@ def drain_detection(workers: int | None = Query(None, ge=1, le=16),
 
 @router.get("/log-listeners")
 def log_listeners_status():
-    """Status of the long-running log collectors (syslog UDP listener + file/dir
-    watcher) - what's enabled and where."""
+    """Status of the long-running log collectors (syslog UDP/TLS listeners,
+    file/dir watcher, and the agentless S3 pull) - what's enabled and where."""
     from dashboard_api.log_listeners import listener_status
-    return listener_status()
+    from dashboard_api.s3_pull import status as s3_status
+    return {**listener_status(), "s3Pull": s3_status()}
 
 
 @router.get("/attack-coverage")

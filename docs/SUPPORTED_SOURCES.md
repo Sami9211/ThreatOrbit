@@ -15,6 +15,7 @@ Ingest happens through:
 | Syslog UDP | `DASHBOARD_SYSLOG_PORT` | RFC 3164/5424 lines |
 | **Syslog TLS (RFC 5425)** | `DASHBOARD_SYSLOG_TLS_PORT` + cert/key | octet-counted framing, optional mTLS |
 | File / directory watch | `DASHBOARD_LOG_WATCH_DIR` | tails new appends, checkpointed |
+| **Agentless S3 pull** | `DASHBOARD_S3_PULL_BUCKET` (+ prefix/region/endpoint) | tails a bucket prefix on an interval, checkpointed; SigV4, S3-compatible |
 | First-party agent | [`collector/`](../collector) | tail + checkpoint + at-least-once |
 | Certified shippers | Fluent Bit / Vector / Filebeat→Logstash | configs in [`collector/configs`](../collector/configs) |
 
@@ -71,9 +72,6 @@ deployment — bind it on one node (or a VIP) per cluster.
 
 ## What is *not* yet first-class (honest gaps)
 
-- **Agentless pull** (tail an S3 / Azure Blob / GCS bucket on a schedule) — use
-  the file watcher or a shipper today; a native bucket-pull connector is on the
-  roadmap.
 - **Vendors beyond the matrix** (other EDR/firewall brands, NDR, WAF). The
   generic key=value and JSON paths still extract IP/user/host and content
   signatures; add a mapper in `ingest.py` (see the `_apply_*` functions) to

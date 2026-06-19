@@ -124,6 +124,11 @@ def _connector_scheduler():
                     logger.info("Connector %s imported %d indicators", r.get("connector"), r["imported"])
         except Exception:  # never let the scheduler thread die
             logger.exception("Connector scheduler tick failed")
+        try:  # agentless S3 log pull (no-op unless configured; honours its own interval)
+            from dashboard_api.s3_pull import poll_if_configured
+            poll_if_configured()
+        except Exception:
+            logger.exception("S3 pull tick failed")
         time.sleep(CONNECTOR_TICK_SECONDS)
 
 

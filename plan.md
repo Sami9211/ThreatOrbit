@@ -335,19 +335,15 @@ that buying companies require. Realistic positioning today:
       *deprovisioning* (an IdP can auto-deactivate departed users). All opt-in
       (degrade to "not configured"). Follow-ups (SCIM Group→role push, a shared
       multi-worker SAML replay cache) are tracked under P1 — Identity.
-- [~] **Parser & source breadth** — **Windows Security + Sysmon + the three
-      major clouds (AWS CloudTrail, Azure AD/Entra, GCP Cloud Audit) DONE**
-      (2026-06-15), and **endpoint EDR (CrowdStrike Falcon, SentinelOne),
-      Microsoft 365 (Defender Advanced-Hunting + the Office 365 unified audit
-      log), Palo Alto PAN-OS + Fortinet FortiGate firewalls, TLS syslog
-      (RFC 5425, optional mTLS), and a published supported-sources matrix DONE**
-      (2026-06-18, see CHANGELOG): JSON/key=value ingest recognises all of them
-      and maps their distinctive fields → the native event_type vocabulary
-      (e.g. a failed login from Windows / cloud / EDR / M365 / firewall all land
-      as `failed_login`, AV/IPS hits as `malware_detected`/`ips_alert`).
-      `docs/SUPPORTED_SOURCES.md` is the matrix. **CEF (ArcSight) + LEEF (IBM
-      QRadar) envelope decoding DONE** (2026-06-18). Still ahead: an
-      agentless-pull option (S3/blob bucket tail).
+- [x] **Parser & source breadth** — DONE (see CHANGELOG): Windows Security +
+      Sysmon, the three clouds (AWS CloudTrail, Azure AD/Entra, GCP Cloud Audit),
+      endpoint EDR (CrowdStrike Falcon, SentinelOne), Microsoft 365 (Defender
+      Advanced-Hunting + Office 365 audit), Palo Alto PAN-OS + Fortinet FortiGate
+      firewalls, and **CEF (ArcSight) + LEEF (IBM QRadar)** envelopes all
+      normalise onto the native event vocabulary at ingest; **TLS syslog
+      (RFC 5425, optional mTLS)** and an **agentless S3 pull** (tail a bucket
+      prefix, checkpointed, SigV4, S3-compatible) stream through the same
+      pipeline; `docs/SUPPORTED_SOURCES.md` is the published matrix.
 - [x] **Detection content library** — DONE (see CHANGELOG): a curated starter
       pack (`detection_pack.py`, grown to 15 rules across 8 ATT&CK tactics)
       loadable via `POST /siem/rules/load-pack` + a one-click UI button,
@@ -582,9 +578,9 @@ and published EPS limits.
   EDR (CrowdStrike Falcon, SentinelOne), and firewall exports (Palo Alto
   PAN-OS, Fortinet FortiGate) all normalise onto the detection vocabulary at
   ingest; **CEF (ArcSight) + LEEF (IBM QRadar)** envelopes are decoded; TLS
-  syslog (RFC 5425, optional mTLS) streams through the same pipeline; and
-  `docs/SUPPORTED_SOURCES.md` publishes the matrix. Still ahead: an agentless
-  S3/blob pull.
+  syslog (RFC 5425, optional mTLS) and an **agentless S3 pull** stream through
+  the same pipeline; and `docs/SUPPORTED_SOURCES.md` publishes the matrix.
+  **Fully done.**
 - **No collector ecosystem.** "POST your logs here" isn't an enterprise answer;
   ship certified Beats/Fluent Bit/Vector configs or a light agent, with mTLS
   enrolment and an agentless S3/blob pull option.
@@ -744,6 +740,20 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Agentless S3 log pull (closes Parser & source breadth).** Logs
+  already landing in object storage now flow into the SIEM with no agent or
+  forwarder. `dashboard_api/s3_pull.py` tails an S3 (or S3-compatible) bucket
+  prefix on an interval: `ListObjectsV2` after a stored checkpoint key, `GET` the
+  new objects, split into lines, and `ingest_lines(... org_id=_ORG)` (per-tenant
+  pull). The checkpoint advances to the last key, so a restart never re-ingests
+  or skips. Stdlib-only **SigV4 GET signing with the canonical query string**
+  (reusing `archive._signing_key`), cross-verified against botocore offline and
+  then removed (tests stay stdlib-only). Driven by the leader-only connector
+  scheduler (no double-ingest), honours `DASHBOARD_S3_PULL_SECONDS`, and surfaces
+  on `GET /siem/log-listeners` (`s3Pull`). `config.py` + `.env.example` document
+  the knobs. Tests in `test_s3_pull.py` (3): signed-GET shape, list→fetch→ingest
+  →checkpoint with a stubbed transport, second-poll no-op, and status. With this,
+  **Parser & source breadth is fully complete**. Full suite green.
 - **2026-06-18 · CEF + LEEF envelope decoding.** The two ubiquitous security-
   appliance log envelopes now decode natively (no longer mis-parsed as generic
   key=value). `ingest.py` gained `_parse_cef` (ArcSight

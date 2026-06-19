@@ -116,6 +116,15 @@ ARCHIVE_S3_BUCKET = os.environ.get("DASHBOARD_ARCHIVE_S3_BUCKET", "").strip()
 ARCHIVE_S3_PREFIX = os.environ.get("DASHBOARD_ARCHIVE_S3_PREFIX", "").strip()
 ARCHIVE_S3_REGION = os.environ.get("DASHBOARD_ARCHIVE_S3_REGION", "").strip()
 ARCHIVE_S3_ENDPOINT = os.environ.get("DASHBOARD_ARCHIVE_S3_ENDPOINT", "").strip()
+# Agentless log pull: tail an S3 (or S3-compatible) bucket prefix on an interval,
+# fetching new objects and feeding their lines through the ingest pipeline. Off
+# unless a bucket is set; credentials come from the standard AWS environment.
+S3_PULL_BUCKET = os.environ.get("DASHBOARD_S3_PULL_BUCKET", "").strip()
+S3_PULL_PREFIX = os.environ.get("DASHBOARD_S3_PULL_PREFIX", "").strip()
+S3_PULL_REGION = os.environ.get("DASHBOARD_S3_PULL_REGION", "").strip()
+S3_PULL_ENDPOINT = os.environ.get("DASHBOARD_S3_PULL_ENDPOINT", "").strip()
+S3_PULL_ORG = os.environ.get("DASHBOARD_S3_PULL_ORG", "").strip()
+S3_PULL_INTERVAL = int(os.environ.get("DASHBOARD_S3_PULL_SECONDS", "60") or "60")
 
 # --- Audit trail external sink (tamper-evidence) --------------------------------
 # When set, every audit event is also shipped (fire-and-forget) to this HTTP
