@@ -327,10 +327,25 @@ def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
     """Purge data older than its retention window. The window is per-table
     (a `retention_days_<table>` setting), falling back to the global
     `data_retention_days` (default 90) - so e.g. noisy raw events can be kept
-    shorter than alerts. When an archive directory is configured, each batch is
-    written to compressed NDJSON cold storage BEFORE deletion; if archival fails,
-    that table is left intact rather than purged unarchived."""
-    from dashboard_api import archive, config
+    shorter than alerts. **Under multi-tenancy** each workspace's own
+    `org_retention_days` override is honoured (per-tenant retention), so tenants
+    on different plans keep data for different periods. When archival is
+    configured, each batch is written to cold storage BEFORE deletion; if
+    archival fails, those rows are left intact rather than purged unarchived."""
+    from dashboard_api import archive, config, tenancy
+
+    def _purge_scope(conn, table, col, cutoff, org_id):
+        """Archive (if enabled) then delete rows older than `cutoff`, optionally
+        scoped to one org. Raises OSError if archival fails (caller skips)."""
+        where, params = f"{col} < ?", [cutoff]
+        if org_id is not None:
+            where += " AND org_id=?"
+            params.append(org_id)
+        if archive.enabled():
+            doomed = conn.execute(f"SELECT * FROM {table} WHERE {where}", params).fetchall()
+            archive.archive_rows(table, doomed)        # OSError on failure → no delete
+        return conn.execute(f"DELETE FROM {table} WHERE {where}", params).rowcount
+
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='data_retention_days'").fetchone()
         default_days = int(row["value"]) if row and str(row["value"]).isdigit() else 90
@@ -342,24 +357,27 @@ def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
 
         now = datetime.now(timezone.utc)
         purged, archived, windows = {}, {}, {}
+        multi = tenancy.enforced()
+        # Per-tenant retention only when isolation is on; otherwise one global pass.
+        org_ids = [r["id"] for r in conn.execute("SELECT id FROM orgs").fetchall()] if multi else [None]
         for table, col in (("alerts", "ts"), ("events", "ts"), ("dark_web_findings", "ts"),
                            ("scans", "ts"), ("notifications", "ts")):
-            days = _days_for(table)
-            windows[table] = days
-            cutoff = (now - timedelta(days=days)).replace(microsecond=0).isoformat()
-            if archive.enabled():
-                doomed = conn.execute(f"SELECT * FROM {table} WHERE {col} < ?", (cutoff,)).fetchall()
+            windows[table] = _days_for(table)          # the deployment default (per-org may differ)
+            total = 0
+            for org in org_ids:
+                days = tenancy.org_retention_days(conn, org, _days_for(table)) if org else _days_for(table)
+                cutoff = (now - timedelta(days=days)).replace(microsecond=0).isoformat()
                 try:
-                    if archive.archive_rows(table, doomed):
-                        archived[table] = len(doomed)
+                    total += _purge_scope(conn, table, col, cutoff, org)
                 except OSError:
-                    # Never delete what we failed to archive: skip this table.
-                    archived[table] = "error"
+                    archived[table] = "error"          # this scope left intact (unarchived)
                     continue
-            cur = conn.execute(f"DELETE FROM {table} WHERE {col} < ?", (cutoff,))
-            purged[table] = cur.rowcount
+            purged[table] = total
+            if archive.enabled() and archived.get(table) != "error":
+                archived[table] = total
         audit(conn, user["email"], "retention.enforce", None,
-              f"default_days={default_days} purged={sum(v for v in purged.values())} archived={archive.enabled()}")
+              f"default_days={default_days} perTenant={multi} "
+              f"purged={sum(purged.values())} archived={archive.enabled()}")
         conn.commit()
     out = {"retentionDays": default_days, "perTableDays": windows, "purged": purged}
     if archive.enabled():

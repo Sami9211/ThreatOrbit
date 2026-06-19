@@ -389,14 +389,14 @@ that buying companies require. Realistic positioning today:
       externalising the event store (e.g. ClickHouse/OpenSearch behind the same
       search API) with predicate push-down for the hunt language.
 - [~] **Finish multi-tenancy for GA** — get-by-id IDOR, global search and the
-      SSE stream are org-scoped (earlier), and **tenant lifecycle tooling DONE**
-      (2026-06-18, see CHANGELOG): create (existing) + **suspend** (blocks the
-      tenant's auth; the default workspace is protected) + **export** (full data
-      dump, secrets scrubbed) + **delete-with-purge** (suspend-first guard, then
-      hard-deletes every row across the tenant tables). Still open before MSSP
-      sale: per-org engine/ingest context (org-tagged sources — background
-      writers still run as the deployment), per-tenant quotas + retention, then
-      flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
+      SSE stream are org-scoped (earlier); **tenant lifecycle tooling DONE**
+      (suspend / export / delete-with-purge); and **per-tenant quotas + retention
+      DONE** (2026-06-18, see CHANGELOG): per-org user/asset caps enforced at
+      create time (402) and a per-org retention window honoured by the purge job,
+      managed via `/orgs/{id}/limits`. Still open before MSSP sale: **per-org
+      engine/ingest context** (org-tagged sources — the background engine still
+      runs as the deployment, so engine-path events/notifications broadcast),
+      then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
 - [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15) and
       **migration-gating on upgrade DONE** (2026-06-18, see CHANGELOG): a
       `SCHEMA_VERSION` marker recorded in the DB; on boot the code adopts a fresh
@@ -639,11 +639,11 @@ and published EPS limits.
 
 `DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, both
 **global search** and the **SSE stream** are org-scoped (2026-06-15), and
-**tenant lifecycle tooling** (create/suspend/export/delete-with-purge) shipped
-(2026-06-18, see CHANGELOG). Still needed for GA: **per-org engine/ingest**
-context (the background engine still publishes/ingests org-agnostically, so
-engine-path SSE events and notifications broadcast) and per-tenant quotas +
-retention - *before* flipping it on by default.
+**tenant lifecycle tooling** (create/suspend/export/delete-with-purge) and
+**per-tenant quotas + retention** shipped (2026-06-18, see CHANGELOG). Still
+needed for GA: **per-org engine/ingest** context (the background engine still
+publishes/ingests org-agnostically, so engine-path SSE events and notifications
+broadcast) - *before* flipping it on by default.
 
 ### P2 — API contract, platform SRE & data lifecycle
 
@@ -733,6 +733,21 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Multi-tenancy: per-tenant quotas + retention.** Each workspace
+  can now be capped and aged independently. `tenancy.py` stores per-org limits as
+  org-scoped settings (`set_org_limits`/`quota_usage`/`enforce_quota`/
+  `org_retention_days`), managed via `GET`/`PUT /orgs/{id}/limits` (config.manage,
+  with usage). **Quotas**: `enforce_quota` raises HTTP 402 at create time when a
+  workspace is at/over its `users` or `assets` cap - wired into user creation
+  (per-tenant seats, on top of the global license seat check) and asset creation;
+  a value of 0 clears a limit. **Retention**: the purge job now honours each
+  workspace's `org_retention_days` override under multi-tenancy (refactored to a
+  per-(table, org) `_purge_scope`, archival-before-delete preserved per scope).
+  All gated by `enforced()`, so single-tenant installs are byte-for-byte
+  unchanged (proven: the existing retention tests still pass). Tests in
+  `test_tenant_quotas.py` (6): set/get limits, user + asset 402 enforcement,
+  per-tenant retention window vs the global default, and the single-tenant no-op.
+  Regenerated the `/v1` contract surface. Full suite green.
 - **2026-06-18 · Multi-tenancy: tenant lifecycle tooling (suspend/export/delete).**
   Advances *Finish multi-tenancy for GA* with the MSSP offboarding controls.
   `tenancy.py` gained `is_org_active`, `export_org`, and `purge_org`. **Suspend**:

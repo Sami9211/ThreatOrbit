@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
 from dashboard_api.tenancy import (DEFAULT_ORG_ID, enforced, export_org, new_org,
-                                   org_of, org_status, purge_org)
+                                   org_of, org_status, purge_org, quota_usage,
+                                   set_org_limits)
 
 router = APIRouter(prefix="/orgs", tags=["orgs"], dependencies=[Depends(current_user)])
 
@@ -31,6 +32,12 @@ class OrgUpdate(BaseModel):
 
 class MemberRole(BaseModel):
     role: str
+
+
+class OrgLimits(BaseModel):
+    maxUsers: int | None = None
+    maxAssets: int | None = None
+    retentionDays: int | None = None
 
 
 def _now() -> str:
@@ -161,6 +168,31 @@ def update_org(org_id: str, body: OrgUpdate, user: dict = Depends(require_perm("
         conn.commit()
         row = conn.execute("SELECT * FROM orgs WHERE id=?", (org_id,)).fetchone()
     return row_to_dict(row)
+
+
+@router.get("/{org_id}/limits")
+def get_limits(org_id: str, user: dict = Depends(require_perm("config.manage"))):
+    """Per-tenant quotas (users/assets) + retention window, with current usage.
+    `limit`/`retentionDays` of null means unlimited / the deployment default."""
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM orgs WHERE id=?", (org_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        return {"orgId": org_id, **quota_usage(conn, org_id)}
+
+
+@router.put("/{org_id}/limits")
+def put_limits(org_id: str, body: OrgLimits, user: dict = Depends(require_perm("config.manage"))):
+    """Set a workspace's quotas/retention (a value of 0 clears it back to
+    unlimited / the global default)."""
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM orgs WHERE id=?", (org_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        set_org_limits(conn, org_id, max_users=body.maxUsers, max_assets=body.maxAssets,
+                       retention_days=body.retentionDays)
+        audit(conn, user["email"], "org.limits", org_id,
+              f"users={body.maxUsers} assets={body.maxAssets} retention={body.retentionDays}")
+        conn.commit()
+        return {"orgId": org_id, **quota_usage(conn, org_id)}
 
 
 @router.get("/{org_id}/export")

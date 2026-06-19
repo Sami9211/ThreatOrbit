@@ -118,6 +118,7 @@
     "/orgs/current",
     "/orgs/{org_id}",
     "/orgs/{org_id}/export",
+    "/orgs/{org_id}/limits",
     "/orgs/{org_id}/members",
     "/orgs/{org_id}/members/{user_id}",
     "/overview/geo",

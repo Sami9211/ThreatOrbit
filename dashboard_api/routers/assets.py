@@ -65,6 +65,7 @@ def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
     aid = str(uuid.uuid4())
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
+        tenancy.enforce_quota(conn, tenancy.org_of(user), "assets")   # per-tenant asset cap
         conn.execute(
             "INSERT INTO assets (id,name,type,value,criticality,status,risk_score,last_scan,"
             "alerts,cves,open_ports,os,owner,patch_age,tags,uptime,created_at,software,org_id) "

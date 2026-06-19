@@ -62,6 +62,8 @@ def create_user(body: UserCreate, actor: dict = Depends(require_perm("users.mana
             raise HTTPException(status_code=402, detail=limit_err)
         # New users join the creator's workspace (multi-tenancy foundation).
         from dashboard_api.tenancy import org_of
+        from dashboard_api import tenancy
+        tenancy.enforce_quota(conn, org_of(actor), "users")   # per-tenant seat cap
         conn.execute(
             "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
             "avatar_color,mfa_enabled,last_login,created_at,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",

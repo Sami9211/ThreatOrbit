@@ -138,6 +138,64 @@ def purge_org(conn, org_id: str) -> dict:
     return counts
 
 
+# ── Per-tenant quotas + retention (limits stored as org-scoped settings) ───────
+
+_LIMIT_KEY = {"users": "org_quota_users", "assets": "org_quota_assets",
+              "retention_days": "org_retention_days"}
+_QUOTA_TABLE = {"users": "users", "assets": "assets"}
+
+
+def _get_limit(conn, org_id: str, kind: str):
+    row = conn.execute("SELECT value FROM settings WHERE key=?",
+                       (f"{_LIMIT_KEY[kind]}:{org_id}",)).fetchone()
+    return int(row["value"]) if row and str(row["value"]).isdigit() else None
+
+
+def set_org_limits(conn, org_id: str, *, max_users=None, max_assets=None, retention_days=None) -> None:
+    """Set (or clear with <=0) a workspace's quotas/retention. Caller commits."""
+    for kind, val in (("users", max_users), ("assets", max_assets), ("retention_days", retention_days)):
+        if val is None:
+            continue
+        key = f"{_LIMIT_KEY[kind]}:{org_id}"
+        if int(val) <= 0:                       # 0/negative → clear (unlimited / global)
+            conn.execute("DELETE FROM settings WHERE key=?", (key,))
+        else:
+            conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (key, str(int(val))))
+
+
+def quota_usage(conn, org_id: str) -> dict:
+    """Current usage vs limit per quota'd resource (limit None = unlimited)."""
+    out = {}
+    for resource, table in _QUOTA_TABLE.items():
+        used = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE org_id=?", (org_id,)).fetchone()["n"]
+        out[resource] = {"used": used, "limit": _get_limit(conn, org_id, resource)}
+    out["retentionDays"] = _get_limit(conn, org_id, "retention_days")
+    return out
+
+
+def enforce_quota(conn, org_id: str, resource: str) -> None:
+    """Raise HTTP 402 if `org_id` is at/over its quota for `resource`. No-op when
+    isolation is off or no limit is set, so single-tenant installs are unaffected."""
+    if not MULTI_TENANT:
+        return
+    limit = _get_limit(conn, org_id, resource)
+    if limit is None:
+        return
+    used = conn.execute(f"SELECT COUNT(*) AS n FROM {_QUOTA_TABLE[resource]} WHERE org_id=?",
+                        (org_id,)).fetchone()["n"]
+    if used >= limit:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=402,
+                            detail=f"Workspace quota reached for {resource} ({used}/{limit})")
+
+
+def org_retention_days(conn, org_id: str, default: int) -> int:
+    """A workspace's retention window in days - its per-org override, else the
+    deployment default."""
+    v = _get_limit(conn, org_id, "retention_days")
+    return v if v is not None else default
+
+
 # ── Data-isolation helpers (wired into every TENANT_TABLES list endpoint) ─────────
 
 def enforced() -> bool:
