@@ -388,15 +388,18 @@ that buying companies require. Realistic positioning today:
       ahead: flipping the engine to ingest-only by default, and partitioning or
       externalising the event store (e.g. ClickHouse/OpenSearch behind the same
       search API) with predicate push-down for the hunt language.
-- [~] **Finish multi-tenancy for GA** — get-by-id IDOR, global search and the
-      SSE stream are org-scoped (earlier); **tenant lifecycle tooling DONE**
-      (suspend / export / delete-with-purge); and **per-tenant quotas + retention
-      DONE** (2026-06-18, see CHANGELOG): per-org user/asset caps enforced at
-      create time (402) and a per-org retention window honoured by the purge job,
-      managed via `/orgs/{id}/limits`. Still open before MSSP sale: **per-org
-      engine/ingest context** (org-tagged sources — the background engine still
-      runs as the deployment, so engine-path events/notifications broadcast),
-      then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
+- [~] **Finish multi-tenancy for GA** — the data-path isolation is now complete:
+      get-by-id IDOR closed, global search + SSE stream org-scoped, **tenant
+      lifecycle** (suspend/export/delete-with-purge), **per-tenant quotas +
+      retention**, and **per-org ingest context DONE** (2026-06-18, see CHANGELOG)
+      — ingested events and the alerts they trigger carry the ingesting
+      principal's workspace, so a tenant only sees detections from its own logs.
+      The *synthetic* background engine + the deployment log listeners stay in the
+      default workspace **by design** (demo/deployment infra, not a tenant's real
+      data). Remaining before flipping `DASHBOARD_MULTI_TENANT` on by default for
+      MSSP builds: a full end-to-end validation pass (a deployment decision, not a
+      code gap) — and, if wanted, org-scoped API keys so non-interactive
+      collectors ingest per-tenant (today they authenticate into the default org).
 - [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15) and
       **migration-gating on upgrade DONE** (2026-06-18, see CHANGELOG): a
       `SCHEMA_VERSION` marker recorded in the DB; on boot the code adopts a fresh
@@ -641,13 +644,15 @@ and published EPS limits.
 
 ### P1 — Multi-tenancy completion (for MSSP / SaaS)
 
-`DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, both
-**global search** and the **SSE stream** are org-scoped (2026-06-15), and
-**tenant lifecycle tooling** (create/suspend/export/delete-with-purge) and
-**per-tenant quotas + retention** shipped (2026-06-18, see CHANGELOG). Still
-needed for GA: **per-org engine/ingest** context (the background engine still
-publishes/ingests org-agnostically, so engine-path SSE events and notifications
-broadcast) - *before* flipping it on by default.
+`DASHBOARD_MULTI_TENANT` is staged; the get-by-id IDOR was closed, **global
+search** and the **SSE stream** are org-scoped (2026-06-15), and **tenant
+lifecycle tooling**, **per-tenant quotas + retention**, and **per-org ingest
+context** all shipped (2026-06-18, see CHANGELOG) — ingested events and their
+alerts now carry the ingesting tenant. The data-path isolation is complete; the
+*synthetic* engine + log listeners stay deployment-scoped by design (not a
+tenant's real data). Remaining before flipping it on by default: an end-to-end
+validation pass and (optional) org-scoped API keys for non-interactive
+collectors.
 
 ### P2 — API contract, platform SRE & data lifecycle
 
@@ -737,6 +742,25 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Multi-tenancy: per-org ingest context.** The last data-path
+  isolation gap. Ingested events now carry the **ingesting principal's
+  workspace** (`ingest_lines(... org_id=…)` stamps the `events.org_id`; both
+  `/siem/ingest` and `/siem/ingest/raw` pass `tenancy.org_of(user)`, which honours
+  the X-Org-Id acting-org), and the detection writers propagate it: `run_detection`
+  stamps each alert with **its triggering event's** `org_id`, and the TI-match path
+  (`match_threat_intel` → `alert_from_intel` → `_insert_alert`) does the same. So
+  under multi-tenancy a tenant only sees alerts from its own logs - including
+  mixed-org batches drained by the multi-worker pool, since the org travels with
+  each event. The *synthetic* background engine (`process_tick`) and the
+  deployment log listeners stay in the default workspace **by design** (demo /
+  deployment infrastructure, not a tenant's real data). Single-tenant installs are
+  byte-for-byte unchanged (everything resolves to `org-default`, matching the
+  column default). Tests in `test_per_org_ingest.py` (3): end-to-end event + TI
+  alert land in the ingesting org, the alert writer stamps/defaults org, and the
+  single-tenant no-op; the detection-pool/queue/stream suites stay green. With
+  this, multi-tenancy's data-path isolation is complete - only an end-to-end
+  validation pass (and optional org-scoped API keys) remain before flipping
+  `DASHBOARD_MULTI_TENANT` on by default.
 - **2026-06-18 · Data residency artifact + compliance control.** Closed the
   data-residency gap in the vendor-compliance posture (asked for in enterprise
   security questionnaires). `docs/DATA_RESIDENCY.md` enumerates **every** point

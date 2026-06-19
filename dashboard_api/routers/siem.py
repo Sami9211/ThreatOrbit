@@ -698,7 +698,8 @@ def export_sigma_rule(rule_id: str):
 _INGEST_FORMATS = ("auto", "json", "apache", "nginx", "kv", "syslog", "generic")
 
 
-def _ingest_core(lines: list[str], fmt: str, source: str, actor_email: str) -> dict:
+def _ingest_core(lines: list[str], fmt: str, source: str, actor_email: str,
+                 org_id: str = "org-default") -> dict:
     """Shared ingest path for the structured and raw collector endpoints: validate,
     apply backpressure, parse → events → detection, and audit. One implementation
     so both entry points behave identically."""
@@ -722,7 +723,7 @@ def _ingest_core(lines: list[str], fmt: str, source: str, actor_email: str) -> d
                 headers={"Retry-After": "5"})
     from dashboard_api.ingest import ingest_lines
     source = (source or "collector").strip() or "collector"
-    result = ingest_lines(lines, fmt, source)
+    result = ingest_lines(lines, fmt, source, org_id)
     with get_conn() as conn:
         audit(conn, actor_email, "siem.ingest", source,
               f"lines={result['parsed']} alerts={result['alerts']}")
@@ -735,7 +736,8 @@ def ingest(body: IngestBody, user: dict = Depends(current_user)):
     """Native log collector: POST raw log lines (syslog/apache/json/kv/auto),
     they're parsed into events and the detection rules + threat-intel matching
     fire on them. This is how production logs stream into the SIEM."""
-    return _ingest_core(body.lines, body.format, body.source, user["email"])
+    return _ingest_core(body.lines, body.format, body.source, user["email"],
+                        tenancy.org_of(user))
 
 
 def _lines_from_raw(raw: bytes, content_type: str) -> list[str]:
@@ -773,7 +775,7 @@ async def ingest_raw(
     audit as /siem/ingest."""
     raw = await request.body()
     lines = _lines_from_raw(raw, request.headers.get("content-type", ""))
-    return _ingest_core(lines, format, source, user["email"])
+    return _ingest_core(lines, format, source, user["email"], tenancy.org_of(user))
 
 
 @router.post("/detection/drain")

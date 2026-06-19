@@ -828,8 +828,14 @@ def parse_line(line: str, fmt: str = "auto") -> dict | None:
     return _base_event(line)
 
 
-def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector") -> dict:
-    """Parse lines → events → run detection. Returns {ingested, parsed, alerts}."""
+def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
+                 org_id: str = "org-default") -> dict:
+    """Parse lines → events → run detection. Returns {ingested, parsed, alerts}.
+
+    `org_id` stamps the events with the ingesting principal's workspace, so under
+    multi-tenancy the alerts they trigger land in that tenant (per-org ingest
+    context). The default workspace is used by deployment-level collectors (the
+    syslog/file listeners) and single-tenant installs."""
     from dashboard_api.engine import run_detection, seed_builtin_rules
     seed_builtin_rules()
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -841,13 +847,13 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector")
                 continue
             conn.execute(
                 "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
-                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,processed) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,"
+                "processed,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
                 (str(uuid.uuid4()), now, ev.get("category"), ev.get("event_type"),
                  ev.get("src_ip"), ev.get("dest_ip"), ev.get("dest_port"), ev.get("username"),
                  ev.get("hostname"), ev.get("process_name"), ev.get("action"),
                  ev.get("bytes_out", 0), ev.get("country"), ev.get("severity_hint"),
-                 ev.get("mitre_tech_id"), ev.get("raw")),
+                 ev.get("mitre_tech_id"), ev.get("raw"), org_id),
             )
             parsed += 1
         det = run_detection(conn)
@@ -869,7 +875,7 @@ def match_threat_intel(conn) -> int:
     a known malicious IOC raises an enriched 'threat intel match' alert."""
     from dashboard_api.detections import alert_from_intel
     rows = conn.execute(
-        "SELECT id, src_ip, dest_ip, hostname FROM events WHERE processed IN (0,1) "
+        "SELECT id, src_ip, dest_ip, hostname, org_id FROM events WHERE processed IN (0,1) "
         "ORDER BY ts DESC LIMIT 300"
     ).fetchall()
     raised = 0
@@ -895,7 +901,8 @@ def match_threat_intel(conn) -> int:
             aid = alert_from_intel(conn, value=ioc["value"], ioc_type=ioc["type"],
                                    severity=ioc["severity"], confidence=ioc["confidence"] or 70,
                                    threat_type=ioc["threat_type"] or "", actor_name=ioc["actor"] or "",
-                                   source=ioc["source"] or "CTI")
+                                   source=ioc["source"] or "CTI",
+                                   org_id=e["org_id"] or "org-default")
             conn.execute("UPDATE alerts SET rule_id='R-TIMATCH' WHERE id=?", (aid,))
             raised += 1
             seen.add(val)

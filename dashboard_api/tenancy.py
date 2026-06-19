@@ -16,12 +16,16 @@ running with the flag off). User-driven create endpoints stamp `org_of(user)`
 so rows land in the creator's workspace (the single-tenant value IS the
 default org, so nothing changes there either), and the aggregate/summary
 endpoints (overview rollups, section KPIs) apply the same scope via
-`scope_sql`. Engine/seed/background writers deliberately stay in the default
-workspace - they run as the deployment, not a user; a per-org engine context
-is a deployment-level concern. Known limits of the current isolation:
-get-by-id detail endpoints are id-addressed (UUIDs are unguessable, but a
-strict deployment may want them to 404 cross-org), and global search spans
-the deployment.
+`scope_sql`. Get-by-id detail reads 404 across workspaces (`cross_org`), global
+search and the SSE stream are org-scoped, and **ingested events + the alerts
+they trigger carry the ingesting principal's workspace** (per-org ingest), so a
+tenant only sees detections from its own logs. The *synthetic* background engine
+(`process_tick`) and the deployment-level log listeners deliberately stay in the
+default workspace - they are demo/deployment infrastructure, not a tenant's real
+data, which flows in through the per-org ingest path. Tenant lifecycle
+(suspend/export/delete-with-purge) and per-tenant quotas/retention complete the
+MSSP controls. The remaining step before flipping `MULTI_TENANT` on by default
+is end-to-end validation of the whole multi-tenant path.
 """
 import os
 import uuid

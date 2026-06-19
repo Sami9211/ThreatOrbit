@@ -464,6 +464,9 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
                 mitre_tactic_id=rule.get("mitre_tactic_id"),
                 description=f"Rule '{rule['name']}' matched. {ev.get('raw', '')}",
                 raw_log=ev.get("raw"), event_count=m["count"],
+                # Per-tenant: the alert lands in the same workspace as the event
+                # that triggered it (ingested events carry the ingester's org).
+                org_id=ev.get("org_id") or "org-default",
             )
             created += 1
             rule_created += 1
