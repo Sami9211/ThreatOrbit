@@ -8,6 +8,7 @@ deployments should use `pg_dump` instead (see docs/OPERATIONS.md).
 CLI:
     python -m dashboard_api.ops backup [dest.db]     # snapshot to a file
     python -m dashboard_api.ops verify <backup.db>   # integrity-check a backup
+    python -m dashboard_api.ops schema-version       # code vs db schema (rc=1 if db newer)
 
 Restore is deliberately NOT an API or hot operation: stop the service,
 replace the DB file with the backup, start the service (migrations re-apply
@@ -71,6 +72,16 @@ def _main(argv: list[str]) -> int:
         return 0
     if len(argv) >= 2 and argv[0] == "verify":
         print(verify_backup(argv[1]))
+        return 0
+    if len(argv) >= 1 and argv[0] in ("schema-version", "schema"):
+        from dashboard_api.db import schema_versions
+        v = schema_versions()
+        print(f"code schema version: {v['code']}")
+        print(f"db   schema version: {v['db']}")
+        if v["db"] is not None and v["db"] > v["code"]:
+            print("WARNING: database is NEWER than this build - it will refuse to "
+                  "start unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1.")
+            return 1
         return 0
     print(__doc__)
     return 2

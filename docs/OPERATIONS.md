@@ -75,6 +75,29 @@ columns), applied automatically at boot. That gives a simple contract:
 - Run the test suite against a copy when in doubt:
   `python -m pytest dashboard_api/tests -q`.
 
+### Migration-gating (rollback safety)
+
+The DB records the schema version it was migrated to (`SCHEMA_VERSION` in
+`dashboard_api/db.py`, surfaced at `GET /ready` as `schema.{code,db}`). On boot
+the code:
+
+- **adopts** a fresh or pre-versioning database (no gate);
+- **bumps** the recorded version after a normal (additive) upgrade;
+- **refuses to start** if the database is *newer* than the binary — i.e. a build
+  was rolled back onto a schema a later build wrote. This stops an old binary
+  from silently corrupting newer data.
+
+Check before a deploy/rollback:
+
+```bash
+python -m dashboard_api.ops schema-version    # prints code vs db; rc=1 if db is newer
+```
+
+If you have **verified** the newer schema is compatible with the older code,
+override the gate with `DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1`; otherwise deploy a
+build that supports the DB's version, or restore the pre-upgrade backup. Bump
+`SCHEMA_VERSION` by 1 whenever you add a migration.
+
 ## Observability
 
 - **Metrics:** `GET /metrics` (Prometheus text format) — request

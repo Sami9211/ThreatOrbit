@@ -9,10 +9,32 @@ helper plus ``json_cols`` decoding turns a row into a JSON-ready dict, expanding
 columns that hold serialized JSON (lists/objects) back into real structures.
 """
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 
 from dashboard_api.config import DB_PATH
+
+# Schema version for migration-gating on upgrade (HA/DR rollback safety). Bump
+# this by 1 whenever a migration is added to `_MIGRATIONS` / the schema. The DB
+# records the version it was last migrated to; on boot the code refuses to run
+# against a DB that is NEWER than it understands (an older binary rolled back
+# onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
+# are additive-only, so a normal upgrade just applies the new columns and bumps.
+SCHEMA_VERSION = 1
+
+
+class SchemaVersionError(RuntimeError):
+    """Raised at startup when the database schema is newer than this code."""
+
+    def __init__(self, db_version: int, code_version: int):
+        self.db_version, self.code_version = db_version, code_version
+        super().__init__(
+            f"Database schema version {db_version} is newer than this build "
+            f"(supports {code_version}). This binary was likely rolled back onto a "
+            f"newer schema. Deploy a build that supports schema {db_version}, or - "
+            f"only if you have verified the schema is compatible - set "
+            f"DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1 to override.")
 
 # Columns that store JSON-encoded text and should be decoded on read.
 JSON_COLUMNS = {
@@ -843,12 +865,49 @@ def _safe_schema(conn: sqlite3.Connection):
                 pass
 
 
+def _schema_version_gate(conn):
+    """Migration-gating on upgrade. Compares the DB's recorded schema version to
+    SCHEMA_VERSION and either adopts (fresh/unversioned DB), bumps (normal
+    upgrade after migrations applied), or refuses to boot (DB newer than code,
+    i.e. a rollback) unless explicitly overridden."""
+    row = conn.execute("SELECT value FROM settings WHERE key='schema_version'").fetchone()
+    stored = int(row["value"]) if row and str(row["value"]).isdigit() else None
+    if stored is None:
+        # Fresh DB, or one predating versioning: the running code's schema is now
+        # authoritative (existing tables are additive-compatible). Adopt it.
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('schema_version', ?)",
+                     (str(SCHEMA_VERSION),))
+        return
+    if stored > SCHEMA_VERSION:
+        allow = os.environ.get("DASHBOARD_ALLOW_SCHEMA_DOWNGRADE", "").lower() in ("1", "true", "yes")
+        if not allow:
+            raise SchemaVersionError(stored, SCHEMA_VERSION)
+        return  # overridden: proceed, but don't downgrade the recorded version
+    if stored < SCHEMA_VERSION:
+        # Normal upgrade: _apply_migrations already added the new columns; record it.
+        conn.execute("UPDATE settings SET value=? WHERE key='schema_version'", (str(SCHEMA_VERSION),))
+
+
+def schema_versions() -> dict:
+    """The code's and the DB's schema versions (for ops/health surfaces)."""
+    try:
+        with get_conn() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='schema_version'").fetchone()
+        db = int(row["value"]) if row and str(row["value"]).isdigit() else None
+    except Exception:
+        db = None
+    return {"code": SCHEMA_VERSION, "db": db}
+
+
 def init_db():
     with get_conn() as conn:
         _safe_schema(conn)
         _apply_migrations(conn)
         # second pass: indexes that needed migrated columns now succeed
         _safe_schema(conn)
+        # Migration-gating: refuse to run against a DB newer than this code
+        # (rollback safety) before we touch any data.
+        _schema_version_gate(conn)
         # Multi-tenancy foundation: ensure the default workspace exists and every
         # user belongs to one (non-breaking; single-tenant installs are unchanged).
         from dashboard_api.tenancy import ensure_default_org

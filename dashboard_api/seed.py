@@ -443,6 +443,12 @@ def _seed_settings(conn):
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (k, v))
+    # Keep the schema-version marker present even after a force-wipe of settings,
+    # so migration-gating still has its baseline (init_db's gate ran first and
+    # already rejected any DB newer than this code, so stamping = current is safe).
+    from dashboard_api.db import SCHEMA_VERSION
+    conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('schema_version', ?)",
+                 (str(SCHEMA_VERSION),))
 
 
 def _seed_hunts(conn, rng):

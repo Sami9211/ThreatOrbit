@@ -228,9 +228,10 @@ def health():
 @app.get("/ready", tags=["meta"])
 def ready():
     try:
+        from dashboard_api.db import schema_versions
         with get_conn() as conn:
             conn.execute("SELECT 1")
-        return {"ready": True}
+        return {"ready": True, "schema": schema_versions()}
     except Exception as e:  # pragma: no cover
         return {"ready": False, "error": str(e)}
 

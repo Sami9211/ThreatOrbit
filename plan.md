@@ -394,11 +394,13 @@ that buying companies require. Realistic positioning today:
       context (org-tagged sources), tenant lifecycle tooling (create/suspend/
       export/delete with data purge), and per-tenant quotas + retention.
       Then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
-- [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15, see
-      CHANGELOG): `deploy/helm/threatorbit` deploys all four services with health
-      probes, PVCs, a Secret/ConfigMap split, optional Postgres for a
-      multi-replica dashboard (rolling updates), and ingress. Still ahead:
-      migration-gating on upgrade, RPO/RTO targets with tested failover, and
+- [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15) and
+      **migration-gating on upgrade DONE** (2026-06-18, see CHANGELOG): a
+      `SCHEMA_VERSION` marker recorded in the DB; on boot the code adopts a fresh
+      DB, bumps a normal additive upgrade, and **refuses to start against a DB
+      newer than it understands** (rollback safety) unless
+      `DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1`; `GET /ready` and `ops schema-version`
+      surface code-vs-db. Still ahead: RPO/RTO targets with tested failover and
       multi-AZ Postgres guidance. (A full-stack backup + tooled restore + drill
       already shipped — see the 2026-06-15 HA/DR entry.)
 - [~] **Vendor compliance posture** — **DPA template** + GDPR data-subject
@@ -537,8 +539,10 @@ and published EPS limits.
   scheduler, engine tick) have no leader election - two app replicas would
   double-run them. Either document the single-writer constraint loudly or add
   leader election.
-- **No HA/DR story**: no k8s/Helm chart, no rolling upgrade with migration
-  gating, no RPO/RTO targets or tested failover, no multi-AZ Postgres guidance.
+- **HA/DR — partially closed**: a k8s/Helm chart shipped (2026-06-15) and
+  **migration-gating on upgrade** shipped (2026-06-18, schema-version boot gate +
+  `ops schema-version`). Still open: RPO/RTO targets with tested failover and
+  multi-AZ Postgres guidance.
 - **Backups operationalised (2026-06-15)**: `dashboard_api/backup.py` +
   `scripts/backup.sh`/`restore.sh` snapshot **all three** service DBs into one
   verified archive and perform a **tooled, integrity-checked restore** (was
@@ -726,6 +730,20 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · HA/DR: migration-gating on upgrade (rollback safety).** Added a
+  `SCHEMA_VERSION` marker (`dashboard_api/db.py`) recorded in the DB's `settings`.
+  On boot `init_db` runs `_schema_version_gate` BEFORE touching data: it **adopts**
+  a fresh/pre-versioning DB, **bumps** the marker after a normal additive upgrade,
+  and **raises `SchemaVersionError` (refuses to start)** when the DB is newer than
+  the code — an older binary rolled back onto a newer schema — unless
+  `DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1`. Surfaced for ops at `GET /ready`
+  (`schema.{code,db}`) and `python -m dashboard_api.ops schema-version` (rc=1 if
+  the DB is newer). Fixed a latent bug uncovered en route: `seed(force=True)`
+  wiped the whole `settings` table (including the version marker) after `init_db`
+  set it, so `_seed_settings` now re-stamps `schema_version` (safe: the gate has
+  already rejected any too-new DB by then). Documented the contract + runbook in
+  `docs/OPERATIONS.md`. Tests in `test_schema_gate.py` (6): fresh adopt, downgrade
+  gated, override allows, upgrade bumps, `/ready` + CLI surfaces. Full suite green.
 - **2026-06-18 · Scale-grade RBAC: per-workspace role assignment.** Completes the
   Scale-grade RBAC item. A `user_org_roles` table + new `/orgs/{id}/members`
   endpoints (`PUT`/`GET`/`DELETE`, gated by `users.manage`) let an operator grant
