@@ -211,7 +211,7 @@ def attack_surface_exposure():
 
 
 @router.get("/discovered")
-def discovered_assets(limit: int = 50):
+def discovered_assets(limit: int = Query(50, le=1000)):
     """Passive attack-surface discovery: hosts emitting telemetry that are NOT
     in the asset inventory (shadow IT), with observed activity for vetting."""
     from dashboard_api.attack_surface import discover_unmanaged

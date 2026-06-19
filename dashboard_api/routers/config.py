@@ -4,7 +4,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api.auth import current_user, require_perm
@@ -365,7 +365,7 @@ def engine_control(body: EngineControl, user: dict = Depends(require_perm("confi
 
 
 @router.get("/jobs")
-def list_jobs(limit: int = 50, _: dict = Depends(require_perm("config.manage"))):
+def list_jobs(limit: int = Query(50, le=500), _: dict = Depends(require_perm("config.manage"))):
     """Recent background jobs (IOC syncs, risk recomputes, log analyses)."""
     limit = max(1, min(limit, 200))
     with get_conn() as conn:
@@ -377,7 +377,7 @@ def list_jobs(limit: int = 50, _: dict = Depends(require_perm("config.manage")))
 
 @router.get("/audit-log")
 def list_audit_log(
-    limit: int = 100,
+    limit: int = Query(100, le=2000),
     action: str | None = None,
     _: dict = Depends(require_perm("config.manage")),
 ):

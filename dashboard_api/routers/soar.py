@@ -3,7 +3,7 @@ import json
 import random
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
@@ -702,7 +702,7 @@ def run_playbook(playbook_id: str, body: PlaybookRunBody | None = None,
 
 
 @router.get("/playbooks/{playbook_id}/runs")
-def list_playbook_runs(playbook_id: str, limit: int = 20):
+def list_playbook_runs(playbook_id: str, limit: int = Query(20, le=500)):
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM playbook_runs WHERE playbook_id=? ORDER BY ts DESC LIMIT ?",
@@ -711,7 +711,7 @@ def list_playbook_runs(playbook_id: str, limit: int = 20):
 
 
 @router.get("/runs")
-def list_runs(status: str | None = None, limit: int = 30,
+def list_runs(status: str | None = None, limit: int = Query(30, le=500),
               user: dict = Depends(current_user)):
     clauses, params = [], []
     # Tenant isolation (same pattern as alerts): active only when flipped on.
@@ -890,7 +890,7 @@ def run_integration_action(integration_id: str, body: ActionRun, user: dict = De
 
 
 @router.get("/integrations/{integration_id}/actions")
-def integration_action_trail(integration_id: str, limit: int = 50):
+def integration_action_trail(integration_id: str, limit: int = Query(50, le=500)):
     """The action audit trail for one integration - what was done, to whom, and
     whether it was a live vendor call or recorded-only."""
     with get_conn() as conn:

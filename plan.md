@@ -358,8 +358,11 @@ that buying companies require. Realistic positioning today:
       shipped (2026-06-15): `dashboard_api/bench.py` is a repeatable benchmark and
       `docs/LOAD_LIMITS.md` captures real numbers (~10k EPS ingest+detect, ~7k EPS
       detection on 4 vCPU SQLite) with the honest finding that the worker pool
-      doesn't speed up SQLite (single-writer). Still ahead: a documented Postgres
-      baseline and UI dataset ceilings.
+      doesn't speed up SQLite (single-writer). **UI dataset ceilings DONE**
+      (2026-06-18): every list endpoint hard-caps its `limit` (422 over the cap)
+      so a client can't force an unbounded result set; the ceilings are published
+      in `docs/LOAD_LIMITS.md`. Still ahead: a documented Postgres baseline (needs
+      a live PG host to measure).
 - [x] **Background-service HA story** — DONE (see CHANGELOG): a DB-backed
       **leader lease** (`leader.py` + `leader_lease` table) now gates the
       singleton loops — the engine tick drives election (acquire/renew), the
@@ -740,6 +743,17 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · UI dataset ceilings (list-endpoint limit caps).** An audit found
+  ~12 list endpoints (overview rollups, jobs, audit-log, SOAR run history,
+  discovered assets, service IOC pulls) took a **plain `limit: int = N` with no
+  upper bound** — a client could request `?limit=10000000` and force an unbounded
+  result set (memory/DoS). Each now uses `Query(default, le=cap)` (the same
+  pattern the 15 paginated endpoints already used), so an over-cap value is
+  rejected with 422 and the cap is the hard ceiling. Published the per-family
+  ceilings in `docs/LOAD_LIMITS.md` (alongside the client-side 150-row windowing).
+  Tests in `test_dataset_ceilings.py` (5 endpoints: over-cap → 422, cap → 200).
+  Full suite green. (Only the live-Postgres EPS baseline remains on the
+  load-limits item — it needs a real PG host to measure.)
 - **2026-06-18 · Agentless S3 log pull (closes Parser & source breadth).** Logs
   already landing in object storage now flow into the SIEM with no agent or
   forwarder. `dashboard_api/s3_pull.py` tails an S3 (or S3-compatible) bucket

@@ -6,7 +6,7 @@ with the detail pages (the same alerts that drive SIEM also drive these counts).
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from dashboard_api import tenancy
 from dashboard_api.auth import current_user
@@ -93,7 +93,7 @@ def mitre_heatmap(user: dict = Depends(current_user)):
 
 
 @router.get("/recent-alerts")
-def recent_alerts(limit: int = 8, user: dict = Depends(current_user)):
+def recent_alerts(limit: int = Query(8, le=200), user: dict = Depends(current_user)):
     sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
@@ -104,7 +104,7 @@ def recent_alerts(limit: int = 8, user: dict = Depends(current_user)):
 
 
 @router.get("/recent-incidents")
-def recent_incidents(limit: int = 6, user: dict = Depends(current_user)):
+def recent_incidents(limit: int = Query(6, le=200), user: dict = Depends(current_user)):
     sc, sp = _scope(user)
     with get_conn() as conn:
         rows = conn.execute(
@@ -115,7 +115,7 @@ def recent_incidents(limit: int = 6, user: dict = Depends(current_user)):
 
 
 @router.get("/top-actors")
-def top_actors(limit: int = 5, user: dict = Depends(current_user)):
+def top_actors(limit: int = Query(5, le=100), user: dict = Depends(current_user)):
     sc, sp = _scope(user)
     with get_conn() as conn:
         # Rank by indicators REALLY attributed to each actor in the store (a
@@ -149,7 +149,7 @@ _NAME_TO_CC = {v: k for k, v in _CC.items()}
 
 
 @router.get("/geo")
-def geo_distribution(limit: int = 20, user: dict = Depends(current_user)):
+def geo_distribution(limit: int = Query(20, le=500), user: dict = Depends(current_user)):
     """Observed attack origins, by country, from the platform's OWN alert
     store (src_country on alerts) - real measurement, not global statistics.
     Includes per-country severity mix and the latest observation time."""
@@ -190,7 +190,7 @@ def geo_distribution(limit: int = 20, user: dict = Depends(current_user)):
 
 
 @router.get("/live-feed")
-def live_feed(limit: int = 10, user: dict = Depends(current_user)):
+def live_feed(limit: int = Query(10, le=200), user: dict = Depends(current_user)):
     """Latest IOCs presented as a live threat feed."""
     sc, sp = _scope(user)
     with get_conn() as conn:

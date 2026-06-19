@@ -58,3 +58,25 @@ realistic event mix (failed logins, large egress, process starts, beacons):
   stream will measure higher EPS.
 - These are pipeline numbers, not an end-to-end SLA — front the API with TLS, a
   reverse proxy, and the resource limits in `deploy/helm/`.
+
+## API dataset ceilings (UI safety)
+
+Every list endpoint caps its `limit` query parameter server-side, so a client
+(or a buggy UI) can't request an unbounded result set and exhaust memory. An
+over-cap value is rejected with HTTP 422; the cap is the hard ceiling:
+
+| Endpoint family | Per-request cap |
+| --- | --- |
+| SIEM alerts, assets, dark-web, hunts | 500 |
+| CTI IOCs / TAXII objects / fleet vulns | 1000 |
+| MISP export | 5000 · STIX bundle | 10000 |
+| Audit-log read | 2000 · audit CSV export | 50000 |
+| Overview rollups (recent/top/geo/feed) | 100–500 |
+| SOAR run history / action trails | 500 |
+| Notifications | 100 · global search | 25 |
+
+On the client side, the SIEM queue **windows** rows above 150 (a dependency-free
+`useWindowedRows` hook) so even a full 500-row page renders only the visible
+slice. For datasets larger than a single page, use the server-side
+pagination (`offset`/`limit`) and filters the list endpoints expose rather than
+raising the cap.

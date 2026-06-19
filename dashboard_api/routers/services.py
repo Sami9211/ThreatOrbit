@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.config import (
@@ -65,7 +65,7 @@ def threat_source_health():
 
 
 @router.get("/threat/iocs")
-def threat_iocs(limit: int = 50):
+def threat_iocs(limit: int = Query(50, le=1000)):
     data = _get(THREAT_API_URL, "/iocs", params={"limit": max(1, min(limit, 500))})
     if data is None:
         return {"available": False, "items": []}
@@ -109,7 +109,7 @@ _TYPE_MAP = {"ip": "ip", "domain": "domain", "url": "url", "hash": "hash",
 
 
 @router.post("/threat/sync-iocs")
-def sync_threat_iocs(limit: int = 500, user: dict = Depends(require_perm("services.run"))):
+def sync_threat_iocs(limit: int = Query(500, le=10000), user: dict = Depends(require_perm("services.run"))):
     """Pull indicators from the Threat API ingestion store into the dashboard
     CTI IOC store (deduplicated by value). This is the live bridge between the
     OSINT engine and the operator console."""
