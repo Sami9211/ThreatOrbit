@@ -22,6 +22,7 @@ auto-fill.
 | Provisioning + **deprovisioning** (SCIM) | CC6.2, CC6.3 | A.5.16, A.5.18 | `scim.py` |
 | Password storage + throttling | CC6.1 | A.8.5 | `auth.py` (PBKDF2 600k) |
 | Secrets encrypted at rest | CC6.7 | A.8.24 | `secretstore.py` (Fernet) |
+| Data residency (self-hosted, pinnable egress) | C1.1 | A.5.23 | `docs/DATA_RESIDENCY.md` |
 | Audit logging | CC7.2, CC7.3 | A.8.15 | `db.audit()` |
 | Security monitoring/metrics | CC7.1 | A.8.16 | `observability.py` |
 | SSRF guard | CC6.6 | A.8.20, A.8.21 | `net_guard.py` |

@@ -223,8 +223,9 @@ ThreatOrbit-V2/
 `api_examples.md`, **`DEPLOYMENT.md`** (proxy/TLS topology, nginx + Caddy
 configs, env checklist), **`OPERATIONS.md`** (backup/restore, retention,
 runbook), **`SUPPORTED_SOURCES.md`** (the parser/source matrix — which vendor
-log shapes normalise onto the detection vocabulary) and **`API_VERSIONING.md`**
-(the `/v1` contract + deprecation policy).
+log shapes normalise onto the detection vocabulary), **`API_VERSIONING.md`**
+(the `/v1` contract + deprecation policy) and **`DATA_RESIDENCY.md`** (every
+external egress point + how to pin/disable each for in-region installs).
 
 ---
 

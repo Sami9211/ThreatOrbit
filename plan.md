@@ -407,10 +407,12 @@ that buying companies require. Realistic positioning today:
       multi-AZ Postgres guidance. (A full-stack backup + tooled restore + drill
       already shipped — see the 2026-06-15 HA/DR entry.)
 - [~] **Vendor compliance posture** — **DPA template** + GDPR data-subject
-      tooling DONE (`docs/DPA_TEMPLATE.md`; export/erase per user). Still ahead
-      (external / can't self-certify): an independent **SOC 2 Type II** (then ISO
-      27001) program and data-residency options. Enterprises ask for these before
-      the first PoC ends.
+      tooling DONE (`docs/DPA_TEMPLATE.md`; export/erase per user), **and
+      data-residency DONE** (2026-06-18, see CHANGELOG): `docs/DATA_RESIDENCY.md`
+      enumerates every external egress point and how to pin/disable each for an
+      in-region or air-gapped install (mapped as control `DR-RESIDENCY`). Still
+      ahead (external / can't self-certify): an independent **SOC 2 Type II**
+      (then ISO 27001) program. Enterprises ask for these before the first PoC ends.
 - [x] **Collector ecosystem** — DONE (see CHANGELOG): a stdlib-only first-party
       agent (tail + checkpoint + rotation + at-least-once + backpressure) **and**
       certified Fluent Bit / Vector / Beats→Logstash configs, all shipping to a
@@ -621,8 +623,10 @@ and published EPS limits.
   map the implemented controls to SOC 2 TSC + ISO 27001:2022 Annex A with in-repo
   evidence and **honest status** (implemented/partial/planned), so a buyer's
   security questionnaire can be answered from real artifacts. Still needed (the
-  parts that aren't code): an **independent SOC 2 Type II** audit then ISO 27001,
-  and data-residency options - asked for *before* the first enterprise PoC ends.
+  parts that aren't code): an **independent SOC 2 Type II** audit then ISO 27001
+  - asked for *before* the first enterprise PoC ends. **Data-residency DONE
+  (2026-06-18)**: `docs/DATA_RESIDENCY.md` documents every egress point + how to
+  pin/disable each for in-region/air-gapped installs (control `DR-RESIDENCY`).
   **DPA template DONE (2026-06-15)**: `docs/DPA_TEMPLATE.md` (GDPR Art. 28,
   grounded in the real controls + honest on the self-hosted-vs-SaaS roles and the
   not-yet-certified items). **GDPR data-subject tooling DONE (2026-06-15)**:
@@ -733,6 +737,18 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Data residency artifact + compliance control.** Closed the
+  data-residency gap in the vendor-compliance posture (asked for in enterprise
+  security questionnaires). `docs/DATA_RESIDENCY.md` enumerates **every** point
+  where data could leave the deployment - threat-intel connectors, IOC
+  enrichment, the AI assistant, Stripe, the audit sink, cold-storage archive,
+  webhooks/Slack, SMTP, the SSO IdP, TAXII/OpenCTI - notes that each is opt-in
+  and SSRF-guarded, and gives a strict in-region / air-gapped checklist (the
+  self-hosted store is the residency boundary). Added it as control
+  `DR-RESIDENCY` (SOC 2 C1.1 / ISO A.5.23) in `compliance.py` + `docs/COMPLIANCE.md`
+  (the compliance test guards the matrix's shape/honesty - still green). RPO/RTO
+  targets were already documented in `docs/BACKUP_RESTORE.md`; the *tested*
+  failover remains infra-gated. Linked from the README docs index.
 - **2026-06-18 · Multi-tenancy: per-tenant quotas + retention.** Each workspace
   can now be capped and aged independently. `tenancy.py` stores per-org limits as
   org-scoped settings (`set_org_limits`/`quota_usage`/`enforce_quota`/
