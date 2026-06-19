@@ -465,6 +465,7 @@ export interface ApiKey {
   createdAt: string
   createdBy: string
   revoked: boolean
+  orgId?: string
 }
 
 export interface AuditEntry {
@@ -1205,8 +1206,8 @@ export const fetchSettings   = () => api<Record<string, string>>('/config/settin
 export const updateSettings  = (values: Record<string, string>) =>
   api<Record<string, string>>('/config/settings', { method: 'PUT', body: JSON.stringify({ values }) })
 export const fetchApiKeys    = () => api<ApiKey[]>('/config/api-keys')
-export const createApiKey    = (name: string, scope = 'read') =>
-  api<ApiKey & { secret: string }>('/config/api-keys', { method: 'POST', body: JSON.stringify({ name, scope }) })
+export const createApiKey    = (name: string, scope = 'read', orgId?: string) =>
+  api<ApiKey & { secret: string }>('/config/api-keys', { method: 'POST', body: JSON.stringify({ name, scope, ...(orgId ? { orgId } : {}) }) })
 export const revokeApiKey    = (id: string) =>
   api<void>(`/config/api-keys/${id}`, { method: 'DELETE' })
 export interface Webhook {

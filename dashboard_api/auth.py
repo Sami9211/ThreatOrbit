@@ -190,7 +190,7 @@ def _principal_from_api_key(token: str) -> dict | None:
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, name, scope, revoked, secret_hash FROM api_keys WHERE secret_hash=?",
+            "SELECT id, name, scope, revoked, secret_hash, org_id FROM api_keys WHERE secret_hash=?",
             (digest,)).fetchone()
         if row is None or not hmac.compare_digest(str(row["secret_hash"]), digest):
             raise HTTPException(status_code=401, detail="Invalid API key")
@@ -201,9 +201,11 @@ def _principal_from_api_key(token: str) -> dict | None:
     from dashboard_api.tenancy import DEFAULT_ORG_ID
     role = _API_KEY_SCOPE_ROLE.get(str(row["scope"]), "viewer")
     # A complete principal so downstream code (audit, tenancy, RBAC) is happy.
+    # Org-scoped keys act in their workspace, so a collector ingests per-tenant.
     return {
         "id": row["id"], "email": f"apikey:{row['name']}", "name": row["name"],
-        "role": role, "status": "active", "org_id": DEFAULT_ORG_ID,
+        "role": role, "status": "active",
+        "org_id": (row["org_id"] if "org_id" in row.keys() else None) or DEFAULT_ORG_ID,
         "is_service": True, "api_key_scope": row["scope"],
     }
 

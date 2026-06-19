@@ -396,10 +396,10 @@ that buying companies require. Realistic positioning today:
       principal's workspace, so a tenant only sees detections from its own logs.
       The *synthetic* background engine + the deployment log listeners stay in the
       default workspace **by design** (demo/deployment infra, not a tenant's real
-      data). Remaining before flipping `DASHBOARD_MULTI_TENANT` on by default for
-      MSSP builds: a full end-to-end validation pass (a deployment decision, not a
-      code gap) — and, if wanted, org-scoped API keys so non-interactive
-      collectors ingest per-tenant (today they authenticate into the default org).
+      data), **and org-scoped API keys DONE** (2026-06-18) so non-interactive
+      collectors ingest per-tenant. All code pieces for multi-tenant GA are now in;
+      the only thing left is flipping `DASHBOARD_MULTI_TENANT` on by default for
+      MSSP builds after an end-to-end validation pass (a deployment decision).
 - [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15) and
       **migration-gating on upgrade DONE** (2026-06-18, see CHANGELOG): a
       `SCHEMA_VERSION` marker recorded in the DB; on boot the code adopts a fresh
@@ -742,6 +742,17 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Org-scoped API keys (per-tenant collectors).** Closes the last
+  optional multi-tenancy piece: a non-interactive collector now ingests into the
+  right workspace. Added `api_keys.org_id` (migration; `SCHEMA_VERSION` 1→2, which
+  exercises the new boot gate) — `auth._principal_from_api_key` returns the key's
+  org, so a service principal acts in that workspace and `ingest_lines` stamps its
+  events accordingly. `POST /config/api-keys` takes an optional `orgId` (defaults
+  to the creator's workspace; a named workspace must exist), and the frontend
+  client/type carry it. Tests in `test_api_key_org.py` (3): default-to-creator,
+  unknown-workspace 404, and an end-to-end org-scoped-key ingest landing in its
+  tenant. Full suite green. With this, **all code pieces for multi-tenant GA are
+  in** — only the default-flip + an end-to-end validation pass remain.
 - **2026-06-18 · Multi-tenancy: per-org ingest context.** The last data-path
   isolation gap. Ingested events now carry the **ingesting principal's
   workspace** (`ingest_lines(... org_id=…)` stamps the `events.org_id`; both

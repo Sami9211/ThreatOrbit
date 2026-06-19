@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class SchemaVersionError(RuntimeError):
@@ -795,6 +795,9 @@ _MIGRATIONS = [
     ("notifications", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("saved_views", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("report_schedules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    # Org-scoped API keys: a service principal authenticating with this key acts
+    # in this workspace, so a non-interactive collector ingests per-tenant.
+    ("api_keys", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     # Per-user Slack notification routing (personal incoming-webhook URL +
     # the minimum severity that should reach it).
     ("users", "slack_webhook", "TEXT"),

@@ -20,6 +20,7 @@ class SettingsUpdate(BaseModel):
 class ApiKeyCreate(BaseModel):
     name: str
     scope: str = "read"
+    orgId: str | None = None    # workspace this key acts in (default: the creator's)
 
 
 class WebhookCreate(BaseModel):
@@ -278,19 +279,24 @@ def create_api_key(body: ApiKeyCreate, user: dict = Depends(require_perm("config
     display_fragment = secret[-4:]
     kid = str(uuid.uuid4())
     created_at = _now()
+    from dashboard_api import tenancy
+    org_id = (body.orgId or "").strip() or tenancy.org_of(user)
     with get_conn() as conn:
+        # If a workspace was named explicitly, it must exist.
+        if body.orgId and conn.execute("SELECT 1 FROM orgs WHERE id=?", (org_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
         conn.execute(
-            "INSERT INTO api_keys (id,name,prefix,secret_hash,scope,last_used,created_at,created_by,revoked) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO api_keys (id,name,prefix,secret_hash,scope,last_used,created_at,created_by,revoked,org_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (kid, name, display_fragment, hashlib.sha256(secret.encode()).hexdigest(),
-             body.scope, None, created_at, user["email"], 0),
+             body.scope, None, created_at, user["email"], 0, org_id),
         )
-        audit(conn, user["email"], "apikey.create", kid, f"name={name} scope={body.scope}")
+        audit(conn, user["email"], "apikey.create", kid, f"name={name} scope={body.scope} org={org_id}")
         conn.commit()
     # Secret is returned exactly once, at creation.
     return {"id": kid, "name": name, "prefix": display_fragment, "scope": body.scope,
             "last_used": None, "created_at": created_at, "created_by": user["email"],
-            "revoked": 0, "secret": secret}
+            "revoked": 0, "orgId": org_id, "secret": secret}
 
 
 class EngineControl(BaseModel):
