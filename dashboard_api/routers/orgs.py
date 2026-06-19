@@ -11,7 +11,8 @@ from pydantic import BaseModel
 
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
-from dashboard_api.tenancy import enforced, new_org, org_of
+from dashboard_api.tenancy import (DEFAULT_ORG_ID, enforced, export_org, new_org,
+                                   org_of, org_status, purge_org)
 
 router = APIRouter(prefix="/orgs", tags=["orgs"], dependencies=[Depends(current_user)])
 
@@ -147,6 +148,10 @@ def update_org(org_id: str, body: OrgUpdate, user: dict = Depends(require_perm("
             fields.append(f"{col}=?"); values.append(v)
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
+    # The default workspace is the deployment itself - never suspend it (that
+    # would lock out the platform admin).
+    if org_id == DEFAULT_ORG_ID and body.status == "suspended":
+        raise HTTPException(status_code=400, detail="The default workspace cannot be suspended")
     values.append(org_id)
     with get_conn() as conn:
         cur = conn.execute(f"UPDATE orgs SET {','.join(fields)} WHERE id=?", values)
@@ -156,3 +161,36 @@ def update_org(org_id: str, body: OrgUpdate, user: dict = Depends(require_perm("
         conn.commit()
         row = conn.execute("SELECT * FROM orgs WHERE id=?", (org_id,)).fetchone()
     return row_to_dict(row)
+
+
+@router.get("/{org_id}/export")
+def export_workspace(org_id: str, user: dict = Depends(require_perm("config.manage"))):
+    """Full JSON dump of a workspace's data (tenant offboarding / portability).
+    Secrets are scrubbed from the user rows."""
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM orgs WHERE id=?", (org_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        data = export_org(conn, org_id)
+        audit(conn, user["email"], "org.export", org_id,
+              f"tables={len(data['tables'])}")
+        conn.commit()
+    return data
+
+
+@router.delete("/{org_id}")
+def delete_workspace(org_id: str, user: dict = Depends(require_perm("config.manage"))):
+    """Hard-delete a workspace and ALL its data across every tenant table. Guarded:
+    the default workspace can't be deleted, and a workspace must be **suspended**
+    first (a deliberate two-step) so this can't be a one-click data loss."""
+    if org_id == DEFAULT_ORG_ID:
+        raise HTTPException(status_code=400, detail="The default workspace cannot be deleted")
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM orgs WHERE id=?", (org_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        if org_status(conn, org_id) != "suspended":
+            raise HTTPException(status_code=409, detail="Suspend the workspace before deleting it")
+        counts = purge_org(conn, org_id)
+        audit(conn, user["email"], "org.delete", org_id,
+              f"purged={sum(counts.values())}")
+        conn.commit()
+    return {"orgId": org_id, "deleted": True, "purged": counts}

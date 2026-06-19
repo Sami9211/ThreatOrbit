@@ -388,12 +388,15 @@ that buying companies require. Realistic positioning today:
       ahead: flipping the engine to ingest-only by default, and partitioning or
       externalising the event store (e.g. ClickHouse/OpenSearch behind the same
       search API) with predicate push-down for the hunt language.
-- [ ] **Finish multi-tenancy for GA** — the documented limits must close
-      before MSSP sale: org-scope get-by-id detail endpoints (404 cross-org),
-      org-scope global search and the SSE stream, per-org engine/ingest
-      context (org-tagged sources), tenant lifecycle tooling (create/suspend/
-      export/delete with data purge), and per-tenant quotas + retention.
-      Then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
+- [~] **Finish multi-tenancy for GA** — get-by-id IDOR, global search and the
+      SSE stream are org-scoped (earlier), and **tenant lifecycle tooling DONE**
+      (2026-06-18, see CHANGELOG): create (existing) + **suspend** (blocks the
+      tenant's auth; the default workspace is protected) + **export** (full data
+      dump, secrets scrubbed) + **delete-with-purge** (suspend-first guard, then
+      hard-deletes every row across the tenant tables). Still open before MSSP
+      sale: per-org engine/ingest context (org-tagged sources — background
+      writers still run as the deployment), per-tenant quotas + retention, then
+      flip `DASHBOARD_MULTI_TENANT` on by default for MSSP builds.
 - [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15) and
       **migration-gating on upgrade DONE** (2026-06-18, see CHANGELOG): a
       `SCHEMA_VERSION` marker recorded in the DB; on boot the code adopts a fresh
@@ -634,13 +637,13 @@ and published EPS limits.
 
 ### P1 — Multi-tenancy completion (for MSSP / SaaS)
 
-`DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, and both
-**global search** and the **SSE stream** are now org-scoped (2026-06-15, see
-CHANGELOG). Still needed for GA: **per-org engine/ingest** context (the
-background engine still publishes/ingests org-agnostically, so engine-path SSE
-events and notifications broadcast), tenant lifecycle tooling
-(create/suspend/export/delete with purge), and per-tenant quotas + retention -
-*before* flipping it on by default.
+`DASHBOARD_MULTI_TENANT` is staged, the get-by-id IDOR was closed, both
+**global search** and the **SSE stream** are org-scoped (2026-06-15), and
+**tenant lifecycle tooling** (create/suspend/export/delete-with-purge) shipped
+(2026-06-18, see CHANGELOG). Still needed for GA: **per-org engine/ingest**
+context (the background engine still publishes/ingests org-agnostically, so
+engine-path SSE events and notifications broadcast) and per-tenant quotas +
+retention - *before* flipping it on by default.
 
 ### P2 — API contract, platform SRE & data lifecycle
 
@@ -730,6 +733,23 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Multi-tenancy: tenant lifecycle tooling (suspend/export/delete).**
+  Advances *Finish multi-tenancy for GA* with the MSSP offboarding controls.
+  `tenancy.py` gained `is_org_active`, `export_org`, and `purge_org`. **Suspend**:
+  a workspace with `status=suspended` is blocked from auth - enforced in both
+  `login` and `current_user` (gated by `enforced()`, so single-tenant is a no-op),
+  and the default workspace is protected (can't be suspended or deleted, or the
+  platform admin would lock themselves out). **Export**: `GET /orgs/{id}/export`
+  (config.manage) dumps every row for the org across the tenant tables + its users
+  with secrets scrubbed - data portability for offboarding. **Delete**:
+  `DELETE /orgs/{id}` (config.manage) hard-purges every row across all tenant
+  tables (+ users, per-workspace grants, break-glass) and the org itself, guarded
+  by a **suspend-first** two-step (409 otherwise) so it can't be one-click data
+  loss; every step audited. Tests in `test_tenant_lifecycle.py` (5): suspend
+  blocks login + live tokens + resume, default-org protection (suspend & delete),
+  export-without-secrets, delete-requires-suspend-then-purges. Regenerated the
+  `/v1` contract surface. Still open for GA: per-org engine/ingest context and
+  per-tenant quotas. Full suite green.
 - **2026-06-18 · HA/DR: migration-gating on upgrade (rollback safety).** Added a
   `SCHEMA_VERSION` marker (`dashboard_api/db.py`) recorded in the DB's `settings`.
   On boot `init_db` runs `_schema_version_gate` BEFORE touching data: it **adopts**

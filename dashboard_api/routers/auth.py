@@ -97,6 +97,11 @@ def login(body: LoginRequest, request: Request):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if user["status"] == "disabled":
             raise HTTPException(status_code=403, detail="Account disabled")
+        # Tenant lifecycle: a suspended workspace can't be signed into (no-op when
+        # isolation is off or for the default workspace).
+        from dashboard_api import tenancy
+        if not tenancy.is_org_active(conn, user.get("org_id") or tenancy.DEFAULT_ORG_ID):
+            raise HTTPException(status_code=403, detail="Workspace suspended")
         # TOTP step-up: enrolled users must supply a valid current code. The
         # password is verified FIRST, so this never becomes a user-enumeration
         # oracle; wrong codes count against the same login throttle.

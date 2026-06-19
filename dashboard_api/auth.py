@@ -272,7 +272,19 @@ def current_user(
             user["org_id"] = x_org_id
             user["role"] = wr
             user["acting_org"] = x_org_id
+    # Tenant lifecycle: block all access to a suspended workspace (no-op when
+    # isolation is off or for the default workspace).
+    if tenancy_enforced():
+        with get_conn() as conn:
+            from dashboard_api import tenancy
+            if not tenancy.is_org_active(conn, user["org_id"]):
+                raise HTTPException(status_code=403, detail="Workspace suspended")
     return user
+
+
+def tenancy_enforced() -> bool:
+    from dashboard_api import tenancy
+    return tenancy.enforced()
 
 
 def current_session_id(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> str | None:

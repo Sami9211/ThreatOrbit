@@ -79,6 +79,65 @@ def org_of(user: dict) -> str:
     return user.get("org_id") or DEFAULT_ORG_ID
 
 
+# ── Tenant lifecycle (create/suspend/export/delete) ───────────────────────────
+
+def org_status(conn, org_id: str) -> str:
+    """A workspace's lifecycle status ('active'/'suspended'); 'active' if unknown."""
+    row = conn.execute("SELECT status FROM orgs WHERE id=?", (org_id,)).fetchone()
+    return (row["status"] if row and row["status"] else "active")
+
+
+def is_org_active(conn, org_id: str) -> bool:
+    """Whether a workspace may be used for auth. Always True when isolation is off
+    or for the default org (never suspendable - it's the deployment workspace)."""
+    if not MULTI_TENANT or org_id == DEFAULT_ORG_ID:
+        return True
+    return org_status(conn, org_id) != "suspended"
+
+
+def export_org(conn, org_id: str) -> dict:
+    """A JSON-serialisable dump of every row belonging to `org_id` across the
+    tenant tables + its users (secrets scrubbed) - for tenant offboarding / data
+    portability. A full dump: for a large tenant `events` can be sizeable."""
+    from dashboard_api.db import rows_to_dicts
+    out: dict = {"orgId": org_id, "exportedAt": _now(), "tables": {}}
+    org = conn.execute("SELECT * FROM orgs WHERE id=?", (org_id,)).fetchone()
+    out["org"] = dict(org) if org else None
+    secret_cols = ("password_hash", "password_salt", "mfa_secret",
+                   "mfa_recovery_codes", "slack_webhook")
+    users = rows_to_dicts(conn.execute("SELECT * FROM users WHERE org_id=?", (org_id,)).fetchall())
+    for u in users:
+        for c in secret_cols:
+            u.pop(c, None)
+    out["tables"]["users"] = users
+    for table in TENANT_TABLES:
+        try:
+            out["tables"][table] = rows_to_dicts(
+                conn.execute(f"SELECT * FROM {table} WHERE org_id=?", (org_id,)).fetchall())
+        except Exception:
+            out["tables"][table] = []
+    return out
+
+
+def purge_org(conn, org_id: str) -> dict:
+    """Hard-delete every row belonging to `org_id`, then the org itself (tenant
+    offboarding). Caller must guard the default org and commit/audit. Returns
+    per-table delete counts."""
+    counts: dict = {}
+    for table in TENANT_TABLES:
+        try:
+            counts[table] = conn.execute(f"DELETE FROM {table} WHERE org_id=?", (org_id,)).rowcount
+        except Exception:
+            counts[table] = 0
+    for extra in ("user_org_roles", "break_glass", "users"):
+        try:
+            counts[extra] = conn.execute(f"DELETE FROM {extra} WHERE org_id=?", (org_id,)).rowcount
+        except Exception:
+            counts[extra] = 0
+    counts["orgs"] = conn.execute("DELETE FROM orgs WHERE id=?", (org_id,)).rowcount
+    return counts
+
+
 # ── Data-isolation helpers (wired into every TENANT_TABLES list endpoint) ─────────
 
 def enforced() -> bool:
