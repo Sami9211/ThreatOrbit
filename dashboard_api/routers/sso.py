@@ -85,7 +85,7 @@ def callback(request: Request, code: str | None = Query(default=None),
         return _back("sso_error=missing_code")
     try:
         st = oidc.read_state(state)
-        tokens = oidc.exchange_code(code)
+        tokens = oidc.exchange_code(code, st.get("cv"))   # PKCE verifier (if any)
         claims = oidc.verify_id_token(tokens.get("id_token", ""), st["n"])
         u = oidc.claims_to_user(claims)
     except ValueError as e:

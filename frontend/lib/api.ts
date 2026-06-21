@@ -12,10 +12,26 @@ const BASE =
 export const TOKEN_KEY = 'to_token'
 export const USER_KEY  = 'to_user'
 
-// Server-Sent Events URL (token in query - EventSource can't set headers).
-export function liveStreamUrl(): string | null {
-  const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
-  return tok ? `${BASE}/stream?token=${encodeURIComponent(tok)}` : null
+// Server-Sent Events URL. EventSource can't set an Authorization header, so
+// rather than leak the long-lived session JWT in the URL (proxy logs, browser
+// history, Referer), we mint a short-lived, single-use stream ticket via
+// POST /stream/ticket (sent with the normal Authorization header) and pass THAT
+// in the query string. Single-use → fetch a fresh one for every (re)connect.
+export async function fetchStreamUrl(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  const tok = localStorage.getItem(TOKEN_KEY)
+  if (!tok) return null
+  try {
+    const res = await fetch(`${BASE}/stream/ticket`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}` },
+    })
+    if (!res.ok) return null
+    const { ticket } = await res.json()
+    return ticket ? `${BASE}/stream?ticket=${encodeURIComponent(ticket)}` : null
+  } catch {
+    return null
+  }
 }
 
 // RBAC: the caller's effective capabilities (UI gates controls on these).

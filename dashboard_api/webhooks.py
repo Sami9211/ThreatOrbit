@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 import httpx
 
+from dashboard_api import net_guard
 from dashboard_api.db import get_conn
 
 logger = logging.getLogger("dashboard_api.webhooks")
@@ -102,9 +103,14 @@ _BACKOFF_BASE = 1.0   # seconds; doubles each retry (1s, 2s)
 def _post_with_retry(url: str, body: bytes, headers: dict) -> bool:
     for attempt in range(_MAX_ATTEMPTS):
         try:
-            r = httpx.post(url, content=body, headers=headers, timeout=_TIMEOUT)
+            # SSRF guard applied at SEND time: re-validates, pins the connection
+            # to a validated IP (no DNS rebinding), and never follows redirects.
+            r = net_guard.safe_post(url, content=body, headers=headers, timeout=_TIMEOUT)
             if r.status_code < 400:
                 return True
+        except net_guard.UnsafeUrlError:
+            logger.warning("Webhook target blocked by SSRF guard: %s", url)
+            return False  # a disallowed target won't become allowed on retry
         except httpx.HTTPError:
             pass
         if attempt < _MAX_ATTEMPTS - 1 and not SYNC_DELIVERY:
@@ -147,10 +153,15 @@ _SEV_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
 def deliver_slack(url: str, text: str) -> bool:
-    """POST a Slack-format message ({"text": ...}); True on 2xx/3xx."""
+    """POST a Slack-format message ({"text": ...}); True on 2xx/3xx. The URL is
+    user-supplied, so it goes through the send-time SSRF guard (pin + no
+    redirects), not a bare httpx call."""
     try:
-        r = httpx.post(url, json={"text": text}, timeout=_TIMEOUT)
+        r = net_guard.safe_post(url, json={"text": text}, timeout=_TIMEOUT)
         return r.status_code < 400
+    except net_guard.UnsafeUrlError:
+        logger.warning("Slack webhook blocked by SSRF guard")
+        return False
     except httpx.HTTPError:
         return False
 

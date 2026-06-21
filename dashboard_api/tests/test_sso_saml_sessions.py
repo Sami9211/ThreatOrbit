@@ -20,7 +20,8 @@ def test_sso_callback_creates_listable_session(client, monkeypatch):
     email = f"sso-{uuid.uuid4().hex[:8]}@acme.com"
     monkeypatch.setattr(oidc, "configured", lambda: True)
     monkeypatch.setattr(oidc, "read_state", lambda s: {"n": "nonce", "r": None})
-    monkeypatch.setattr(oidc, "exchange_code", lambda code: {"id_token": "fake"})
+    monkeypatch.setattr(oidc, "exchange_code",
+                        lambda code, code_verifier=None: {"id_token": "fake"})
     monkeypatch.setattr(oidc, "verify_id_token", lambda tok, nonce: {"email": email})
     monkeypatch.setattr(oidc, "claims_to_user",
                         lambda claims: {"email": email, "name": "SSO User", "role": "analyst"})

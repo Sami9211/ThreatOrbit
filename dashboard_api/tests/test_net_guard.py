@@ -48,3 +48,60 @@ def test_override_permits_private():
     # The escape hatch (local dev / internal webhooks) lets a loopback through.
     assert validate_external_url("http://127.0.0.1:9000/sink", allow_private=True) == \
         "http://127.0.0.1:9000/sink"
+
+
+# ── Send-time SSRF defences (audit B1): pin the resolved IP, re-validate at the
+#    moment of sending, and never follow redirects. ────────────────────────────
+
+def test_safe_post_blocks_dns_rebinding(monkeypatch):
+    """A public-looking name that resolves to the cloud-metadata IP at SEND time
+    is rejected, even though it would have passed a check done at registration."""
+    import socket
+
+    from dashboard_api import net_guard
+    monkeypatch.setattr(socket, "getaddrinfo",
+                        lambda *a, **k: [(2, 1, 6, "", ("169.254.169.254", 80))])
+    with pytest.raises(net_guard.UnsafeUrlError):
+        net_guard.safe_post("http://rebinding.example.com/x",
+                            allow_private=False, json={})
+
+
+def test_safe_post_pins_ip_preserves_host_and_blocks_redirects(monkeypatch):
+    """The connection is pinned to the validated IP while the Host header + TLS
+    SNI stay on the real hostname, and redirects are disabled on the client."""
+    import socket
+
+    import httpx
+
+    from dashboard_api import net_guard
+    monkeypatch.setattr(socket, "getaddrinfo",
+                        lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 443))])
+    captured: dict = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            captured["client_kw"] = kw
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def request(self, method, url, **kw):
+            captured["url"] = str(url)
+            captured["headers"] = kw.get("headers")
+            captured["extensions"] = kw.get("extensions")
+
+            class _Resp:
+                status_code = 200
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    r = net_guard.safe_post("https://hooks.example.com/path",
+                           allow_private=False, json={"x": 1})
+    assert r.status_code == 200
+    assert captured["client_kw"]["follow_redirects"] is False          # redirects blocked
+    assert "93.184.216.34" in captured["url"]                          # pinned to resolved IP
+    assert captured["headers"]["Host"] == "hooks.example.com"          # Host preserved
+    assert captured["extensions"]["sni_hostname"] == "hooks.example.com"  # TLS SNI preserved

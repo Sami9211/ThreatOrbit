@@ -101,6 +101,35 @@ def create_token(user: dict, sid: str | None = None) -> str:
     return _jwt_encode(payload)
 
 
+_STREAM_TICKET_TTL_SECONDS = 60
+
+
+def create_stream_ticket(user_id: str) -> str:
+    """A short-lived, single-use token for opening the SSE stream. EventSource
+    can't send an Authorization header, so a ticket rides in the URL instead of
+    the long-lived session JWT (audit B3): it expires in ~60s, is consumed on
+    first use, and carries a `typ=stream` marker so it can't be replayed as a
+    session token. A leaked stream URL (proxy log, browser history, Referer) is
+    therefore near-worthless."""
+    now = datetime.now(timezone.utc)
+    return _jwt_encode({
+        "sub": user_id,
+        "typ": "stream",
+        "jti": os.urandom(12).hex(),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=_STREAM_TICKET_TTL_SECONDS)).timestamp()),
+    })
+
+
+def decode_stream_ticket(ticket: str) -> dict:
+    """Verify a stream ticket (signature + expiry + `typ`); return its payload.
+    Raises 401 for anything that isn't a live stream ticket."""
+    payload = _jwt_decode(ticket)            # signature + exp
+    if payload.get("typ") != "stream":
+        raise HTTPException(status_code=401, detail="Not a stream ticket")
+    return payload
+
+
 def record_session(conn, user_id: str, request=None, sid: str | None = None) -> str:
     """Create a per-device session row and return its id (used as the JWT `sid`).
     Best-effort device metadata (user-agent / client IP) for the "your sessions"
@@ -224,6 +253,9 @@ def current_user(
     if service is not None:
         return service
     payload = decode_token(token)
+    # A stream ticket is a 60s SSE-only credential — never a session token.
+    if payload.get("typ") == "stream":
+        raise HTTPException(status_code=401, detail="Not a session token")
     sid = payload.get("sid")
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()

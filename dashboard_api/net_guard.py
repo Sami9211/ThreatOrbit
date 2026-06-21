@@ -23,6 +23,8 @@ import os
 import socket
 from urllib.parse import urlparse
 
+import httpx
+
 _LOCAL_HOSTNAMES = {"localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"}
 
 
@@ -84,3 +86,86 @@ def validate_external_url(url: str, *, allow_private: bool | None = None) -> str
         if _blocked(info[4][0]):
             raise UnsafeUrlError("URL resolves to a private or reserved address")
     return value
+
+
+def _safe_connect_ip(parsed, allow: bool) -> str | None:
+    """Resolve ``parsed.hostname`` and return ONE address that's safe to connect
+    to, after range-checking *every* resolved address (so a name that resolves to
+    a mix of public and private addresses is rejected, not cherry-picked).
+
+    Returns ``None`` when the host is already a literal IP that should be used
+    as-is is handled by the caller, when ``allow`` is set, or when resolution
+    fails (offline) - in those cases the caller connects normally without
+    pinning. Raises :class:`UnsafeUrlError` if a resolved address is blocked.
+    """
+    host = parsed.hostname or ""
+    try:
+        ipaddress.ip_address(host)
+        return host  # literal IP - already validated; pin to it directly
+    except ValueError:
+        pass
+    if allow:
+        return None
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return None  # offline: validate_external_url already let it through
+    ips = [i[4][0] for i in infos]
+    for ip in ips:
+        if _blocked(ip):
+            raise UnsafeUrlError("URL resolves to a private or reserved address")
+    return ips[0] if ips else None
+
+
+def safe_request(method: str, url: str, *, allow_private: bool | None = None,
+                 timeout: float = 5.0, **kwargs) -> httpx.Response:
+    """Make an outbound HTTP request to a *user-supplied* URL with the SSRF
+    defences applied at SEND time, not just at registration time:
+
+      * the URL is re-validated now (scheme / host / address-range checks);
+      * DNS is resolved once and the connection is PINNED to a validated IP, so a
+        name that passed validation can't rebind to ``127.0.0.1`` /
+        ``169.254.169.254`` between the check and the connect (DNS rebinding /
+        TOCTOU - the gap the registration-time check alone leaves open);
+      * redirects are NOT followed (a 30x to an internal URL would otherwise be
+        re-resolved by the client and bypass the guard).
+
+    TLS still verifies against the real hostname (SNI + certificate check) even
+    though the socket connects to the pinned IP. Raises :class:`UnsafeUrlError`
+    for disallowed targets; otherwise returns the :class:`httpx.Response`.
+    """
+    allow = _allow_private() if allow_private is None else allow_private
+    validate_external_url(url, allow_private=allow)
+    parsed = urlparse((url or "").strip())
+    ip = _safe_connect_ip(parsed, allow)
+
+    headers = dict(kwargs.pop("headers", {}) or {})
+    extensions = dict(kwargs.pop("extensions", {}) or {})
+    request_url: str | httpx.URL = url
+    if ip and ip != parsed.hostname:
+        # Pin to the validated IP, but keep the Host header + TLS SNI pointed at
+        # the real hostname so the request still addresses (and verifies against)
+        # the intended server.
+        default_port = 443 if parsed.scheme == "https" else 80
+        port = parsed.port
+        host_header = parsed.hostname if (port is None or port == default_port) \
+            else f"{parsed.hostname}:{port}"
+        headers.setdefault("Host", host_header)
+        if parsed.scheme == "https":
+            extensions.setdefault("sni_hostname", parsed.hostname)
+        request_url = httpx.URL(url).copy_with(host=ip)
+
+    with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+        return client.request(method, request_url, headers=headers,
+                              extensions=extensions, **kwargs)
+
+
+def safe_post(url: str, **kwargs) -> httpx.Response:
+    """SSRF-hardened ``POST`` for user-supplied URLs (see :func:`safe_request`)."""
+    return safe_request("POST", url, **kwargs)
+
+
+def safe_get(url: str, **kwargs) -> httpx.Response:
+    """SSRF-hardened ``GET`` for user-supplied URLs (see :func:`safe_request`)."""
+    return safe_request("GET", url, **kwargs)

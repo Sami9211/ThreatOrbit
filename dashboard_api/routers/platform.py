@@ -215,11 +215,12 @@ def _deliver_report(webhook_url: str | None, report: dict) -> bool:
     if not webhook_url:
         return False
     try:
-        import httpx
-        r = httpx.post(webhook_url, json={"event": "report.scheduled",
-                                          "title": report["meta"]["title"],
-                                          "period": report["meta"]["period"],
-                                          "summary": report["summary"]}, timeout=8.0)
+        from dashboard_api import net_guard
+        # User-supplied URL → send-time SSRF guard (pin to validated IP, no redirects).
+        r = net_guard.safe_post(webhook_url, json={"event": "report.scheduled",
+                                                   "title": report["meta"]["title"],
+                                                   "period": report["meta"]["period"],
+                                                   "summary": report["summary"]}, timeout=8.0)
         return r.status_code < 400
     except Exception:
         return False

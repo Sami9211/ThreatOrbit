@@ -42,10 +42,32 @@ def test_signed_state_roundtrip():
     state, nonce = oidc.make_state("/dashboard/siem")
     data = oidc.read_state(state)
     assert data["n"] == nonce and data["r"] == "/dashboard/siem"
+    assert data.get("cv")                   # a PKCE verifier is bound into the state
     with pytest.raises(ValueError):
         oidc.read_state(state + "x")        # tampered signature
     with pytest.raises(ValueError):
         oidc.read_state("not-a-state")
+
+
+def test_authorization_url_includes_pkce(monkeypatch):
+    """The auth request carries an S256 PKCE challenge derived from the verifier
+    that's sealed in the signed state (so the code can't be redeemed elsewhere)."""
+    import hashlib
+    from urllib.parse import parse_qs, urlparse
+
+    monkeypatch.setattr(oidc, "discovery",
+                        lambda: {"authorization_endpoint": "https://idp.test/authorize"})
+    monkeypatch.setattr(oidc, "OIDC_CLIENT_ID", "cid")
+    monkeypatch.setattr(oidc, "OIDC_REDIRECT_URI", "https://sp.test/cb")
+    state, nonce = oidc.make_state("/dashboard")
+    q = parse_qs(urlparse(oidc.authorization_url(state, nonce)).query)
+    assert q["code_challenge_method"] == ["S256"]
+    verifier = oidc.read_state(state)["cv"]
+    expected = oidc._code_challenge(verifier)
+    assert q["code_challenge"] == [expected]
+    # challenge is the base64url SHA-256 of the verifier, never the verifier itself
+    assert q["code_challenge"][0] != verifier
+    assert oidc._b64u_encode(hashlib.sha256(verifier.encode()).digest()) == expected
 
 
 def test_id_token_verify_and_role_mapping(monkeypatch):

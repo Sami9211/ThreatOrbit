@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { liveStreamUrl } from '@/lib/api'
+import { fetchStreamUrl } from '@/lib/api'
 
 export type LiveEvent = { type: string; data: Record<string, unknown> }
 
@@ -19,8 +19,6 @@ export function useLiveStream(onEvent?: (e: LiveEvent) => void) {
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return
-    const url = liveStreamUrl()
-    if (!url) return
 
     let es: EventSource | null = null
     let closed = false
@@ -38,13 +36,18 @@ export function useLiveStream(onEvent?: (e: LiveEvent) => void) {
     const NAMED = ['notification', 'tick', 'alert.created', 'case.created',
       'incident.resolved', 'ioc.confirmed', 'playbook.completed', 'playbook.action']
 
-    function connect() {
+    // Each connect mints a FRESH single-use ticket (so a reconnect can't reuse a
+    // consumed one), then opens the EventSource with it.
+    async function connect() {
       if (closed) return
-      es = new EventSource(url as string)
+      const url = await fetchStreamUrl()
+      if (!url || closed) return
+      es = new EventSource(url)
       NAMED.forEach((t) => es!.addEventListener(t, handle(t)))
       es.onmessage = handle('message')
       es.onerror = () => {
-        // EventSource reconnects on its own; recreate only if fully closed.
+        // EventSource reconnects on its own; recreate only if fully closed (so we
+        // mint a new ticket - the prior one is already consumed).
         if (es && es.readyState === EventSource.CLOSED && !closed) {
           es.close()
           setTimeout(connect, 3000)

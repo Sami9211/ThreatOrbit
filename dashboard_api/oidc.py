@@ -83,10 +83,20 @@ def _sign_state(payload: dict) -> str:
 
 
 def make_state(return_to: str | None) -> tuple[str, str]:
-    """Return (state, nonce). Both are bound together inside the signed state."""
+    """Return (state, nonce). The nonce and a PKCE code_verifier are bound
+    together inside the signed state, so the round-trip needs no server-side
+    session store: the IdP echoes `state` back and we recover the verifier from it
+    at the token exchange."""
     nonce = secrets.token_urlsafe(16)
-    state = _sign_state({"n": nonce, "r": return_to or "", "exp": int(time.time()) + _STATE_TTL})
+    code_verifier = secrets.token_urlsafe(48)   # PKCE (RFC 7636): 43-128 url-safe chars
+    state = _sign_state({"n": nonce, "r": return_to or "", "cv": code_verifier,
+                         "exp": int(time.time()) + _STATE_TTL})
     return state, nonce
+
+
+def _code_challenge(verifier: str) -> str:
+    """PKCE S256 challenge: base64url(SHA256(verifier)), no padding."""
+    return _b64u_encode(hashlib.sha256(verifier.encode()).digest())
 
 
 def read_state(state: str) -> dict:
@@ -115,19 +125,33 @@ def authorization_url(state: str, nonce: str) -> str:
         "state": state,
         "nonce": nonce,
     }
+    # PKCE: derive the S256 challenge from the verifier carried in the signed
+    # state (OAuth 2.1 expects PKCE even for confidential clients; it binds the
+    # auth code to this client so a stolen code can't be redeemed elsewhere).
+    try:
+        verifier = read_state(state).get("cv")
+    except ValueError:
+        verifier = None
+    if verifier:
+        params["code_challenge"] = _code_challenge(verifier)
+        params["code_challenge_method"] = "S256"
     return f"{discovery()['authorization_endpoint']}?{urlencode(params)}"
 
 
-def exchange_code(code: str) -> dict:
+def exchange_code(code: str, code_verifier: str | None = None) -> dict:
     """Swap an authorization code for tokens at the token endpoint (TLS, with
-    the confidential client's secret)."""
-    r = httpx.post(discovery()["token_endpoint"], timeout=_HTTP_TIMEOUT, data={
+    the confidential client's secret). Sends the PKCE `code_verifier` when one
+    was planted in the login request."""
+    data = {
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": OIDC_REDIRECT_URI,
         "client_id": OIDC_CLIENT_ID,
         "client_secret": OIDC_CLIENT_SECRET,
-    })
+    }
+    if code_verifier:
+        data["code_verifier"] = code_verifier
+    r = httpx.post(discovery()["token_endpoint"], timeout=_HTTP_TIMEOUT, data=data)
     if r.status_code >= 400:
         raise ValueError(f"token exchange failed ({r.status_code})")
     return r.json()

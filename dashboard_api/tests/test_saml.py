@@ -53,7 +53,8 @@ _KEY2, _CERT2 = _mint_idp()  # an unrelated key, for the wrong-signer test
 def _signed_response(*, key=_KEY, cert=_CERT, email="grace@example.com",
                      issuer=IDP_ENTITY, audience=SP_ENTITY, recipient=ACS,
                      in_response_to="_req123", groups=("soc",),
-                     cond_minutes=5, sign=True, name="Grace Hopper"):
+                     cond_minutes=5, sign=True, name="Grace Hopper",
+                     include_audience=True):
     # Build the WHOLE Response first (namespaces on the root), then sign the
     # Assertion in place. Signing a standalone element and moving it afterwards
     # re-serialises and breaks the digest - so the document structure must be
@@ -62,6 +63,8 @@ def _signed_response(*, key=_KEY, cert=_CERT, email="grace@example.com",
     aid = "_" + secrets.token_hex(16)
     noa = _iso(now + timedelta(minutes=cond_minutes))
     grp = "".join(f"<saml:AttributeValue>{g}</saml:AttributeValue>" for g in groups)
+    aud_el = (f"<saml:AudienceRestriction><saml:Audience>{audience}</saml:Audience>"
+              "</saml:AudienceRestriction>") if include_audience else ""
     full = f"""<samlp:Response xmlns:samlp="{SAMLP_NS}" xmlns:saml="{SAML_NS}" ID="_r{secrets.token_hex(8)}" Version="2.0" IssueInstant="{_iso(now)}">
   <samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>
   <saml:Assertion ID="{aid}" Version="2.0" IssueInstant="{_iso(now)}">
@@ -73,7 +76,7 @@ def _signed_response(*, key=_KEY, cert=_CERT, email="grace@example.com",
       </saml:SubjectConfirmation>
     </saml:Subject>
     <saml:Conditions NotBefore="{_iso(now - timedelta(minutes=5))}" NotOnOrAfter="{noa}">
-      <saml:AudienceRestriction><saml:Audience>{audience}</saml:Audience></saml:AudienceRestriction>
+      {aud_el}
     </saml:Conditions>
     <saml:AttributeStatement>
       <saml:Attribute Name="email"><saml:AttributeValue>{email}</saml:AttributeValue></saml:Attribute>
@@ -145,6 +148,13 @@ def test_rejects_expired():
 def test_rejects_wrong_audience():
     with pytest.raises(ValueError, match="audience"):
         saml.parse_response(_signed_response(audience="some-other-sp"), "_req123")
+
+
+def test_rejects_missing_audience():
+    # An assertion with no AudienceRestriction at all is rejected (it could have
+    # been minted for a different SP and replayed at ours).
+    with pytest.raises(ValueError, match="audience"):
+        saml.parse_response(_signed_response(include_audience=False), "_req123")
 
 
 def test_rejects_wrong_issuer():

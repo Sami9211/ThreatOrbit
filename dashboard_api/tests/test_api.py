@@ -1034,7 +1034,9 @@ def test_per_user_slack_routing(client, auth, monkeypatch):
     class _R:
         status_code = 200
 
-    monkeypatch.setattr(wh.httpx, "post",
+    # deliver_slack routes user-supplied URLs through the send-time SSRF guard,
+    # so intercept there (net_guard.safe_post) rather than the bare httpx.post.
+    monkeypatch.setattr(wh.net_guard, "safe_post",
                         lambda url, json=None, timeout=None: (sent.append({"url": url, "json": json}), _R())[1])
 
     # the webhook URL is a quasi-secret: scrubbed from the principal payload

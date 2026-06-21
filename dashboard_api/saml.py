@@ -172,7 +172,12 @@ def parse_response(saml_response_b64: str, expected_in_response_to: str,
         raise ValueError("assertion expired")
     audiences = [_text(a) for a in assertion.findall(
         "saml:Conditions/saml:AudienceRestriction/saml:Audience", NS)]
-    if audiences and SAML_SP_ENTITY_ID not in audiences:
+    # Require an AudienceRestriction for SP-initiated SSO: an assertion with no
+    # audience at all could have been minted for a *different* SP and replayed at
+    # ours, so absence is rejected (not just a wrong value).
+    if not audiences:
+        raise ValueError("assertion is missing a required audience restriction")
+    if SAML_SP_ENTITY_ID not in audiences:
         raise ValueError("audience mismatch")
 
     # SubjectConfirmation: recipient + InResponseTo + window

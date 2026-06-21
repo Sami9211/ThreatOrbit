@@ -363,15 +363,15 @@ Guiding principle applied: design for any device/environment from the start.
 | A2  | Unbounded in-memory result leak            | FIXED — persisted to SQLite |
 | A3  | SQLite scaling ceiling                      | INFRA — Postgres seam staged |
 | A4  | New DB connection per call (no pooling)     | OPEN |
-| B1  | SSRF validate-time only / rebinding         | OPEN |
+| B1  | SSRF validate-time only / rebinding         | FIXED — send-time pin to a validated IP + re-validate + no redirects (`net_guard.safe_post`), wired into webhook/Slack/report delivery |
 | B2  | Webhooks not tenant-scoped                  | FIXED — `org_id` + scoped `_subscribers()` |
-| B3  | JWT in localStorage + token in SSE URL      | OPEN — SSE-URL leak being fixed |
-| B4  | No CSP / HSTS                               | PARTIAL — set in frontend nginx + vercel.json; root vercel.json CSP being added |
+| B3  | JWT in localStorage + token in SSE URL      | FIXED (SSE) — short-lived single-use stream ticket; the JWT is no longer in the stream URL (localStorage XSS risk mitigated by the B4 CSP) |
+| B4  | No CSP / HSTS                               | FIXED — CSP + HSTS in nginx and BOTH vercel.json files (the root one was missing CSP) |
 | B5  | log_api non-constant-time keys + CORS `*`   | FIXED |
 | B6  | Error responses leak exception text         | FIXED |
 | B7  | threat_api Flask dev server as root         | FIXED — gunicorn, non-root, healthcheck |
 | B8  | MFA replay / rate-limit                     | PARTIAL — login path tracks TOTP counter; step-up being hardened |
-| B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned; SAML audience + OIDC PKCE being added |
+| B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned + PKCE (S256) added; SAML now REQUIRES an AudienceRestriction; shared multi-worker replay store + signed AuthnRequest remain follow-ups |
 | B10 | Hand-rolled crypto justification            | FIXED — comment corrected |
 | B11 | Slack/companion SSRF + explicit timeouts    | FIXED — explicit timeouts everywhere |
 | B12 | 12h session, no refresh rotation            | INFRA — configurable TTL; documented |
