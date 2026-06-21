@@ -43,7 +43,7 @@ export default function DashboardPreview() {
 
   return (
     <section ref={ref} className="py-28 bg-surface overflow-hidden">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="site-container">
         <Reveal variant="rise" className="text-center mb-14">
           <h2 className="font-display text-4xl md:text-5xl font-bold text-white mb-4">
             Everything visible.

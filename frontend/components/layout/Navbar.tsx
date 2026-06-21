@@ -56,7 +56,7 @@ export default function Navbar() {
             : 'py-5 bg-transparent'
         )}
       >
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+        <div className="site-container flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5 group">
             <Logo size={30} className="transition-transform duration-500 group-hover:scale-110" />
             <span className="font-display font-semibold text-lg tracking-tight">

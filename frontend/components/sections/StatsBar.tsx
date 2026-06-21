@@ -42,7 +42,7 @@ export default function StatsBar() {
 
   return (
     <section ref={ref} className="relative py-12 border-y border-white/5 bg-surface overflow-hidden">
-      <div className="hidden md:grid grid-cols-6 max-w-7xl mx-auto px-6">
+      <div className="hidden md:grid grid-cols-6 site-container">
         {STATS.map((stat, i) => (
           <motion.div
             key={stat.label}

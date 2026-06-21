@@ -176,7 +176,7 @@ function FeatureCard({ feat, index }: { feat: (typeof FEATURES)[number]; index: 
 
 export default function Features() {
   return (
-    <section id="features" className="py-28 max-w-7xl mx-auto px-6">
+    <section id="features" className="py-28 site-container">
       <Reveal variant="rise" className="text-center mb-16">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/3 mb-5">
           <span className="w-1.5 h-1.5 rounded-full bg-magenta" />

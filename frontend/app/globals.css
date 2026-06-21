@@ -296,6 +296,21 @@ body {
   overflow-x: hidden;
 }
 
+/* ── Fluid page container ────────────────────────────────────────────
+ * Single source of truth for the marketing/site content width. The old
+ * fixed `max-w-7xl` (80rem) left large empty gutters on wide / ultrawide
+ * displays. Instead the width now tracks the viewport: it stays at the
+ * familiar ~80rem on laptops (so existing layouts are unchanged there),
+ * then grows with the screen up to a readable 130rem cap, and the side
+ * padding scales too. One class so every section flexes consistently
+ * across phone → laptop → desktop → ultrawide. */
+.site-container {
+  width: 100%;
+  margin-inline: auto;
+  max-width: clamp(80rem, 88vw, 130rem);
+  padding-inline: clamp(1.5rem, 0.75rem + 1vw, 3.5rem);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: #0A0612; }

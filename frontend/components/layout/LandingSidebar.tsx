@@ -7,6 +7,7 @@ import {
   Activity, ChevronRight, Globe, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCoarsePointer } from '@/lib/usePointer'
 import Logo from '@/components/ui/Logo'
 
 const LINKS = [
@@ -21,16 +22,22 @@ const LINKS = [
 
 export default function LandingSidebar() {
   const [open, setOpen] = useState(false)
+  const isCoarse = useCoarsePointer()
 
   return (
     <>
-      {/* Desktop hover trigger strip. (Mobile navigation is handled by the
-          Navbar's menu button, which opens the full-screen MegaMenu - a
-          second hamburger here would overlap the Navbar logo on phones.) */}
-      <div
-        className="hidden md:block fixed left-0 top-0 bottom-0 z-50 w-4 cursor-pointer"
-        onMouseEnter={() => setOpen(true)}
-      />
+      {/* Hover trigger strip - hover-capable pointers only. (Mobile/touch
+          navigation is handled by the Navbar's always-visible menu button,
+          which opens the full-screen MegaMenu. On a touchscreen there's no
+          real hover, so this strip would misfire - a tap fires a sticky
+          synthetic mouseenter with no leave - which is exactly the "not
+          smooth" behaviour we're removing here.) */}
+      {!isCoarse && (
+        <div
+          className="hidden md:block fixed left-0 top-0 bottom-0 z-50 w-4 cursor-pointer"
+          onMouseEnter={() => setOpen(true)}
+        />
+      )}
 
       {/* Sidebar panel */}
       <AnimatePresence>

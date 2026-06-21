@@ -309,3 +309,90 @@ Interviewers don't expect a portfolio to be flawless — they're testing whether
 - *"What would you fix first?"* → point at this checklist. Having a prioritised, self‑authored remediation plan is itself a strong signal.
 
 The fact that the hard parts (auth, RBAC, signature verification, CI/supply‑chain) are *right* is what makes the gaps forgivable. Fix the P0 list, learn to narrate the rest, and this project becomes a genuine asset rather than a liability in your SOC‑analyst search.
+
+---
+
+## 6. Re-verification & remediation log (2026-06-21)
+
+This report was written a few revisions back. On 2026-06-21 every finding above
+was re-checked against the current `main`, and a new responsive / cross-device
+finding (raised after viewing the landing page on a wide monitor and a
+touchscreen) was added and fixed. Items marked **OPEN** below are being worked
+through in the same remediation pass (follow-up commits); this log is updated as
+each lands.
+
+Status key: **FIXED** (resolved in code) · **PARTIAL** (materially improved,
+residue noted) · **OPEN** (still present, being addressed) · **INFRA**
+(deployment-time / outside the code).
+
+### New findings (this round)
+
+**[I1] Wide screens left large empty gutters; content was a fixed width. — FIXED**
+*Where:* every marketing/site section and the docs shell used a hardcoded
+`max-w-7xl` (80rem) container, so on 1920px / 2560px / ultrawide displays the
+content stayed ~1280px wide and centred, wasting hundreds of pixels of dead space
+on each side.
+*Fix:* introduced one fluid `.site-container` class (`frontend/app/globals.css`)
+whose width tracks the viewport — `max-width: clamp(80rem, 88vw, 130rem)` with
+viewport-scaled side padding — and replaced all 18 `max-w-7xl mx-auto px-6`
+usages with it (Hero, Features, Pricing, About, StatsBar, Footer, Navbar,
+MegaMenu, the docs shell, etc.). Laptops are visually unchanged (still ~80rem);
+desktop and ultrawide now use the available width so the empty gutters are gone,
+capped at a readable 130rem. One class = one source of truth, so new sections
+flex automatically.
+
+**[I2] Hover-to-reveal sidebars misbehaved on touchscreens. — FIXED**
+*Where:* the dashboard `Sidebar` expanded on `onMouseEnter`/`onMouseLeave`, and the
+landing `LandingSidebar` opened from a 4px `onMouseEnter` strip. Touch devices have
+no real hover — a tap fires a sticky synthetic `mouseenter` with no matching
+`mouseleave` — so the rail opened half-way or stuck open ("not smooth").
+*Fix:* added a shared `useCoarsePointer()` hook (`frontend/lib/usePointer.ts`,
+backed by `(pointer: coarse)`). On coarse pointers the dashboard rail no longer
+hover-expands; the collapsed rail becomes an explicit tap-to-expand target and
+collapses again on navigation (drawer-like), while mouse/trackpad users keep the
+smooth hover. The landing hover strip renders only for hover-capable pointers
+(touch users already have the always-visible Navbar menu / MegaMenu). A
+touch-laptop with a trackpad reports `pointer: fine`, so it correctly keeps hover.
+Guiding principle applied: design for any device/environment from the start.
+
+### Status of the original findings (re-verified 2026-06-21)
+
+| ID  | Title (short)                              | Status |
+|-----|--------------------------------------------|--------|
+| A1  | Single-process state vs multi-worker       | PARTIAL — log_api results persisted + `--workers 1`; threat_api rate-limiter in-proc (fine single-process) |
+| A2  | Unbounded in-memory result leak            | FIXED — persisted to SQLite |
+| A3  | SQLite scaling ceiling                      | INFRA — Postgres seam staged |
+| A4  | New DB connection per call (no pooling)     | OPEN |
+| B1  | SSRF validate-time only / rebinding         | OPEN |
+| B2  | Webhooks not tenant-scoped                  | FIXED — `org_id` + scoped `_subscribers()` |
+| B3  | JWT in localStorage + token in SSE URL      | OPEN — SSE-URL leak being fixed |
+| B4  | No CSP / HSTS                               | PARTIAL — set in frontend nginx + vercel.json; root vercel.json CSP being added |
+| B5  | log_api non-constant-time keys + CORS `*`   | FIXED |
+| B6  | Error responses leak exception text         | FIXED |
+| B7  | threat_api Flask dev server as root         | FIXED — gunicorn, non-root, healthcheck |
+| B8  | MFA replay / rate-limit                     | PARTIAL — login path tracks TOTP counter; step-up being hardened |
+| B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned; SAML audience + OIDC PKCE being added |
+| B10 | Hand-rolled crypto justification            | FIXED — comment corrected |
+| B11 | Slack/companion SSRF + explicit timeouts    | FIXED — explicit timeouts everywhere |
+| B12 | 12h session, no refresh rotation            | INFRA — configurable TTL; documented |
+| C1  | ML flags ~5% by construction                | FIXED — `contamination='auto'` + corroboration |
+| C2  | Every ML finding tagged T1595               | FIXED — technique derived from dominant signal |
+| C3  | Dark-web/social OSINT empty wrappers         | OPEN — seeding + honest naming |
+| C4  | Whole-file-into-memory parse                | FIXED — byte cap at ingress |
+| C5  | Report XSS sink + weak escaper              | FIXED — all fields escaped incl. quotes |
+| C6  | One shared report file                      | FIXED — per-job reports |
+| D1  | threat_api/log_api untested                 | OPEN — adding unit tests |
+| D2  | pip-audit only dashboard_api                | FIXED — all three audited |
+| D3  | No Python lockfile                          | OPEN |
+| E1  | Dockerfile hardening inconsistency          | FIXED |
+| E2  | Port defaults drift                         | PARTIAL — container ports correct; documented |
+| E3  | ADMIN_API_KEY falls back to user key        | FIXED — warns loudly when unset |
+| E4  | Public demo exposure                        | INFRA — deployment-time |
+| F1  | Committed `.pyc`                            | FIXED — none tracked |
+| F2  | No LICENSE                                  | FIXED — MIT added |
+| F3  | Language bar TS-heavy                       | OPEN — `.gitattributes` |
+| F4  | plan.md references missing CHANGELOG        | OPEN — adding CHANGELOG.md |
+| G1-3| Scope / duplication / SQL discipline       | INFRA / ongoing |
+| H1-3| CV / README positioning                    | OPEN — README "Status & limitations" + skills map |
+| I1  | Wide-screen fixed width / empty gutters     | FIXED (this round) |
+| I2  | Hover sidebars on touch                     | FIXED (this round) |

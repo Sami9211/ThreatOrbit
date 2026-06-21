@@ -38,7 +38,7 @@ export default function Footer() {
     <footer className="relative border-t border-white/5 bg-surface pt-16 pb-8 overflow-hidden">
       <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-magenta/5 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="site-container">
         <div className="grid grid-cols-2 md:grid-cols-6 gap-10 mb-14">
           <div className="col-span-2">
             <Link href="/" className="flex items-center gap-2.5 mb-4 group w-fit">

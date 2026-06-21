@@ -58,7 +58,7 @@ export default function ExpandingShowcase() {
 
   return (
     <section className="py-28 bg-surface overflow-hidden">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="site-container">
         <Reveal variant="rise" className="text-center mb-14">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/3 mb-5">
             <span className="w-1.5 h-1.5 rounded-full bg-amber" />

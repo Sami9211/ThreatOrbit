@@ -103,7 +103,7 @@ export default function ThreatIntelSection() {
   }, [prefersReducedMotion, feedVisible])
 
   return (
-    <section id="threat-intel" ref={ref} className="py-28 max-w-7xl mx-auto px-6 overflow-x-clip">
+    <section id="threat-intel" ref={ref} className="py-28 site-container overflow-x-clip">
       <div className="grid lg:grid-cols-2 gap-16 items-center">
         <motion.div
           initial={{ opacity: 0, x: -32 }}

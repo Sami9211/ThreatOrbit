@@ -44,7 +44,7 @@ export default function About() {
 
   return (
     <section id="about" className="py-28 bg-surface overflow-hidden">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="site-container">
         <div className="grid lg:grid-cols-2 gap-16 items-center mb-20">
           <Reveal variant="left">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/3 mb-6">

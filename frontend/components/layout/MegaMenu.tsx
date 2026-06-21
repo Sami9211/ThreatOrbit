@@ -87,7 +87,7 @@ export default function MegaMenu({ open, onClose }: { open: boolean; onClose: ()
           <div className="absolute inset-0 plasma-mesh opacity-60 pointer-events-none" />
           <div className="absolute inset-0 bg-grid-dim opacity-30 pointer-events-none" />
 
-          <div className="relative max-w-7xl mx-auto px-6 py-6">
+          <div className="relative site-container py-6">
             {/* Top bar */}
             <div className="flex items-center justify-between mb-12">
               <a href="/" onClick={onClose} className="flex items-center gap-2.5">

@@ -44,7 +44,7 @@ export default function GlobalThreatMap() {
       <div className="absolute inset-0 plasma-mesh opacity-30 pointer-events-none" />
       <div className="absolute inset-0 bg-grid-dim opacity-10 pointer-events-none" />
 
-      <div className="relative max-w-7xl mx-auto px-6">
+      <div className="relative site-container">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}

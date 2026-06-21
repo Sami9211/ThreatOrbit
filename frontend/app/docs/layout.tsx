@@ -42,7 +42,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
     <div className="min-h-screen bg-bg">
       {/* Top bar */}
       <header className="sticky top-0 z-50 border-b border-white/5 bg-bg/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="site-container h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
             <Logo size={22} />
             <span className="font-display font-semibold text-sm">
@@ -61,7 +61,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 flex gap-10 py-10">
+      <div className="site-container flex gap-10 py-10">
         {/* Sidebar */}
         <aside className="hidden md:block w-56 shrink-0">
           <nav className="sticky top-24 space-y-6">

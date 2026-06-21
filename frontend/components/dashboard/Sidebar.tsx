@@ -10,6 +10,7 @@ import {
   PanelLeftOpen, PanelLeftClose, X, ChevronDown, Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCoarsePointer } from '@/lib/usePointer'
 import Logo from '@/components/ui/Logo'
 
 type SubItem = { href: string; label: string }
@@ -124,6 +125,11 @@ export default function Sidebar() {
   const [pinned, setPinned] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  // Touch devices have no real hover, so a hover-to-expand rail behaves
+  // erratically (a tap fires a sticky synthetic mouseenter with no leave).
+  // On coarse pointers we disable hover-expand and switch to an explicit
+  // tap-to-toggle instead (see the logo row + pin button below).
+  const isCoarse = useCoarsePointer()
   // Manually expanded sections (in addition to auto-expand for active)
   const [manualExpanded, setManualExpanded] = useState<Set<string>>(new Set())
 
@@ -176,6 +182,15 @@ export default function Sidebar() {
     })
   }
 
+  // After navigating, close the drawer (mobile) or collapse the rail (touch
+  // tablet, which stays open via `pinned` since there's no mouse-leave) so the
+  // panel doesn't sit on top of the content. With a real mouse the rail
+  // collapses on its own when the pointer leaves, so we leave it alone.
+  function closeNav() {
+    if (isMobile) setMobileOpen(false)
+    else if (isCoarse) setPinned(false)
+  }
+
   return (
     <>
       {/* Mobile backdrop */}
@@ -203,12 +218,21 @@ export default function Sidebar() {
           className="h-full flex flex-col bg-surface border-r border-white/5 overflow-hidden select-none"
           animate={{ width: expanded ? 232 : 56 }}
           transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-          onMouseEnter={() => { if (!pinned) setHovered(true) }}
-          onMouseLeave={() => { if (!pinned) setHovered(false) }}
+          onMouseEnter={() => { if (!pinned && !isCoarse) setHovered(true) }}
+          onMouseLeave={() => { if (!pinned && !isCoarse) setHovered(false) }}
         >
           {/* Logo row */}
-          <div className="h-14 flex items-center px-3.5 border-b border-white/5 shrink-0">
+          <div className="relative h-14 flex items-center px-3.5 border-b border-white/5 shrink-0">
             <Logo size={26} className="shrink-0" />
+            {/* Touch devices have no hover, so tapping the collapsed rail reveals
+                the labels (the pin button collapses it again when expanded). */}
+            {!expanded && isCoarse && !isMobile && (
+              <button
+                onClick={() => setPinned(true)}
+                aria-label="Expand navigation"
+                className="absolute inset-0 z-10"
+              />
+            )}
             <AnimatePresence>
               {expanded && (
                 <motion.div
@@ -299,7 +323,7 @@ export default function Sidebar() {
                         <Link
                           href={href}
                           title={label}
-                          onClick={() => { if (isMobile) setMobileOpen(false) }}
+                          onClick={closeNav}
                           className={cn(
                             'flex-1 flex items-center gap-3 px-2.5 py-2.5 rounded-lg transition-colors duration-150',
                             active
@@ -370,7 +394,7 @@ export default function Sidebar() {
                                   <Link
                                     key={subItem.href}
                                     href={subItem.href}
-                                    onClick={() => { if (isMobile) setMobileOpen(false) }}
+                                    onClick={closeNav}
                                     className={cn(
                                       'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] transition-colors duration-150',
                                       subActive
@@ -404,7 +428,7 @@ export default function Sidebar() {
             <Link
               href="/dashboard/siem"
               title="Active Alerts"
-              onClick={() => { if (isMobile) setMobileOpen(false) }}
+              onClick={closeNav}
               className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-amber hover:bg-amber/5 transition-colors"
             >
               <div className="relative shrink-0">

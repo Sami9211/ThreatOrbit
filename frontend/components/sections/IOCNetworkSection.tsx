@@ -60,7 +60,7 @@ export default function IOCNetworkSection() {
         <div className="absolute bottom-1/4 right-0 w-[350px] h-[350px] rounded-full bg-magenta/4 blur-[80px]" />
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-6">
+      <div className="relative site-container">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}

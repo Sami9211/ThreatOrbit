@@ -62,7 +62,7 @@ const TIERS = [
 
 export default function Pricing() {
   return (
-    <section id="pricing" className="py-28 max-w-7xl mx-auto px-6">
+    <section id="pricing" className="py-28 site-container">
       <Reveal variant="rise" className="text-center mb-16">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/3 mb-5">
           <Sparkles className="w-3 h-3 text-amber" />

@@ -59,7 +59,7 @@ export default function LogAnalysisSection() {
 
   return (
     <section id="log-analysis" ref={ref} className="py-28 bg-surface-2 overflow-hidden">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="site-container">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           <motion.div
             initial={{ opacity: 0, x: -32 }}

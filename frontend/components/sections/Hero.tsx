@@ -140,7 +140,7 @@ export default function Hero() {
 
       <motion.div
         style={{ y: contentY, opacity: contentOpacity }}
-        className="relative z-10 max-w-7xl mx-auto px-6 py-28 grid lg:grid-cols-2 gap-16 items-center"
+        className="relative z-10 site-container py-28 grid lg:grid-cols-2 gap-16 items-center"
       >
         {/* Left */}
         <div>
