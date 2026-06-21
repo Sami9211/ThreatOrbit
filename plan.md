@@ -406,9 +406,13 @@ that buying companies require. Realistic positioning today:
       DB, bumps a normal additive upgrade, and **refuses to start against a DB
       newer than it understands** (rollback safety) unless
       `DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1`; `GET /ready` and `ops schema-version`
-      surface code-vs-db. Still ahead: RPO/RTO targets with tested failover and
-      multi-AZ Postgres guidance. (A full-stack backup + tooled restore + drill
-      already shipped — see the 2026-06-15 HA/DR entry.)
+      surface code-vs-db. **Multi-AZ Postgres HA guidance DONE** (2026-06-18,
+      `docs/POSTGRES_HA.md`): managed/self-managed topologies, why failover is
+      clean here (stateless replicas, per-request connections, DB-backed leader
+      lease), RPO/RTO, and an upgrade-against-HA note. Still ahead: an actual
+      **tested** failover drill (needs live multi-AZ infra to run). (A full-stack
+      backup + tooled restore + drill already shipped — see the 2026-06-15 HA/DR
+      entry.)
 - [~] **Vendor compliance posture** — **DPA template** + GDPR data-subject
       tooling DONE (`docs/DPA_TEMPLATE.md`; export/erase per user), **and
       data-residency DONE** (2026-06-18, see CHANGELOG): `docs/DATA_RESIDENCY.md`
@@ -549,16 +553,17 @@ and published EPS limits.
   leader election.
 - **HA/DR — partially closed**: a k8s/Helm chart shipped (2026-06-15) and
   **migration-gating on upgrade** shipped (2026-06-18, schema-version boot gate +
-  `ops schema-version`). Still open: RPO/RTO targets with tested failover and
-  multi-AZ Postgres guidance.
+  `ops schema-version`) and **multi-AZ Postgres HA guidance** (`docs/POSTGRES_HA.md`).
+  Still open: an actual tested failover drill (needs live multi-AZ infra).
 - **Backups operationalised (2026-06-15)**: `dashboard_api/backup.py` +
   `scripts/backup.sh`/`restore.sh` snapshot **all three** service DBs into one
   verified archive and perform a **tooled, integrity-checked restore** (was
   documented-manual, dashboard-only). An **automated restore drill** runs in CI
   (`test_backup.py` round-trips real data + catches corruption/zip-slip/clobber),
   and `docs/BACKUP_RESTORE.md` covers scheduling, off-box shipping, RPO/RTO, and
-  encryption. Still ahead: a packaged scheduled job (cron/timer image) and
-  multi-AZ Postgres failover guidance.
+  encryption. Multi-AZ Postgres failover guidance shipped
+  (`docs/POSTGRES_HA.md`, 2026-06-18). Still ahead: a packaged scheduled job
+  (cron/timer image).
 
 ### P1 — Detection content, parsers & collectors (the actual SOC value)
 
@@ -743,6 +748,18 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Multi-AZ Postgres HA guidance.** Closes the documentation half
+  of the HA/DR item's Postgres gap. `docs/POSTGRES_HA.md` covers turning on the
+  Postgres backend behind a highly-available endpoint, managed (RDS/Aurora
+  Multi-AZ, Cloud SQL HA, Azure zone-redundant) vs self-managed (Patroni/repmgr)
+  topologies, and — grounded in the actual architecture — **why failover is clean
+  here**: stateless API replicas, per-request connections (no stale pool to
+  drain → automatic reconnect through the HA endpoint), and the DB-backed leader
+  lease that survives promotion so the background singletons stay single-run.
+  Plus PgBouncer notes, RPO≈0 with a synchronous standby, RTO, and rolling
+  upgrades against the schema-version gate. Linked from the README. (The only
+  HA/DR piece left is an actual *tested* failover drill, which needs live
+  multi-AZ infrastructure to run.)
 - **2026-06-18 · UI dataset ceilings (list-endpoint limit caps).** An audit found
   ~12 list endpoints (overview rollups, jobs, audit-log, SOAR run history,
   discovered assets, service IOC pulls) took a **plain `limit: int = N` with no

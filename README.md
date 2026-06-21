@@ -225,7 +225,8 @@ configs, env checklist), **`OPERATIONS.md`** (backup/restore, retention,
 runbook), **`SUPPORTED_SOURCES.md`** (the parser/source matrix — which vendor
 log shapes normalise onto the detection vocabulary), **`API_VERSIONING.md`**
 (the `/v1` contract + deprecation policy) and **`DATA_RESIDENCY.md`** (every
-external egress point + how to pin/disable each for in-region installs).
+external egress point + how to pin/disable each for in-region installs). HA/scale
+deployers: see **`POSTGRES_HA.md`** (multi-AZ Postgres) and **`LOAD_LIMITS.md`**.
 
 ---
 
