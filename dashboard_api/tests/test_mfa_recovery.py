@@ -76,6 +76,18 @@ def test_disable_clears_recovery_codes(client):
     assert _login(client, email).status_code == 200
 
 
+def test_mfa_step_up_is_rate_limited(client):
+    # Even on an authenticated session, repeated bad codes against a step-up route
+    # lock out (audit B8) - a hijacked session can't brute-force the 6-digit code.
+    email, h, secret, _ = _enrol(client)
+    locked = False
+    for _ in range(15):
+        if client.post("/auth/mfa/disable", headers=h, json={"code": "000000"}).status_code == 429:
+            locked = True
+            break
+    assert locked, "MFA step-up should rate-limit repeated wrong codes"
+
+
 def test_totp_replay_rejected_at_login(client):
     email, h, secret, _ = _enrol(client)
     code = mfa.totp_code(secret)

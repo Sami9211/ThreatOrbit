@@ -239,6 +239,8 @@ def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
     from dashboard_api.mfa import verify_code, new_recovery_codes, hash_recovery_code
     from dashboard_api.secretstore import decrypt
     import json
+    key = f"mfa:{user['id']}"
+    _check_throttle(key)   # rate-limit code guesses even on an authenticated session
     with get_conn() as conn:
         row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
                            (user["id"],)).fetchone()
@@ -246,6 +248,7 @@ def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
         if not secret:
             raise HTTPException(status_code=400, detail="No enrolment in progress - call /auth/mfa/enroll first")
         if not verify_code(secret, body.code):
+            _record_failure(key)
             raise HTTPException(status_code=400, detail="Invalid MFA code")
         # Issue one-time recovery codes (shown once now) so a lost authenticator
         # isn't a lockout; only their hashes are stored.
@@ -254,6 +257,7 @@ def mfa_verify(body: MfaCode, user: dict = Depends(current_user)):
                      (json.dumps([hash_recovery_code(c) for c in codes]), user["id"]))
         audit(conn, user["email"], "auth.mfa_enabled", user["id"])
         conn.commit()
+    _clear_failures(key)
     return {"enabled": True, "recoveryCodes": codes}
 
 
@@ -263,17 +267,21 @@ def mfa_disable(body: MfaCode, user: dict = Depends(current_user)):
     hijacked session can't silently strip the second factor."""
     from dashboard_api.mfa import verify_code
     from dashboard_api.secretstore import decrypt
+    key = f"mfa:{user['id']}"
+    _check_throttle(key)
     with get_conn() as conn:
         row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
                            (user["id"],)).fetchone()
         if not row["mfa_enabled"]:
             raise HTTPException(status_code=400, detail="MFA is not enabled")
         if not verify_code(decrypt(row["mfa_secret"]), body.code):
+            _record_failure(key)
             raise HTTPException(status_code=400, detail="Invalid MFA code")
         conn.execute("UPDATE users SET mfa_enabled=0, mfa_secret=NULL, mfa_recovery_codes=NULL WHERE id=?",
                      (user["id"],))
         audit(conn, user["email"], "auth.mfa_disabled", user["id"])
         conn.commit()
+    _clear_failures(key)
     return {"enabled": False}
 
 
@@ -284,18 +292,22 @@ def regenerate_recovery_codes(body: MfaCode, user: dict = Depends(current_user))
     from dashboard_api.mfa import verify_code, new_recovery_codes, hash_recovery_code
     from dashboard_api.secretstore import decrypt
     import json
+    key = f"mfa:{user['id']}"
+    _check_throttle(key)
     with get_conn() as conn:
         row = conn.execute("SELECT mfa_secret, mfa_enabled FROM users WHERE id=?",
                            (user["id"],)).fetchone()
         if not row["mfa_enabled"]:
             raise HTTPException(status_code=400, detail="MFA is not enabled")
         if not verify_code(decrypt(row["mfa_secret"]), body.code):
+            _record_failure(key)
             raise HTTPException(status_code=400, detail="Invalid MFA code")
         codes = new_recovery_codes()
         conn.execute("UPDATE users SET mfa_recovery_codes=? WHERE id=?",
                      (json.dumps([hash_recovery_code(c) for c in codes]), user["id"]))
         audit(conn, user["email"], "auth.mfa_recovery_regenerated", user["id"])
         conn.commit()
+    _clear_failures(key)
     return {"recoveryCodes": codes}
 
 

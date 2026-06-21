@@ -315,15 +315,17 @@ The fact that the hard parts (auth, RBAC, signature verification, CI/supply‑ch
 ## 6. Re-verification & remediation log (2026-06-21)
 
 This report was written a few revisions back. On 2026-06-21 every finding above
-was re-checked against the current `main`, and a new responsive / cross-device
-finding (raised after viewing the landing page on a wide monitor and a
-touchscreen) was added and fixed. Items marked **OPEN** below are being worked
-through in the same remediation pass (follow-up commits); this log is updated as
-each lands.
+was re-checked against the current `main`, a new responsive / cross-device finding
+(I1/I2) was added and fixed, and the still-present issues were remediated in this
+pass. Net result: the headline security gaps (B1 SSRF, B3 SSE token-in-URL, B4
+CSP, B8 MFA, B9 SAML/OIDC) are closed; the flagship pipeline is now unit-tested
+(D1); detection is honest (C1–C3); and the remainder are deployment-time (INFRA),
+external to the repo (the CV — H1), or deliberately deferred (A4 pooling, D3
+lockfile — best generated in the release pipeline).
 
 Status key: **FIXED** (resolved in code) · **PARTIAL** (materially improved,
-residue noted) · **OPEN** (still present, being addressed) · **INFRA**
-(deployment-time / outside the code).
+residue noted) · **DEFERRED** (deliberate, rationale in-row) · **OPEN** (tracked)
+· **INFRA** (deployment-time / outside the code).
 
 ### New findings (this round)
 
@@ -362,7 +364,7 @@ Guiding principle applied: design for any device/environment from the start.
 | A1  | Single-process state vs multi-worker       | PARTIAL — log_api results persisted + `--workers 1`; threat_api rate-limiter in-proc (fine single-process) |
 | A2  | Unbounded in-memory result leak            | FIXED — persisted to SQLite |
 | A3  | SQLite scaling ceiling                      | INFRA — Postgres seam staged |
-| A4  | New DB connection per call (no pooling)     | OPEN |
+| A4  | New DB connection per call (no pooling)     | DEFERRED — per-call connect is cheap for WAL-SQLite (audit notes "minor"); pooling is tied to the Postgres path to avoid thread-local/WAL lifecycle risk |
 | B1  | SSRF validate-time only / rebinding         | FIXED — send-time pin to a validated IP + re-validate + no redirects (`net_guard.safe_post`), wired into webhook/Slack/report delivery |
 | B2  | Webhooks not tenant-scoped                  | FIXED — `org_id` + scoped `_subscribers()` |
 | B3  | JWT in localStorage + token in SSE URL      | FIXED (SSE) — short-lived single-use stream ticket; the JWT is no longer in the stream URL (localStorage XSS risk mitigated by the B4 CSP) |
@@ -370,7 +372,7 @@ Guiding principle applied: design for any device/environment from the start.
 | B5  | log_api non-constant-time keys + CORS `*`   | FIXED |
 | B6  | Error responses leak exception text         | FIXED |
 | B7  | threat_api Flask dev server as root         | FIXED — gunicorn, non-root, healthcheck |
-| B8  | MFA replay / rate-limit                     | PARTIAL — login path tracks TOTP counter; step-up being hardened |
+| B8  | MFA replay / rate-limit                     | FIXED — login: TOTP-counter replay + login throttle; step-up (verify/disable/recovery) now per-user rate-limited (locks after AUTH_MAX_FAILURES) |
 | B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned + PKCE (S256) added; SAML now REQUIRES an AudienceRestriction; shared multi-worker replay store + signed AuthnRequest remain follow-ups |
 | B10 | Hand-rolled crypto justification            | FIXED — comment corrected |
 | B11 | Slack/companion SSRF + explicit timeouts    | FIXED — explicit timeouts everywhere |
