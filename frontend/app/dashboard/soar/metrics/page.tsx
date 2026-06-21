@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { fetchSoarMetrics, fetchSiemKpis, type SoarMetrics, type SiemKpis } from '@/lib/api'
+import { fetchSoarMetrics, fetchSiemKpis, fetchAttackCoverage,
+         type SoarMetrics, type SiemKpis, type AttackCoverage } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
   TrendingDown, TrendingUp, Clock, Zap, AlertTriangle,
@@ -110,23 +111,15 @@ const ANALYST_THROUGHPUT = [
   { name: 'r.osei',      closed: 74,  color: '#FF4D6D' },
 ]
 
-// MITRE ATT&CK coverage
-const MITRE_TACTICS = [
-  { id: 'TA0001', name: 'Initial Access',        coverage: 82 },
-  { id: 'TA0002', name: 'Execution',             coverage: 74 },
-  { id: 'TA0003', name: 'Persistence',           coverage: 61 },
-  { id: 'TA0004', name: 'Privilege Escalation',  coverage: 88 },
-  { id: 'TA0005', name: 'Defense Evasion',       coverage: 45 },
-  { id: 'TA0006', name: 'Credential Access',     coverage: 79 },
-  { id: 'TA0007', name: 'Discovery',             coverage: 38 },
-  { id: 'TA0008', name: 'Lateral Movement',      coverage: 67 },
-  { id: 'TA0009', name: 'Collection',            coverage: 52 },
-  { id: 'TA0010', name: 'Exfiltration',          coverage: 71 },
-  { id: 'TA0011', name: 'C2',                    coverage: 93 },
-  { id: 'TA0040', name: 'Impact',                coverage: 86 },
-  { id: 'TA0042', name: 'Resource Development',  coverage: 29 },
-  { id: 'TA0043', name: 'Reconnaissance',        coverage: 41 },
-]
+// MITRE ATT&CK tactic → navigator id, for labelling the live coverage derived
+// from /siem/attack-coverage (real per-tactic rule coverage, not a mock).
+const TACTIC_ID: Record<string, string> = {
+  'Reconnaissance': 'TA0043', 'Resource Development': 'TA0042', 'Initial Access': 'TA0001',
+  'Execution': 'TA0002', 'Persistence': 'TA0003', 'Privilege Escalation': 'TA0004',
+  'Defense Evasion': 'TA0005', 'Credential Access': 'TA0006', 'Discovery': 'TA0007',
+  'Lateral Movement': 'TA0008', 'Collection': 'TA0009', 'Command and Control': 'TA0011',
+  'Exfiltration': 'TA0010', 'Impact': 'TA0040',
+}
 
 // Analyst leaderboard
 const ANALYSTS = [
@@ -353,11 +346,25 @@ export default function SOCMetricsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
   const [metrics, setMetrics] = useState<SoarMetrics | null>(null)
   const [siem, setSiem] = useState<SiemKpis | null>(null)
+  const [coverage, setCoverage] = useState<AttackCoverage | null>(null)
 
   useEffect(() => {
     fetchSoarMetrics().then(setMetrics).catch(() => {})
     fetchSiemKpis().then(setSiem).catch(() => {})
+    fetchAttackCoverage().then(setCoverage).catch(() => {})
   }, [])
+
+  // Live MITRE coverage: % of each tactic's techniques that have an enabled
+  // detection rule (from /siem/attack-coverage), labelled with the tactic id.
+  const mitreTactics = (coverage?.tactics ?? []).map((t) => {
+    const total = t.techniques.length
+    const covered = t.techniques.filter((x) => x.covered).length
+    return {
+      id: TACTIC_ID[t.tactic] ?? '—',
+      name: t.tactic,
+      coverage: total ? Math.round((covered / total) * 100) : 0,
+    }
+  }).sort((a, b) => a.id.localeCompare(b.id))
 
   // Real KPI values overlaid onto the card styling (by label). Unbacked values
   // fall back to the card's static placeholder.
@@ -522,7 +529,7 @@ export default function SOCMetricsPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
-            {MITRE_TACTICS.map((t, i) => (
+            {mitreTactics.map((t, i) => (
               <motion.div
                 key={t.id}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -560,19 +567,21 @@ export default function SOCMetricsPage() {
             <span>
               Avg coverage:{' '}
               <span className="text-amber font-mono font-semibold">
-                {Math.round(MITRE_TACTICS.reduce((s, t) => s + t.coverage, 0) / MITRE_TACTICS.length)}%
+                {mitreTactics.length
+                  ? Math.round(mitreTactics.reduce((s, t) => s + t.coverage, 0) / mitreTactics.length)
+                  : 0}%
               </span>
             </span>
             <span>
               Fully covered (≥80%):{' '}
               <span className="text-safe font-mono font-semibold">
-                {MITRE_TACTICS.filter((t) => t.coverage >= 80).length} / {MITRE_TACTICS.length} tactics
+                {mitreTactics.filter((t) => t.coverage >= 80).length} / {mitreTactics.length} tactics
               </span>
             </span>
             <span>
               Gaps ({'<'}40%):{' '}
               <span className="text-threat font-mono font-semibold">
-                {MITRE_TACTICS.filter((t) => t.coverage < 40).length} tactics
+                {mitreTactics.filter((t) => t.coverage < 40).length} tactics
               </span>
             </span>
           </div>

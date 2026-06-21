@@ -578,9 +578,10 @@ and published EPS limits.
   channel DONE (2026-06-15)**: versioned JSON packs in `content/rules/` apply via
   `POST /siem/content/apply` (idempotent upsert, operator enable/disable
   preserved) - new detections without a code release; first pack ships 4 Windows
-  persistence/defense-evasion rules. Still ahead: per-rule noise ratings, growing
-  the packs toward a Sigma community-pack import, and computing the SOAR
-  page's **ATT&CK coverage from this library** instead of the current mock.
+  persistence/defense-evasion rules. **The SOAR metrics page's ATT&CK coverage is
+  now computed live** from `/siem/attack-coverage` (per-tactic % of techniques
+  with an enabled rule) instead of the hardcoded mock (2026-06-18). Still ahead:
+  growing the packs toward a Sigma community-pack import.
 - **Parser/source breadth — DONE (2026-06-18).** Windows Event/Sysmon, AWS
   CloudTrail, Azure AD/Entra + M365 (Defender AH + Office audit), GCP audit,
   EDR (CrowdStrike Falcon, SentinelOne), and firewall exports (Palo Alto
@@ -750,6 +751,18 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · SOAR metrics: live ATT&CK coverage (de-mocked).** The SOAR
+  metrics page hardcoded a MITRE ATT&CK coverage grid (fabricated `82/74/61…`
+  percentages) — a violation of the "every number traces to the API" principle.
+  It now derives coverage **live** from `/siem/attack-coverage` (the same real
+  endpoint the SOC console + SIEM navigator use): per tactic, the % of techniques
+  that have an enabled detection rule, labelled with the ATT&CK tactic id, with
+  the summary stats (avg / fully-covered / gaps) computed from the live data too.
+  The page already fetched its other metrics live, so this just adds one more
+  fetch + derivation and removes the mock constant. Verified with `tsc`, the route
+  gate, and a production `npm run build`. (The rest of this metrics page still has
+  some illustrative figures — analyst leaderboard, playbook effectiveness — left
+  as a separate frontend-polish item.)
 - **2026-06-18 · Per-device sessions for SSO/SAML logins.** The interactive
   login + self-service register created a listable/revocable per-device session
   row (JWT `sid`), but the OIDC callback and SAML ACS minted a `sid`-less token —
