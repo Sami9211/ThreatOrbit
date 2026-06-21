@@ -11,11 +11,11 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, Form, HTTPException, Query
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
 from dashboard_api import saml, tenancy
-from dashboard_api.auth import create_token, hash_password
+from dashboard_api.auth import create_token, hash_password, record_session
 from dashboard_api.config import OIDC_POST_LOGIN_URL, SAML_ROLE_MAP
 from dashboard_api.db import audit, get_conn, row_to_dict
 
@@ -72,7 +72,7 @@ def _back(fragment: str) -> RedirectResponse:
 
 
 @router.post("/acs")
-def acs(SAMLResponse: str = Form(...), RelayState: str = Form(default="")):
+def acs(request: Request, SAMLResponse: str = Form(...), RelayState: str = Form(default="")):
     if not saml.configured():
         raise HTTPException(status_code=404, detail="SAML is not configured on this deployment.")
     try:
@@ -84,7 +84,8 @@ def acs(SAMLResponse: str = Form(...), RelayState: str = Form(default="")):
         return _back("sso_error=saml_failed")
     with get_conn() as conn:
         user = _provision(conn, u)
+        sid = record_session(conn, user["id"], request)   # listable/revocable per-device
         audit(conn, user["email"], "auth.saml_login", user["id"], f"role={user['role']}")
         conn.commit()
-    token = create_token(user)
+    token = create_token(user, sid=sid)
     return _back(f"sso_token={token}")

@@ -9,11 +9,11 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
 from dashboard_api import oidc, tenancy
-from dashboard_api.auth import create_token, hash_password
+from dashboard_api.auth import create_token, hash_password, record_session
 from dashboard_api.config import OIDC_POST_LOGIN_URL, OIDC_ROLE_MAP
 from dashboard_api.db import audit, get_conn, row_to_dict
 
@@ -75,8 +75,8 @@ def _back(fragment: str) -> RedirectResponse:
 
 
 @router.get("/callback")
-def callback(code: str | None = Query(default=None), state: str | None = Query(default=None),
-             error: str | None = Query(default=None)):
+def callback(request: Request, code: str | None = Query(default=None),
+             state: str | None = Query(default=None), error: str | None = Query(default=None)):
     if not oidc.configured():
         raise HTTPException(status_code=404, detail="SSO is not configured on this deployment.")
     if error:
@@ -95,7 +95,8 @@ def callback(code: str | None = Query(default=None), state: str | None = Query(d
 
     with get_conn() as conn:
         user = _provision(conn, u)
+        sid = record_session(conn, user["id"], request)   # listable/revocable per-device
         audit(conn, user["email"], "auth.sso_login", user["id"], f"role={user['role']}")
         conn.commit()
-    token = create_token(user)
+    token = create_token(user, sid=sid)
     return _back(f"sso_token={token}")

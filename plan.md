@@ -607,8 +607,8 @@ and published EPS limits.
   code-authoritative; operators now define **custom roles** (capability bundles)
   via `/roles`, resolved by `permissions.perms_for()` from a `roles` table, with
   a **no-privilege-escalation** guard (you can't grant a capability you don't
-  hold). See CHANGELOG. Still ahead: per-workspace role assignment and a
-  break-glass / audit-everything mode.
+  hold). **Break-glass / audit-everything and per-workspace role assignment both
+  shipped** (2026-06-18, see CHANGELOG) — Scale-grade RBAC is now complete.
 - **Session management — revocation + per-device list DONE (2026-06-15).**
   Stateless JWTs are revocable via a per-user **token-epoch** counter
   (`POST /auth/sessions/revoke-all`, admin `POST /users/{id}/revoke-sessions`,
@@ -619,9 +619,10 @@ and published EPS limits.
   others. The `revoked` flag is kept honest across change-password (keeps the
   current device, drops the rest) / revoke-all / admin revoke. **MFA recovery
   codes DONE**, **password screening DONE**, and **idle timeout DONE** (separate
-  entries). Still ahead: per-device session rows for the SSO/SAML login paths
-  (login + self-service register are covered today). *This section is now
-  effectively closed for GA.*
+  entries). **Per-device session rows for the SSO/SAML login paths DONE**
+  (2026-06-18) — the OIDC callback and SAML ACS now `record_session`, so those
+  logins are listable/revocable per-device too. *This section is now closed for
+  GA.*
 
 ### P1 — Compliance & trust posture
 
@@ -675,8 +676,9 @@ collectors.
 - **Retention archive DONE (2026-06-15).** Retention now writes each purged
   batch to compressed NDJSON cold storage **before** deletion when
   `DASHBOARD_ARCHIVE_DIR` is set (sync the dir to object storage); purge-only
-  when unset. See CHANGELOG. Still open: a direct object-storage (S3) writer and
-  a PII handling/redaction policy in stored logs.
+  when unset. **A direct object-storage (S3) writer shipped** (2026-06-18, SigV4
+  PUT to S3/S3-compatible). Still open: a PII handling/redaction policy in stored
+  logs.
 
 ### P2 — Product, UX & quality maturity
 
@@ -748,6 +750,18 @@ from the same batch were fixed (see CHANGELOG).
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-18 · Per-device sessions for SSO/SAML logins.** The interactive
+  login + self-service register created a listable/revocable per-device session
+  row (JWT `sid`), but the OIDC callback and SAML ACS minted a `sid`-less token —
+  so an SSO/SAML device couldn't be seen in "your sessions" or signed out
+  individually (only the coarse token-epoch applied). Both now `record_session`
+  (with best-effort device metadata from the request) and mint the token with the
+  `sid`, closing the gap noted under Session management. Tests in
+  `test_sso_saml_sessions.py` drive the callback/ACS with mocked providers and
+  assert the token carries a `sid` backed by a real `sessions` row; the existing
+  SSO/SAML/session suites stay green. This closes the Session-management section
+  for GA. (Also corrected three stale roadmap notes whose work shipped earlier
+  this session: break-glass + per-workspace RBAC, and the retention S3 writer.)
 - **2026-06-18 · Multi-AZ Postgres HA guidance.** Closes the documentation half
   of the HA/DR item's Postgres gap. `docs/POSTGRES_HA.md` covers turning on the
   Postgres backend behind a highly-available endpoint, managed (RDS/Aurora
