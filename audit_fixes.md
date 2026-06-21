@@ -390,9 +390,9 @@ Guiding principle applied: design for any device/environment from the start.
 | E4  | Public demo exposure                        | INFRA — deployment-time |
 | F1  | Committed `.pyc`                            | FIXED — none tracked |
 | F2  | No LICENSE                                  | FIXED — MIT added |
-| F3  | Language bar TS-heavy                       | OPEN — `.gitattributes` |
-| F4  | plan.md references missing CHANGELOG        | OPEN — adding CHANGELOG.md |
+| F3  | Language bar TS-heavy                       | FIXED — `.gitattributes` marks `frontend/**` linguist-vendored, `docs/**` documentation, `*.pyc` generated |
+| F4  | plan.md references missing CHANGELOG        | FIXED — added CHANGELOG.md (resolves the dangling references) |
 | G1-3| Scope / duplication / SQL discipline       | INFRA / ongoing |
-| H1-3| CV / README positioning                    | OPEN — README "Status & limitations" + skills map |
+| H1-3| CV / README positioning                    | PARTIAL — README has "Project status — read this first" + §15 limitations + by-role/by-task map (H2/H3); CV wording (H1) is external to the repo |
 | I1  | Wide-screen fixed width / empty gutters     | FIXED (this round) |
 | I2  | Hover sidebars on touch                     | FIXED (this round) |
