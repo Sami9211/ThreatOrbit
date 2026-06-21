@@ -1,7 +1,11 @@
-# One source URL per line. Lines starting with # are ignored.
-# Add RSS/Atom feeds from social media aggregators or OSINT community feeds.
-# Many social OSINT sources require API keys or authentication.
-#
-# Examples of the expected format:
-#   https://your-osint-aggregator.example.com/community/feed.xml
-#   https://threat-share.example.com/social/rss
+# Security-community / social OSINT RSS feeds (one URL per line; lines starting
+# with # are ignored). This is NOT a social-media API client — it's a pluggable
+# slot for public RSS exposed by community platforms. The fetcher tags items as
+# community-sourced (see fetchers/social_osint.py). Add API-backed sources here
+# if you have keys for them.
+
+# Mastodon (infosec.exchange) — public #threatintel tag
+https://infosec.exchange/tags/threatintel.rss
+
+# Reddit r/netsec — community security discussion
+https://www.reddit.com/r/netsec/.rss

@@ -377,11 +377,11 @@ Guiding principle applied: design for any device/environment from the start.
 | B12 | 12h session, no refresh rotation            | INFRA — configurable TTL; documented |
 | C1  | ML flags ~5% by construction                | FIXED — `contamination='auto'` + corroboration |
 | C2  | Every ML finding tagged T1595               | FIXED — technique derived from dominant signal |
-| C3  | Dark-web/social OSINT empty wrappers         | OPEN — seeding + honest naming |
+| C3  | Dark-web/social OSINT empty wrappers         | FIXED — docstrings already honest; source files seeded with real curated public feeds (DataBreaches.net / Krebs / BleepingComputer-ransomware; Mastodon #threatintel + r/netsec) |
 | C4  | Whole-file-into-memory parse                | FIXED — byte cap at ingress |
 | C5  | Report XSS sink + weak escaper              | FIXED — all fields escaped incl. quotes |
 | C6  | One shared report file                      | FIXED — per-job reports |
-| D1  | threat_api/log_api untested                 | OPEN — adding unit tests |
+| D1  | threat_api/log_api untested                 | FIXED — threat_api transforms (normalise/correlate/trust/STIX) + log_api parsers / detectors (pattern, statistical, temporal, ML) / analyse / report all unit-tested |
 | D2  | pip-audit only dashboard_api                | FIXED — all three audited |
 | D3  | No Python lockfile                          | OPEN |
 | E1  | Dockerfile hardening inconsistency          | FIXED |
