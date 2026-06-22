@@ -77,5 +77,10 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   (normalise/correlate/trust/STIX) and the `log_api` parsers and pattern /
   statistical / temporal / ML detectors; Playwright E2E in CI; `pip-audit` across
   all three services.
+- **TestClient on `httpx2`** — migrated the FastAPI/Starlette `TestClient` to its
+  sanctioned successor (`httpx2`) as a *test‑only* dependency; production keeps the
+  stable `httpx` (SSRF guard etc. unchanged). Each service's `pytest.ini` errors on
+  `StarletteDeprecationWarning`, so a missing httpx2 fails CI loudly rather than
+  silently regressing to the deprecated shim.
 
 [Unreleased]: https://github.com/Sami9211/ThreatOrbit-V2/commits/main

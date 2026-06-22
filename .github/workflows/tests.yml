@@ -20,9 +20,11 @@ jobs:
         with:
           python-version: '3.11'
       # One install of all three services proves the shared pins still resolve
-      # together (a past divergence broke the Windows launchers).
+      # together (a past divergence broke the Windows launchers). The -dev files
+      # add httpx2 so Starlette's TestClient runs on its sanctioned client (the
+      # dashboard/log_api pytest.ini errors on the deprecated httpx fallback).
       - name: Install API deps (combined)
-        run: pip install -r dashboard_api/requirements.txt -r threat_api/requirements.txt -r log_api/requirements.txt
+        run: pip install -r dashboard_api/requirements.txt -r threat_api/requirements.txt -r log_api/requirements.txt -r dashboard_api/requirements-dev.txt -r log_api/requirements-dev.txt
       - name: dashboard_api (SQLite)
         run: python -m pytest dashboard_api/tests -q
       - name: threat_api
@@ -60,6 +62,7 @@ jobs:
         run: |
           pip install -r dashboard_api/requirements.txt
           pip install -r dashboard_api/requirements-postgres.txt
+          pip install -r dashboard_api/requirements-dev.txt  # httpx2 for TestClient
       - name: dashboard_api against live Postgres
         # SQLite-only tests (online-backup, sqlite_master) skip automatically.
         run: python -m pytest dashboard_api/tests -q

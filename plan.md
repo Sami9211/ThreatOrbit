@@ -101,9 +101,15 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       passed). Postgres extras live in `dashboard_api/requirements-postgres.txt`.
 - [ ] **B9 residual — SP-signed SAML AuthnRequest** is still unimplemented
       (IdP-dependent); the request is sent unsigned. Add when an IdP requires it.
-- [ ] **Test-only: Starlette `TestClient` httpx deprecation.** The suites emit
-      `StarletteDeprecationWarning: install httpx2`. Pin/migrate before Starlette
-      drops the httpx shim, or the suites break on a future bump.
+- [x] **Test-only: Starlette `TestClient` httpx deprecation.** DONE (2026-06-22):
+      migrated the TestClient to its sanctioned successor `httpx2` (Tom Christie /
+      Pydantic; Starlette's own deprecation points there). Added as a *test-only*
+      dep (`dashboard_api/`+`log_api/requirements-dev.txt`) so production keeps the
+      stable `httpx` — the SSRF guard etc. stay on the audited client, unchanged.
+      Each service's new `pytest.ini` errors on `StarletteDeprecationWarning`, so a
+      missing httpx2 fails CI loudly instead of silently regressing to the shim
+      (verified both ways: green with httpx2, red without). CI test jobs install the
+      `-dev` files. Suites green: dashboard 388, log_api 18/2-skip, no warnings.
 
 ---
 
