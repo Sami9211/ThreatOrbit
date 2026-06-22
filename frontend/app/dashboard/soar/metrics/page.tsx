@@ -2,18 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { fetchSoarMetrics, fetchSiemKpis, fetchAttackCoverage,
-         type SoarMetrics, type SiemKpis, type AttackCoverage } from '@/lib/api'
+         fetchSoarAnalysts, fetchPlaybooks,
+         type SoarMetrics, type SiemKpis, type AttackCoverage,
+         type AnalystStat, type Playbook } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
   TrendingDown, TrendingUp, Clock, Zap, AlertTriangle,
-  CheckCircle, User, Award, Flame, BarChart2, Target,
+  CheckCircle, User, Award, BarChart2, Target,
   Shield, Activity, ChevronUp, ChevronDown, Minus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-
-/* ── Types ────────────────────────────────────────────────────────── */
-type TimeRange = '7d' | '30d' | '90d'
 
 /* ── Static data ─────────────────────────────────────────────────── */
 const KPI_DATA = [
@@ -102,14 +101,9 @@ const ALERT_VOLUME_7D = [
   { day: 'Sun', critical: 8,  high: 31,  medium: 143, low: 308 },
 ]
 
-// Analyst throughput
-const ANALYST_THROUGHPUT = [
-  { name: 'j.chen',      closed: 247, color: '#FF2E97' },
-  { name: 'a.patel',     closed: 198, color: '#7A3CFF' },
-  { name: 'm.rodriguez', closed: 156, color: '#34F5C5' },
-  { name: 's.kim',       closed: 89,  color: '#FFB23E' },
-  { name: 'r.osei',      closed: 74,  color: '#FF4D6D' },
-]
+// Bar palette for the (live) analyst-throughput chart.
+const ANALYST_COLORS = ['#FF2E97', '#7A3CFF', '#34F5C5', '#FFB23E', '#FF4D6D']
+type ThroughputRow = { name: string; closed: number; color: string }
 
 // MITRE ATT&CK tactic → navigator id, for labelling the live coverage derived
 // from /siem/attack-coverage (real per-tactic rule coverage, not a mock).
@@ -121,23 +115,6 @@ const TACTIC_ID: Record<string, string> = {
   'Exfiltration': 'TA0010', 'Impact': 'TA0040',
 }
 
-// Analyst leaderboard
-const ANALYSTS = [
-  { name: 'j.chen',      full: 'Jenny Chen',       alerts: 247, mttr: '14.2m', fp: '6.1%',  sla: '98.4%', streak: 12, rank: 1 },
-  { name: 'a.patel',     full: 'Aryan Patel',      alerts: 198, mttr: '18.9m', fp: '7.4%',  sla: '96.9%', streak: 8,  rank: 2 },
-  { name: 'm.rodriguez', full: 'Maya Rodriguez',   alerts: 156, mttr: '21.4m', fp: '9.2%',  sla: '95.5%', streak: 4,  rank: 3 },
-  { name: 's.kim',       full: 'Sam Kim',          alerts: 89,  mttr: '28.1m', fp: '11.8%', sla: '91.0%', streak: 1,  rank: 4 },
-  { name: '-',           full: 'Unassigned Queue', alerts: 594, mttr: '-',     fp: '-',     sla: '-',     streak: 0,  rank: 0 },
-]
-
-// Playbook effectiveness
-const PLAYBOOK_EFFECTIVENESS = [
-  { name: 'Threat Intel Enrichment',           runs: 38291, timeSaved: 1274, successRate: 99 },
-  { name: 'Brute Force Block',                 runs: 14203, timeSaved: 710,  successRate: 99 },
-  { name: 'Phishing Email Response',           runs: 2847,  timeSaved: 341,  successRate: 96 },
-  { name: 'Endpoint Ransomware Containment',   runs: 847,   timeSaved: 127,  successRate: 98 },
-  { name: 'C2 Beacon Isolation',               runs: 412,   timeSaved: 98,   successRate: 97 },
-]
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 function coverageColor(pct: number): string {
@@ -252,13 +229,16 @@ function AlertVolumeChart() {
   )
 }
 
-// Analyst throughput bar chart
-function AnalystThroughputChart() {
-  const max = Math.max(...ANALYST_THROUGHPUT.map((a) => a.closed))
+// Analyst throughput bar chart (live data)
+function AnalystThroughputChart({ data }: { data: ThroughputRow[] }) {
+  const max = Math.max(1, ...data.map((a) => a.closed))
+  if (data.length === 0) {
+    return <p className="text-xs text-ink-500">No closed cases yet — throughput appears once analysts resolve cases.</p>
+  }
 
   return (
     <div className="space-y-3">
-      {ANALYST_THROUGHPUT.map((a, i) => (
+      {data.map((a, i) => (
         <motion.div
           key={a.name}
           initial={{ opacity: 0, x: -12 }}
@@ -343,16 +323,36 @@ function DonutChart({
 /* ── Main page ────────────────────────────────────────────────────── */
 export default function SOCMetricsPage() {
   const [mode] = useExperienceMode()
-  const [timeRange, setTimeRange] = useState<TimeRange>('7d')
   const [metrics, setMetrics] = useState<SoarMetrics | null>(null)
   const [siem, setSiem] = useState<SiemKpis | null>(null)
   const [coverage, setCoverage] = useState<AttackCoverage | null>(null)
+  const [analysts, setAnalysts] = useState<AnalystStat[]>([])
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
 
   useEffect(() => {
     fetchSoarMetrics().then(setMetrics).catch(() => {})
     fetchSiemKpis().then(setSiem).catch(() => {})
     fetchAttackCoverage().then(setCoverage).catch(() => {})
+    fetchSoarAnalysts().then(setAnalysts).catch(() => {})
+    fetchPlaybooks().then(setPlaybooks).catch(() => {})
   }, [])
+
+  // Live analyst throughput (cases closed per analyst, excluding the Unassigned
+  // bucket) + the leaderboard rows, from /soar/analysts.
+  const realAnalysts = analysts.filter((a) => a.name !== 'Unassigned')
+  const throughput: ThroughputRow[] = realAnalysts
+    .slice().sort((a, b) => b.closed - a.closed).slice(0, 6)
+    .map((a, i) => ({ name: a.name, closed: a.closed, color: ANALYST_COLORS[i % ANALYST_COLORS.length] }))
+  const leaderboard = realAnalysts
+    .slice().sort((a, b) => b.closed - a.closed || b.handled - a.handled).slice(0, 6)
+
+  // Live playbook effectiveness (top by runs), from /soar/playbooks.
+  const topPlaybooks = playbooks.slice().sort((a, b) => b.runs - a.runs).slice(0, 5)
+  const totalRuns = playbooks.reduce((s, p) => s + p.runs, 0)
+  const avgSuccess = playbooks.length
+    ? Math.round(playbooks.reduce((s, p) => s + p.successRate, 0) / playbooks.length) : 0
+  // Live automation share (closed cases driven by a playbook).
+  const autoPct = Math.round(metrics?.automationRate ?? 0)
 
   // Live MITRE coverage: % of each tactic's techniques that have an enabled
   // detection rule (from /siem/attack-coverage), labelled with the tactic id.
@@ -380,8 +380,6 @@ export default function SOCMetricsPage() {
       : metrics ? '100%' : undefined,
   }
 
-  const timeRanges: TimeRange[] = ['7d', '30d', '90d']
-
   return (
     <div className="overflow-y-auto h-full">
       <div className="px-6 py-5 space-y-6 max-w-screen-2xl mx-auto pb-12">
@@ -393,24 +391,6 @@ export default function SOCMetricsPage() {
             <p className="text-xs text-ink-500 mt-0.5">
               Operational performance, analyst efficiency, and response trends
             </p>
-          </div>
-
-          {/* Time range selector */}
-          <div className="flex items-center gap-1 bg-surface-2/60 rounded-lg p-1 border border-white/6 self-start shrink-0">
-            {timeRanges.map((r) => (
-              <button
-                key={r}
-                onClick={() => setTimeRange(r)}
-                className={cn(
-                  'px-3 py-1 rounded-md text-xs font-medium transition-colors',
-                  timeRange === r
-                    ? 'bg-magenta/15 border border-magenta/30 text-magenta'
-                    : 'text-ink-500 hover:text-ink-300',
-                )}
-              >
-                Last {r}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -452,58 +432,55 @@ export default function SOCMetricsPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm font-semibold text-white">Alert Volume Trend</p>
-                <p className="text-[10px] text-ink-600 mt-0.5">7-day stacked by severity</p>
+                <p className="text-[10px] text-ink-600 mt-0.5">Illustrative 7-day shape</p>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-safe">
-                <TrendingDown className="w-3 h-3" />
-                <span>-12% this week</span>
-              </div>
+              <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-ink-500 shrink-0">sample</span>
             </div>
             <AlertVolumeChart />
           </div>
 
-          {/* 2. Automation vs Manual Donut */}
+          {/* 2. Automation vs Manual Donut (live) */}
           <div className="bg-surface-2/50 rounded-xl border border-white/6 p-5 flex flex-col">
             <div className="mb-4">
               <p className="text-sm font-semibold text-white">Automation vs Manual</p>
-              <p className="text-[10px] text-ink-600 mt-0.5">Response action distribution</p>
+              <p className="text-[10px] text-ink-600 mt-0.5">Closed cases driven by a playbook</p>
             </div>
             <div className="flex-1 flex items-center justify-center">
               <DonutChart
                 segments={[
-                  { label: 'Automated', value: 73, color: '#7A3CFF' },
-                  { label: 'Manual',    value: 27, color: '#FFB23E' },
+                  { label: 'Automated', value: autoPct, color: '#7A3CFF' },
+                  { label: 'Manual',    value: 100 - autoPct, color: '#FFB23E' },
                 ]}
-                label="73%"
+                label={`${autoPct}%`}
                 sublabel="Automated"
                 size={110}
               />
             </div>
             <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-3 text-center">
               <div>
-                <p className="text-sm font-bold text-violet">34,821</p>
-                <p className="text-[10px] text-ink-600">Auto actions</p>
+                <p className="text-sm font-bold text-violet">{(metrics?.totalRuns ?? 0).toLocaleString()}</p>
+                <p className="text-[10px] text-ink-600">Playbook runs</p>
               </div>
               <div>
-                <p className="text-sm font-bold text-amber">12,894</p>
-                <p className="text-[10px] text-ink-600">Manual actions</p>
+                <p className="text-sm font-bold text-amber">{(metrics?.casesClosedWeek ?? 0).toLocaleString()}</p>
+                <p className="text-[10px] text-ink-600">Cases closed (wk)</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 3. Analyst Throughput */}
+        {/* 3. Analyst Throughput (live) */}
         <div className="bg-surface-2/50 rounded-xl border border-white/6 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm font-semibold text-white">Analyst Throughput</p>
-              <p className="text-[10px] text-ink-600 mt-0.5">Alerts closed per analyst (last {timeRange})</p>
+              <p className="text-[10px] text-ink-600 mt-0.5">Cases closed per analyst</p>
             </div>
             <span className="text-[10px] text-ink-500 font-mono">
-              Total: {ANALYST_THROUGHPUT.reduce((s, a) => s + a.closed, 0)} closed
+              Total: {throughput.reduce((s, a) => s + a.closed, 0)} closed
             </span>
           </div>
-          <AnalystThroughputChart />
+          <AnalystThroughputChart data={throughput} />
         </div>
 
         {/* ── MITRE ATT&CK Coverage ────────────────────────────────── */}
@@ -595,112 +572,89 @@ export default function SOCMetricsPage() {
             <div className="px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-white">Analyst Leaderboard</p>
-                <p className="text-[10px] text-ink-600 mt-0.5">Last {timeRange} performance</p>
+                <p className="text-[10px] text-ink-600 mt-0.5">Cases handled per analyst</p>
               </div>
               <Award className="w-4 h-4 text-amber opacity-60" />
             </div>
 
             {/* Table header */}
-            <div className="grid grid-cols-[20px_1fr_70px_70px_60px_65px_50px] gap-2 px-5 py-2 text-[9px] text-ink-600 uppercase tracking-widest border-b border-white/4">
+            <div className="grid grid-cols-[20px_1fr_64px_56px_88px_64px] gap-2 px-5 py-2 text-[9px] text-ink-600 uppercase tracking-widest border-b border-white/4">
               <span>#</span>
               <span>Analyst</span>
               <span className="text-right">Closed</span>
-              <span className="text-right">Avg MTTR</span>
-              <span className="text-right">FP Rate</span>
-              <span className="text-right">SLA %</span>
-              <span className="text-right">Streak</span>
+              <span className="text-right">Open</span>
+              <span className="text-right">Avg resolve</span>
+              <span className="text-right">Crit open</span>
             </div>
 
-            {ANALYSTS.map((a, i) => (
+            {leaderboard.length === 0 && (
+              <div className="px-5 py-8 text-center text-xs text-ink-500">
+                No analyst activity yet — assign cases to build the leaderboard.
+              </div>
+            )}
+            {leaderboard.map((a, i) => {
+              const rank = i + 1
+              return (
               <motion.div
                 key={a.name}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.06, duration: 0.22 }}
                 className={cn(
-                  'grid grid-cols-[20px_1fr_70px_70px_60px_65px_50px] gap-2 items-center px-5 py-2.5 border-b border-white/4 last:border-0',
-                  a.rank === 1 && 'bg-magenta/4',
-                  a.rank === 0 && 'opacity-50',
+                  'grid grid-cols-[20px_1fr_64px_56px_88px_64px] gap-2 items-center px-5 py-2.5 border-b border-white/4 last:border-0',
+                  rank === 1 && 'bg-magenta/4',
                 )}
               >
                 {/* Rank */}
                 <span className={cn(
                   'text-[10px] font-bold',
-                  a.rank === 1 ? 'text-magenta' :
-                  a.rank === 2 ? 'text-amber' :
-                  a.rank === 3 ? 'text-safe' :
-                  'text-ink-600',
+                  rank === 1 ? 'text-magenta' :
+                  rank === 2 ? 'text-amber' :
+                  rank === 3 ? 'text-safe' : 'text-ink-600',
                 )}>
-                  {a.rank > 0 ? a.rank : '-'}
+                  {rank}
                 </span>
 
-                {/* Name */}
+                {/* Name (the case owner identity) */}
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-5 h-5 rounded-full flex items-center justify-center bg-surface-2 border border-white/8 shrink-0">
                     <User className="w-2.5 h-2.5 text-ink-500" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-ink-200 truncate">{a.full}</p>
-                    <p className="text-[9px] text-ink-600 font-mono">{a.name}</p>
-                  </div>
+                  <p className="text-[11px] text-ink-200 truncate font-mono">{a.name}</p>
                 </div>
 
-                {/* Alerts closed */}
-                <span className="text-[11px] font-mono font-semibold text-white text-right">{a.alerts.toLocaleString()}</span>
+                {/* Closed */}
+                <span className="text-[11px] font-mono font-semibold text-white text-right">{a.closed.toLocaleString()}</span>
 
-                {/* MTTR */}
-                <span className={cn(
-                  'text-[11px] font-mono text-right',
-                  a.mttr === '-' ? 'text-ink-700' :
-                  parseFloat(a.mttr) < 18 ? 'text-safe' :
-                  parseFloat(a.mttr) < 25 ? 'text-amber' : 'text-threat',
-                )}>
-                  {a.mttr}
+                {/* Open */}
+                <span className="text-[11px] font-mono text-ink-300 text-right">{a.open.toLocaleString()}</span>
+
+                {/* Avg resolve time */}
+                <span className="text-[11px] font-mono text-right text-ink-300">
+                  {a.avgResolveMins != null ? `${a.avgResolveMins}m` : '—'}
                 </span>
 
-                {/* FP Rate */}
-                <span className={cn(
-                  'text-[11px] font-mono text-right',
-                  a.fp === '-' ? 'text-ink-700' :
-                  parseFloat(a.fp) < 8 ? 'text-safe' :
-                  parseFloat(a.fp) < 12 ? 'text-amber' : 'text-threat',
-                )}>
-                  {a.fp}
+                {/* Critical open */}
+                <span className={cn('text-[11px] font-mono text-right', a.critical > 0 ? 'text-threat' : 'text-ink-700')}>
+                  {a.critical}
                 </span>
-
-                {/* SLA */}
-                <span className={cn(
-                  'text-[11px] font-mono text-right',
-                  a.sla === '-' ? 'text-ink-700' :
-                  parseFloat(a.sla) >= 97 ? 'text-safe' :
-                  parseFloat(a.sla) >= 93 ? 'text-amber' : 'text-threat',
-                )}>
-                  {a.sla}
-                </span>
-
-                {/* Streak */}
-                <div className="flex items-center justify-end gap-1">
-                  {a.streak > 0 ? (
-                    <>
-                      <Flame className="w-3 h-3 text-amber shrink-0" />
-                      <span className="text-[10px] font-mono text-amber">{a.streak}d</span>
-                    </>
-                  ) : (
-                    <span className="text-[10px] text-ink-700">-</span>
-                  )}
-                </div>
               </motion.div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Right column: disposition donut + playbook table */}
           <div className="lg:col-span-2 flex flex-col gap-4">
 
-            {/* Alert disposition donut */}
+            {/* Alert disposition donut — the split is illustrative (no per-alert
+                disposition store yet); the live FP rate + total are shown below. */}
             <div className="bg-surface-2/50 rounded-xl border border-white/6 p-5 flex-1">
-              <div className="mb-4">
-                <p className="text-sm font-semibold text-white">Alert Disposition</p>
-                <p className="text-[10px] text-ink-600 mt-0.5">Last {timeRange} breakdown</p>
+              <div className="mb-4 flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-white">Alert Disposition</p>
+                  <p className="text-[10px] text-ink-600 mt-0.5">Illustrative split</p>
+                </div>
+                <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-ink-500 shrink-0">sample</span>
               </div>
               <DonutChart
                 segments={[
@@ -715,50 +669,54 @@ export default function SOCMetricsPage() {
               />
               <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2">
                 <div className="bg-white/3 rounded-lg px-3 py-2 text-center">
-                  <p className="text-sm font-bold text-magenta">1,284</p>
-                  <p className="text-[9px] text-ink-600">Alerts/day</p>
+                  <p className="text-sm font-bold text-magenta">{siem ? siem.totalAlerts.toLocaleString() : '—'}</p>
+                  <p className="text-[9px] text-ink-600">Total alerts</p>
                 </div>
                 <div className="bg-white/3 rounded-lg px-3 py-2 text-center">
-                  <p className="text-sm font-bold text-safe">860</p>
-                  <p className="text-[9px] text-ink-600">Actioned</p>
+                  <p className="text-sm font-bold text-safe">{siem ? `${siem.fpRate}%` : '—'}</p>
+                  <p className="text-[9px] text-ink-600">FP rate</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Playbook effectiveness ────────────────────────────────── */}
+        {/* ── Playbook effectiveness (live) ─────────────────────────── */}
         <div className="bg-surface-2/50 rounded-xl border border-white/6 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-white">Playbook Effectiveness</p>
-              <p className="text-[10px] text-ink-600 mt-0.5">Top 5 by analyst time saved (last {timeRange})</p>
+              <p className="text-[10px] text-ink-600 mt-0.5">Top playbooks by run volume</p>
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-safe">
               <Zap className="w-3 h-3" />
-              <span>847h total saved this period</span>
+              <span>{totalRuns.toLocaleString()} total runs</span>
             </div>
           </div>
 
           {/* Table header */}
-          <div className="grid grid-cols-[24px_1fr_80px_80px_100px_100px] gap-3 px-5 py-2 text-[9px] text-ink-600 uppercase tracking-widest border-b border-white/4">
+          <div className="grid grid-cols-[24px_1fr_80px_80px_90px_90px] gap-3 px-5 py-2 text-[9px] text-ink-600 uppercase tracking-widest border-b border-white/4">
             <span>#</span>
             <span>Playbook</span>
             <span className="text-right">Runs</span>
             <span className="text-right">Success</span>
-            <span className="text-right">Time Saved</span>
-            <span className="text-right">Time Saved Bar</span>
+            <span className="text-right">Avg time</span>
+            <span className="text-right">Run share</span>
           </div>
 
-          {PLAYBOOK_EFFECTIVENESS.map((pb, i) => {
-            const maxSaved = PLAYBOOK_EFFECTIVENESS[0].timeSaved
+          {topPlaybooks.length === 0 && (
+            <div className="px-5 py-8 text-center text-xs text-ink-500">No playbooks configured yet.</div>
+          )}
+          {topPlaybooks.map((pb, i) => {
+            const maxRuns = topPlaybooks[0]?.runs || 1
+            const avg = pb.avgTime < 60 ? `${Math.round(pb.avgTime)}s` : `${(pb.avgTime / 60).toFixed(1)}m`
             return (
               <motion.div
-                key={pb.name}
+                key={pb.id}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.07, duration: 0.22 }}
-                className="grid grid-cols-[24px_1fr_80px_80px_100px_100px] gap-3 items-center px-5 py-3 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors"
+                className="grid grid-cols-[24px_1fr_80px_80px_90px_90px] gap-3 items-center px-5 py-3 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors"
               >
                 {/* Rank */}
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold bg-surface-2 border border-white/8 text-ink-400">
@@ -781,20 +739,17 @@ export default function SOCMetricsPage() {
                   pb.successRate >= 97 ? 'text-safe' :
                   pb.successRate >= 90 ? 'text-amber' : 'text-threat',
                 )}>
-                  {pb.successRate}%
+                  {Math.round(pb.successRate)}%
                 </span>
 
-                {/* Time saved (hours) */}
-                <div className="text-right">
-                  <span className="text-sm font-bold text-violet">{pb.timeSaved}</span>
-                  <span className="text-[9px] text-ink-600 ml-1">hrs</span>
-                </div>
+                {/* Avg run time */}
+                <span className="text-[11px] font-mono text-violet text-right">{avg}</span>
 
-                {/* Bar */}
+                {/* Run-share bar */}
                 <div className="h-2 bg-white/6 rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${(pb.timeSaved / maxSaved) * 100}%` }}
+                    animate={{ width: `${(pb.runs / maxRuns) * 100}%` }}
                     transition={{ duration: 0.6, delay: i * 0.07, ease: 'easeOut' }}
                     className="h-full rounded-full bg-gradient-to-r from-violet to-magenta"
                   />
@@ -803,20 +758,17 @@ export default function SOCMetricsPage() {
             )
           })}
 
-          {/* Footer total */}
+          {/* Footer total (live) */}
           <div className="px-5 py-3 bg-surface-2/30 flex items-center justify-between text-[10px] border-t border-white/5">
             <span className="text-ink-600">
-              Total across all {18} playbooks
+              Across {playbooks.length} playbook{playbooks.length === 1 ? '' : 's'}
             </span>
             <div className="flex items-center gap-4">
               <span className="text-ink-500">
-                Runs: <span className="text-white font-mono font-semibold">55,874</span>
+                Runs: <span className="text-white font-mono font-semibold">{totalRuns.toLocaleString()}</span>
               </span>
               <span className="text-ink-500">
-                Time saved: <span className="text-violet font-mono font-semibold">847 hrs</span>
-              </span>
-              <span className="text-ink-500">
-                ≈ <span className="text-magenta font-mono font-semibold">$127K</span> analyst value
+                Avg success: <span className="text-violet font-mono font-semibold">{avgSuccess}%</span>
               </span>
             </div>
           </div>

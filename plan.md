@@ -29,7 +29,13 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
 
 ### New findings (open)
 
-- [ ] **Several dashboard widgets render hardcoded demo data as if live** —
+- [x] **Several dashboard widgets render hardcoded demo data as if live** —
+      DONE (2026-06-22): see CHANGELOG. Overview Trending CVEs → /assets/vuln-findings;
+      CTI Sector Targeting + Threat Briefs → derived from live actors; SOC-metrics
+      analyst throughput/leaderboard → new /soar/analysts, playbook effectiveness →
+      /soar/playbooks, automation donut → live; SIEM in-page hunt tab now links to
+      the real /siem/hunt workspace. The two genuinely-unbacked SOC-metrics charts
+      (alert-volume shape, disposition split) are explicitly badged "sample".
       contradicts the repeated "every number is real data" principle.
       Confirmed static, with no API binding:
       - Overview (`frontend/app/dashboard/page.tsx`) — the **Trending CVEs**
@@ -50,15 +56,22 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       sample. (The `*_FALLBACK` arrays that overlay live data — `HEATMAP_ROWS`,
       `BRIEF_ITEMS_FALLBACK`, `HOURLY_FALLBACK` — are acceptable offline
       fallbacks and are out of scope here.)
-- [ ] **SOC Metrics time-range selector is a no-op.** The 7d/30d/90d control
+- [x] **SOC Metrics time-range selector is a no-op.** DONE (2026-06-22): the
+      no-op 7d/30d/90d control was removed (the backing endpoints aren't windowed),
+      along with the "last {range}" relabels. The 7d/30d/90d control
       only relabels the cards ("last {range}"); it triggers no refetch or
       filter (the data effect has `[]` deps and the underlying constants never
       change). Wire it to a windowed query or remove it.
-- [ ] **Scanner shows fabricated history on an empty install.**
+- [x] **Scanner shows fabricated history on an empty install.** DONE (2026-06-22):
+      the bundled SCAN_HISTORY rows were removed; Recent Scans is populated live
+      from /scans and shows an empty state on a fresh install.
       `frontend/app/dashboard/scanner/page.tsx` keeps the bundled `SCAN_HISTORY`
       rows (acme-corp…) unless a live scan exists (`if (data.items.length > 0)`),
       so a fresh tenant sees invented scans. Render an empty state instead.
-- [ ] **CI dependency gate is enforced only for `dashboard_api`.**
+- [x] **CI dependency gate is enforced only for `dashboard_api`.** DONE (2026-06-22):
+      all three services now run `pip-audit --strict` (gating); only the triaged
+      starlette advisory PYSEC-2026-161 is ignored, and only for the two FastAPI
+      services (threat_api is Flask, no ignore). Verified clean locally.
       `.github/workflows/security.yml` runs `pip-audit … dashboard_api --strict`
       (fails the build) but `log_api` / `threat_api` use `|| true` (audit, never
       fail), and `log_api` blanket-ignores `PYSEC-2026-161`. A CVE in the two
@@ -175,6 +188,28 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-22 · De-mocked dashboard widgets + CI gate (audit findings F-1…F-4).**
+  Wired the widgets that rendered hardcoded demo data to their live endpoints, or
+  gave them honest empty states / "sample" badges:
+  - **Overview Trending CVEs** → `/assets/vuln-findings`, sorted KEV → exploit →
+    CVSS, with an empty state (was a hardcoded 2024 CVE list).
+  - **CTI Sector Targeting** → derived from the tracked actors' `sectors`;
+    **Threat Briefs** (Normal mode) → derived from the live actors (real
+    description / TTPs / sectors / IOC counts), replacing the hardcoded lists.
+  - **SOC Metrics** → new **`GET /soar/analysts`** (per-analyst case workload from
+    `cases.owner`) backs the analyst throughput + leaderboard; playbook
+    effectiveness → `/soar/playbooks`; the automation donut + disposition summary
+    are computed from live SOAR/SIEM metrics. The no-op **time-range selector was
+    removed**. The two genuinely-unbacked decorative charts (7-day alert-volume
+    shape, 4-way disposition split) are explicitly badged **"sample"**.
+  - **SIEM** in-page Threat-Hunt tab now links to the real `/siem/hunt` workspace
+    (POST `/siem/search`) instead of a fabricated `HUNT_RESULTS` table.
+  - **Scanner** Recent Scans is live from `/scans` with an empty state (dropped
+    the bundled `acme-corp` history).
+  - **CI**: `pip-audit --strict` now gates all three services (only the triaged
+    starlette advisory PYSEC-2026-161 is ignored, FastAPI services only).
+  Tests: `test_soar_analysts.py`; tsc + `check:routes` (227 links) + `next build`
+  green; dashboard_api suite green.
 - **2026-06-22 · Roadmap audit + prune.** Ran a full audit pass: all three
   backend suites green on a clean install (**413 tests** — log_api 20,
   threat_api 8, dashboard_api 385), re-verified `audit_fixes.md` against the

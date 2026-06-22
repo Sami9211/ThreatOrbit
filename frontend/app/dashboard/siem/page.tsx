@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Activity, Search, Filter, ChevronDown, ChevronRight, X, Shield,
@@ -851,96 +852,30 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
-/* ── Threat hunting workspace ─────────────────────────────────────── */
-const SAVED_HUNTS = [
-  { name: 'PowerShell spawned from Office apps', q: "process=powershell.exe AND parent IN (winword.exe, excel.exe, outlook.exe)", tech: 'T1059.001' },
-  { name: 'Outbound to newly-registered domains', q: "event=dns AND domain_age < 30d AND direction=outbound", tech: 'T1071' },
-  { name: 'Service account interactive logon',    q: "user LIKE 'svc-*' AND logon_type=Interactive", tech: 'T1078' },
-  { name: 'Mass file access by single process',   q: "event=file_read AND count(distinct file) > 1000 BY process", tech: 'T1486' },
-  { name: 'LSASS memory access',                  q: "event=process_access AND target=lsass.exe AND access_mask=0x1010", tech: 'T1003.001' },
-]
-
-// Deterministic mock result set so the workspace renders identically server/client
-const HUNT_RESULTS = [
-  { ts: '2024-11-12T14:15:22Z', host: 'WS-HR-045',      user: 'jdoe',     process: 'powershell.exe', parent: 'EXCEL.EXE',  detail: '-EncodedCommand (Base64, 412 bytes)', risk: 91 },
-  { ts: '2024-11-12T13:48:11Z', host: 'WS-FIN-012',     user: 'akhan',    process: 'powershell.exe', parent: 'WINWORD.EXE', detail: 'IEX (New-Object Net.WebClient).Download', risk: 88 },
-  { ts: '2024-11-12T12:30:44Z', host: 'HOST-EXEC-01',   user: 'ceo',      process: 'powershell.exe', parent: 'EXCEL.EXE',  detail: 'Invoke-Expression on macro payload', risk: 96 },
-  { ts: '2024-11-12T11:22:09Z', host: 'WS-SALES-112',   user: 'bwilson',  process: 'powershell.exe', parent: 'OUTLOOK.EXE', detail: 'DownloadString from pastebin[.]com', risk: 84 },
-  { ts: '2024-11-12T09:14:55Z', host: 'WS-DEV-088',     user: 'dev_user3',process: 'powershell.exe', parent: 'EXCEL.EXE',  detail: 'Set-MpPreference -DisableRealtimeMonitoring', risk: 79 },
-]
-
+/* ── Threat hunting ───────────────────────────────────────────────────
+   The real, full-featured hunt workspace lives at /dashboard/siem/hunt and
+   runs live queries against the event store (POST /siem/search). This in-page
+   tab links to it rather than duplicating it with a second (previously mocked)
+   results table. */
 function ThreatHunt() {
-  const [query, setQuery] = useState(SAVED_HUNTS[0].q)
-  const [ran, setRan] = useState(true)
-
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Query bar */}
-      <div className="p-4 border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-2 mb-2">
-          <Terminal className="w-4 h-4 text-magenta" />
-          <span className="text-xs font-semibold text-white">Threat Hunting Query</span>
-          <span className="text-[10px] text-ink-600">ThreatOrbit Query Language (TQL)</span>
-        </div>
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-start gap-2 px-3 py-2 rounded-lg bg-[#0a0612] border border-white/10 font-mono">
-            <span className="text-magenta text-xs mt-0.5 select-none">›</span>
-            <textarea
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              rows={2}
-              spellCheck={false}
-              className="flex-1 bg-transparent text-xs text-ink-100 placeholder-ink-600 focus:outline-none resize-none leading-relaxed"
-            />
-          </div>
-          <button
-            onClick={() => setRan(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-magenta/15 border border-magenta/30 text-magenta hover:bg-magenta/25 transition-colors self-stretch shrink-0"
-          >
-            <Search className="w-3.5 h-3.5" /> Run
-          </button>
-        </div>
-        {/* Saved hunts */}
-        <div className="flex flex-wrap gap-1.5 mt-2.5">
-          <span className="text-[10px] text-ink-600 mr-1 self-center">Saved hunts:</span>
-          {SAVED_HUNTS.map((h) => (
-            <button key={h.name} onClick={() => { setQuery(h.q); setRan(true) }}
-              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-white/8 bg-surface-2 text-ink-400 hover:text-white hover:border-white/15 transition-colors">
-              {h.name}
-              <span className="font-mono text-violet">{h.tech}</span>
-            </button>
-          ))}
-        </div>
+    <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
+      <div className="w-14 h-14 rounded-2xl bg-magenta/10 border border-magenta/20 flex items-center justify-center">
+        <Terminal className="w-6 h-6 text-magenta" />
       </div>
-
-      {/* Results */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-[10px] text-ink-600">
-          <span>{ran ? `${HUNT_RESULTS.length} matching events · scanned 41.2M events in 0.84s` : 'Run a query to see results'}</span>
-          {ran && <span className="text-safe">MITRE T1059.001 - PowerShell</span>}
-        </div>
-        {ran && (
-          <div className="grid grid-cols-[120px_110px_90px_1fr_60px] gap-3 px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide">
-            <span>Timestamp</span><span>Host</span><span>User</span><span>Process Chain / Detail</span><span>Risk</span>
-          </div>
-        )}
-        {ran && HUNT_RESULTS.map((r, i) => (
-          <motion.div key={i}
-            initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
-            className="grid grid-cols-[120px_110px_90px_1fr_60px] gap-3 px-4 py-2.5 border-b border-white/4 hover:bg-white/3 text-[11px]">
-            <span suppressHydrationWarning className="font-mono text-ink-600">{new Date(r.ts).toLocaleTimeString('en-GB')}</span>
-            <span className="font-mono text-ink-300">{r.host}</span>
-            <span className="text-ink-400">{r.user}</span>
-            <div className="min-w-0">
-              <span className="font-mono text-violet">{r.parent}</span>
-              <span className="text-ink-700 mx-1">→</span>
-              <span className="font-mono text-ink-200">{r.process}</span>
-              <p className="text-[10px] text-ink-600 truncate mt-0.5">{r.detail}</p>
-            </div>
-            <span className={cn('font-bold', r.risk >= 90 ? 'text-magenta' : r.risk >= 70 ? 'text-threat' : 'text-amber')}>{r.risk}</span>
-          </motion.div>
-        ))}
+      <div>
+        <p className="text-sm font-semibold text-white">Threat Hunting Workspace</p>
+        <p className="text-xs text-ink-500 mt-1 max-w-md leading-relaxed">
+          Run live KQL queries against your event store with saved hunts, time
+          ranges, and real matched events — in the full hunt workspace.
+        </p>
       </div>
+      <Link
+        href="/dashboard/siem/hunt"
+        className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-magenta/15 border border-magenta/30 text-magenta hover:bg-magenta/25 transition-colors"
+      >
+        <Search className="w-3.5 h-3.5" /> Open Hunt Workspace
+      </Link>
     </div>
   )
 }
