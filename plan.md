@@ -111,6 +111,62 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       (verified both ways: green with httpx2, red without). CI test jobs install the
       `-dev` files. Suites green: dashboard 388, log_api 18/2-skip, no warnings.
 
+### UX / product findings (2026-06-22, round 2)
+
+User-reported pass over the live dashboard. Several are recurrences of the
+"flexible for any device/viewport" principle; one is a hard crash; the reports
+item is a large, multi-part feature.
+
+- [x] **Normal-mode Overview (and other pages) leave empty left/right gutters on
+      wide screens.** DONE (2026-06-22): the recurring fixed-width problem. The
+      `NormalDashboard` (`frontend/app/dashboard/page.tsx`) was pinned to
+      `max-w-3xl mx-auto`, wasting most of a wide viewport. Rebuilt as a fluid,
+      responsive multi-column layout (health + status side-by-side, priority/quick
+      access on a 12-col grid at `xl`) that fills the space at every width. Also
+      replaced the hardcoded Detection/Response/Prevention mock scores with a real
+      derivation from the health score.
+- [x] **Actor Profiles page crashes (white screen) once live actors load.**
+      DONE (2026-06-22): the backend emits the motivation `"Disruption"`
+      (`threat_actor_library.py`), absent from the frontend `MOTIVATION_CFG`, so
+      `cfg.icon` threw. Added `Disruption`, made the motivation/threat/type lookups
+      defensive (neutral fallback for any unknown value), and normalised the mapped
+      values so no backend string can white-screen the page again.
+- [x] **Network map still shakes on continuous (held) zoom in/out.** DONE
+      (2026-06-22): the cursor anchor was read from the stale `vbRef` outside the
+      `setVb` updater, so during a fast pinch the zoom centre drifted each event →
+      wobble. Anchor is now computed from `prev` inside the functional update and
+      the viewBox is rounded, so held/pinch zoom is stable.
+- [x] **"Ask ThreatOrbit" launcher is an oversized pill.** DONE (2026-06-22):
+      collapsed to a circular icon button that expands to reveal the label on
+      hover/focus (`AssistantWidget.tsx`), keeping the full affordance on touch.
+- [x] **Save buttons require scrolling back to the top.** DONE (2026-06-22):
+      added a shared floating Save affordance (`SaveBar`) that appears at the
+      top-right while there are unsaved changes, so config can be saved from any
+      scroll position; wired into the Settings page.
+- [~] **Theme/colour palette doesn't reach everything.** The token system
+      (`--magenta`/`--violet`/… + 11 `[data-theme]` palettes) is sound, but many
+      components hardcode the default plasma hexes in inline `style`/SVG, so a theme
+      switch doesn't change them. Fix: swap hardcoded hex → `rgb(var(--token))`
+      (resolves live, theme-aware) via a shared `lib/colors.ts`. Worst offenders:
+      severity/status maps (every page), KPI cards, SVG chart gradients, network
+      topology, world-map heat scale. (3D marketing scenes are outside ThemeScope
+      — intentionally brand-fixed.)
+- [~] **"SOC Metrics" reads thin and has an empty section.** Analyst throughput/
+      leaderboard go empty when no cases have owners, and two charts are flagged
+      "sample" (alert-volume shape, disposition split). Make it dashboard-grade:
+      give the unbacked charts real backing where data exists, show useful empty
+      states, and add live operational depth so the page earns the name.
+- [ ] **Reports are consistently lacking vs. mature vuln-assessment tools.**
+      LARGE. Today: `dashboard_api/reports.py` builds structured JSON; the
+      frontend renders an HTML preview + browser print-to-PDF only. Missing:
+      compact/scannable layout, multiple **formats** (PDF/CSV/Markdown/JSON), and
+      multiple **audiences** (executive / technical-analyst / compliance). Plan:
+      (a) backend emits format variants (CSV + Markdown + JSON now; richer HTML/PDF
+      layout); (b) an `audience` parameter reshapes section depth; (c) frontend
+      download menu offers format + audience; (d) keep it dependency-light (stdlib
+      csv + string templating, no heavyweight PDF lib unless needed). Thoroughness
+      required — tracked as its own work item.
+
 ---
 
 ## Open roadmap (remaining work only — finished items live in the CHANGELOG)

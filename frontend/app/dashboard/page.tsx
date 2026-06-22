@@ -682,9 +682,10 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
 }
 
 /* ── Normal Mode Dashboard ───────────────────────────────────────── */
-function NormalDashboard({ count, alerts, incidents }: {
+function NormalDashboard({ count, alerts, incidents, siem, soar }: {
   count: { threats: number; iocs: number; sources: number; score: number }
   alerts: OverviewAlert[]; incidents: Incident[]
+  siem: SiemKpis | null; soar: SoarMetrics | null
 }) {
   // Real, actionable alerts (highest severity first) - no hardcoded data.
   const sevRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
@@ -698,8 +699,17 @@ function NormalDashboard({ count, alerts, incidents }: {
   const score = Math.max(0, Math.min(100, 100 - Math.round(Number(count.score ?? 0))))
   const band = score >= 80 ? 'Strong' : score >= 60 ? 'Good' : score >= 40 ? 'At risk' : 'Critical'
   const bandColor = score >= 60 ? 'text-safe' : score >= 40 ? 'text-amber' : 'text-threat'
+  const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
+  // Posture pillars from REAL telemetry (not fixed demo numbers): Detection =
+  // inverse of the live false-positive rate; Response = live SLA compliance;
+  // Prevention = the overall health score. Each falls back to the health score.
+  const pillars = [
+    { label: 'Detection',  score: siem ? clampPct(100 - siem.fpRate) : score },
+    { label: 'Response',   score: soar && soar.openCases > 0 ? clampPct((1 - (soar.slaBreached ?? 0) / soar.openCases) * 100) : (soar ? 100 : score) },
+    { label: 'Prevention', score },
+  ].map((p) => ({ ...p, color: p.score >= 60 ? 'text-safe' : p.score >= 40 ? 'text-amber' : 'text-threat' }))
   return (
-    <div className="p-6 space-y-6 max-w-3xl mx-auto w-full">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -714,8 +724,10 @@ function NormalDashboard({ count, alerts, incidents }: {
         </div>
       </div>
 
+      {/* Top row: health gauge + key status cards — fills wide screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Health Score */}
-      <div className="glass border border-white/5 rounded-2xl p-8 text-center relative overflow-hidden">
+      <div className="lg:col-span-5 xl:col-span-4 glass border border-white/5 rounded-2xl p-8 text-center relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 100%, rgb(var(--violet) / 0.08), transparent)' }} />
         <p className="text-sm text-ink-400 mb-6 relative">Overall Security Health</p>
         <div className="relative inline-flex">
@@ -751,11 +763,7 @@ function NormalDashboard({ count, alerts, incidents }: {
           </p>
         </div>
         <div className="flex justify-center gap-3 mt-6 relative">
-          {[
-            { label: 'Detection',  score: 82, color: 'text-safe'  },
-            { label: 'Response',   score: 71, color: 'text-safe'  },
-            { label: 'Prevention', score: 68, color: 'text-amber' },
-          ].map((m) => (
+          {pillars.map((m) => (
             <div key={m.label} className="px-4 py-2.5 rounded-xl bg-white/4 border border-white/6 text-center min-w-[72px]">
               <p className={cn('text-base font-bold', m.color)}>{m.score}</p>
               <p className="text-[10px] text-ink-500 mt-0.5">{m.label}</p>
@@ -764,8 +772,8 @@ function NormalDashboard({ count, alerts, incidents }: {
         </div>
       </div>
 
-      {/* 3 big status cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Key status cards (right column of the top row) */}
+      <div className="lg:col-span-7 xl:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4 content-start">
         {[
           { icon: AlertTriangle, label: 'Active Threats',       value: count.threats.toLocaleString(), sub: `${count.iocs.toLocaleString()} indicators tracked`, iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-ink-500' },
           { icon: CheckCircle2,  label: 'Sources Online',       value: count.sources.toLocaleString(), sub: 'feeds & connectors active',   iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-ink-500'  },
@@ -783,9 +791,12 @@ function NormalDashboard({ count, alerts, incidents }: {
           </motion.div>
         ))}
       </div>
+      </div>
 
+      {/* Priority actions (primary) + Quick access — two columns on wide screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Priority actions */}
-      <div className="glass border border-white/5 rounded-xl overflow-hidden">
+      <div className="lg:col-span-7 xl:col-span-8 glass border border-white/5 rounded-xl overflow-hidden self-start">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-2.5">
             <span className="w-2 h-2 rounded-full bg-threat animate-pulse" />
@@ -833,9 +844,9 @@ function NormalDashboard({ count, alerts, incidents }: {
       </div>
 
       {/* Quick Access */}
-      <div className="glass border border-white/5 rounded-xl p-6">
+      <div className="lg:col-span-5 xl:col-span-4 glass border border-white/5 rounded-xl p-6 self-start">
         <h2 className="text-base font-semibold text-white mb-5">Quick Access</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {[
             { label: 'Run Security Scan', icon: Shield,        href: '/dashboard/scanner', color: 'text-violet', bg: 'bg-violet/10', border: 'border-violet/15' },
             { label: 'Review Alerts',     icon: AlertTriangle, href: '/dashboard/siem',    color: 'text-threat', bg: 'bg-threat/10', border: 'border-threat/15' },
@@ -851,6 +862,8 @@ function NormalDashboard({ count, alerts, incidents }: {
             </Link>
           ))}
         </div>
+      </div>
+
       </div>
 
       {/* Switch to Power Mode CTA */}
@@ -898,7 +911,7 @@ export default function DashboardOverview() {
     fetchHeatmap().then(setHeatmap).catch(() => {})
   }, [])
 
-  if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} />
+  if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} siem={siemKpis} soar={soarMetrics} />
 
   const fmtScore = Number(kpis.score ?? 0).toFixed(1)
 

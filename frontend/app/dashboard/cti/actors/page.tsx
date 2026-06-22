@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
-type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction'
+type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction' | 'Disruption'
 type ActorType = 'Nation-State' | 'Cybercrime' | 'Hacktivist'
 
 interface Campaign {
@@ -321,7 +321,11 @@ const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ComponentT
   Financial:   { color: '#34F5C5', icon: DollarSign },
   Hacktivism:  { color: '#FFB23E', icon: Megaphone },
   Destruction: { color: '#FF4D6D', icon: Flame },
+  Disruption:  { color: '#FF4D6D', icon: Flame },
 }
+// Neutral fallback so an unrecognised motivation/threat value from the API can
+// never crash the page (the lookups below are all `?? FALLBACK_*`).
+const FALLBACK_MOTIVATION = { color: '#8A7DA3', icon: Crosshair }
 
 const TYPE_CFG: Record<ActorType, { color: string; icon: React.ComponentType<any> }> = {
   'Nation-State': { color: '#FF2E97', icon: Globe },
@@ -334,6 +338,9 @@ const THREAT_CFG: Record<ThreatActor['threatLevel'], { color: string; label: str
   high:     { color: '#FF4D6D', label: 'High' },
   elevated: { color: '#FFB23E', label: 'Elevated' },
 }
+const FALLBACK_THREAT = { color: '#FFB23E', label: 'Elevated' }
+// Lookup that tolerates any string the API might send.
+const threatCfg = (lvl: string) => THREAT_CFG[lvl as ThreatActor['threatLevel']] ?? FALLBACK_THREAT
 
 /* ─── Sophistication meter ──────────────────────────────────────────── */
 function SophMeter({ level, color = '#FF2E97' }: { level: number; color?: string }) {
@@ -354,8 +361,8 @@ function SophMeter({ level, color = '#FF2E97' }: { level: number; color?: string
 }
 
 /* ─── Motivation badge ──────────────────────────────────────────────── */
-function MotivationBadge({ m }: { m: Motivation }) {
-  const cfg = MOTIVATION_CFG[m]
+function MotivationBadge({ m }: { m: string }) {
+  const cfg = MOTIVATION_CFG[m as Motivation] ?? FALLBACK_MOTIVATION
   const Icon = cfg.icon
   return (
     <span
@@ -369,7 +376,7 @@ function MotivationBadge({ m }: { m: Motivation }) {
 
 /* ─── Actor card ────────────────────────────────────────────────────── */
 function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => void }) {
-  const threat = THREAT_CFG[actor.threatLevel]
+  const threat = threatCfg(actor.threatLevel)
   return (
     <div
       onClick={onSelect}
@@ -419,7 +426,7 @@ function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => vo
 
 /* ─── Detail slide-over ─────────────────────────────────────────────── */
 function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => void }) {
-  const threat = THREAT_CFG[actor.threatLevel]
+  const threat = threatCfg(actor.threatLevel)
   return (
     <motion.div
       key={actor.id}
@@ -622,7 +629,9 @@ export default function ActorProfilesPage() {
             origin: a.origin,
             flag: a.flag ?? seed?.flag ?? '🌐',
             type: ((t) => t === 'nation-state' ? 'Nation-State' : t === 'cybercrime' ? 'Cybercrime' : 'Hacktivist')((a.type ?? '').toLowerCase()) as ActorType,
-            motivations: ((Array.isArray(a.motivations) ? a.motivations : []) as Motivation[]),
+            motivations: (Array.isArray(a.motivations) ? a.motivations : [])
+              .filter((m): m is string => typeof m === 'string')
+              .map((m) => (m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())) as Motivation[],
             sophistication: a.sophistication,
             threatLevel: (a.threatLevel as 'critical' | 'high' | 'elevated') ?? 'high',
             sectors: Array.isArray(a.sectors) ? a.sectors : [],

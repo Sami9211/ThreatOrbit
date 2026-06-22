@@ -62,17 +62,22 @@ export default function AssistantWidget() {
 
   return (
     <>
-      {/* Launcher */}
+      {/* Launcher — a compact icon that expands to reveal the label on
+          hover/focus (keeps the screen clear; full affordance on demand). */}
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label="Open the security assistant"
+        aria-label="Ask ThreatOrbit — open the security assistant"
+        title="Ask ThreatOrbit"
         className={cn(
-          'fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full px-4 py-3 shadow-xl transition-all',
+          'group fixed bottom-5 right-5 z-50 flex items-center gap-0 hover:gap-2 focus-visible:gap-2',
+          'rounded-full p-3.5 hover:pr-5 focus-visible:pr-5 shadow-xl transition-all',
           'bg-plasma text-white hover:scale-105 hover:shadow-magenta-md',
           open && 'scale-0 opacity-0 pointer-events-none',
         )}>
-        <Sparkles className="w-4 h-4" />
-        <span className="text-sm font-semibold">Ask ThreatOrbit</span>
+        <Sparkles className="w-5 h-5 shrink-0" />
+        <span className="max-w-0 group-hover:max-w-[160px] group-focus-visible:max-w-[160px] overflow-hidden whitespace-nowrap text-sm font-semibold transition-[max-width] duration-200 ease-out">
+          Ask ThreatOrbit
+        </span>
       </button>
 
       <AnimatePresence>

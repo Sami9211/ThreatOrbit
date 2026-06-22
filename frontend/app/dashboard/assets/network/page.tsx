@@ -202,8 +202,6 @@ export default function NetworkMapPage() {
   // Viewport (zoom + pan) expressed as an SVG viewBox.
   const [vb, setVb] = useState({ x: 0, y: 0, w: VB_W, h: VB_H })
   const svgRef = useRef<SVGSVGElement>(null)
-  const vbRef = useRef(vb)
-  vbRef.current = vb   // mirror for the native wheel listener (stable ref)
   const dragRef = useRef<{ kind: 'node' | 'pan'; id?: string; startX: number; startY: number; startClientX: number; startClientY: number; vb?: typeof vb; moved: boolean } | null>(null)
 
   /* Merge live inventory: update seed-node risk from matching assets and
@@ -355,22 +353,26 @@ export default function NetworkMapPage() {
     }
   }
 
-  const zoomBy = useCallback((factor: number, cx?: number, cy?: number) => {
+  // Zoom toward a fractional anchor (fx,fy in 0..1 of the SVG box; default
+  // centre). The anchor's user-space point is derived from the LIVE `prev`
+  // inside the updater — not a mirrored ref — so a fast/held pinch doesn't
+  // drift the centre and wobble. ViewBox values are rounded to kill the
+  // sub-pixel shimmer that also reads as "shake".
+  const zoomBy = useCallback((factor: number, fx = 0.5, fy = 0.5) => {
     setVb((prev) => {
       const w = Math.max(280, Math.min(VB_W * 1.4, prev.w * factor))
       const h = w * (VB_H / VB_W)
-      const px = cx ?? prev.x + prev.w / 2
-      const py = cy ?? prev.y + prev.h / 2
-      const kx = (px - prev.x) / prev.w
-      const ky = (py - prev.y) / prev.h
-      return { x: px - kx * w, y: py - ky * h, w, h }
+      const ax = prev.x + fx * prev.w
+      const ay = prev.y + fy * prev.h
+      const round = (n: number) => Math.round(n * 100) / 100
+      return { x: round(ax - fx * w), y: round(ay - fy * h), w: round(w), h: round(h) }
     })
   }, [])
 
   // Wheel: zoom ONLY on a pinch gesture (ctrl+wheel - how trackpads report
   // pinch). A normal scroll passes straight through to the page. Native,
   // non-passive listener so preventDefault can stop the browser's own page
-  // pinch-zoom; reads the live viewBox via vbRef so it never re-subscribes.
+  // pinch-zoom; passes a fractional cursor anchor so it never re-subscribes.
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
@@ -378,10 +380,9 @@ export default function NetworkMapPage() {
       if (!e.ctrlKey) return
       e.preventDefault()
       const rect = svg.getBoundingClientRect()
-      const cur = vbRef.current
-      const px = cur.x + ((e.clientX - rect.left) / rect.width) * cur.w
-      const py = cur.y + ((e.clientY - rect.top) / rect.height) * cur.h
-      zoomBy(e.deltaY > 0 ? 1.08 : 0.92, px, py)
+      const fx = (e.clientX - rect.left) / rect.width
+      const fy = (e.clientY - rect.top) / rect.height
+      zoomBy(e.deltaY > 0 ? 1.08 : 0.92, fx, fy)
     }
     svg.addEventListener('wheel', onWheelNative, { passive: false })
     return () => svg.removeEventListener('wheel', onWheelNative)
