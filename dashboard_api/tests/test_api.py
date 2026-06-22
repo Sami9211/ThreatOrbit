@@ -39,6 +39,16 @@ def test_overview(client, auth):
     assert isinstance(client.get("/overview/threat-vectors", headers=auth).json(), list)
 
 
+def test_alert_analytics(client, auth):
+    """SOC-metrics charts (7-day volume + disposition) are backed by real data."""
+    a = client.get("/overview/alert-analytics", headers=auth).json()
+    assert len(a["volume"]) == 7
+    assert {"day", "date", "critical", "high", "medium", "low", "info"} <= a["volume"][0].keys()
+    assert isinstance(a["disposition"], list)
+    for d in a["disposition"]:
+        assert {"key", "label", "count"} <= d.keys()
+
+
 def test_siem(client, auth):
     data = client.get("/siem/alerts?limit=10", headers=auth).json()
     assert data["total"] > 0 and len(data["items"]) <= 10

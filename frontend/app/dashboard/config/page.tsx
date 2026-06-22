@@ -4,12 +4,13 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings, Key, Bell, Shield, Globe, Plug, Database,
-  Eye, Copy, CheckCircle, Save,
+  Eye, Copy, CheckCircle,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
   PanelLeftOpen, PanelLeftClose, ScrollText, Plus, RotateCcw, CreditCard, ExternalLink,
   Monitor, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import FloatingSave from '@/components/dashboard/FloatingSave'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
   fetchApiKeys, createApiKey, revokeApiKey,
@@ -1578,16 +1579,11 @@ export default function ConfigPage() {
           <h1 className="font-display text-xl font-bold text-white">Configuration</h1>
           <p className="text-xs text-ink-500 mt-0.5">Platform settings, API keys, integrations, and notifications</p>
         </div>
-        <button
-          onClick={save}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
-            saved ? 'bg-safe/15 text-safe border border-safe/25' : 'bg-plasma text-white hover:shadow-magenta-sm',
-          )}
-        >
-          {saved ? <><CheckCircle className="w-4 h-4" /> <span className="hidden sm:inline">Saved!</span></> : <><Save className="w-4 h-4" /> <span className="hidden sm:inline">Save Changes</span></>}
-        </button>
       </div>
+
+      {/* Always-reachable Save — pinned top-right so it stays clickable from
+          any scroll position (no scrolling back up to the header). */}
+      <FloatingSave onSave={save} saved={saved} />
 
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
         {/* Nav: horizontal strip on mobile, vertical rail on sm+ */}

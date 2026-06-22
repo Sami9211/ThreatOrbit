@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { fetchSoarMetrics, fetchSiemKpis, fetchAttackCoverage,
-         fetchSoarAnalysts, fetchPlaybooks,
+         fetchSoarAnalysts, fetchPlaybooks, fetchAlertAnalytics,
          type SoarMetrics, type SiemKpis, type AttackCoverage,
-         type AnalystStat, type Playbook } from '@/lib/api'
+         type AnalystStat, type Playbook, type AlertAnalytics, type AlertVolumeDay } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
   TrendingDown, TrendingUp, Clock, Zap, AlertTriangle,
@@ -90,17 +90,6 @@ const KPI_DATA = [
   },
 ]
 
-// 7-day alert volume stacked bar data
-const ALERT_VOLUME_7D = [
-  { day: 'Mon', critical: 38, high: 142, medium: 387, low: 651 },
-  { day: 'Tue', critical: 27, high: 118, medium: 412, low: 594 },
-  { day: 'Wed', critical: 54, high: 201, medium: 438, low: 723 },
-  { day: 'Thu', critical: 19, high: 88,  medium: 299, low: 510 },
-  { day: 'Fri', critical: 41, high: 154, medium: 441, low: 648 },
-  { day: 'Sat', critical: 12, high: 44,  medium: 187, low: 391 },
-  { day: 'Sun', critical: 8,  high: 31,  medium: 143, low: 308 },
-]
-
 // Bar palette for the (live) analyst-throughput chart.
 const ANALYST_COLORS = ['#FF2E97', '#7A3CFF', '#34F5C5', '#FFB23E', '#FF4D6D']
 type ThroughputRow = { name: string; closed: number; color: string }
@@ -133,13 +122,18 @@ function mitreHeatBg(pct: number): string {
 
 /* ── Sub-components ───────────────────────────────────────────────── */
 
-// Stacked bar chart (SVG)
-function AlertVolumeChart() {
-  const maxTotal = Math.max(...ALERT_VOLUME_7D.map((d) => d.critical + d.high + d.medium + d.low))
+// Stacked bar chart (SVG) — live 7-day alert volume by severity.
+function AlertVolumeChart({ data }: { data: AlertVolumeDay[] }) {
+  const hasData = data.length > 0 && data.some((d) => d.critical + d.high + d.medium + d.low > 0)
+  const maxTotal = Math.max(1, ...data.map((d) => d.critical + d.high + d.medium + d.low))
   const BAR_W = 32
   const GAP = 20
   const HEIGHT = 120
   const COLORS = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5' }
+
+  if (!hasData) {
+    return <p className="text-xs text-ink-500 py-10 text-center">No alerts recorded in the last 7 days.</p>
+  }
 
   return (
     <div className="w-full">
@@ -152,7 +146,7 @@ function AlertVolumeChart() {
         ))}
       </div>
       <svg
-        viewBox={`0 0 ${ALERT_VOLUME_7D.length * (BAR_W + GAP)} ${HEIGHT + 28}`}
+        viewBox={`0 0 ${data.length * (BAR_W + GAP)} ${HEIGHT + 28}`}
         className="w-full overflow-visible"
         aria-label="Alert volume stacked bar chart"
       >
@@ -161,14 +155,14 @@ function AlertVolumeChart() {
           <line
             key={frac}
             x1={0} y1={HEIGHT - frac * HEIGHT}
-            x2={ALERT_VOLUME_7D.length * (BAR_W + GAP) - GAP}
+            x2={data.length * (BAR_W + GAP) - GAP}
             y2={HEIGHT - frac * HEIGHT}
             stroke="rgba(255,255,255,0.05)"
             strokeDasharray="4 4"
           />
         ))}
 
-        {ALERT_VOLUME_7D.map((d, i) => {
+        {data.map((d, i) => {
           const total = d.critical + d.high + d.medium + d.low
           const x = i * (BAR_W + GAP)
           let yOff = HEIGHT
@@ -328,6 +322,7 @@ export default function SOCMetricsPage() {
   const [coverage, setCoverage] = useState<AttackCoverage | null>(null)
   const [analysts, setAnalysts] = useState<AnalystStat[]>([])
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [analytics, setAnalytics] = useState<AlertAnalytics | null>(null)
 
   useEffect(() => {
     fetchSoarMetrics().then(setMetrics).catch(() => {})
@@ -335,6 +330,7 @@ export default function SOCMetricsPage() {
     fetchAttackCoverage().then(setCoverage).catch(() => {})
     fetchSoarAnalysts().then(setAnalysts).catch(() => {})
     fetchPlaybooks().then(setPlaybooks).catch(() => {})
+    fetchAlertAnalytics().then(setAnalytics).catch(() => {})
   }, [])
 
   // Live analyst throughput (cases closed per analyst, excluding the Unassigned
@@ -353,6 +349,19 @@ export default function SOCMetricsPage() {
     ? Math.round(playbooks.reduce((s, p) => s + p.successRate, 0) / playbooks.length) : 0
   // Live automation share (closed cases driven by a playbook).
   const autoPct = Math.round(metrics?.automationRate ?? 0)
+
+  // Live alert disposition split (real `disposition` column; null = untriaged).
+  const DISP_COLOR: Record<string, string> = {
+    'true-positive': '#FF2E97', 'false-positive': '#FF4D6D', benign: '#34F5C5',
+    duplicate: '#FFB23E', untriaged: '#7A3CFF',
+  }
+  const dispTotal = (analytics?.disposition ?? []).reduce((s, d) => s + d.count, 0)
+  const dispSegments = (analytics?.disposition ?? []).map((d) => ({
+    label: d.label,
+    value: dispTotal ? Math.round((d.count / dispTotal) * 100) : 0,
+    color: DISP_COLOR[d.key] ?? '#7A3CFF',
+  }))
+  const topDisp = dispSegments[0]
 
   // Live MITRE coverage: % of each tactic's techniques that have an enabled
   // detection rule (from /siem/attack-coverage), labelled with the tactic id.
@@ -427,16 +436,15 @@ export default function SOCMetricsPage() {
 
         {/* ── Charts row ───────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* 1. Alert Volume Trend */}
+          {/* 1. Alert Volume Trend (live) */}
           <div className="lg:col-span-2 bg-surface-2/50 rounded-xl border border-white/6 p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm font-semibold text-white">Alert Volume Trend</p>
-                <p className="text-[10px] text-ink-600 mt-0.5">Illustrative 7-day shape</p>
+                <p className="text-[10px] text-ink-600 mt-0.5">Last 7 days by severity</p>
               </div>
-              <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-ink-500 shrink-0">sample</span>
             </div>
-            <AlertVolumeChart />
+            <AlertVolumeChart data={analytics?.volume ?? []} />
           </div>
 
           {/* 2. Automation vs Manual Donut (live) */}
@@ -646,27 +654,22 @@ export default function SOCMetricsPage() {
           {/* Right column: disposition donut + playbook table */}
           <div className="lg:col-span-2 flex flex-col gap-4">
 
-            {/* Alert disposition donut — the split is illustrative (no per-alert
-                disposition store yet); the live FP rate + total are shown below. */}
+            {/* Alert disposition donut (live — from the alerts' disposition column). */}
             <div className="bg-surface-2/50 rounded-xl border border-white/6 p-5 flex-1">
-              <div className="mb-4 flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-white">Alert Disposition</p>
-                  <p className="text-[10px] text-ink-600 mt-0.5">Illustrative split</p>
-                </div>
-                <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-ink-500 shrink-0">sample</span>
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-white">Alert Disposition</p>
+                <p className="text-[10px] text-ink-600 mt-0.5">Triage outcomes across all alerts</p>
               </div>
-              <DonutChart
-                segments={[
-                  { label: 'True Positive',  value: 67,  color: '#FF2E97' },
-                  { label: 'False Positive', value: 8,   color: '#FF4D6D' },
-                  { label: 'Benign',         value: 19,  color: '#34F5C5' },
-                  { label: 'Duplicate',      value: 6,   color: '#FFB23E' },
-                ]}
-                label="67%"
-                sublabel="True Pos."
-                size={100}
-              />
+              {dispTotal === 0 ? (
+                <p className="text-xs text-ink-500 py-8 text-center">No alerts to disposition yet.</p>
+              ) : (
+                <DonutChart
+                  segments={dispSegments}
+                  label={topDisp ? `${topDisp.value}%` : '—'}
+                  sublabel={topDisp?.label}
+                  size={100}
+                />
+              )}
               <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2">
                 <div className="bg-white/3 rounded-lg px-3 py-2 text-center">
                   <p className="text-sm font-bold text-magenta">{siem ? siem.totalAlerts.toLocaleString() : '—'}</p>

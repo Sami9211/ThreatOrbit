@@ -571,6 +571,10 @@ export const revokeSession = (id: string) =>
 export const fetchKpis    = () => api<OverviewKpis>('/overview/kpis')
 export const fetchVectors = () => api<ThreatVector[]>('/overview/threat-vectors')
 export const fetchHourly  = () => api<number[]>('/overview/hourly-volume')
+export interface AlertVolumeDay { day: string; date: string; critical: number; high: number; medium: number; low: number; info: number }
+export interface DispositionStat { key: string; label: string; count: number }
+export interface AlertAnalytics { volume: AlertVolumeDay[]; disposition: DispositionStat[] }
+export const fetchAlertAnalytics = () => api<AlertAnalytics>('/overview/alert-analytics')
 export interface GeoCountry { country: string; iso2: string | null; observed: number; critical: number; high: number; lastSeen: string | null }
 export const fetchGeo = (limit = 20) =>
   api<{ countries: GeoCountry[]; totalGeolocated: number }>(`/overview/geo?limit=${limit}`)

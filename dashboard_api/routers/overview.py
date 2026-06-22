@@ -4,7 +4,7 @@ Everything here is derived from the live tables so the overview stays consistent
 with the detail pages (the same alerts that drive SIEM also drive these counts).
 """
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 
@@ -70,6 +70,43 @@ def hourly_volume(user: dict = Depends(current_user)):
         except (ValueError, TypeError):
             continue
     return buckets
+
+
+@router.get("/alert-analytics")
+def alert_analytics(user: dict = Depends(current_user)):
+    """Real backing for the SOC-metrics charts: 7-day alert volume split by
+    severity (from alert timestamps) and the disposition breakdown (null/empty
+    dispositions count as 'untriaged'). Replaces the former illustrative data."""
+    today = datetime.now(timezone.utc).date()
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    day_index = {d: i for i, d in enumerate(days)}
+    volume = [{"day": d.strftime("%a"), "date": d.isoformat(),
+               "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0} for d in days]
+    disp_counts: dict[str, int] = {}
+    sc, sp = _scope(user)
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT ts, severity, disposition FROM alerts WHERE 1=1 {sc}", sp).fetchall()
+    for r in rows:
+        key = (r["disposition"] or "").strip().lower() or "untriaged"
+        disp_counts[key] = disp_counts.get(key, 0) + 1
+        try:
+            ts = datetime.fromisoformat(r["ts"])
+        except (ValueError, TypeError):
+            continue
+        di = day_index.get(ts.date())
+        if di is None:
+            continue
+        sev = (r["severity"] or "").lower()
+        if sev in ("critical", "high", "medium", "low", "info"):
+            volume[di][sev] += 1
+    disp_label = {
+        "true-positive": "True Positive", "false-positive": "False Positive",
+        "benign": "Benign", "duplicate": "Duplicate", "untriaged": "Untriaged",
+    }
+    disposition = [{"key": k, "label": disp_label.get(k, k.replace("-", " ").title()), "count": v}
+                   for k, v in sorted(disp_counts.items(), key=lambda kv: kv[1], reverse=True)]
+    return {"volume": volume, "disposition": disposition}
 
 
 @router.get("/mitre-heatmap")
