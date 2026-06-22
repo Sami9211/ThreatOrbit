@@ -11,746 +11,181 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ---
 
-## Phase 0 — Cross-cutting platform (foundations everything needs)
+## Audit (2026-06-22) — verified state + open findings
 
-- [x] **Scheduled & emailed reports** — DONE: report schedules (daily/weekly)
-      with webhook **and SMTP email** delivery + a background scheduler;
-      "Schedule" in the report viewer. Real SMTP send when configured (honest
-      not-configured otherwise); `/config/email` status + test-send.
-- [x] **Deep-linking** — DONE: the SIEM queue honours `?q=` from search / the
-      detail drawer / the ATT&CK navigator. (Extend to other sections as needed.)
-- [x] **Global search + command palette** — DONE: `/search` across alerts,
-      IOCs, assets, cases, actors, dark-web; wired into ⌘K with deep links.
-- [x] **Saved views / filters** — DONE: backend `/saved-views` per user +
-      section, and a shared `SavedViewsButton` (save current filters / apply /
-      delete) wired into the SIEM queue, assets, dark web and feeds headers.
-- [x] **Real-time push** — DONE (see CHANGELOG): an in-process pub/sub broker +
-      `GET /stream` SSE endpoint; the engine tick, `notify()`, and webhook
-      dispatch publish events; a `useLiveStream` hook updates the notification
-      bell and SIEM queue the instant data lands (polling kept as a safety net).
-- [x] **Notifications centre** — DONE: live notification bell (real
-      `/notifications` feed from critical alerts, escalated cases, credential
-      leaks, scheduled reports), mark-read, deep-link on click. An SMTP email
-      channel backs report delivery (see Scheduled reports), and **per-user
-      Slack routing is live**: each user registers a personal incoming-webhook
-      URL + severity floor (`/auth/me/slack`, UI in Config → Notifications);
-      `notify()` mirrors qualifying notifications there, with an honest
-      test-send.
-- [x] **RBAC depth** — DONE (see CHANGELOG): a capability matrix (roles →
-      named per-section/per-action permissions), a `require_perm` dependency
-      that audits denials, applied so viewers are read-only and analysts hold
-      SOC write but not platform admin; `/auth/permissions` + `/config/roles`
-      drive UI gating. Every endpoint now enforces a named capability —
-      config/connectors/services/users/schedules included — with licensing on
-      its own admin-only `license.manage`; `require_role` survives only as a
-      documented escape hatch.
-- [x] **Multi-tenancy / workspaces** — DONE (see CHANGELOG): org model/CRUD/
-      membership, then real data isolation behind `DASHBOARD_MULTI_TENANT`
-      (default off, single-tenant behaviour byte-for-byte unchanged):
-      defaulted `org_id` on every table in `tenancy.TENANT_TABLES`, workspace
-      scoping on every list endpoint AND every aggregate/rollup (overview
-      KPIs/charts/geo, SIEM KPIs, SOAR metrics, CTI/assets/darkweb/feeds
-      summaries), and `org_of(user)` stamping on every user-driven create so
-      rows land in the creator's workspace. Proven by tests that flip the
-      flag: foreign-workspace rows vanish from lists and KPI totals, and a
-      foreign-org analyst's IOC/case are invisible to the default admin.
-      Documented limits: engine/seed writers stay in the deployment
-      workspace (per-org engine context is a deployment concern), and
-      get-by-id detail endpoints remain id-addressed.
-- [x] **Audit & compliance pack** — DONE: CSV audit export + retention
-      enforcement (purge past `data_retention_days`) with UI in Config →
-      Security, plus **signed evidence bundles**: a case's full record
-      (evidence with per-item SHA-256 custody, war room, tasks, audit slice)
-      exports as canonical JSON signed with HMAC-SHA256
-      (`/soar/cases/{id}/evidence-bundle` + `/soar/evidence/verify`,
-      "Export signed bundle" in the case drawer) — tamper-evident end to end.
+A fresh end-to-end audit pass: every backend suite was run on a clean install,
+the prior review (`audit_fixes.md`) was re-verified against the current tree,
+and the finished roadmap entries below were pruned into the CHANGELOG.
 
-## Phase 1 — SIEM depth (detection & monitoring)
+**Verified green.** **413 backend tests pass** on a clean checkout — `log_api`
+20, `threat_api` 8, `dashboard_api` 385. Static sweeps are clean: no bare
+`except:`, mutable-default args, `eval`/`exec`/`subprocess(shell=True)`,
+`pickle`, `yaml.load`, or `datetime.utcnow()` in service code. The
+security-critical paths re-read and hold up: SSRF send-time IP-pinning
+(`net_guard.safe_request` pins to a validated address, preserves Host/SNI,
+blocks redirects), RBAC capability enforcement, and SAML/OIDC verification.
+Most `audit_fixes.md` findings (A1–A4, B1–B12, C1–C6, D1–D2, E1–E4, F1–F4,
+I1–I2) are genuinely resolved; the live residue is tracked below.
 
-- [x] **Detection rule editor** — DONE: author rules with field conditions,
-      AND/OR logic, threshold-over-window aggregation, and a live backtest;
-      built-in rules evaluate the raw event stream; per-rule/entity
-      suppression UI + FP tuning; Sigma import/export (see CHANGELOG).
-- [x] **Real log-source ingestion** — DONE: native HTTP collector
-      (`POST /siem/ingest`), **plus** long-running collectors — a syslog UDP
-      listener (`DASHBOARD_SYSLOG_PORT`) and a file/directory watcher
-      (`DASHBOARD_LOG_WATCH_DIR`, tails new appends) that feed the same
-      parse→events→detect→alert pipeline; status at `/siem/log-listeners`.
-- [x] **Field normalization to ECS** — DONE (see CHANGELOG): an ECS alias layer
-      resolves Elastic Common Schema names (`source.ip`, `user.name`,
-      `destination.port`, `event.action`, …) to native event fields at match
-      time, so detection rules and event searches authored in vendor-neutral ECS
-      work unchanged; `/siem/rule-schema` advertises the alias map. **And
-      ingest-time normalization**: ECS-shaped JSON (nested Beats style or
-      dotted keys) lands fully normalised in the events store via the same
-      alias map, with ECS values authoritative over raw-line regex guesses.
-- [x] **UEBA** — DONE (see CHANGELOG): per-entity (user/host/ip) risk scoring
-      (severity-weighted volume + technique diversity), an Entity Risk page with
-      ranking + drill-down, **and** a learned behavioural baseline — each
-      entity's daily-volume norm (mean ± stddev) with the latest day's z-score
-      flagging deviation-from-self, surfaced in the drawer.
-- [x] **Alert tuning workflow** — DONE (see CHANGELOG): false-positive feedback
-      bumps rule FP rate; suppressions/allow-lists per entity (and rule) that
-      retro-close open alerts and drop future matches, with a hit counter —
-      **plus time-boxed/recurring windows**: auto-expiry after N hours and/or
-      a recurring daily HH:MM–HH:MM UTC window (overnight wrap supported);
-      out-of-window entries don't drop or retro-close, and the UI badges
-      active/inactive.
-- [x] **Full ATT&CK navigator** — DONE (see CHANGELOG): coverage matrix by
-      tactic, per-technique drill-down to rules/alerts, gaps highlighted.
-- [x] **Search/hunt language** — DONE: a real field-operator query language over
-      the raw event stream (`POST /siem/search`) + `| stats count by`, **plus**
-      scheduled hunts — a saved hunt put on an interval runs the event search on
-      the engine tick and raises a SIEM alert on hits (detection over time) —
-      **and cross-source joins**: `| join <field> <subquery>` keeps rows whose
-      field value also matches the subquery (brute-force-then-success style
-      correlation), composing with stats and ECS field names.
-- [x] **Threat-intel matching** — DONE: ingested/generated events whose IP
-      matches a known malicious IOC raise an enriched intel alert (R-TIMATCH).
+### New findings (open)
 
-## Phase 2 — SOAR depth (orchestration & response)
+- [ ] **Several dashboard widgets render hardcoded demo data as if live** —
+      contradicts the repeated "every number is real data" principle.
+      Confirmed static, with no API binding:
+      - Overview (`frontend/app/dashboard/page.tsx`) — the **Trending CVEs**
+        list (`TRENDING_CVES`).
+      - Threat-Intel (`frontend/app/dashboard/cti/page.tsx`) — **Sector
+        targeting** (`SECTOR_DATA`) and the **Intelligence briefs** list
+        (`BRIEFS`).
+      - SOC Metrics (`frontend/app/dashboard/soar/metrics/page.tsx`) — analyst
+        throughput, the **analyst leaderboard** (`ANALYSTS`), and **playbook
+        effectiveness** (`PLAYBOOK_EFFECTIVENESS`) are constants; only the KPI
+        strip + MITRE coverage are live (the CHANGELOG's 2026-06-18 note already
+        flagged the first two — promote them to a real fix).
+      - SIEM (`frontend/app/dashboard/siem/page.tsx`) — the in-page **Threat
+        Hunt** tab shows a fixed `HUNT_RESULTS` / `SAVED_HUNTS` set with
+        `ran=true`, while a real `/dashboard/siem/hunt` page already drives
+        `POST /siem/search`.
+      *Fix:* wire each widget to its existing endpoint, or remove/label it as a
+      sample. (The `*_FALLBACK` arrays that overlay live data — `HEATMAP_ROWS`,
+      `BRIEF_ITEMS_FALLBACK`, `HOURLY_FALLBACK` — are acceptable offline
+      fallbacks and are out of scope here.)
+- [ ] **SOC Metrics time-range selector is a no-op.** The 7d/30d/90d control
+      only relabels the cards ("last {range}"); it triggers no refetch or
+      filter (the data effect has `[]` deps and the underlying constants never
+      change). Wire it to a windowed query or remove it.
+- [ ] **Scanner shows fabricated history on an empty install.**
+      `frontend/app/dashboard/scanner/page.tsx` keeps the bundled `SCAN_HISTORY`
+      rows (acme-corp…) unless a live scan exists (`if (data.items.length > 0)`),
+      so a fresh tenant sees invented scans. Render an empty state instead.
+- [ ] **CI dependency gate is enforced only for `dashboard_api`.**
+      `.github/workflows/security.yml` runs `pip-audit … dashboard_api --strict`
+      (fails the build) but `log_api` / `threat_api` use `|| true` (audit, never
+      fail), and `log_api` blanket-ignores `PYSEC-2026-161`. A CVE in the two
+      flagship services would not break CI. Make all three `--strict`, with a
+      reasoned, expiring `--ignore-vuln` only where no fix is yet available.
 
-- [x] **Visual playbook builder** — DONE (see CHANGELOG): a visual step-flow
-      authoring canvas (palette of the 11 executable kinds, reorderable cards,
-      per-step params, live dry-run) over the real execution engine, plus
-      append-only version history with one-click revert.
-- [x] **Real action integrations** — DONE (see CHANGELOG): credentialled
-      connectors make **real** outbound vendor calls (CrowdStrike contain /
-      firewall block / IdP suspend / Jira issue), uncredentialled ones record a
-      not-configured action, and every attempt hits an action audit trail; the
-      API key is never returned. **Credential entry is in the UI**: a per-tool
-      form (base URL + write-only API key, save/clear) on the integration
-      card, live-API/no-credentials badges, a persisted enable toggle, and
-      optional credentials on Connect Tool; `PATCH /soar/integrations/{id}`
-      backs it (vendor request shapes live in `integration_actions.py` —
-      extend there per vendor).
-- [x] **Automation triggers** — DONE (see CHANGELOG): enabled auto playbooks
-      with `trigger_match` criteria (severities/techniques/rule) run
-      automatically on matching fresh alerts, once per alert, throttled per
-      engine tick.
-- [x] **Case management depth** — DONE (see CHANGELOG): SLA tracking, linked
-      evidence (`/related`), **plus** evidence chain-of-custody (SHA-256 +
-      custody log), linked cases (related/duplicate, both-sided), and
-      merge/split (combine entities/war-room/evidence + sum alerts + close
-      source / spin a child case). MITRE-mapped merged timeline in the drawer.
-- [x] **Response approvals** — DONE (see CHANGELOG): `approval` steps pause the
-      run, raise a notification, and resume/cancel via approve/reject — in the
-      Run history panel.
-- [x] **Post-incident** — DONE (see CHANGELOG): `GET /reports/incident?case_id`
-      builds a per-case post-incident report (MITRE timeline, response
-      actions, SLA verdict, lessons-learned scaffold) in the standard report
-      viewer, from the case drawer.
+### Residual from the prior review (still open)
 
-## Phase 3 — CTI depth (intelligence & library)
-
-- [x] **Full STIX 2.1 / TAXII 2.1 server** — DONE (see CHANGELOG): read-side
-      (discovery → collections → STIX objects) + STIX bundle export, **and**
-      write/push (POST a STIX envelope to the indicators collection → ingested
-      into the IOC store) for true publish-subscribe. Auth by JWT or API key.
-- [x] **Relationship graph at scale** — DONE (see CHANGELOG): a multi-entity
-      graph (actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors) built from the
-      live stores, with pivot (`/cti/graph/expand`) and shortest-path
-      (`/cti/graph/path`) over shared nodes; `?focus=&depth=` narrows to a
-      neighbourhood.
-- [x] **Enrichment pipeline** — DONE (see CHANGELOG): pluggable enrichers with
-      per-IOC caching (TTL) + history. Real offline built-ins (internal
-      cross-reference + indicator analysis incl. geo/ASN hint); VirusTotal/
-      GreyNoise/Shodan/WHOIS report honestly-unavailable without an API key —
-      and **with a key set they make the real provider call** (VT v3 analysis
-      stats, GreyNoise community classification, Shodan host ports/vulns,
-      WHOIS registration age), with failed lookups reported as failures.
-- [x] **IOC lifecycle** — DONE (see CHANGELOG): per-type confidence decay,
-      sighting tracking (events/connectors/manual), known-good whitelisting,
-      and expiry — wired into TI matching, with an IOC database + lifecycle
-      drawer on the CTI hub.
-- [x] **Campaign & report management** — DONE (see CHANGELOG): analyst-authored
-      intel reports (CRUD, TLP, draft/publish, actor/IOC refs) + MISP Event
-      import/export (store, per-report, and ingest), **with a dedicated
-      authoring panel on the CTI hub**: draft (title/TLP/summary/body/tags),
-      filter by status, publish/unpublish, expand to read, per-report MISP
-      download, delete.
-- [x] **Attribution scoring** — DONE (see CHANGELOG): evidence-weighted actor
-      attribution (`/cti/attribution` + per-case) ranking tracked actors by
-      shared IOCs/malware/TTPs/sectors/origin with transparent weighted evidence
-      and confidence bands.
-
-## Phase 4 — Asset, Vuln & Dark Web depth
-
-- [x] **Real vulnerability scanning** — DONE (see CHANGELOG): per-asset software
-      inventory matched against a real CVE catalogue (Log4Shell, Heartbleed,
-      regreSSHion, …) with version-range logic → genuine CVE findings (CVSS,
-      fixed-in) that drive asset risk. `/assets/{id}/scan`, `/assets/scan-all`,
-      `/assets/{id}/vulns`. **NVD feed sync is live**: the NVD connector
-      parses CPE product/version ranges into the `cve_catalogue` table and the
-      scanner merges it with the built-ins at scan time; the fleet findings UI
-      (assets → vulns) ships real grouped findings.
-- [x] **Attack-surface discovery** — DONE (see CHANGELOG): passive discovery of
-      unmanaged hosts from real telemetry (+ one-call promotion into the
-      inventory) and transparent factor-based exposure scoring with an
-      internet-facing inventory (`/assets/exposure`, `/assets/discovered`),
-      **surfaced in an AttackSurfacePanel** on the assets page (exposure
-      bands/factors + discovered-host promotion). Active probing (network
-      scans from the platform) stays deliberately out of scope for the core
-      product — passive discovery only; integrate an external scanner via
-      connectors if needed.
-- [x] **Asset ↔ alert ↔ case linkage** — DONE (see CHANGELOG):
-      `/assets/{id}/activity` ties an asset to its alerts, cases, events, CVE
-      findings and responding playbook runs; “Linked activity” section in the
-      asset drawer with SIEM/SOAR deep links. The page’s fake re-scan simulator
-      was replaced with the real vulnerability scanner.
-- [x] **Dark-web depth** — DONE (see CHANGELOG): `darkweb-json` connector kind
-      (any leak-DB/paste-monitor API → findings, deduped), credential-leak
-      matching against the real user directory (stamp + escalate + notify),
-      and a takedown workflow (status + `darkweb.takedown` webhook + UI button).
-
-## Phase 5 — Product polish & scale
-
-- [x] **Onboarding wizard** — DONE (see CHANGELOG): a first-run checklist
-      computed from real platform state (org, admin password rotated, team,
-      connector, log source + events, rules, webhook, first report) with deep
-      links, progress, and a persisted dismiss — on the overview.
-- [x] **Billing/licensing** — DONE (see CHANGELOG): HMAC-signed license keys,
-      plan tiers (starter/pro/enterprise) with seat + connector limits enforced
-      server-side (402), activate/issue/clear endpoints + a License card with
-      usage bars — **and Stripe self-serve** (checkout + billing portal +
-      signature-verified webhook that mints the plan's license key; opt-in,
-      degrades to not-configured). `billing.py` + `routers/billing.py` +
-      `test_billing.py`.
-- [x] **Postgres option** — DONE (see CHANGELOG): the opt-in path translates
-      every statement through the tested dialect layer (`PgConnection`/`PgRow`,
-      literals-safe `executescript`, `information_schema` migrations) **and was
-      validated against a live Postgres 16** — real dialect gaps fixed and a CI
-      job now runs the full suite on a Postgres service container every change
-      (`.github/workflows/tests.yml`). SQLite stays the default by design.
-- [x] **Performance** — DONE (see CHANGELOG): hot-path indexes on every
-      dashboard-refresh query (verified with EXPLAIN QUERY PLAN) with a safe
-      upgrade path for migrated columns; server-side pagination/filtering on
-      alerts/IOCs/assets/findings; and **frontend virtualisation** — a
-      dependency-free `useWindowedRows` hook windows the SIEM queue above
-      150 rows (spacer padding preserves scrollbar geometry; a no-op below
-      the threshold, so small queues render exactly as before).
-- [x] **E2E test suite** (Playwright) — DONE (see CHANGELOG): the suite was
-      root-caused and fixed after failing on every run; **34 passing across
-      desktop-chromium + mobile-safari**, booting the real stack in CI.
-- [x] **Mobile-responsive** — DONE (see CHANGELOG): `responsive.spec.ts` asserts
-      no horizontal overflow + reachable content on a phone viewport across the
-      six core pages, and the **mobile-safari project is green in CI**, so the
-      contract is enforced on every change. (Residual visual polish is tracked
-      in the Frontend UX backlog below.)
+- [ ] **D3 — no hash-pinned Python lockfile.** All `requirements.txt` use
+      version ranges; add `pip-compile --generate-hashes` per service for
+      reproducible, tamper-evident builds (the SBOM/supply-chain workflow already
+      expects this on the Python side).
+- [ ] **A3 / A4 — Postgres path is a regex dialect translator + a new
+      connection per call.** `db_backend.to_postgres` rewrites SQL with `re.sub`
+      (INTEGER→BIGINT, MIN/MAX→LEAST/GREATEST, …); it passes the tested query set
+      but is brittle on new SQL, and `get_conn()` opens/closes per call (no
+      pool). Replace with a real query layer + pooling before leaning on Postgres
+      at scale.
+- [ ] **B9 residual — SP-signed SAML AuthnRequest** is still unimplemented
+      (IdP-dependent); the request is sent unsigned. Add when an IdP requires it.
+- [ ] **Test-only: Starlette `TestClient` httpx deprecation.** The suites emit
+      `StarletteDeprecationWarning: install httpx2`. Pin/migrate before Starlette
+      drops the httpx shim, or the suites break on a future bump.
 
 ---
 
-## Production readiness — honest gap list to go-live (2026-06-12)
+## Open roadmap (remaining work only — finished items live in the CHANGELOG)
 
-**Where the product stands.** Functionally, the SIEM + SOAR + CTI + asset +
-dark-web surface is complete and real (138 backend tests, every feature
-backed by live data paths, honest degradation where keys/deployment are
-required). What separates it from "sellable and operable" is not features —
-it is hardening, scale architecture, and the operational/compliance machinery
-that buying companies require. Realistic positioning today:
+**Shipped & complete** (full detail in the CHANGELOG below): Phase 0
+cross-cutting platform, Phase 1 SIEM depth, Phase 2 SOAR depth, Phase 3 CTI
+depth, Phase 4 asset/vuln/dark-web depth, Phase 5 polish & scale, and the
+Tier-1 go-live hardening (secrets-at-rest, TOTP MFA, OIDC/SAML/SCIM SSO,
+backup/restore, observability baseline, deployment hardening, signed
+releases + SBOM + Trivy, custom-role/break-glass RBAC, versioned `/v1` API).
 
-- **Small companies (single node, ≤ ~50 assets, low EPS):** close — a strong
-  beta. Tier 1 below is the punch list; most items are days-to-weeks, not
-  months.
-- **Mid-size (multiple teams, hundreds of assets, real log volume):** needs
-  Tier 1 + Tier 2 — SSO, parser/content breadth, published load limits.
-- **Large enterprise / MSSP:** needs Tiers 1–3 — a re-architected event
-  pipeline, finished tenant isolation, HA/DR, and a vendor compliance
-  posture. This is the substantial engineering tranche (months).
+**Positioning today.** Small single-node deployments (≤~50 assets, low EPS):
+a strong beta — the Tier-1 punch list is essentially closed. Mid-size: needs
+the Tier-2 items. Large enterprise / MSSP: needs the Tier-3 re-architecture
+plus external compliance attestations.
 
-### Tier 1 — required before ANY paying deployment (small scale)
+### Tier 1 — before any paying deployment
 
-- [x] **Secrets encryption at rest** — DONE (see CHANGELOG): connector +
-      integration API keys and per-user Slack webhooks are Fernet-encrypted
-      (`enc:v1:` envelope) under `DASHBOARD_ENCRYPTION_KEY` (JWT-secret
-      fallback, caveat documented); decrypt happens only at the point of use,
-      legacy plaintext rows are upgraded on boot, and a rotated key degrades
-      honestly to not-configured. SMTP credentials were already env-only.
-- [x] **Real MFA (TOTP)** — DONE (see CHANGELOG): RFC 6238 enrolment
-      (`/auth/mfa/enroll` → secret + otpauth URI, shown once) → verify →
-      login step-up (password first, then the 6-digit code; wrong codes hit
-      the login throttle) → disable with possession proof. Secret encrypted
-      at rest, never on any payload; admins can only reset MFA *off*
-      (recovery), never on. Login page + Config → Security panel wired.
-- [x] **Honest auth-method selector** — DONE: the OIDC/SAML options are
-      removed from Config → Security until Tier 2 implements SSO (a roadmap
-      note marks where they return).
-- [x] **Backup / restore / upgrade path** — DONE (see CHANGELOG): consistent
-      SQLite snapshots via the online-backup API (`GET /config/backup`
-      download, audited + integrity-checked; `python -m dashboard_api.ops
-      backup|verify` for cron), Postgres `pg_dump` guidance, an offline
-      restore drill, the additive-only upgrade/rollback contract, and a key-
-      management table — all in `docs/OPERATIONS.md`.
-- [x] **Deployment hardening** — DONE (see CHANGELOG): baseline security
-      headers on every API response (middleware, tested), non-root API
-      container (`USER app`, only `/data` writable; build-verify with docker
-      where registry access exists), and `docs/DEPLOYMENT.md` with nginx +
-      Caddy reference configs (TLS, HSTS, CSP for the static frontend,
-      SSE-safe proxying), the fail-the-deploy env checklist, compose
-      hardening (read-only root, limits, no-new-privileges), and digest
-      pinning guidance.
-- [x] **Observability baseline** — DONE (see CHANGELOG): Prometheus
-      `/metrics` (request rate/latency by route template, engine tick
-      health/failures, ingest counters, table-row gauges; optional bearer
-      gating via `DASHBOARD_METRICS_TOKEN`), structured JSON logs
-      (`DASHBOARD_LOG_FORMAT=json`), and a Sentry hook (`SENTRY_DSN`,
-      honest about a missing SDK). Documented in docs/OPERATIONS.md.
-- [~] **Security pass** — audits + disclosure DONE (see CHANGELOG):
-      dependency audits in CI (pip-audit + an npm audit gate with an
-      **expiring allowlist**, weekly schedule), backend deps bumped to
-      patched versions (fastapi 0.129/starlette 0.52/python-multipart
-      0.0.27+/cryptography 46 — 143 tests green on the new set), SECURITY.md
-      disclosure policy with honest triage table. Remaining (env-gated /
-      follow-up): a third-party pentest before first sale, the next@16 major
-      upgrade (clears the triaged static-export-only Next server advisories),
-      and re-checking PYSEC-2026-161 when FastAPI's starlette ceiling moves.
-- [ ] **Pilot validation with real logs** — deploy against a live
-      environment, forward real syslog/files, and tune parsers + built-in
-      rules on actual data (the generated event stream only proves the
-      pipeline, not parser coverage).
-- [x] **Validate the Postgres path against a live server** — DONE (see
-      CHANGELOG): ran the full dashboard suite against a live Postgres 16,
-      found + fixed the real dialect gaps (INTEGER→BIGINT, scalar
-      MIN/MAX→LEAST/GREATEST, comment-aware script splitting, Decimal→float,
-      a camelCase alias), and added a CI job that runs the suite against a
-      Postgres service container on every change. 159 passed / 2 SQLite-only
-      skipped on PG; 161 on SQLite.
-- [x] **Execute the E2E suite in CI and fix what it flags** — DONE (see
-      CHANGELOG): the Playwright suite had failed on every run; root-caused and
-      fixed (API booted in the test step, trailing-slash login wait, Normal-mode
-      assertions, reliable typing, an accessible error alert, throttle disabled
-      in CI). 34 passing across desktop-chromium + mobile-safari.
-- [x] **Licensing/billing** — DONE (see CHANGELOG): signed license keys
-      already enforced limits; added optional **Stripe self-serve** checkout +
-      billing portal + signature-verified webhook that mints the plan's license
-      key on a completed subscription. Fully opt-in - degrades to
-      "not configured" with no key, so the default install is unaffected.
+- [ ] **Pilot validation with real logs** — deploy against a live environment,
+      forward real syslog/files, and tune parsers + built-in rules on actual
+      data (the generated event stream proves the pipeline, not parser
+      coverage).
+- [~] **Security pass** — dependency audits, disclosure policy, and patched
+      backend pins shipped. Remaining (env-gated / external): a third-party
+      pentest before first sale, and re-check `PYSEC-2026-161` when FastAPI's
+      Starlette ceiling moves.
 
 ### Tier 2 — mid-size deployments
 
-- [x] **SSO** — DONE (see CHANGELOG): **OIDC** (authorization-code flow, ID-token
-      RS256 verified against the IdP JWKS, JIT provisioning, group→role mapping),
-      **SAML 2.0 SP** (signed-assertion verification with the full security
-      battery), and **SCIM 2.0** provisioning incl. the security-critical
-      *deprovisioning* (an IdP can auto-deactivate departed users). All opt-in
-      (degrade to "not configured"). Follow-ups (SCIM Group→role push, a shared
-      multi-worker SAML replay cache) are tracked under P1 — Identity.
-- [x] **Parser & source breadth** — DONE (see CHANGELOG): Windows Security +
-      Sysmon, the three clouds (AWS CloudTrail, Azure AD/Entra, GCP Cloud Audit),
-      endpoint EDR (CrowdStrike Falcon, SentinelOne), Microsoft 365 (Defender
-      Advanced-Hunting + Office 365 audit), Palo Alto PAN-OS + Fortinet FortiGate
-      firewalls, and **CEF (ArcSight) + LEEF (IBM QRadar)** envelopes all
-      normalise onto the native event vocabulary at ingest; **TLS syslog
-      (RFC 5425, optional mTLS)** and an **agentless S3 pull** (tail a bucket
-      prefix, checkpointed, SigV4, S3-compatible) stream through the same
-      pipeline; `docs/SUPPORTED_SOURCES.md` is the published matrix.
-- [x] **Detection content library** — DONE (see CHANGELOG): a curated starter
-      pack (`detection_pack.py`, grown to 15 rules across 8 ATT&CK tactics)
-      loadable via `POST /siem/rules/load-pack` + a one-click UI button,
-      idempotent, each mapped to a real event field + ATT&CK technique and an
-      authored low|medium|high **noise rating** — **plus a content-update
-      channel**: versioned JSON packs in `content/rules/` apply via
-      `POST /siem/content/apply` (idempotent upsert, operator enable/disable
-      preserved) so new detections ship without a code release. Still ahead
-      (enhancements): Sigma community-pack import and SOAR ATT&CK coverage
-      computed from this library.
-- [~] **Published load limits** — backpressure + a **measured EPS baseline**
-      shipped (2026-06-15): `dashboard_api/bench.py` is a repeatable benchmark and
-      `docs/LOAD_LIMITS.md` captures real numbers (~10k EPS ingest+detect, ~7k EPS
-      detection on 4 vCPU SQLite) with the honest finding that the worker pool
-      doesn't speed up SQLite (single-writer). **UI dataset ceilings DONE**
-      (2026-06-18): every list endpoint hard-caps its `limit` (422 over the cap)
-      so a client can't force an unbounded result set; the ceilings are published
-      in `docs/LOAD_LIMITS.md`. Still ahead: a documented Postgres baseline (needs
-      a live PG host to measure).
-- [x] **Background-service HA story** — DONE (see CHANGELOG): a DB-backed
-      **leader lease** (`leader.py` + `leader_lease` table) now gates the
-      singleton loops — the engine tick drives election (acquire/renew), the
-      connector/report scheduler and the file-watcher run only on the leader, so
-      two app replicas never double-generate telemetry, double-import
-      connectors, double-deliver reports, or double-ingest a shared dir.
-      Failover within one TTL; `/config/leader` exposes the holder. The syslog
-      UDP listener stays single-writer by deployment (bind one node / VIP),
-      documented.
-- [x] **Retention tiering** — DONE (see CHANGELOG): archive/export before purge,
-      per-table retention windows (`retention_days_<table>`), **and a direct
-      object-storage (S3) writer** — each purged batch is also written as an
-      immutable gzip object via a stdlib SigV4-signed PUT (AWS or S3-compatible:
-      MinIO/R2/B2), gating the purge like the local sink. Cold storage is no
-      longer tied to a local disk.
+- [~] **Published load limits** — backpressure, a measured SQLite EPS baseline
+      (`bench.py` + `docs/LOAD_LIMITS.md`), and per-endpoint UI dataset ceilings
+      shipped. Remaining: a documented **Postgres** EPS baseline (needs a live
+      PG host to measure).
 
 ### Tier 3 — large enterprise / MSSP
 
-- [~] **Event pipeline at scale** — the durable queue seam + a **concurrency-safe
-      multi-worker detection pool** are now in (2026-06-15, see CHANGELOG): a
-      pooled drain claims batches under write-locked transactions so workers never
-      double-process, proven by a multi-worker-equals-single-worker test. Still
-      ahead: flipping the engine to ingest-only by default, and partitioning or
-      externalising the event store (e.g. ClickHouse/OpenSearch behind the same
-      search API) with predicate push-down for the hunt language.
-- [~] **Finish multi-tenancy for GA** — the data-path isolation is now complete:
-      get-by-id IDOR closed, global search + SSE stream org-scoped, **tenant
-      lifecycle** (suspend/export/delete-with-purge), **per-tenant quotas +
-      retention**, and **per-org ingest context DONE** (2026-06-18, see CHANGELOG)
-      — ingested events and the alerts they trigger carry the ingesting
-      principal's workspace, so a tenant only sees detections from its own logs.
-      The *synthetic* background engine + the deployment log listeners stay in the
-      default workspace **by design** (demo/deployment infra, not a tenant's real
-      data), **and org-scoped API keys DONE** (2026-06-18) so non-interactive
-      collectors ingest per-tenant. All code pieces for multi-tenant GA are now in;
-      the only thing left is flipping `DASHBOARD_MULTI_TENANT` on by default for
-      MSSP builds after an end-to-end validation pass (a deployment decision).
-- [~] **HA / DR / zero-downtime** — **Helm chart SHIPPED** (2026-06-15) and
-      **migration-gating on upgrade DONE** (2026-06-18, see CHANGELOG): a
-      `SCHEMA_VERSION` marker recorded in the DB; on boot the code adopts a fresh
-      DB, bumps a normal additive upgrade, and **refuses to start against a DB
-      newer than it understands** (rollback safety) unless
-      `DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1`; `GET /ready` and `ops schema-version`
-      surface code-vs-db. **Multi-AZ Postgres HA guidance DONE** (2026-06-18,
-      `docs/POSTGRES_HA.md`): managed/self-managed topologies, why failover is
-      clean here (stateless replicas, per-request connections, DB-backed leader
-      lease), RPO/RTO, and an upgrade-against-HA note. Still ahead: an actual
-      **tested** failover drill (needs live multi-AZ infra to run). (A full-stack
-      backup + tooled restore + drill already shipped — see the 2026-06-15 HA/DR
-      entry.)
-- [~] **Vendor compliance posture** — **DPA template** + GDPR data-subject
-      tooling DONE (`docs/DPA_TEMPLATE.md`; export/erase per user), **and
-      data-residency DONE** (2026-06-18, see CHANGELOG): `docs/DATA_RESIDENCY.md`
-      enumerates every external egress point and how to pin/disable each for an
-      in-region or air-gapped install (mapped as control `DR-RESIDENCY`). Still
-      ahead (external / can't self-certify): an independent **SOC 2 Type II**
-      (then ISO 27001) program. Enterprises ask for these before the first PoC ends.
-- [x] **Collector ecosystem** — DONE (see CHANGELOG): a stdlib-only first-party
-      agent (tail + checkpoint + rotation + at-least-once + backpressure) **and**
-      certified Fluent Bit / Vector / Beats→Logstash configs, all shipping to a
-      new vendor-friendly `/siem/ingest/raw`. Unblocked by real **API-key
-      authentication** (scoped keys now authenticate as service principals);
-      per-collector keys are individually revocable, with mTLS enrolment
-      documented for transport identity.
-- [x] **API stability contract** — DONE (see CHANGELOG): outbound webhook
-      signing (HMAC + idempotency + retries), **and a versioned REST API** — every
-      route is served under `/v1` as an exact alias (pure-ASGI rewrite, single
-      route table, `X-API-Version` header), a written **deprecation policy**
-      (`docs/API_VERSIONING.md`, RFC 8594 `Deprecation`/`Sunset` via
-      `mark_deprecated`), **per-release OpenAPI** snapshots
-      (`scripts/openapi_snapshot.py` + live `/openapi.json` + `/docs`), and a
-      **contract test** that fails if a documented path is removed without a
-      version bump.
-- [x] **Scale-grade RBAC** — DONE (see CHANGELOG): **custom roles** (capability
-      bundles via `/roles`, fail-closed, no-privilege-escalation guard),
-      **break-glass / audit-everything** (a time-boxed emergency elevation gated
-      by `break_glass.use` — admin + manager only — that grants any capability the
-      base role lacks and audits each elevated use individually), **and
-      per-workspace role assignment** (a user can be granted a distinct role
-      *within* another workspace via `/orgs/{id}/members`; under multi-tenancy,
-      acting there with `X-Org-Id` takes that role + data scope, and a non-member
-      gets 403). The broader "act fully in another tenant's engine/ingest context"
-      remains under *Finish multi-tenancy for GA*.
+- [~] **Event pipeline at scale** — the queue seam, bounded ingest (HTTP 429 +
+      Retry-After), and a concurrency-safe multi-worker detection pool shipped.
+      Remaining: flip the engine to **ingest-only** by default, and partition or
+      externalise the event store (ClickHouse / OpenSearch behind the same hunt
+      API, with predicate push-down).
+- [~] **Finish multi-tenancy for GA** — all data-path isolation is in
+      (per-org ingest context, org-scoped API keys, tenant lifecycle, per-tenant
+      quotas + retention, org-scoped search/SSE). Remaining: an end-to-end
+      validation pass, then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP
+      builds (a deployment decision).
+- [~] **HA / DR / zero-downtime** — Helm chart, DB-backed leader lease,
+      schema-version boot gate, full-stack backup/restore drill, and multi-AZ
+      Postgres guidance shipped. Remaining: an actual **tested** failover drill
+      (needs live multi-AZ infra), and a packaged scheduled-backup job
+      (cron/timer image).
+- [~] **Vendor compliance posture** — DPA template, GDPR data-subject tooling,
+      data-residency doc, and a SOC 2 / ISO 27001 control self-assessment
+      shipped. Remaining (external, can't self-certify): an independent **SOC 2
+      Type II** then **ISO 27001** program.
+
+### Cross-cutting maturity (from the honest gap analysis)
+
+- [ ] **Supply chain** — finish the trailing frontend majors (tailwindcss 3→4,
+      `@types/node` 20→25); add an in-product "platform updates" upgrade notice;
+      sign published **container images** once a registry push pipeline exists.
+- [ ] **Detection content** — grow the rule packs toward a **Sigma
+      community-pack import**, fed through the existing content-update channel.
+- [ ] **Compliance & data lifecycle** — a **PII handling / redaction policy**
+      for stored logs; a persisted cursor + replay for the audit sink
+      (at-least-once across restarts) plus native syslog / object-lock writers.
+- [ ] **Platform SRE / self-observability** — distributed tracing, SLOs +
+      error budgets, alerting on the platform's *own* health, and synthetic
+      checks (`/metrics` exists today but the rest is missing).
+- [ ] **Product, UX & quality** — a WCAG / keyboard-nav / screen-reader pass +
+      i18n; notification reliability (delivery retries/backoff, templating,
+      digests, escalation policies); test depth (load/perf, chaos /
+      failure-injection, connector contract tests, and standing
+      SSRF/authz/XSS regressions); GTM plumbing (trial / free-tier flow, usage
+      metering, in-product upgrade prompts, status page, support surface).
+
+### Frontend polish backlog
+
+- [~] **Asset network map** — the pan-shake and scroll-zoom bugs are fixed;
+      remaining (visual, needs a browser): the clean, eased **R3F 3D look**
+      (`components/effects/OrbitalScene` / `IOCNetworkScene`) instead of the
+      current 2D SVG.
+- [~] **Exported reports** — findings are now grouped by severity in both the
+      preview and the printable HTML; remaining (visual): richer per-domain
+      narrative, charts beyond the bars, and a tighter print layout.
 
 ---
-
-## Honest gap analysis — the most important things still missing (2026-06-14)
-
-A deep, self-critical pass on what stands between this and a product an
-enterprise security team would actually trust and buy. Some items restate
-Tier 2/3 with sharper "why it matters / definition of done"; several are new.
-Ordered by priority. **P0** = do now / credibility-blocking; **P1** =
-enterprise-required; **P2** = maturity.
-
-### P0 — Supply-chain & dependency hygiene (the weakest current link)
-
-This is the gap that most undercuts the "secure product" claim, and it was
-caught by the user, not by us. Honest findings (2026-06-14):
-
-- **Dependencies were audited but not *updated*.** CI runs pip-audit + an npm
-  audit gate, but nothing opens fix PRs - so known-vulnerable pins sat in the
-  tree. The npm install prints **"5 vulnerabilities (1 moderate, 4 high)"**;
-  all are **Next.js 14** server advisories that were *triaged-as-accepted*
-  (static export) rather than fixed.
-- **A real CVE was missed.** `threat_api` pinned **flask-cors==4.0.1**, which
-  is vulnerable (CVE-2024-6221, CVE-2024-1681, plus the 5.x/6.x regex/path
-  fixes). The 2026-06-12 "security pass" bumped dashboard_api + log_api but
-  never touched threat_api's Flask stack. **Fixed 2026-06-14** (flask-cors
-  >=6.0.1, requests >=2.32.4); the rest of the audit-then-defer posture is the
-  systemic problem.
-- **Majors are well behind**, carrying the unfixed advisories: next 14→16,
-  react 18→19, three 0.167→0.184, framer-motion 11→12 (now `motion`),
-  @react-three/fiber 8→9. The Next.js advisories only truly clear at **next@16**.
-- **DONE 2026-06-14 (the auto-update feature):** `.github/dependabot.yml`
-  watches all four services (pip ×3 + npm) **and** the CI actions, opening
-  grouped weekly PRs (and security PRs immediately); `dependabot-auto-merge.yml`
-  auto-merges patch/minor bumps once the Tests/E2E/Security gates pass, leaving
-  majors for human review. **next@16 DONE** (2026-06-14) - cleared all 5 npm
-  advisories on React 18. **react@19 + the R3F v9 chain DONE** (2026-06-14) -
-  react/react-dom 19.2, @react-three/fiber 9, drei 10, postprocessing 3,
-  framer-motion 12, lucide-react 1 (see CHANGELOG). **Still to do** as their own
-  tracked units: tailwindcss 3→4 (config/PostCSS rewrite) and @types/node 20→25.
-  Also:
-  - **SBOM** - DONE (2026-06-14): `scripts/sbom.sh` + `supply-chain.yml`
-    publish CycloneDX SBOMs (backend resolved env + frontend npm) as artifacts
-    on every run; the **release** workflow also attaches signed SBOMs to each
-    tagged release (below).
-  - **container image / IaC scanning** - DONE (2026-06-14): `supply-chain.yml`
-    runs Trivy (vuln + secret, fails on a fixable CRITICAL; misconfig
-    report-only), and Dependabot now tracks the **Docker base images**.
-  - **digest-pinned base images** - DONE (2026-06-14): all four Dockerfiles pin
-    `image:tag@sha256:...` (python:3.11-slim, node:22-alpine, nginx:1.27-alpine),
-    so a build can't silently pick up a re-pushed tag; Dependabot's docker
-    ecosystem bumps the digests.
-  - **signed releases + SLSA provenance** - DONE (2026-06-14):
-    `.github/workflows/release.yml` (tag-triggered, dormant otherwise) builds
-    the SBOMs + a source archive + SHA256SUMS, **cosign-keyless-signs** each
-    (Fulcio cert + Rekor log, detached `.cosign.bundle`), and emits **SLSA3
-    build provenance** via the official generator - all attached to the GitHub
-    release. Still to do: sign published **container images** once a registry
-    push pipeline exists (no registry push today).
-  - an **in-product "platform updates" notice**: a self-hosted instance should
-    check for a newer release and surface an upgrade prompt (it already has the
-    additive-migration contract), distinct from the **threat-intel / detection
-    content** auto-update channel below.
-
-### P0 — Event pipeline ceiling (the architectural truth)
-
-In-process detection over a single WAL-SQLite `events` table is fine for a
-laptop/small team and **will not** hold at enterprise EPS. Until this is
-re-architected, "large enterprise" is aspirational. Definition of done:
-separate **ingest from detection** (durable queue + worker pool), move events
-to a **columnar/search store** (ClickHouse or OpenSearch) behind the same hunt
-API with predicate push-down, add **backpressure** (bounded queue + 429 instead
-of best-effort inserts), and **publish measured load limits** (sustained EPS,
-alert volume, UI dataset ceilings) on reference hardware for SQLite vs Postgres.
-
-**Increment 1 DONE (2026-06-15): the queue seam + backpressure visibility.**
-`event_queue.py` makes the `events` table a lease-based work queue
-(claim/complete/requeue-stale via `claimed_by`/`claimed_at`), and the engine's
-detection now flows through it (`run_detection` claims a batch as worker
-"engine-0", completes it) - behaviour-preserving for the single inline worker
-but ready for a pool. **Backpressure is now observable**: queue depth + oldest-
-pending lag are exposed on `GET /config/engine` and as Prometheus gauges
-(`threatorbit_event_queue_depth` / `_lag_seconds`) - you can finally SEE the
-pipeline fall behind. 6 tests prove the lease semantics (exclusive claim,
-complete, stale re-queue). **Increment 2 DONE (2026-06-15): bounded ingest +
-429.** `POST /siem/ingest` now sheds load with **HTTP 429 + Retry-After** when
-the detection backlog hits `DASHBOARD_INGEST_MAX_BACKLOG` (default 100k, 0 to
-disable), instead of accepting events the pipeline can't keep up with; the cap +
-a live `shedding` flag are on `GET /config/engine`. **Increment 3 DONE
-(2026-06-15): the concurrency-safe multi-worker pool.** `detection_pool.py` runs
-a pool of workers that each `BEGIN IMMEDIATE`/`isolation_level=None` **claim a
-batch under a write lock** (so two workers never grab the same event) and process
-it via the existing `run_detection(claimed=…)` path; `POST /siem/detection/drain`
-exposes it (`DASHBOARD_DETECTION_WORKERS`). Proven by a test that a 6-worker
-drain produces **exactly the same alerts** as a 1-worker drain of identical input
-(no double-processing, none missed). The inline engine tick is untouched (still
-worker engine-0), so the default path is unchanged. **Still ahead (the heavier
-lifts):** flip the engine to ingest-only by default, the columnar/search store,
-and published EPS limits.
-
-### P1 — Reliability, HA & disaster recovery
-
-- **Single-instance background services** (syslog listener, file watcher,
-  scheduler, engine tick) have no leader election - two app replicas would
-  double-run them. Either document the single-writer constraint loudly or add
-  leader election.
-- **HA/DR — partially closed**: a k8s/Helm chart shipped (2026-06-15) and
-  **migration-gating on upgrade** shipped (2026-06-18, schema-version boot gate +
-  `ops schema-version`) and **multi-AZ Postgres HA guidance** (`docs/POSTGRES_HA.md`).
-  Still open: an actual tested failover drill (needs live multi-AZ infra).
-- **Backups operationalised (2026-06-15)**: `dashboard_api/backup.py` +
-  `scripts/backup.sh`/`restore.sh` snapshot **all three** service DBs into one
-  verified archive and perform a **tooled, integrity-checked restore** (was
-  documented-manual, dashboard-only). An **automated restore drill** runs in CI
-  (`test_backup.py` round-trips real data + catches corruption/zip-slip/clobber),
-  and `docs/BACKUP_RESTORE.md` covers scheduling, off-box shipping, RPO/RTO, and
-  encryption. Multi-AZ Postgres failover guidance shipped
-  (`docs/POSTGRES_HA.md`, 2026-06-18). Still ahead: a packaged scheduled job
-  (cron/timer image).
-
-### P1 — Detection content, parsers & collectors (the actual SOC value)
-
-- **Curated detection-content library — first pass DONE (2026-06-15).** The
-  built-in pack went 7 → **15 rules across 8 ATT&CK tactics** (added **Impact**:
-  ransomware T1486 + shadow-copy deletion T1490; deeper **Credential Access**:
-  kerberoasting T1558.003 + password spraying T1110.003; **Persistence**: cloud
-  access-key creation T1098.001; **C2**: DNS tunneling T1071.004 + ingress tool
-  transfer T1105; impossible-travel login T1078), each paired with a telemetry
-  scenario so the detections fire on real engine events, and a test module that
-  asserts telemetry↔rule MITRE alignment (see CHANGELOG). **Content-update
-  channel DONE (2026-06-15)**: versioned JSON packs in `content/rules/` apply via
-  `POST /siem/content/apply` (idempotent upsert, operator enable/disable
-  preserved) - new detections without a code release; first pack ships 4 Windows
-  persistence/defense-evasion rules. **The SOAR metrics page's ATT&CK coverage is
-  now computed live** from `/siem/attack-coverage` (per-tactic % of techniques
-  with an enabled rule) instead of the hardcoded mock (2026-06-18). Still ahead:
-  growing the packs toward a Sigma community-pack import.
-- **Parser/source breadth — DONE (2026-06-18).** Windows Event/Sysmon, AWS
-  CloudTrail, Azure AD/Entra + M365 (Defender AH + Office audit), GCP audit,
-  EDR (CrowdStrike Falcon, SentinelOne), and firewall exports (Palo Alto
-  PAN-OS, Fortinet FortiGate) all normalise onto the detection vocabulary at
-  ingest; **CEF (ArcSight) + LEEF (IBM QRadar)** envelopes are decoded; TLS
-  syslog (RFC 5425, optional mTLS) and an **agentless S3 pull** stream through
-  the same pipeline; and `docs/SUPPORTED_SOURCES.md` publishes the matrix.
-  **Fully done.**
-- **No collector ecosystem.** "POST your logs here" isn't an enterprise answer;
-  ship certified Beats/Fluent Bit/Vector configs or a light agent, with mTLS
-  enrolment and an agentless S3/blob pull option.
-
-### P1 — Identity, access & session depth
-
-- **Enterprise SSO DONE: OIDC + SAML + SCIM (2026-06-15).** OIDC SSO (earlier),
-  **SAML 2.0 SP** (signed-assertion verification with the full security battery -
-  see CHANGELOG), and **SCIM 2.0** provisioning - the security-critical
-  *deprovisioning* half, so an IdP (Okta/Entra/OneLogin) can automatically
-  **deactivate** departed users. The "ex-employee keeps access" finding is
-  closed. Follow-ups: SCIM Group→role push, externalId filtering, a shared
-  (multi-worker) SAML replay cache, and SP-signed AuthnRequests if an IdP
-  requires them.
-- **RBAC: custom roles DONE (2026-06-15).** The four built-ins stay
-  code-authoritative; operators now define **custom roles** (capability bundles)
-  via `/roles`, resolved by `permissions.perms_for()` from a `roles` table, with
-  a **no-privilege-escalation** guard (you can't grant a capability you don't
-  hold). **Break-glass / audit-everything and per-workspace role assignment both
-  shipped** (2026-06-18, see CHANGELOG) — Scale-grade RBAC is now complete.
-- **Session management — revocation + per-device list DONE (2026-06-15).**
-  Stateless JWTs are revocable via a per-user **token-epoch** counter
-  (`POST /auth/sessions/revoke-all`, admin `POST /users/{id}/revoke-sessions`,
-  auto-revoke on password change), AND each login is now a **listable per-device
-  session** (`sessions` table; JWT carries the row id as `sid`):
-  `GET /auth/sessions` lists your devices with the current one flagged, and
-  `POST /auth/sessions/{id}/revoke` signs out **one** device without touching the
-  others. The `revoked` flag is kept honest across change-password (keeps the
-  current device, drops the rest) / revoke-all / admin revoke. **MFA recovery
-  codes DONE**, **password screening DONE**, and **idle timeout DONE** (separate
-  entries). **Per-device session rows for the SSO/SAML login paths DONE**
-  (2026-06-18) — the OIDC callback and SAML ACS now `record_session`, so those
-  logins are listable/revocable per-device too. *This section is now closed for
-  GA.*
-
-### P1 — Compliance & trust posture
-
-- **No third-party pentest yet** (honestly stated in SECURITY.md, but it's a
-  gating item before exposing to untrusted networks or selling).
-- **Compliance program**: a **control self-assessment shipped (2026-06-15)** -
-  `dashboard_api/compliance.py` + `docs/COMPLIANCE.md` + `GET /compliance/controls`
-  map the implemented controls to SOC 2 TSC + ISO 27001:2022 Annex A with in-repo
-  evidence and **honest status** (implemented/partial/planned), so a buyer's
-  security questionnaire can be answered from real artifacts. Still needed (the
-  parts that aren't code): an **independent SOC 2 Type II** audit then ISO 27001
-  - asked for *before* the first enterprise PoC ends. **Data-residency DONE
-  (2026-06-18)**: `docs/DATA_RESIDENCY.md` documents every egress point + how to
-  pin/disable each for in-region/air-gapped installs (control `DR-RESIDENCY`).
-  **DPA template DONE (2026-06-15)**: `docs/DPA_TEMPLATE.md` (GDPR Art. 28,
-  grounded in the real controls + honest on the self-hosted-vs-SaaS roles and the
-  not-yet-certified items). **GDPR data-subject tooling DONE (2026-06-15)**:
-  `/privacy` export (access/portability) + anonymising erasure (right to be
-  forgotten) - see CHANGELOG.
-- **Audit trail external streaming DONE (2026-06-15).** Every audit event is
-  now mirrored (fire-and-forget, optionally HMAC-signed) to an off-box endpoint
-  - the customer's SIEM or an append-only/object-lock store - when
-  `DASHBOARD_AUDIT_SINK_URL` is set, so the trail survives local-DB tampering.
-  See CHANGELOG. Follow-ups: a persisted cursor / replay for at-least-once
-  durability across restarts, and native syslog/object-lock writers.
-
-### P1 — Multi-tenancy completion (for MSSP / SaaS)
-
-`DASHBOARD_MULTI_TENANT` is staged; the get-by-id IDOR was closed, **global
-search** and the **SSE stream** are org-scoped (2026-06-15), and **tenant
-lifecycle tooling**, **per-tenant quotas + retention**, and **per-org ingest
-context** all shipped (2026-06-18, see CHANGELOG) — ingested events and their
-alerts now carry the ingesting tenant. The data-path isolation is complete; the
-*synthetic* engine + log listeners stay deployment-scoped by design (not a
-tenant's real data). Remaining before flipping it on by default: an end-to-end
-validation pass and (optional) org-scoped API keys for non-interactive
-collectors.
-
-### P2 — API contract, platform SRE & data lifecycle
-
-- **Outbound webhook signing + idempotency DONE (2026-06-15).** Every delivery
-  is HMAC-SHA256 signed (`X-ThreatOrbit-Signature: t=…,v1=…`, Stripe scheme) with
-  a per-hook `whsec_` secret shown once at create/rotate, and carries an
-  `X-ThreatOrbit-Delivery` idempotency id, and **retries with exponential
-  backoff** (the stable id lets subscribers dedupe). See CHANGELOG. The
-  **versioned API (`/v1`) + deprecation policy + per-release OpenAPI** are now
-  DONE too (2026-06-18, see CHANGELOG) — this P2 line is fully closed.
-- **Platform self-observability is partial**: `/metrics` exists, but there's no
-  distributed tracing, SLOs/error budgets, alerting on the platform's *own*
-  health, or synthetic checks.
-- **Retention archive DONE (2026-06-15).** Retention now writes each purged
-  batch to compressed NDJSON cold storage **before** deletion when
-  `DASHBOARD_ARCHIVE_DIR` is set (sync the dir to object storage); purge-only
-  when unset. **A direct object-storage (S3) writer shipped** (2026-06-18, SigV4
-  PUT to S3/S3-compatible). Still open: a PII handling/redaction policy in stored
-  logs.
-
-### P2 — Product, UX & quality maturity
-
-- **Accessibility & i18n unproven**: no WCAG audit, keyboard-nav / screen-reader
-  pass, or localisation - real blockers for public-sector and EU buyers.
-- **Notification reliability is basic**: Slack/PagerDuty/webhook routing exists,
-  but no delivery retries/backoff, templating, digests, or escalation policies.
-- **Test depth gaps**: no load/performance or chaos/failure-injection tests, no
-  connector contract tests, and the security findings (SSRF/authz/XSS) should
-  become standing regression tests, not one-time fixes.
-- **GTM plumbing**: billing landed, but no trial/free-tier flow, usage metering,
-  in-product upgrade prompts, status page, or support/ticketing surface.
-
----
-
-## Frontend UX & polish backlog (user-reported 2026-06-15)
-
-Items from the user batch that need design work / a browser to verify (the
-backend is headless here), tracked so they're not lost. Quick data/logic bugs
-from the same batch were fixed (see CHANGELOG).
-
-- [~] **Asset network map - interaction FIXED (2026-06-15), redesign pending.**
-  Fixed the two concrete bugs: the **pan shake** (it measured the drag delta
-  against the *moving* viewBox, a feedback loop - now pans in screen pixels
-  against the original viewBox, 1:1 under the cursor) and **scroll-zoom** (now a
-  native non-passive wheel listener that zooms **only on pinch** (`ctrlKey`) and
-  lets a normal scroll pass through to the page). Still wanted (visual, needs a
-  browser): the **clean, smooth look of the landing-page 3D object**
-  (`components/effects/OrbitalScene`/`IOCNetworkScene` - R3F, soft glow, easing)
-  rather than the current 2D SVG.
-- [x] **Customization (settings) didn't scale text / layout - FIXED (2026-06-15).**
-  The old approach scaled only the root rem baseline, but the dashboard is
-  heavily pixel-pinned (`text-[10px]`, `w-[120px]`, …) so it barely moved, and
-  the range was a near-invisible ±10%. Now `ThemeScope` applies CSS **`zoom`**
-  to the dashboard wrapper - it scales EVERYTHING (px + rem) and the browser
-  re-flows at the zoomed size, so the UI grows proportionally **without overlap**
-  (zoom is overlap-safe by construction). Range widened to 0.9–1.4. Default scale
-  1 → zoom 1 → no change (E2E/layout unaffected). Needs a final visual eyeball at
-  the largest setting, but the mechanism now genuinely zooms.
-- [~] **Exported reports - findings now grouped (2026-06-15), more polish open.**
-  The body past page 1 was a flat findings dump. Both the on-screen preview and
-  the printable/PDF HTML (`ReportButton.renderReportHtml`) now **group findings
-  by severity** (Critical → Info) with a coloured header + count per group, so it
-  reads by priority instead of one list. The report already had an exec summary,
-  KPIs, severity breakdown bars, and recommendations. Still open (visual, needs a
-  browser): richer per-domain narrative in the overall report, charts beyond the
-  bars, and a tighter print layout - pending the user's eyeball on the grouped
-  version.
-- [x] **Dead hyperlinks audit** — DONE (see CHANGELOG): every internal
-  `href`/`router.push` was swept and **all 222 navigation targets resolve to a
-  real App-Router route** (no code-level dead links). A permanent gate
-  (`scripts/check-routes.mjs`, wired into the frontend CI job) now derives the
-  route set from the filesystem and fails the build on any link to a
-  non-existent route, so this can't regress.
-- [x] **Actor profiles page "dead"** — DONE (see CHANGELOG): the live-data
-  mapping now guards `aliases`/`sectors`/`ttps` (it already guarded
-  `campaigns`/`malware`/`motivations`), so an API actor missing those arrays no
-  longer crashes the detail panel's `.map()` render.
-- [x] **Overview → SOC dashboard** — DONE (see CHANGELOG): the Overview stays
-  the executive landing; a **dedicated SOC Console** (`/dashboard/soc`) was added
-  for analysts — live open-alert queue, SLA-breach timers (ack vs resolve, ages
-  from real alert timestamps), triage-state breakdown, MITRE coverage, and
-  pipeline backpressure (queue depth/in-flight/lag, load-shedding). Backed by a
-  new `/siem/triage` endpoint plus the existing `/siem/kpis`,
-  `/config/engine`, `/siem/attack-coverage`, `/siem/log-listeners`; 20s live
-  refresh; every number is real data.
 
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-22 · Roadmap audit + prune.** Ran a full audit pass: all three
+  backend suites green on a clean install (**413 tests** — log_api 20,
+  threat_api 8, dashboard_api 385), re-verified `audit_fixes.md` against the
+  current tree, and removed every finished `[x]` entry from the active roadmap
+  (Phases 0–5 + the closed Tier-1 hardening) since they are recorded here. The
+  roadmap above now carries only remaining work plus the new findings surfaced
+  by this pass — chiefly that several dashboard widgets (Overview Trending CVEs,
+  CTI sector/briefs, SOC-metrics analyst & playbook panels, the SIEM in-page
+  Threat-Hunt tab, the scanner's demo history) still render hardcoded sample
+  data rather than their live endpoints, the SOC-metrics time-range selector is
+  a no-op, and the CI `pip-audit` gate is `--strict` only for `dashboard_api`.
 - **2026-06-18 · SOAR metrics: live ATT&CK coverage (de-mocked).** The SOAR
   metrics page hardcoded a MITRE ATT&CK coverage grid (fabricated `82/74/61…`
   percentages) — a violation of the "every number traces to the API" principle.
