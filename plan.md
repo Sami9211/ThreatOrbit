@@ -151,21 +151,27 @@ item is a large, multi-part feature.
       severity/status maps (every page), KPI cards, SVG chart gradients, network
       topology, world-map heat scale. (3D marketing scenes are outside ThemeScope
       — intentionally brand-fixed.)
-- [~] **"SOC Metrics" reads thin and has an empty section.** Analyst throughput/
-      leaderboard go empty when no cases have owners, and two charts are flagged
-      "sample" (alert-volume shape, disposition split). Make it dashboard-grade:
-      give the unbacked charts real backing where data exists, show useful empty
-      states, and add live operational depth so the page earns the name.
-- [ ] **Reports are consistently lacking vs. mature vuln-assessment tools.**
-      LARGE. Today: `dashboard_api/reports.py` builds structured JSON; the
-      frontend renders an HTML preview + browser print-to-PDF only. Missing:
-      compact/scannable layout, multiple **formats** (PDF/CSV/Markdown/JSON), and
-      multiple **audiences** (executive / technical-analyst / compliance). Plan:
-      (a) backend emits format variants (CSV + Markdown + JSON now; richer HTML/PDF
-      layout); (b) an `audience` parameter reshapes section depth; (c) frontend
-      download menu offers format + audience; (d) keep it dependency-light (stdlib
-      csv + string templating, no heavyweight PDF lib unless needed). Thoroughness
-      required — tracked as its own work item.
+- [x] **"SOC Metrics" reads thin and has an empty section.** DONE (2026-06-22):
+      both formerly "sample" charts are now live — new GET /overview/alert-analytics
+      returns real 7-day alert volume by severity and the disposition breakdown
+      (null = untriaged). The "sample" badges are gone and the empty sections carry
+      honest empty states.
+- [x] **Reports are consistently lacking vs. mature vuln-assessment tools.**
+      DONE (2026-06-22): multi-format + multi-audience reporting.
+      • Formats — new `report_render.py` (stdlib only) renders any report to
+        JSON / CSV / Markdown / self-contained printable HTML (all HTML-escaped);
+        `GET /reports/{kind}?format=…` returns it as a file download. PDF stays
+        browser print-to-PDF of the HTML.
+      • Audiences — `audience=technical|executive|compliance` reshapes the report:
+        Executive (compact: top findings + severity breakdowns + exec framing),
+        Technical (full depth, default), Compliance (adds an ISO 27001 / SOC 2
+        control-mapping section + evidence framing).
+      • Frontend — ReportButton gains an audience selector (re-renders the preview)
+        and CSV/MD/JSON download buttons alongside HTML/PDF; the preview + printable
+        HTML render the control-mapping section.
+      • Tests — the dashboard suite covers every format + audience and HTML escaping.
+      Remaining (optional): a heavyweight server-side PDF engine — currently
+      unnecessary (browser print-to-PDF covers it dependency-free).
 
 ---
 

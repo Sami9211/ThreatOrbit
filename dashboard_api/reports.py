@@ -441,13 +441,52 @@ _BUILDERS = {
 REPORT_KINDS = list(_BUILDERS)
 
 
+AUDIENCES = ["technical", "executive", "compliance"]
+
+# Control families each domain's findings evidence, for the compliance audience.
+_COMPLIANCE_CONTROLS = {
+    "siem": [{"control": "Security event logging & monitoring", "framework": "ISO 27001 A.8.15-8.16 · SOC 2 CC7.2"}],
+    "soar": [{"control": "Incident response & management", "framework": "ISO 27001 A.5.24-5.26 · SOC 2 CC7.3-CC7.4"}],
+    "cti":  [{"control": "Threat intelligence", "framework": "ISO 27001 A.5.7"}],
+    "assets": [{"control": "Vulnerability & asset management", "framework": "ISO 27001 A.8.8-8.9 · SOC 2 CC7.1"}],
+    "darkweb": [{"control": "Information exposure monitoring", "framework": "ISO 27001 A.5.7 · SOC 2 CC7.2"}],
+}
+_COMPLIANCE_CONTROLS["executive"] = [c for cs in
+    ("siem", "soar", "cti", "assets", "darkweb") for c in _COMPLIANCE_CONTROLS[cs]]
+
+
+def apply_audience(report: dict, audience: str = "technical") -> dict:
+    """Reshape a built report for its reader. Technical = full depth (default);
+    Executive = compact (top findings, severity breakdowns, exec framing);
+    Compliance = evidence framing + a control-mapping section."""
+    audience = (audience or "technical").lower()
+    if audience not in AUDIENCES:
+        audience = "technical"
+    out = {**report, "meta": {**report.get("meta", {}), "audience": audience}}
+    if audience == "executive":
+        out["findings"] = (report.get("findings") or [])[:8]
+        out["breakdowns"] = [b for b in (report.get("breakdowns") or []) if b.get("type") == "severity"][:2]
+        nar = report.get("summary", {}).get("narrative", "")
+        out["summary"] = {**report.get("summary", {}), "narrative": "Executive summary — " + nar}
+    elif audience == "compliance":
+        kind = report.get("meta", {}).get("kind", "")
+        out["compliance"] = _COMPLIANCE_CONTROLS.get(kind, _COMPLIANCE_CONTROLS["executive"])
+        nar = report.get("summary", {}).get("narrative", "")
+        out["summary"] = {**report.get("summary", {}),
+                          "narrative": nar + " Prepared for compliance review; the findings below evidence "
+                                             "the effectiveness of the mapped controls."}
+    return out
+
+
 def build_report(kind: str, period: str = "weekly",
-                 frm: str | None = None, to: str | None = None) -> dict:
+                 frm: str | None = None, to: str | None = None,
+                 audience: str = "technical") -> dict:
     if kind not in _BUILDERS:
         raise ValueError(f"unknown report kind: {kind}")
     since, until, label = _window(period, frm, to)
     with get_conn() as conn:
-        return _BUILDERS[kind](conn, since, until, label)
+        report = _BUILDERS[kind](conn, since, until, label)
+    return apply_audience(report, audience)
 
 
 def build_incident_report(case_id: str) -> dict:

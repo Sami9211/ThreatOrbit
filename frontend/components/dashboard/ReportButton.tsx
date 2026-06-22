@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FileText, X, Printer, Download, Loader2, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fetchReport, fetchIncidentReport, createReportSchedule, type ReportData, type ReportFinding } from '@/lib/api'
+import { fetchReport, fetchIncidentReport, createReportSchedule, downloadReport,
+         type ReportData, type ReportFinding, type ReportAudience, type ReportFormat } from '@/lib/api'
 
 const SEV_COLOR: Record<string, string> = {
   critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
@@ -55,6 +56,7 @@ export default function ReportButton({ kind, label, caseId }: { kind: string; la
 
 function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: string; caseId?: string; onClose: () => void }) {
   const [period, setPeriod] = useState('weekly')
+  const [audience, setAudience] = useState<ReportAudience>('technical')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [report, setReport] = useState<ReportData | null>(null)
@@ -66,19 +68,28 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
     setError(null)
     // Incident reports are case-scoped - no period window.
     ;(caseId
-      ? fetchIncidentReport(caseId)
+      ? fetchIncidentReport(caseId, audience)
       : fetchReport(kind, period, period === 'custom' ? `${from}T00:00:00` : undefined,
-          period === 'custom' ? `${to}T23:59:59` : undefined))
+          period === 'custom' ? `${to}T23:59:59` : undefined, audience))
       .then(setReport)
       .catch(() => setError('Could not generate the report. Is the dashboard API running?'))
       .finally(() => setLoading(false))
-  }, [kind, caseId, period, from, to])
+  }, [kind, caseId, period, from, to, audience])
+
+  // Download the current report in a non-JSON format from the backend renderer.
+  const dl = (format: ReportFormat) => {
+    downloadReport(kind, {
+      format, caseId, period, audience,
+      from: period === 'custom' ? `${from}T00:00:00` : undefined,
+      to: period === 'custom' ? `${to}T23:59:59` : undefined,
+    }).catch(() => setError('Could not download the report.'))
+  }
 
   // Generate once on open (and whenever a non-custom period is picked).
   useEffect(() => {
     if (period !== 'custom') generate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period])
+  }, [period, audience])
 
   function downloadHtml() {
     if (!report) return
@@ -121,6 +132,17 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
         <div className="flex items-center gap-2 px-5 py-3 border-b border-white/8 shrink-0 flex-wrap">
           <FileText className="w-4 h-4 text-magenta" />
           <h2 className="text-sm font-semibold text-white">{label ?? kind} Report</h2>
+          {/* Audience: reshapes depth/framing (Technical full, Executive compact,
+              Compliance adds a control-mapping section). */}
+          <div className="flex items-center gap-0.5 rounded-md bg-surface-2 border border-white/8 p-0.5" title="Report audience">
+            {(['technical', 'executive', 'compliance'] as ReportAudience[]).map((a) => (
+              <button key={a} onClick={() => setAudience(a)}
+                className={cn('px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors',
+                  audience === a ? 'bg-magenta/20 text-magenta' : 'text-ink-500 hover:text-ink-200')}>
+                {a}
+              </button>
+            ))}
+          </div>
           <div className="flex items-center gap-1 ml-auto flex-wrap">
             {!caseId && PERIODS.map((p) => (
               <button key={p.id} onClick={() => setPeriod(p.id)}
@@ -151,6 +173,13 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
               className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40"><Printer className="w-4 h-4" /></button>
             <button onClick={downloadHtml} disabled={!report} title="Download HTML"
               className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40"><Download className="w-4 h-4" /></button>
+            {/* Other formats straight from the backend renderer. */}
+            {(['csv', 'markdown', 'json'] as ReportFormat[]).map((f) => (
+              <button key={f} onClick={() => dl(f)} disabled={!report} title={`Download ${f.toUpperCase()}`}
+                className="px-1.5 py-1 rounded-lg text-[10px] font-semibold uppercase text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40">
+                {f === 'markdown' ? 'MD' : f}
+              </button>
+            ))}
             <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5"><X className="w-4 h-4" /></button>
           </div>
         </div>
@@ -257,6 +286,21 @@ function ReportBody({ report }: { report: ReportData }) {
         </div>
       </section>
 
+      {/* Control mapping (compliance audience only) */}
+      {report.compliance && report.compliance.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Control Mapping</h2>
+          <div className="space-y-1.5">
+            {report.compliance.map((c, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-surface-2/40 px-3 py-2">
+                <span className="text-xs text-ink-200">{c.control}</span>
+                <span className="text-[10px] text-ink-500 font-mono text-right">{c.framework}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Recommendations */}
       <section>
         <h2 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Recommendations</h2>
@@ -300,11 +344,12 @@ function renderReportHtml(report: ReportData): string {
 </style></head><body>
   <div class="period">${esc(report.meta.period)}</div>
   <h1>${esc(report.meta.title)}</h1>
-  <div class="meta">Generated ${esc(new Date(report.meta.generatedAt).toLocaleString())} · ThreatOrbit</div>
+  <div class="meta">${report.meta.audience ? esc(report.meta.audience[0].toUpperCase() + report.meta.audience.slice(1)) + ' audience · ' : ''}Generated ${esc(new Date(report.meta.generatedAt).toLocaleString())} · ThreatOrbit</div>
   <h2>Executive Summary</h2>
   <div class="kpis">${report.summary.headline.map(head).join('')}</div>
   <p class="narr">${esc(report.summary.narrative)}</p>
   ${report.breakdowns.map((b) => `<h2>${esc(b.heading)}</h2>${b.data.map(bar).join('')}`).join('')}
+  ${report.compliance && report.compliance.length ? `<h2>Control Mapping</h2>${report.compliance.map((c) => `<div class="row"><span class="rl" style="width:auto;flex:1">${esc(c.control)}</span><span style="font-size:11px;color:#888">${esc(c.framework)}</span></div>`).join('')}` : ''}
   <h2>Detailed Findings (${report.findings.length})</h2>
   ${report.findings.length === 0
     ? '<p style="font-size:12px;color:#888">No findings in this window.</p>'

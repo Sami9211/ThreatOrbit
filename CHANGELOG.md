@@ -32,11 +32,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   scaling padding).
 - **Touch‑friendly navigation** — hover‑to‑reveal sidebars switch to explicit
   tap‑to‑toggle on coarse pointers; mouse/trackpad keep the smooth hover.
+- **Fluid dashboards too** — the Normal‑mode Overview fills wide screens with a
+  12‑column layout instead of a narrow centred column (no empty side gutters).
+- **Compact, persistent controls** — the assistant launcher and the Settings Save
+  collapse to icons that expand on hover; Save floats top‑right so it's reachable
+  from any scroll position. Network‑map zoom no longer wobbles on a held pinch.
 
 ### Platform & UX
 - Real‑time push (in‑process pub/sub broker → SSE), notifications centre.
 - Global search + command palette, deep‑linking, saved views / filters.
 - Scheduled & emailed reports; onboarding wizard; 11 runtime themes; mobile‑responsive.
+- **Multi‑format, multi‑audience reports** — every domain report exports as
+  JSON / CSV / Markdown / printable HTML (PDF via browser print) and reshapes for
+  the reader: Executive (compact), Technical (full depth), or Compliance (adds an
+  ISO 27001 / SOC 2 control‑mapping section). All HTML output is escaped.
+- **SOC Metrics fully live** — the alert‑volume trend and disposition split are
+  now backed by real data (`/overview/alert-analytics`); no remaining "sample" charts.
 
 ### SIEM
 - Detection rule editor; real log‑source ingestion (syslog/CEF/LEEF + vendor

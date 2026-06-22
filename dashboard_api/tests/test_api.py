@@ -1442,6 +1442,37 @@ def test_reports_all_kinds(client, auth):
     assert client.get("/reports/executive?period=daily", headers=auth).status_code == 200
 
 
+def test_report_audiences_and_formats(client, auth):
+    """Reports now reshape per audience and export in multiple formats."""
+    # JSON default behaviour is unchanged (technical, full depth).
+    base = client.get("/reports/siem?period=weekly", headers=auth).json()
+    assert base["meta"]["audience"] == "technical"
+
+    # Executive = compact (<= 8 findings, severity breakdowns only, exec framing).
+    execr = client.get("/reports/siem?audience=executive", headers=auth).json()
+    assert execr["meta"]["audience"] == "executive"
+    assert len(execr["findings"]) <= 8
+    assert execr["summary"]["narrative"].startswith("Executive summary")
+
+    # Compliance = adds a control-mapping section.
+    comp = client.get("/reports/assets?audience=compliance", headers=auth).json()
+    assert comp["meta"]["audience"] == "compliance"
+    assert comp.get("compliance") and "framework" in comp["compliance"][0]
+
+    # Downloadable formats carry the right content-type + attachment header.
+    for fmt, ctype in [("csv", "text/csv"), ("markdown", "text/markdown"), ("html", "text/html")]:
+        resp = client.get(f"/reports/siem?format={fmt}", headers=auth)
+        assert resp.status_code == 200, f"{fmt}: {resp.text}"
+        assert ctype in resp.headers["content-type"]
+        assert "attachment" in resp.headers.get("content-disposition", "")
+        assert resp.text.strip()
+    # HTML escapes content (no raw script can leak through report text).
+    html = client.get("/reports/siem?format=html", headers=auth).text
+    assert "<script>" not in html.lower() or "&lt;script&gt;" in html.lower()
+    # Unknown format is rejected by the route pattern.
+    assert client.get("/reports/siem?format=pdf", headers=auth).status_code == 422
+
+
 def test_rule_engine_matching():
     """Pure rule_engine: conditions, operators, and aggregation thresholds."""
     from dashboard_api.rule_engine import matches_event, evaluate

@@ -1289,22 +1289,53 @@ export interface ReportFinding {
   detail?: string
 }
 export interface ReportData {
-  meta: { kind: string; title: string; period: string; from: string; to: string; generatedAt: string }
+  meta: { kind: string; title: string; period: string; from: string; to: string; generatedAt: string; audience?: string }
   summary: { headline: Array<{ label: string; value: number | string; color?: string }>; narrative: string }
   breakdowns: Array<{ heading: string; type: 'severity' | 'bars'; data: Array<{ label?: string; severity?: string; count: number; color?: string }> }>
   findings: ReportFinding[]
   recommendations: string[]
   sections?: string[]
+  compliance?: Array<{ control: string; framework: string }>
 }
+export type ReportAudience = 'technical' | 'executive' | 'compliance'
+export type ReportFormat = 'json' | 'csv' | 'markdown' | 'html'
 export const fetchReportKinds = () => api<Array<{ kind: string; label: string }>>('/reports/kinds')
-export const fetchReport = (kind: string, period: string, from?: string, to?: string) => {
-  const q = new URLSearchParams({ period })
+export const fetchReport = (kind: string, period: string, from?: string, to?: string, audience: ReportAudience = 'technical') => {
+  const q = new URLSearchParams({ period, audience })
   if (from) q.set('from', from)
   if (to) q.set('to', to)
   return api<ReportData>(`/reports/${kind}?${q.toString()}`)
 }
-export const fetchIncidentReport = (caseId: string) =>
-  api<ReportData>(`/reports/incident?case_id=${encodeURIComponent(caseId)}`)
+export const fetchIncidentReport = (caseId: string, audience: ReportAudience = 'technical') =>
+  api<ReportData>(`/reports/incident?case_id=${encodeURIComponent(caseId)}&audience=${audience}`)
+
+/** Download a report from the backend renderer (CSV / Markdown / HTML / JSON),
+ *  authenticated, as a browser file download. */
+export async function downloadReport(kind: string, opts: {
+  format: ReportFormat; period?: string; audience?: ReportAudience
+  from?: string; to?: string; caseId?: string
+}): Promise<void> {
+  if (typeof window === 'undefined') return
+  const tok = localStorage.getItem(TOKEN_KEY)
+  const incident = !!opts.caseId
+  const q = new URLSearchParams({ format: opts.format, audience: opts.audience ?? 'technical' })
+  if (incident) q.set('case_id', opts.caseId!)
+  else q.set('period', opts.period ?? 'weekly')
+  if (opts.from) q.set('from', opts.from)
+  if (opts.to) q.set('to', opts.to)
+  const path = incident ? 'incident' : kind
+  const res = await fetch(`${BASE}/reports/${path}?${q.toString()}`,
+    { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
+  if (!res.ok) throw new Error(`report download failed: ${res.status}`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const ext = opts.format === 'markdown' ? 'md' : opts.format
+  a.download = `threatorbit-${path}-${opts.audience ?? 'technical'}-${opts.period ?? 'report'}.${ext}`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // ── Case linked evidence (SLA + related alerts/IOCs/runs/timeline) ───
 export interface CaseRelated {
