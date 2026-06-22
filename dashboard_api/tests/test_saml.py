@@ -102,7 +102,11 @@ def saml_on(monkeypatch):
     monkeypatch.setattr("dashboard_api.saml.SAML_IDP_CERT", _CERT.decode())
     monkeypatch.setattr("dashboard_api.saml.SAML_SP_ENTITY_ID", SP_ENTITY)
     monkeypatch.setattr("dashboard_api.saml.SAML_SP_ACS_URL", ACS)
-    monkeypatch.setattr("dashboard_api.saml._seen", {})  # fresh replay cache per test
+    # Fresh replay cache per test (now a shared DB table, not an in-process set).
+    from dashboard_api.db import get_conn
+    with get_conn() as conn:
+        conn.execute("DELETE FROM saml_replay")
+        conn.commit()
     return True
 
 

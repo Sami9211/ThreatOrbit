@@ -361,7 +361,7 @@ Guiding principle applied: design for any device/environment from the start.
 
 | ID  | Title (short)                              | Status |
 |-----|--------------------------------------------|--------|
-| A1  | Single-process state vs multi-worker       | PARTIAL — log_api results persisted + `--workers 1`; threat_api rate-limiter in-proc (fine single-process) |
+| A1  | Single-process state vs multi-worker       | PARTIAL — log_api results persisted + `--workers 1`; SAML replay cache now DB-backed; threat_api rate-limiter + OIDC discovery cache still in-proc (fine single-process) |
 | A2  | Unbounded in-memory result leak            | FIXED — persisted to SQLite |
 | A3  | SQLite scaling ceiling                      | INFRA — Postgres seam staged |
 | A4  | New DB connection per call (no pooling)     | DEFERRED — per-call connect is cheap for WAL-SQLite (audit notes "minor"); pooling is tied to the Postgres path to avoid thread-local/WAL lifecycle risk |
@@ -373,7 +373,7 @@ Guiding principle applied: design for any device/environment from the start.
 | B6  | Error responses leak exception text         | FIXED |
 | B7  | threat_api Flask dev server as root         | FIXED — gunicorn, non-root, healthcheck |
 | B8  | MFA replay / rate-limit                     | FIXED — login: TOTP-counter replay + login throttle; step-up (verify/disable/recovery) now per-user rate-limited (locks after AUTH_MAX_FAILURES) |
-| B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned + PKCE (S256) added; SAML now REQUIRES an AudienceRestriction; shared multi-worker replay store + signed AuthnRequest remain follow-ups |
+| B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned + PKCE (S256); SAML requires AudienceRestriction; replay cache now DB-backed (shared across workers/replicas + durable). Only the IdP-dependent signed AuthnRequest remains |
 | B10 | Hand-rolled crypto justification            | FIXED — comment corrected |
 | B11 | Slack/companion SSRF + explicit timeouts    | FIXED — explicit timeouts everywhere |
 | B12 | 12h session, no refresh rotation            | INFRA — configurable TTL; documented |

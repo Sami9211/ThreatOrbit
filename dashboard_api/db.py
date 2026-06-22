@@ -681,6 +681,14 @@ CREATE TABLE IF NOT EXISTS user_org_roles (
     PRIMARY KEY (user_id, org_id)
 );
 
+-- One-time-use cache for SAML assertion IDs (replay protection). DB-backed so
+-- the check is shared across workers/replicas and survives a restart, not a
+-- per-process in-memory set. Rows are pruned once past their validity window.
+CREATE TABLE IF NOT EXISTS saml_replay (
+    assertion_id TEXT PRIMARY KEY,
+    expires_at   REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_ts ON scans(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_sev ON alerts(severity);
@@ -710,6 +718,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, revoked);
 CREATE INDEX IF NOT EXISTS idx_break_glass_user ON break_glass(user_id, deactivated_at);
 CREATE INDEX IF NOT EXISTS idx_user_org_roles_org ON user_org_roles(org_id);
+CREATE INDEX IF NOT EXISTS idx_saml_replay_exp ON saml_replay(expires_at);
 """
 
 

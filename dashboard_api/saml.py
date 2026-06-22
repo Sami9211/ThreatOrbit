@@ -13,14 +13,14 @@ Security model (the parts that matter):
   * we enforce Issuer, Audience, SubjectConfirmation Recipient, the Conditions
     and SubjectConfirmation time windows (with small clock skew), and bind the
     response to our request via InResponseTo;
-  * assertion IDs are one-time-use (in-process replay cache) within their
+  * assertion IDs are one-time-use (DB-backed replay cache) within their
     validity window;
   * XML is parsed by signxml's hardened parser (no external entities / DTD), so
     XXE/SSRF via a crafted DOCTYPE is not reachable.
 
-In-process replay cache note: the one-time-use set is per worker. The time
-window + InResponseTo binding already bound replay; a shared cache (DB/Redis) is
-the multi-worker hardening follow-up.
+The replay cache is a shared DB table (`saml_replay`), so one-time-use holds
+across workers/replicas and survives a restart - not a per-process set. The time
+window + InResponseTo binding bound replay even without it.
 """
 import base64
 import hashlib
@@ -46,8 +46,28 @@ _VALID_ROLES = {"admin", "manager", "analyst", "viewer"}
 _SKEW = 120  # seconds of clock skew tolerance
 _POST_BINDING = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
 
-# assertion_id -> expiry epoch (one-time-use within the validity window)
-_seen: dict[str, float] = {}
+def _replay_seen(aid: str, now_ts: float) -> bool:
+    """True if `aid` is already in the shared replay cache (within its window).
+    Prunes expired rows on the way through. DB-backed so it holds across
+    workers/replicas, not a per-process set."""
+    from dashboard_api.db import get_conn
+    with get_conn() as conn:
+        conn.execute("DELETE FROM saml_replay WHERE expires_at <= ?", (now_ts,))
+        conn.commit()
+        return conn.execute(
+            "SELECT 1 FROM saml_replay WHERE assertion_id=? AND expires_at > ?",
+            (aid, now_ts)).fetchone() is not None
+
+
+def _replay_record(aid: str, expiry_ts: float) -> None:
+    """Mark `aid` one-time-used until `expiry_ts` (committed only after the
+    assertion has fully validated, mirroring the prior in-process behaviour)."""
+    from dashboard_api.db import get_conn
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO saml_replay (assertion_id, expires_at) VALUES (?,?)",
+            (aid, expiry_ts))
+        conn.commit()
 
 
 def configured() -> bool:
@@ -158,8 +178,7 @@ def parse_response(saml_response_b64: str, expected_in_response_to: str,
 
     # One-time-use (replay) on the assertion ID
     aid = assertion.get("ID") or ""
-    _prune(now)
-    if not aid or aid in _seen:
+    if not aid or _replay_seen(aid, now.timestamp()):
         raise ValueError("assertion replay detected")
 
     # Conditions: validity window + audience
@@ -197,19 +216,14 @@ def parse_response(saml_response_b64: str, expected_in_response_to: str,
 
     user = _assertion_to_user(assertion)
     # Commit the replay marker only once everything else passed.
-    _seen[aid] = (noa or now).timestamp() + _SKEW if noa else now.timestamp() + 600
+    expiry = (noa.timestamp() + _SKEW) if noa else (now.timestamp() + 600)
+    _replay_record(aid, expiry)
     return user
 
 
 def _skew():
     from datetime import timedelta
     return timedelta(seconds=_SKEW)
-
-
-def _prune(now: datetime):
-    cutoff = now.timestamp()
-    for k in [k for k, exp in _seen.items() if exp < cutoff]:
-        _seen.pop(k, None)
 
 
 def _attrs(assertion) -> dict[str, list[str]]:
