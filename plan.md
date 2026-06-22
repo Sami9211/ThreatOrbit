@@ -143,14 +143,18 @@ item is a large, multi-part feature.
       added a shared floating Save affordance (`SaveBar`) that appears at the
       top-right while there are unsaved changes, so config can be saved from any
       scroll position; wired into the Settings page.
-- [~] **Theme/colour palette doesn't reach everything.** The token system
-      (`--magenta`/`--violet`/… + 11 `[data-theme]` palettes) is sound, but many
-      components hardcode the default plasma hexes in inline `style`/SVG, so a theme
-      switch doesn't change them. Fix: swap hardcoded hex → `rgb(var(--token))`
-      (resolves live, theme-aware) via a shared `lib/colors.ts`. Worst offenders:
-      severity/status maps (every page), KPI cards, SVG chart gradients, network
-      topology, world-map heat scale. (3D marketing scenes are outside ThemeScope
-      — intentionally brand-fixed.)
+- [~] **Theme/colour palette doesn't reach everything.** IN PROGRESS (2026-06-22):
+      `lib/colors.ts` is now token-based — `rgb(var(--token))` values plus `tk()`
+      and a `withAlpha()` helper (so the old `${hex}NN` alpha-append sites convert
+      cleanly) — the single theme-aware source of truth for severity/status colour.
+      Migrated the highest-traffic surfaces off their local hardcoded maps onto it:
+      the TopBar (every page), the DetailDrawer (every page) and the SOC Console, so
+      a theme switch now reaches them. Remaining (mechanical, same pattern): the
+      per-page maps in the Overview / SIEM / CTI / assets pages, the SVG chart
+      gradients and the network-topology / world-map hues. Note: the report
+      print/download HTML keeps concrete hex on purpose — it renders in a detached
+      window without the theme's CSS variables. (3D marketing scenes stay
+      brand-fixed by design, outside ThemeScope.)
 - [x] **"SOC Metrics" reads thin and has an empty section.** DONE (2026-06-22):
       both formerly "sample" charts are now live — new GET /overview/alert-analytics
       returns real 7-day alert volume by severity and the disposition breakdown

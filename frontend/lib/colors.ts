@@ -1,45 +1,79 @@
 /**
- * Semantic color mappings - the single source of truth for severity, status,
- * and categorical chart colors across the dashboard. Values mirror the token
- * palette in tailwind.config.ts / globals.css.
+ * Theme-aware semantic colours — the single source of truth for severity,
+ * status and categorical chart colours across the dashboard.
+ *
+ * Values are `rgb(var(--token))`, NOT hardcoded hex, so they follow whichever
+ * `[data-theme]` the user picks (globals.css redefines the tokens per theme).
+ * A hardcoded "#FF2E97" would stay Plasma-Noir pink in every theme — that's why
+ * some surfaces "don't respect the palette". Use these in inline `style`/SVG
+ * (which can't take Tailwind classes); use Tailwind tokens (text-magenta, …) in
+ * className.
  *
  *   critical → magenta   high → threat   medium → amber
  *   low → safe           info → violet
  */
+export type ThemeToken = 'magenta' | 'violet' | 'amber' | 'teal' | 'threat' | 'safe' | 'ink'
+
+const VAR: Record<ThemeToken, string> = {
+  magenta: '--magenta', violet: '--violet', amber: '--amber', teal: '--teal',
+  threat: '--threat', safe: '--safe', ink: '--ink-400',
+}
+
+/** Solid theme colour, e.g. `tk('magenta')` → "rgb(var(--magenta))". */
+export const tk = (name: ThemeToken): string => `rgb(var(${VAR[name]}))`
+
+/**
+ * Add alpha to a colour string. Supports both `rgb(var(--x))` tokens (→ the
+ * modern `rgb(var(--x) / a)` form) and plain hex (→ #rrggbbaa), so existing
+ * `${color}NN` call sites convert cleanly regardless of the source colour.
+ */
+export function withAlpha(color: string, a: number): string {
+  const m = color.match(/^rgb\(\s*(var\(--[\w-]+\))\s*\)$/)
+  if (m) return `rgb(${m[1]} / ${a})`
+  const hex = color.replace('#', '')
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    const aa = Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0')
+    return `#${hex}${aa}`
+  }
+  return color
+}
 
 export const SEVERITY_COLORS: Record<string, string> = {
-  critical: '#FF2E97',
-  high: '#FF4D6D',
-  medium: '#FFB23E',
-  low: '#34F5C5',
-  info: '#7A3CFF',
+  critical: tk('magenta'),
+  high: tk('threat'),
+  medium: tk('amber'),
+  low: tk('safe'),
+  info: tk('violet'),
 }
+/** Singular alias — many components use the name `SEV_COLOR` locally. */
+export const SEVERITY_COLOR = SEVERITY_COLORS
 
 export const STATUS_COLORS: Record<string, string> = {
-  // open/unresolved work
-  open: '#FF4D6D',
-  active: '#FF2E97',
-  new: '#FF2E97',
-  triaged: '#FFB23E',
-  'in-progress': '#FFB23E',
-  pending: '#FFB23E',
+  // open / unresolved work
+  open: tk('threat'),
+  active: tk('magenta'),
+  new: tk('magenta'),
+  triaged: tk('amber'),
+  'in-progress': tk('amber'),
+  pending: tk('amber'),
   // resolved work
-  resolved: '#34F5C5',
-  closed: '#34F5C5',
-  patched: '#34F5C5',
+  resolved: tk('safe'),
+  closed: tk('safe'),
+  patched: tk('safe'),
   // special
-  accepted: '#7A3CFF',
+  accepted: tk('violet'),
 }
 
-/** Categorical palette for charts (MITRE tactics, case types, …). Keeps the
- * extra hues the charts need without scattering raw hexes through pages. */
+/** Categorical palette for charts (MITRE tactics, case types, …). The core hues
+ * map to theme tokens; two extra hues stay fixed so multi-series charts keep
+ * enough distinct colours. */
 export const CHART_PALETTE = {
-  magenta: '#FF2E97',
-  red: '#FF4D6D',
-  amber: '#FFB23E',
+  magenta: tk('magenta'),
+  red: tk('threat'),
+  amber: tk('amber'),
   orange: '#FF9B2E',
-  violet: '#7A3CFF',
+  violet: tk('violet'),
   lavender: '#A78BFA',
-  teal: '#2DD4BF',
-  mint: '#34F5C5',
+  teal: tk('teal'),
+  mint: tk('safe'),
 } as const

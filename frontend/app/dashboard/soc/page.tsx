@@ -16,14 +16,11 @@ import {
   RefreshCw, ArrowUpRight, Wifi, Server, Timer, Inbox, Flame,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SEVERITY_COLOR as SEV_COLOR, tk, withAlpha } from '@/lib/colors'
 import {
   fetchTriage, fetchSiemKpis, fetchEngineStatus, fetchAttackCoverage, fetchLogListeners,
   type SocTriage, type SiemKpis, type EngineStatus, type AttackCoverage, type LogListenerStatus,
 } from '@/lib/api'
-
-const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7C5CFF',
-}
 const STATUS_LABEL: Record<string, string> = {
   new: 'New', assigned: 'Assigned', 'in-progress': 'In Progress', pending: 'Pending',
 }
@@ -103,7 +100,7 @@ export default function SocConsolePage() {
   const sevOrder = ['critical', 'high', 'medium', 'low', 'info'] as const
 
   return (
-    <div className="flex flex-col h-full bg-[#0A0612]">
+    <div className="flex flex-col h-full bg-bg">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-white/5 shrink-0 flex-wrap">
         <div>
@@ -132,11 +129,11 @@ export default function SocConsolePage() {
           sub={open ? `${open.unassigned} unassigned` : undefined} />
         <KpiTile label="Critical open" value={open?.critical ?? '—'} icon={Flame} color={SEV_COLOR.critical} />
         <KpiTile label="SLA breaches" value={triage?.sla.breachCount ?? '—'} icon={AlertTriangle}
-          color={triage && triage.sla.breachCount > 0 ? SEV_COLOR.high : '#34F5C5'} />
-        <KpiTile label="Oldest open" value={triage ? age(triage.oldestOpenMinutes) : '—'} icon={Clock} color="#FFB23E" />
-        <KpiTile label="MTTA" value={kpis ? `${kpis.mtta}m` : '—'} icon={Timer} color="#7C5CFF" />
-        <KpiTile label="MTTR" value={kpis ? `${kpis.mttr}m` : '—'} icon={Timer} color="#7C5CFF" />
-        <KpiTile label="Ingest EPS" value={kpis?.totalEps ?? '—'} icon={Activity} color="#34F5C5" />
+          color={triage && triage.sla.breachCount > 0 ? SEV_COLOR.high : tk('safe')} />
+        <KpiTile label="Oldest open" value={triage ? age(triage.oldestOpenMinutes) : '—'} icon={Clock} color={tk('amber')} />
+        <KpiTile label="MTTA" value={kpis ? `${kpis.mtta}m` : '—'} icon={Timer} color={tk('violet')} />
+        <KpiTile label="MTTR" value={kpis ? `${kpis.mttr}m` : '—'} icon={Timer} color={tk('violet')} />
+        <KpiTile label="Ingest EPS" value={kpis?.totalEps ?? '—'} icon={Activity} color={tk('safe')} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -158,13 +155,13 @@ export default function SocConsolePage() {
                       <motion.div key={b.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: Math.min(i * 0.02, 0.3) }}>
                         <Link href={`/dashboard/siem?q=${encodeURIComponent(b.srcIp || b.title)}`}
-                          className="flex items-center gap-3 p-2.5 rounded-lg border border-white/8 bg-[#0A0612] hover:border-white/15 transition-colors group">
+                          className="flex items-center gap-3 p-2.5 rounded-lg border border-white/8 bg-bg hover:border-white/15 transition-colors group">
                           <span className="w-1.5 h-8 rounded-full shrink-0" style={{ background: SEV_COLOR[b.severity] }} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-medium text-white truncate">{b.title}</span>
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
-                                style={{ background: `${b.slaType === 'ack' ? SEV_COLOR.high : SEV_COLOR.medium}22`,
+                                style={{ background: withAlpha(b.slaType === 'ack' ? SEV_COLOR.high : SEV_COLOR.medium, 0.13),
                                          color: b.slaType === 'ack' ? SEV_COLOR.high : SEV_COLOR.medium }}>
                                 {b.slaType === 'ack' ? 'Unacked' : 'Overdue'}
                               </span>
@@ -219,7 +216,7 @@ export default function SocConsolePage() {
                           <div className="text-[9px] text-ink-600">In flight</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-base font-bold font-mono" style={{ color: queue.lagSeconds > 60 ? SEV_COLOR.high : '#34F5C5' }}>
+                          <div className="text-base font-bold font-mono" style={{ color: queue.lagSeconds > 60 ? SEV_COLOR.high : tk('safe') }}>
                             {queue.lagSeconds}s
                           </div>
                           <div className="text-[9px] text-ink-600">Lag</div>
@@ -230,7 +227,7 @@ export default function SocConsolePage() {
                           <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
                             <div className="h-full rounded-full transition-all"
                               style={{ width: `${Math.min(100, (queue.depth / queue.maxBacklog) * 100)}%`,
-                                       background: queue.shedding ? SEV_COLOR.critical : '#7C5CFF' }} />
+                                       background: queue.shedding ? SEV_COLOR.critical : tk('violet') }} />
                           </div>
                           <div className="flex justify-between text-[9px] text-ink-600 mt-1">
                             <span>{queue.shedding ? 'Shedding load' : 'Capacity'}</span>
@@ -270,7 +267,7 @@ export default function SocConsolePage() {
               <Panel title="Triage State" icon={User}>
                 <div className="grid grid-cols-2 gap-2">
                   {triage && Object.entries(STATUS_LABEL).map(([k, label]) => (
-                    <div key={k} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#0A0612] border border-white/5">
+                    <div key={k} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-bg border border-white/5">
                       <span className="text-[10px] text-ink-500">{label}</span>
                       <span className="text-xs font-mono font-bold text-white">{triage.byStatus[k] ?? 0}</span>
                     </div>
@@ -286,7 +283,7 @@ export default function SocConsolePage() {
                     <div className="relative w-14 h-14 shrink-0">
                       <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
                         <circle cx="18" cy="18" r="15.9" fill="none" stroke="#ffffff14" strokeWidth="3" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#34F5C5" strokeWidth="3"
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke={tk('safe')} strokeWidth="3"
                           strokeDasharray={`${coverage.summary.coveragePct} 100`} strokeLinecap="round" />
                       </svg>
                       <span className="absolute inset-0 flex items-center justify-center text-xs font-bold font-mono text-white">

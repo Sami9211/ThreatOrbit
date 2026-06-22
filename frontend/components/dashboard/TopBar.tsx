@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { useLiveStream } from '@/lib/useLiveStream'
+import { SEVERITY_COLOR as SEV_COLOR } from '@/lib/colors'
 
 /* Compact segmented Normal/Power toggle - surfaces the experience mode so the
    difference is one tap away (it was previously buried in Configuration). */
@@ -54,13 +55,6 @@ const LABELS: Record<string, string> = {
   '/dashboard/config': 'Configuration',
 }
 
-const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97',
-  high:     '#FF4D6D',
-  medium:   '#FFB23E',
-  low:      '#34F5C5',
-  info:     '#7A3CFF',
-}
 
 function relTime(iso: string): string {
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))

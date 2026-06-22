@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ArrowRight } from 'lucide-react'
+import { SEVERITY_COLOR as SEV_COLOR, withAlpha } from '@/lib/colors'
 
 /* ── Public payload + helper ─────────────────────────────────────────
    Any component can open the drawer without prop-drilling:
@@ -19,10 +20,6 @@ export interface DetailPayload {
   tags?: string[]
   body?: string
   actions?: DetailAction[]
-}
-
-const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
 }
 
 const EVENT = 'to:detail'
@@ -45,7 +42,7 @@ export default function DetailDrawer() {
     return () => { window.removeEventListener(EVENT, handler); window.removeEventListener('keydown', esc) }
   }, [])
 
-  const accent = payload?.severity ? SEV_COLOR[payload.severity] ?? '#7A3CFF' : '#7A3CFF'
+  const accent = payload?.severity ? SEV_COLOR[payload.severity] ?? SEV_COLOR.info : SEV_COLOR.info
 
   return (
     <AnimatePresence>
@@ -60,7 +57,7 @@ export default function DetailDrawer() {
                 <div className="min-w-0">
                   {payload.severity && (
                     <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mb-1.5 inline-block"
-                      style={{ color: accent, background: `${accent}1a` }}>{payload.severity}</span>
+                      style={{ color: accent, background: withAlpha(accent, 0.1) }}>{payload.severity}</span>
                   )}
                   <h2 className="text-sm font-semibold text-white leading-snug">{payload.title}</h2>
                   {payload.subtitle && <p className="text-[11px] text-ink-500 mt-0.5">{payload.subtitle}</p>}
