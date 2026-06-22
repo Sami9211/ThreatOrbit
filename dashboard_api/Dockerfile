@@ -4,8 +4,11 @@
 FROM python:3.11-slim@sha256:ae52c5bef62a6bdd42cd1e8dffef86b9cd284bde9427da79839de7a4b983e7ca
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install from the hash-pinned lockfile (reproducible, tamper-evident builds);
+# requirements.txt stays the human-edited input. Regenerate the lock with
+# pip-compile --generate-hashes when requirements.txt changes.
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY . /app/dashboard_api/
 

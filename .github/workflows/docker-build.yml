@@ -17,6 +17,7 @@ on:
     paths:
       - "**/Dockerfile"
       - "**/requirements.txt"
+      - "**/requirements.lock"
       - "frontend/package.json"
       - "frontend/package-lock.json"
       - "frontend/nginx.conf"
@@ -26,6 +27,7 @@ on:
     paths:
       - "**/Dockerfile"
       - "**/requirements.txt"
+      - "**/requirements.lock"
       - "frontend/package.json"
       - "frontend/package-lock.json"
       - "frontend/nginx.conf"
