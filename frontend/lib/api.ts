@@ -1008,6 +1008,13 @@ export const fetchIntegrationActions = (id: string) =>
   api<IntegrationAction[]>(`/soar/integrations/${id}/actions`)
 export const fetchSoarMetrics = () => api<SoarMetrics>('/soar/metrics')
 
+// Per-analyst case workload + throughput (aggregated from cases.owner).
+export interface AnalystStat {
+  name: string; handled: number; closed: number; open: number
+  critical: number; avgResolveMins: number | null
+}
+export const fetchSoarAnalysts = () => api<AnalystStat[]>('/soar/analysts')
+
 // ── CTI ──────────────────────────────────────────────────────────────
 export const fetchActors  = () => api<Actor[]>('/cti/actors')
 export const fetchIocs    = (params?: Record<string, string>) => {

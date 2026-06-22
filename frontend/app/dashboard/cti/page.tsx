@@ -451,27 +451,41 @@ function ThreatHuntPanel() {
   )
 }
 
-/* ── Sector Targeting ────────────────────────────────────────────── */
-const SECTOR_DATA = [
-  { sector: 'Finance',              score: 94, actors: ['Lazarus', 'FIN7'] },
-  { sector: 'Government',           score: 88, actors: ['APT29', 'Volt Typhoon'] },
-  { sector: 'Critical Infrastructure', score: 85, actors: ['Volt Typhoon'] },
-  { sector: 'Defense',              score: 82, actors: ['Lazarus', 'APT29'] },
-  { sector: 'Healthcare',           score: 71, actors: ['Lazarus', 'FIN7'] },
-  { sector: 'Technology',           score: 68, actors: ['APT29', 'FIN7'] },
-  { sector: 'Energy',               score: 62, actors: ['Volt Typhoon'] },
-  { sector: 'Telecommunications',   score: 58, actors: ['Scattered Spider'] },
-]
+/* ── Sector Targeting ──────────────────────────────────────────────
+   Derived live from the tracked actors' `sectors` field (no hardcoded list):
+   the "heat" of a sector is how many tracked actors target it, normalised so
+   the most-targeted sector reads 100. */
+function buildSectorTargeting(
+  actors: Actor[],
+): { sector: string; score: number; actors: string[] }[] {
+  const map = new Map<string, Set<string>>()
+  for (const a of actors) {
+    for (const s of a.sectors) {
+      if (!map.has(s)) map.set(s, new Set())
+      map.get(s)!.add(a.name)
+    }
+  }
+  const rows = [...map.entries()].map(([sector, set]) => ({ sector, names: [...set] }))
+  const max = Math.max(1, ...rows.map((r) => r.names.length))
+  return rows
+    .sort((a, b) => b.names.length - a.names.length)
+    .slice(0, 8)
+    .map((r) => ({ sector: r.sector, score: Math.round((r.names.length / max) * 100), actors: r.names }))
+}
 
-function SectorTargeting() {
+function SectorTargeting({ actors }: { actors: Actor[] }) {
+  const data = buildSectorTargeting(actors)
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <Building2 className="w-3.5 h-3.5 text-amber" />
         <h3 className="text-sm font-semibold text-white">Sector Targeting Heat</h3>
       </div>
+      {data.length === 0 ? (
+        <p className="text-xs text-ink-500">No sector data yet — add tracked actors with target sectors.</p>
+      ) : (
       <div className="space-y-2.5">
-        {SECTOR_DATA.map(({ sector, score, actors }, i) => (
+        {data.map(({ sector, score, actors }, i) => (
           <div key={sector}>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-ink-300">{sector}</span>
@@ -496,6 +510,7 @@ function SectorTargeting() {
           </div>
         ))}
       </div>
+      )}
     </div>
   )
 }
@@ -503,44 +518,18 @@ function SectorTargeting() {
 /* ── Normal Mode: Threat Brief ───────────────────────────────────── */
 function NormalCTI() {
   const [sum, setSum] = useState<CtiSummary | null>(null)
-  useEffect(() => { fetchCtiSummary().then(setSum).catch(() => {}) }, [])
-  const BRIEFS = [
-    {
-      id:     'lazarus',
-      actor:  'Lazarus Group',
-      origin: 'North Korea',
-      flag:   '🇰🇵',
-      sev:    'critical' as const,
-      what:   'Nation-state APT actively targeting financial institutions and cryptocurrency exchanges. Recent campaigns use spear-phishing with malicious Office macros and trojanised software updates.',
-      action: 'Verify MFA is enabled for all remote access endpoints. Block execution of macros from internet-originated files via Group Policy.',
-      iocs:   4821,
-      color:  '#FF2E97',
-    },
-    {
-      id:     'apt29',
-      actor:  'APT29 (Cozy Bear)',
-      origin: 'Russia',
-      flag:   '🇷🇺',
-      sev:    'high' as const,
-      what:   'Ongoing espionage campaign targeting government and technology organisations via supply chain compromise and credential harvesting through phishing and OAuth token theft.',
-      action: 'Review privileged account activity logs and enforce conditional access policies on all cloud services. Rotate any recently-exposed service account credentials.',
-      iocs:   3124,
-      color:  '#FF4D6D',
-    },
-    {
-      id:     'volt',
-      actor:  'Volt Typhoon',
-      origin: 'China',
-      flag:   '🇨🇳',
-      sev:    'high' as const,
-      what:   'Pre-positioning for potential disruptive attacks on critical infrastructure sectors. Uses living-off-the-land techniques (LOLbins) to blend in with normal admin activity and evade EDR.',
-      action: 'Audit anomalous usage of LOLbins (certutil, netsh, wmic, ntdsutil). Flag admin accounts accessing systems outside normal business hours.',
-      iocs:   1892,
-      color:  '#FFB23E',
-    },
-  ]
+  const [actors, setActors] = useState<Actor[]>([])
+  useEffect(() => {
+    fetchCtiSummary().then(setSum).catch(() => {})
+    fetchActors().then((data) => setActors(data.map(apiActorToPage))).catch(() => {})
+  }, [])
 
-  const SEV_COLOR: Record<string, string> = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E' }
+  const SEV_COLOR: Record<string, string> = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#7A3CFF' }
+  // Severity proxy from the actor's (real) sophistication rating.
+  const sevFor = (s: string) => /expert|advanced/i.test(s) ? 'critical' : /high/i.test(s) ? 'high' : 'medium'
+  // Active threat briefs derived from the live tracked actors - real description,
+  // TTPs, sectors and IOC counts, no hardcoded brief text.
+  const briefs = actors.filter((a) => a.active).sort((a, b) => b.iocCount - a.iocCount).slice(0, 4)
 
   const SUMMARY = [
     { label: 'Tracked Actors', value: (sum?.trackedActors ?? 0).toLocaleString(), icon: Target, color: '#FF2E97' },
@@ -579,47 +568,63 @@ function NormalCTI() {
         ))}
       </div>
 
-      {/* Threat Brief Cards */}
+      {/* Threat Brief Cards (derived from live tracked actors) */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-white">Active Threats Affecting Your Sector</h2>
-        {BRIEFS.map((b, i) => (
+        {briefs.length === 0 && (
+          <p className="text-xs text-ink-500">No active threat actors are being tracked yet.</p>
+        )}
+        {briefs.map((b, i) => {
+          const sev = sevFor(b.sophistication)
+          return (
           <motion.div key={b.id}
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
             className="glass border border-white/5 rounded-xl p-5 space-y-4">
             {/* Actor row */}
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
-                style={{ background: `${b.color}15` }}>
+                style={{ background: `${SEV_COLOR[sev]}15` }}>
                 {b.flag}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-semibold text-white">{b.actor}</h3>
+                  <h3 className="text-sm font-semibold text-white">{b.name}</h3>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase"
-                    style={{ background: `${SEV_COLOR[b.sev]}1a`, color: SEV_COLOR[b.sev] }}>
-                    {b.sev}
+                    style={{ background: `${SEV_COLOR[sev]}1a`, color: SEV_COLOR[sev] }}>
+                    {sev}
                   </span>
-                  <span className="text-[10px] text-ink-600">{b.origin}</span>
+                  <span className="text-[10px] text-ink-600">{b.flag} {b.origin} · {b.type}</span>
                 </div>
-                <p className="text-[10px] text-ink-500 mt-0.5">{b.iocs.toLocaleString()} tracked IOCs</p>
+                <p className="text-[10px] text-ink-500 mt-0.5">{b.iocCount.toLocaleString()} tracked IOCs · {b.campaigns} campaigns</p>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <p className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">What's Happening</p>
-                <p className="text-sm text-ink-300 leading-relaxed">{b.what}</p>
+                <p className="text-sm text-ink-300 leading-relaxed">{b.description || 'No description on record for this actor.'}</p>
               </div>
-              <div className="p-3.5 rounded-xl border border-safe/15 bg-safe/5 space-y-1.5">
+              <div className="p-3.5 rounded-xl border border-violet/15 bg-violet/5 space-y-2">
                 <div className="flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-safe" />
-                  <p className="text-[10px] uppercase tracking-widest text-safe font-semibold">Recommended Action</p>
+                  <Crosshair className="w-3.5 h-3.5 text-violet" />
+                  <p className="text-[10px] uppercase tracking-widest text-violet font-semibold">Key TTPs &amp; Targets</p>
                 </div>
-                <p className="text-sm text-ink-300 leading-relaxed">{b.action}</p>
+                <div className="flex flex-wrap gap-1">
+                  {b.ttps.slice(0, 6).map((t) => (
+                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-violet/15 text-violet font-mono border border-violet/20">{t}</span>
+                  ))}
+                  {b.ttps.length === 0 && <span className="text-[10px] text-ink-600">No TTPs recorded</span>}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {b.sectors.slice(0, 5).map((s) => (
+                    <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-surface-2 border border-white/10 text-ink-400">{s}</span>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Power mode CTA */}
@@ -842,7 +847,7 @@ export default function CTIPage() {
           {/* Threat hunt + sector targeting */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <ThreatHuntPanel />
-            <SectorTargeting />
+            <SectorTargeting actors={actors} />
           </div>
 
           {/* Campaign timeline */}

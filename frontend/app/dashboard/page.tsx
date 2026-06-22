@@ -18,9 +18,10 @@ import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
   fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
   fetchRiskDistribution, fetchHeatmap, fetchSiemKpis, fetchSoarMetrics,
+  fetchFleetVulnFindings,
   type OverviewKpis, type OverviewAlert, type Incident,
   type TopActor, type ThreatVector, type LiveFeedItem, type RiskDistribution,
-  type SiemKpis, type SoarMetrics,
+  type SiemKpis, type SoarMetrics, type FleetVulnFinding,
 } from '@/lib/api'
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -75,15 +76,19 @@ function KPICard({
 }
 
 /* ── Trending CVEs (static - no CVE endpoint yet) ────────────────── */
-const TRENDING_CVES = [
-  { id: 'CVE-2024-6387', name: 'OpenSSH regreSSHion', cvss: 8.1,  affected: 'OpenSSH < 9.8p1', patched: false, color: '#FF2E97', tag: 'RCE' },
-  { id: 'CVE-2024-3094', name: 'XZ Utils backdoor',   cvss: 10.0, affected: 'XZ Utils 5.6.x',  patched: true,  color: '#FF2E97', tag: 'Supply Chain' },
-  { id: 'CVE-2024-21762',name: 'FortiOS SSL VPN OOB', cvss: 9.6,  affected: 'FortiOS < 7.4.2', patched: false, color: '#FF4D6D', tag: 'Auth Bypass' },
-  { id: 'CVE-2024-23897',name: 'Jenkins File Read',   cvss: 9.8,  affected: 'Jenkins < 2.442',  patched: true,  color: '#FF4D6D', tag: 'RCE' },
-  { id: 'CVE-2024-1709', name: 'ConnectWise Auth Bypass', cvss: 10.0, affected: 'ScreenConnect < 23.9.8', patched: false, color: '#FF2E97', tag: 'Auth Bypass' },
-]
-
 function TrendingCVEs() {
+  const [cves, setCves] = useState<FleetVulnFinding[]>([])
+  useEffect(() => {
+    fetchFleetVulnFindings()
+      .then((rows) => {
+        // "Trending" = highest-impact open vulns first: KEV / exploited, then CVSS.
+        const sorted = [...rows].sort((a, b) =>
+          Number(b.kev) - Number(a.kev) || Number(b.exploit) - Number(a.exploit) || b.cvss - a.cvss)
+        setCves(sorted.slice(0, 5))
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -91,12 +96,23 @@ function TrendingCVEs() {
           <Bug className="w-3.5 h-3.5 text-threat" />
           <h3 className="text-sm font-semibold text-white">Trending CVEs</h3>
         </div>
-        <Link href="/dashboard/feeds" className="text-xs text-magenta hover:underline">Feeds →</Link>
+        <Link href="/dashboard/assets/vulns" className="text-xs text-magenta hover:underline">Vulns →</Link>
       </div>
+      {cves.length === 0 ? (
+        <div className="px-5 py-10 text-center">
+          <Bug className="w-6 h-6 text-ink-700 mx-auto mb-2" />
+          <p className="text-xs text-ink-400">No fleet vulnerabilities yet</p>
+          <p className="text-[10px] text-ink-600 mt-1">Run an asset scan to surface CVEs here.</p>
+        </div>
+      ) : (
       <div className="divide-y divide-white/4">
-        {TRENDING_CVES.map((cve, i) => (
+        {cves.map((cve, i) => {
+          const tag = cve.kev ? 'KEV' : cve.exploit ? 'Exploit' : (cve.severity || 'CVE')
+          const color = cve.cvss >= 9 ? '#FF2E97' : cve.cvss >= 7 ? '#FF4D6D' : '#FFB23E'
+          const affected = cve.products?.[0] ?? cve.summary ?? '—'
+          return (
           <motion.div
-            key={cve.id}
+            key={cve.cve}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.06 }}
@@ -105,23 +121,25 @@ function TrendingCVEs() {
             <span className="text-[10px] text-ink-600 w-3 shrink-0">{i + 1}</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-mono text-ink-200 group-hover:text-white transition-colors">{cve.id}</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: `${cve.color}1a`, color: cve.color }}>{cve.tag}</span>
+                <span className="text-xs font-mono text-ink-200 group-hover:text-white transition-colors">{cve.cve}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: `${color}1a`, color }}>{tag}</span>
               </div>
-              <p className="text-[10px] text-ink-500 truncate">{cve.affected}</p>
+              <p className="text-[10px] text-ink-500 truncate">{affected}</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-xs font-bold" style={{ color: cve.cvss >= 9 ? '#FF2E97' : cve.cvss >= 7 ? '#FF4D6D' : '#FFB23E' }}>{cve.cvss.toFixed(1)}</p>
+              <p className="text-xs font-bold" style={{ color }}>{cve.cvss.toFixed(1)}</p>
               <p className="text-[9px] text-ink-600">CVSS</p>
             </div>
             <div className="shrink-0">
-              {cve.patched
+              {cve.fixedIn
                 ? <CheckCircle2 className="w-3.5 h-3.5 text-safe" aria-label="Patch available" />
                 : <XCircle className="w-3.5 h-3.5 text-threat animate-pulse" aria-label="No patch" />}
             </div>
           </motion.div>
-        ))}
+          )
+        })}
       </div>
+      )}
     </div>
   )
 }

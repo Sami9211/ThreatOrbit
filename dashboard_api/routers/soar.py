@@ -965,3 +965,47 @@ def soar_metrics(user: dict = Depends(current_user)):
         "avgPlaybookTime": avg_pb,
         "casesClosedWeek": closed_week,
     }
+
+
+def _duration_secs(start: str | None, end: str | None) -> float | None:
+    try:
+        a = datetime.fromisoformat((start or "").replace("Z", "+00:00"))
+        b = datetime.fromisoformat((end or "").replace("Z", "+00:00"))
+        return max(0.0, (b - a).total_seconds())
+    except (ValueError, TypeError):
+        return None
+
+
+@router.get("/analysts")
+def soar_analysts(user: dict = Depends(current_user)):
+    """Per-analyst case workload + throughput, aggregated from the cases each one
+    owns. Real data (empty until cases are assigned), so the SOC-metrics
+    leaderboard / throughput is no longer a hardcoded list."""
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT owner, status, severity, created, updated FROM cases WHERE 1=1 {sc}", sp
+        ).fetchall()
+    agg: dict[str, dict] = {}
+    for c in rows:
+        owner = (c["owner"] or "").strip() or "Unassigned"
+        a = agg.setdefault(owner, {"name": owner, "handled": 0, "closed": 0, "open": 0,
+                                   "critical": 0, "_secs": []})
+        a["handled"] += 1
+        if c["status"] in ("resolved", "closed"):
+            a["closed"] += 1
+            secs = _duration_secs(c["created"], c["updated"])
+            if secs is not None:
+                a["_secs"].append(secs)
+        else:
+            a["open"] += 1
+            if c["severity"] == "critical":
+                a["critical"] += 1
+    out = []
+    for a in agg.values():
+        secs = a.pop("_secs")
+        a["avgResolveMins"] = round(sum(secs) / len(secs) / 60.0, 1) if secs else None
+        out.append(a)
+    # Real analysts first (most closed), the Unassigned bucket last.
+    out.sort(key=lambda x: (x["name"] == "Unassigned", -x["closed"], -x["handled"]))
+    return out

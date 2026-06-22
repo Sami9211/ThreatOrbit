@@ -10,15 +10,16 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/* ── Static scan history (deterministic - no Date.now()) ─────────── */
-const SCAN_HISTORY = [
-  { target: 'http://malicious-phishing-site.xyz/login', type: 'url',  verdict: 'malicious', score: 93, engines: '62/90', time: '2m ago'  },
-  { target: '45.95.147.236',                            type: 'ip',   verdict: 'malicious', score: 81, engines: '41/90', time: '8m ago'  },
-  { target: 'a3f8e92b1d47c61e83dd2a9f7c4b5e01',        type: 'hash', verdict: 'malicious', score: 98, engines: '69/72', time: '14m ago' },
-  { target: '8.8.8.8',                                  type: 'ip',   verdict: 'clean',     score: 0,  engines: '0/90',  time: '21m ago' },
-  { target: 'https://api.acme-corp.com/v2',             type: 'url',  verdict: 'clean',     score: 2,  engines: '1/90',  time: '38m ago' },
-  { target: 'b3f1a92c8e5d47c61f83dd9b7c4a5d02',        type: 'hash', verdict: 'malicious', score: 76, engines: '54/72', time: '1h ago'  },
-]
+/* ── Recent-scan history row (populated live from /scans; empty on a fresh
+   install rather than showing invented history) ──────────────────── */
+type ScanRow = {
+  target: string
+  type: string
+  verdict: string
+  score: number
+  engines: string
+  time: string
+}
 
 /* ── Sample results for demo ─────────────────────────────────────── */
 const DEMO_RESULTS: Record<string, ScanResult> = {
@@ -276,23 +277,22 @@ export default function ScannerPage() {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [history, setHistory] = useState<typeof SCAN_HISTORY>(SCAN_HISTORY)
+  const [history, setHistory] = useState<ScanRow[]>([])
   const [stats, setStats] = useState<{ scansToday: number; malicious: number } | null>(null)
 
-  // Live scan history + header stats; bundled demo rows remain the offline fallback.
+  // Live scan history + header stats. On a fresh install there are no scans, so
+  // the list is genuinely empty (an empty state) rather than invented rows.
   const refreshHistory = useCallback(() => {
     fetchScans(8).then((data) => {
       setStats({ scansToday: data.scansToday, malicious: data.malicious })
-      if (data.items.length > 0) {
-        setHistory(data.items.map((s: ScanEntry) => ({
-          target: s.target,
-          type: s.type,
-          verdict: s.verdict,
-          score: Math.round(s.score * 100),
-          engines: s.engines ?? '-',
-          time: relativeTime(s.ts),
-        })))
-      }
+      setHistory(data.items.map((s: ScanEntry) => ({
+        target: s.target,
+        type: s.type,
+        verdict: s.verdict,
+        score: Math.round(s.score * 100),
+        engines: s.engines ?? '-',
+        time: relativeTime(s.ts),
+      })))
     }).catch(() => {})
   }, [])
 
@@ -588,8 +588,15 @@ export default function ScannerPage() {
                 <Clock className="w-4 h-4 text-ink-500" />
                 <h3 className="text-sm font-semibold text-white">Recent Scans</h3>
               </div>
-              <span className="text-[10px] text-ink-500">{stats ? 'Live history' : 'Session history'}</span>
+              <span className="text-[10px] text-ink-500">Live history</span>
             </div>
+            {history.length === 0 ? (
+              <div className="px-5 py-12 text-center">
+                <Clock className="w-6 h-6 text-ink-700 mx-auto mb-2" />
+                <p className="text-xs text-ink-400">No scans yet</p>
+                <p className="text-[10px] text-ink-600 mt-1">Run your first scan above — results will appear here.</p>
+              </div>
+            ) : (
             <div className="divide-y divide-white/4">
               {history.map((s, i) => (
                 <div key={`${s.target}-${i}`} className="flex items-center gap-4 px-5 py-3 hover:bg-white/2 transition-colors">
@@ -612,6 +619,7 @@ export default function ScannerPage() {
                 </div>
               ))}
             </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
