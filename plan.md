@@ -80,10 +80,13 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
 
 ### Residual from the prior review (still open)
 
-- [ ] **D3 — no hash-pinned Python lockfile.** All `requirements.txt` use
-      version ranges; add `pip-compile --generate-hashes` per service for
-      reproducible, tamper-evident builds (the SBOM/supply-chain workflow already
-      expects this on the Python side).
+- [x] **D3 — no hash-pinned Python lockfile.** DONE (2026-06-22): added
+      `requirements.lock` per service (`pip-compile --generate-hashes`,
+      fully hash-pinned incl. transitive deps), and a CI step that verifies each
+      resolves under `pip install --require-hashes` (so a lock can't ship
+      incomplete). `requirements.txt` stays the human-edited input; regenerate the
+      lock with `pip-compile --generate-hashes -o <svc>/requirements.lock
+      <svc>/requirements.txt` when it changes.
 - [ ] **A3 / A4 — Postgres path is a regex dialect translator + a new
       connection per call.** `db_backend.to_postgres` rewrites SQL with `re.sub`
       (INTEGER→BIGINT, MIN/MAX→LEAST/GREATEST, …); it passes the tested query set
