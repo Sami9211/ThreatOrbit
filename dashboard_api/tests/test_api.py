@@ -1788,7 +1788,7 @@ def test_real_integration_actions(client, auth, monkeypatch):
     def fake_request(method, url, headers=None, json=None, timeout=None):
         captured.update(method=method, url=url, headers=headers, json=json)
         return FakeResp()
-    monkeypatch.setattr(httpx, "request", fake_request)
+    monkeypatch.setattr("dashboard_api.net_guard.safe_request", fake_request)
 
     fw = client.post("/soar/integrations", json={
         "name": "Edge FW", "vendor": "Palo Alto", "category": "Firewall",
@@ -1811,7 +1811,7 @@ def test_real_integration_actions(client, auth, monkeypatch):
     # 4) a network failure is recorded as failed, never crashes
     def boom(*a, **k):
         raise RuntimeError("connection refused")
-    monkeypatch.setattr(httpx, "request", boom)
+    monkeypatch.setattr("dashboard_api.net_guard.safe_request", boom)
     r3 = client.post(f"/soar/integrations/{fw['id']}/actions/run",
                      json={"action": "block_ip", "params": {"ip": "9.9.9.9"}}, headers=auth).json()
     assert r3["result"]["status"] == "failed" and "refused" in r3["result"]["detail"]

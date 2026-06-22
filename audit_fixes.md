@@ -375,7 +375,7 @@ Guiding principle applied: design for any device/environment from the start.
 | B8  | MFA replay / rate-limit                     | FIXED — login: TOTP-counter replay + login throttle; step-up (verify/disable/recovery) now per-user rate-limited (locks after AUTH_MAX_FAILURES) |
 | B9  | SAML/OIDC residual gaps                      | PARTIAL — OIDC kid pinned + PKCE (S256); SAML requires AudienceRestriction; replay cache now DB-backed (shared across workers/replicas + durable). Only the IdP-dependent signed AuthnRequest remains |
 | B10 | Hand-rolled crypto justification            | FIXED — comment corrected |
-| B11 | Slack/companion SSRF + explicit timeouts    | FIXED — explicit timeouts everywhere |
+| B11 | Slack/companion SSRF + explicit timeouts    | FIXED — explicit timeouts everywhere; the user/admin-URL push paths (Slack, SOAR integration actions) now use the send-time SSRF guard (pin + no redirects) and connector feed fetches re-validate at send |
 | B12 | 12h session, no refresh rotation            | INFRA — configurable TTL; documented |
 | C1  | ML flags ~5% by construction                | FIXED — `contamination='auto'` + corroboration |
 | C2  | Every ML finding tagged T1595               | FIXED — technique derived from dominant signal |

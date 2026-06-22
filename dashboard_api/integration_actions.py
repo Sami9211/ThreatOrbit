@@ -80,8 +80,10 @@ def run_action(conn, integration: dict, action: str, params: dict, actor: str) -
     else:
         method, url, headers, body = _request_spec(category, base_url, api_key, action, params)
         try:
-            import httpx
-            r = httpx.request(method, url, headers=headers, json=body, timeout=_TIMEOUT)
+            from dashboard_api import net_guard
+            # Admin-configured push endpoint → send-time SSRF guard (pin to a
+            # validated IP, no redirects), not a bare httpx call.
+            r = net_guard.safe_request(method, url, headers=headers, json=body, timeout=_TIMEOUT)
             ok = r.status_code < 400
             status = "success" if ok else "failed"
             mode = "live"

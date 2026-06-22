@@ -115,6 +115,12 @@ def _now() -> str:
 
 
 def _http_get(url: str, headers: dict | None = None, params: dict | None = None):
+    # Re-validate at SEND time (not just when the connector was registered) so a
+    # name can't rebind to an internal IP between configuration and fetch.
+    # Redirects stay enabled here: feed URLs legitimately redirect (http→https,
+    # CDN), unlike the push sinks which pin + block redirects.
+    from dashboard_api.net_guard import validate_external_url
+    validate_external_url(url)
     r = httpx.get(url, headers=headers or {}, params=params or {}, timeout=_TIMEOUT,
                   follow_redirects=True)
     r.raise_for_status()
@@ -122,6 +128,8 @@ def _http_get(url: str, headers: dict | None = None, params: dict | None = None)
 
 
 def _http_post(url: str, headers: dict | None = None, json_body: dict | None = None):
+    from dashboard_api.net_guard import validate_external_url
+    validate_external_url(url)
     r = httpx.post(url, headers=headers or {}, json=json_body or {}, timeout=_TIMEOUT,
                    follow_redirects=True)
     r.raise_for_status()
