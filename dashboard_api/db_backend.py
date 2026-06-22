@@ -4,21 +4,24 @@ ThreatOrbit runs on single-file WAL SQLite, which is perfect up to a busy
 single node. Scaling past that means Postgres. The *full* switch is a breaking
 migration: every query in the codebase uses SQLite's `?` placeholder and a few
 SQLite idioms (`INSERT OR REPLACE`, `datetime('now')`, `AUTOINCREMENT`,
-`PRAGMA`, `executescript`). Rewriting all of that at once is risky, so it's
-staged here rather than rushed onto `main`:
+`PRAGMA`, `executescript`). Rather than rewrite all of that, the dialect gap is
+bridged here:
 
   * backend selection is live and non-breaking - `DASHBOARD_DB_BACKEND`
     (default `sqlite`) + an optional `DATABASE_URL`;
-  * the **dialect translation** below (`to_postgres`) is pure and unit-tested:
-    it rewrites a SQLite statement to Postgres form (placeholders + the common
-    idioms). When the Postgres path is switched on, `get_conn()` wraps
-    `execute()` to translate on the fly, so call sites stay unchanged;
-  * the Postgres connection path requires `psycopg` and is only taken when the
-    backend is explicitly set - SQLite installs are 100% unaffected.
-
-Flipping it on (set `DASHBOARD_DB_BACKEND=postgres`, install psycopg, point at
-a DSN) is then mechanical and reviewable on its own, with this translation
-layer already proven.
+  * the **dialect translation** (`to_postgres`) parses each statement with
+    **sqlglot** (a real SQL parser/transpiler) and applies AST transforms for the
+    app-specific idioms sqlglot doesn't map on its own (SQLite `INTEGER`→`BIGINT`,
+    `INSERT OR REPLACE`→`ON CONFLICT`, `datetime('now')`→`now()`), then renders
+    Postgres. This replaces the previous regex rewriter, which is kept as a
+    best-effort fallback for any statement sqlglot can't parse (or when sqlglot
+    isn't installed). When the Postgres path is on, `get_conn()` wraps `execute()`
+    to translate on the fly, so call sites stay unchanged;
+  * connections come from a **pool** (`psycopg_pool`) so the per-call
+    open/close cost is gone under load;
+  * the Postgres path requires `psycopg` (+ `psycopg_pool`, `sqlglot` for the
+    full experience) and is only taken when the backend is explicitly set -
+    SQLite installs are 100% unaffected. See `requirements-postgres.txt`.
 """
 import os
 import re
@@ -32,20 +35,15 @@ def is_postgres() -> bool:
     return BACKEND in ("postgres", "postgresql", "pg")
 
 
-# ── SQLite → Postgres statement translation (pure, tested) ────────────────────────
+# ── SQLite → Postgres statement translation ───────────────────────────────────
 
-_INSERT_OR_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\s+INTO\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)",
-                                re.IGNORECASE)
-_AUTOINC = re.compile(r"\bINTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT\b", re.IGNORECASE)
-_DATETIME_NOW = re.compile(r"datetime\(\s*'now'\s*\)", re.IGNORECASE)
-_PRAGMA = re.compile(r"^\s*PRAGMA\b.*$", re.IGNORECASE | re.MULTILINE)
+_PRAGMA_ONLY = re.compile(r"^\s*PRAGMA\b", re.IGNORECASE)
 
 
 def _qmark_to_dollar(sql: str) -> str:
-    """Replace `?` placeholders with `$1,$2,…` - but not `?` inside string
-    literals. Postgres' psycopg accepts `%s`; we use `%s` for parameter style
-    compatibility with psycopg's default."""
-    out, i, in_str = [], 0, False
+    """Replace `?` placeholders with psycopg's `%s` - but never a `?` inside a
+    string literal."""
+    out, in_str = [], False
     for ch in sql:
         if ch == "'":
             in_str = not in_str
@@ -57,24 +55,80 @@ def _qmark_to_dollar(sql: str) -> str:
     return "".join(out)
 
 
-def to_postgres(sql: str) -> str:
-    """Translate a SQLite statement to a Postgres-compatible one.
+def _pg_transform(tree, exp):
+    """Apply the app-specific SQLite→Postgres transforms sqlglot doesn't do on its
+    own, on the parsed AST (no regex on SQL text)."""
+    # SQLite INTEGER is 64-bit; Postgres INTEGER is 32-bit and overflows on the
+    # larger values this app stores (uptime, byte counts, epochs). Widen every
+    # INT data type to BIGINT (an `INTEGER PRIMARY KEY AUTOINCREMENT` becomes a
+    # `BIGINT … GENERATED … AS IDENTITY`, which is what we want).
+    for dt in tree.find_all(exp.DataType):
+        if dt.this == exp.DataType.Type.INT:
+            dt.set("this", exp.DataType.Type.BIGINT)
+    # datetime('now') → now()
+    for fn in list(tree.find_all(exp.Anonymous)):
+        if fn.name.upper() == "DATETIME":
+            a = fn.expressions
+            if len(a) == 1 and isinstance(a[0], exp.Literal) and a[0].this == "now":
+                fn.replace(exp.func("now"))
+    # INSERT OR REPLACE → INSERT … ON CONFLICT (first/PK column) DO UPDATE/NOTHING,
+    # matching how the app uses it (single-PK upserts: settings(key), leases, …).
+    import sqlglot
+    if isinstance(tree, exp.Insert) and str(tree.args.get("alternative") or "").upper() == "REPLACE":
+        tree.set("alternative", None)
+        schema = tree.this
+        cols = [c.name for c in schema.expressions] if isinstance(schema, exp.Schema) else []
+        if cols:
+            first = cols[0]
+            updates = [c for c in cols if c != first]
+            if updates:
+                setc = ", ".join(f"{c} = EXCLUDED.{c}" for c in updates)
+                tmpl = (f"INSERT INTO _x ({', '.join(cols)}) VALUES ({', '.join(['1'] * len(cols))}) "
+                        f"ON CONFLICT ({first}) DO UPDATE SET {setc}")
+            else:
+                tmpl = f"INSERT INTO _x ({first}) VALUES (1) ON CONFLICT ({first}) DO NOTHING"
+            tree.set("conflict", sqlglot.parse_one(tmpl, read="postgres").args["conflict"])
+    return tree
 
-    Handles the idioms this codebase actually uses: `?`→`%s` placeholders,
-    `INSERT OR REPLACE`→`INSERT … ON CONFLICT … DO UPDATE`, `AUTOINCREMENT`→
-    `SERIAL`/`GENERATED`, `datetime('now')`→`now()`, and strips `PRAGMA`.
-    Conservative: anything it doesn't recognise passes through unchanged.
-    """
+
+def to_postgres(sql: str) -> str:
+    """Translate a SQLite statement to Postgres. Parses with sqlglot and applies
+    the AST transforms in `_pg_transform`; falls back to the regex rewriter for
+    anything sqlglot can't parse (or when sqlglot isn't installed). PRAGMA has no
+    Postgres equivalent and translates to an empty (no-op) statement."""
+    if _PRAGMA_ONLY.match(sql):
+        return ""
+    try:
+        import sqlglot
+        from sqlglot import exp
+    except ImportError:
+        return _to_postgres_regex(sql)
+    try:
+        tree = sqlglot.parse_one(sql, read="sqlite")
+        if tree is None:
+            return _to_postgres_regex(sql)
+        return _pg_transform(tree, exp).sql(dialect="postgres")
+    except Exception:
+        # Parser couldn't handle this statement — best-effort regex rewrite keeps
+        # the path working (and surfaces in the live-Postgres CI run if wrong).
+        return _to_postgres_regex(sql)
+
+
+# ── Regex rewriter (fallback for statements sqlglot can't parse) ──────────────
+
+_INSERT_OR_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\s+INTO\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)",
+                                re.IGNORECASE)
+_AUTOINC = re.compile(r"\bINTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT\b", re.IGNORECASE)
+_DATETIME_NOW = re.compile(r"datetime\(\s*'now'\s*\)", re.IGNORECASE)
+_PRAGMA = re.compile(r"^\s*PRAGMA\b.*$", re.IGNORECASE | re.MULTILINE)
+
+
+def _to_postgres_regex(sql: str) -> str:
+    """Best-effort regex SQLite→Postgres rewrite. Retained as the fallback for the
+    sqlglot translator; conservative (anything unrecognised passes through)."""
     s = _PRAGMA.sub("", sql)
     s = _AUTOINC.sub("BIGSERIAL PRIMARY KEY", s)
-    # SQLite's INTEGER is 64-bit; Postgres INTEGER is 32-bit and overflows on the
-    # larger values this app stores (uptime, byte counts, epoch-ish ints), so map
-    # plain INTEGER -> BIGINT. Runs after AUTOINCREMENT handling (which already
-    # produced BIGSERIAL), so PKs are unaffected.
     s = re.sub(r"\bINTEGER\b", "BIGINT", s)
-    # SQLite's scalar MIN(a, b)/MAX(a, b) (always written here with a numeric
-    # first argument) is LEAST()/GREATEST() in Postgres; aggregate MIN(col)/
-    # MAX(col) never starts with a digit, so this targeted form is safe.
     s = re.sub(r"\bMIN\(\s*(\d)", r"LEAST(\1", s, flags=re.IGNORECASE)
     s = re.sub(r"\bMAX\(\s*(\d)", r"GREATEST(\1", s, flags=re.IGNORECASE)
     s = _DATETIME_NOW.sub("now()", s)
@@ -84,14 +138,11 @@ def to_postgres(sql: str) -> str:
         first_col = cols.split(",")[0].strip()
         updates = ", ".join(f"{c.strip()}=EXCLUDED.{c.strip()}"
                             for c in cols.split(",") if c.strip() != first_col)
-        # ON CONFLICT on the PK/first column - matches how the app uses
-        # INSERT OR REPLACE (settings(key), single-PK upserts).
         tail = f" ON CONFLICT ({first_col}) DO UPDATE SET {updates}" if updates else \
                f" ON CONFLICT ({first_col}) DO NOTHING"
         return f"INSERT INTO {table} ({cols}) /*UPSERT {first_col}*/{tail}__VALUES__"
 
     if _INSERT_OR_REPLACE.search(s):
-        # mark the ON CONFLICT clause to move after the VALUES(...) list
         s2 = _INSERT_OR_REPLACE.sub(_upsert, s)
         m = re.search(r"/\*UPSERT (\w+)\*/(.*?)__VALUES__(.*)", s2, re.DOTALL)
         if m:
@@ -185,10 +236,12 @@ class _PgCursor:  # pragma: no cover - exercised only against a live Postgres
 class PgConnection:  # pragma: no cover - exercised only against a live Postgres
     """Adapts a psycopg connection to the sqlite3-ish interface the codebase
     uses (`execute`/`executemany`/`executescript`/`commit`/`close`), translating
-    each statement through `to_postgres` so call sites stay unchanged."""
+    each statement through `to_postgres` so call sites stay unchanged. When it
+    came from a pool, `close()` returns it to the pool instead of closing it."""
 
-    def __init__(self, raw):
+    def __init__(self, raw, pool=None):
         self._raw = raw
+        self._pool = pool
 
     def execute(self, sql, params=()):
         translated = to_postgres(sql)
@@ -214,7 +267,10 @@ class PgConnection:  # pragma: no cover - exercised only against a live Postgres
         self._raw.commit()
 
     def close(self):
-        self._raw.close()
+        if self._pool is not None:
+            self._pool.putconn(self._raw)   # return to the pool (reset on return)
+        else:
+            self._raw.close()
 
 
 def table_columns_sql() -> str:
@@ -224,9 +280,33 @@ def table_columns_sql() -> str:
             "WHERE table_name = %s")
 
 
+# ── Connection pool (psycopg_pool) ────────────────────────────────────────────
+
+_pool = None
+
+
+def _get_pool():  # pragma: no cover - exercised only against a live Postgres
+    """Lazily build a process-wide connection pool. Raises ImportError if
+    psycopg_pool isn't installed, so the caller can fall back to a direct
+    connection."""
+    global _pool
+    if _pool is None:
+        from psycopg_pool import ConnectionPool
+        _pool = ConnectionPool(
+            DATABASE_URL,
+            min_size=int(os.environ.get("DASHBOARD_PG_POOL_MIN", "1")),
+            max_size=int(os.environ.get("DASHBOARD_PG_POOL_MAX", "10")),
+            kwargs={"autocommit": False},
+            open=True,
+            name="threatorbit",
+        )
+    return _pool
+
+
 def connect_postgres():
-    """Open a Postgres connection (opt-in path). Requires psycopg + a DSN.
-    Returns the adapter, so every existing call site works unchanged."""
+    """Open a Postgres connection (opt-in path). Requires psycopg + a DSN;
+    pools via psycopg_pool when available. Returns the adapter, so every existing
+    call site works unchanged."""
     if not DATABASE_URL:
         raise RuntimeError("DASHBOARD_DB_BACKEND=postgres requires DATABASE_URL")
     try:
@@ -234,9 +314,14 @@ def connect_postgres():
     except ImportError as e:  # pragma: no cover - depends on optional driver
         raise RuntimeError(
             "Postgres backend selected but 'psycopg' is not installed "
-            "(pip install psycopg[binary]).") from e
-    import psycopg
-    return PgConnection(psycopg.connect(DATABASE_URL, autocommit=False))
+            "(pip install -r dashboard_api/requirements-postgres.txt).") from e
+    try:  # pragma: no cover - exercised only against a live Postgres
+        from psycopg_pool import ConnectionPool  # noqa: F401
+        pool = _get_pool()
+        return PgConnection(pool.getconn(), pool=pool)
+    except ImportError:  # pragma: no cover - pool extra not installed
+        import psycopg
+        return PgConnection(psycopg.connect(DATABASE_URL, autocommit=False))
 
 
 def backend_info() -> dict:
@@ -244,10 +329,11 @@ def backend_info() -> dict:
         "backend": "postgres" if is_postgres() else "sqlite",
         "configured": is_postgres() and bool(DATABASE_URL),
         "driverReady": _driver_ready(),
-        "note": ("Postgres adapter implemented and validated against a live "
-                 "Postgres 16 (full dashboard suite green; CI runs it on every "
-                 "change). Enable with DASHBOARD_DB_BACKEND=postgres + "
-                 "DATABASE_URL + psycopg. SQLite remains the default."),
+        "note": ("Postgres adapter: sqlglot-based dialect translation + a "
+                 "psycopg_pool connection pool, validated against a live "
+                 "Postgres 16 (full dashboard suite green in CI on every change). "
+                 "Enable with DASHBOARD_DB_BACKEND=postgres + DATABASE_URL and "
+                 "requirements-postgres.txt. SQLite remains the default."),
     }
 
 

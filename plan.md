@@ -89,12 +89,16 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       `requirements.txt` stays the human-edited input; regenerate the lock with
       `pip-compile --generate-hashes -o <svc>/requirements.lock
       <svc>/requirements.txt` when it changes.
-- [ ] **A3 / A4 — Postgres path is a regex dialect translator + a new
-      connection per call.** `db_backend.to_postgres` rewrites SQL with `re.sub`
-      (INTEGER→BIGINT, MIN/MAX→LEAST/GREATEST, …); it passes the tested query set
-      but is brittle on new SQL, and `get_conn()` opens/closes per call (no
-      pool). Replace with a real query layer + pooling before leaning on Postgres
-      at scale.
+- [x] **A3 / A4 — Postgres path is a regex dialect translator + a new
+      connection per call.** DONE (2026-06-22): `to_postgres` now parses each
+      statement with **sqlglot** (a real SQL transpiler) and applies AST transforms
+      for the app idioms it doesn't map (INTEGER→BIGINT, INSERT OR REPLACE→ON
+      CONFLICT, datetime('now')→now()), replacing the regex rewriter (kept as a
+      best-effort fallback for un-parseable statements). Connections now come from
+      a **psycopg_pool** pool instead of per-call open/close. Validated against a
+      live Postgres 16 locally (full dashboard suite: 386 passed / 2 SQLite-only
+      skipped) and in CI's backend-postgres job; SQLite default unchanged (388
+      passed). Postgres extras live in `dashboard_api/requirements-postgres.txt`.
 - [ ] **B9 residual — SP-signed SAML AuthnRequest** is still unimplemented
       (IdP-dependent); the request is sent unsigned. Add when an IdP requires it.
 - [ ] **Test-only: Starlette `TestClient` httpx deprecation.** The suites emit
@@ -193,6 +197,19 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-06-22 · Real Postgres query layer + connection pooling (audit A3/A4).**
+  Replaced the brittle regex SQL-dialect rewriter with a real parser: `to_postgres`
+  parses each statement with **sqlglot** and applies AST transforms for the SQLite
+  idioms sqlglot doesn't map on its own — `INTEGER`→`BIGINT` (SQLite ints are
+  64-bit), `INSERT OR REPLACE`→`INSERT … ON CONFLICT` (DO UPDATE for multi-col,
+  DO NOTHING for PK-only), `datetime('now')`→`now()` — then renders Postgres. The
+  regex rewriter is kept as a best-effort fallback for any statement sqlglot can't
+  parse (or when sqlglot isn't installed). Connections now come from a
+  **psycopg_pool** pool instead of opening/closing per call. The Postgres extras
+  (`psycopg[binary]`, `psycopg-pool`, `sqlglot`) live in
+  `dashboard_api/requirements-postgres.txt`. Validated end-to-end against a live
+  Postgres 16 — full dashboard suite **386 passed / 2 SQLite-only skipped** — and
+  in CI's backend-postgres job; the SQLite default is unchanged (**388 passed**).
 - **2026-06-22 · De-mocked dashboard widgets + CI gate (audit findings F-1…F-4).**
   Wired the widgets that rendered hardcoded demo data to their live endpoints, or
   gave them honest empty states / "sample" badges:

@@ -56,10 +56,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install API deps + psycopg
+      - name: Install API deps + Postgres extras (psycopg, pool, sqlglot)
         run: |
           pip install -r dashboard_api/requirements.txt
-          pip install 'psycopg[binary]'
+          pip install -r dashboard_api/requirements-postgres.txt
       - name: dashboard_api against live Postgres
         # SQLite-only tests (online-backup, sqlite_master) skip automatically.
         run: python -m pytest dashboard_api/tests -q

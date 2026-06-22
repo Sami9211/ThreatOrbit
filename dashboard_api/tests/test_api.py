@@ -2253,9 +2253,10 @@ def test_email_channel(client, auth, monkeypatch):
     assert client.get("/config/email", headers=viewer).status_code == 403
 
 
-def test_db_backend_dialect_units():
-    """SQLite→Postgres statement translation (the staged Postgres seam)."""
-    from dashboard_api.db_backend import to_postgres
+def test_db_backend_regex_fallback_units():
+    """The regex fallback rewriter (used when sqlglot can't parse a statement, or
+    isn't installed). Exact-output assertions on the SQLite→Postgres idioms."""
+    from dashboard_api.db_backend import _to_postgres_regex as to_postgres
     # placeholder translation, but not inside string literals
     assert to_postgres("SELECT * FROM iocs WHERE value=? AND type=?") == \
         "SELECT * FROM iocs WHERE value=%s AND type=%s"
@@ -2269,6 +2270,30 @@ def test_db_backend_dialect_units():
     pg = to_postgres("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)")
     assert pg.startswith("INSERT INTO settings (key,value) VALUES (%s,%s)")
     assert "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value" in pg
+
+
+def test_db_backend_sqlglot_dialect_units():
+    """The primary translator (sqlglot AST). Semantic Postgres output for the
+    codebase's SQLite idioms; skips if sqlglot isn't installed."""
+    pytest.importorskip("sqlglot")
+    from dashboard_api.db_backend import to_postgres
+    # `?` → `%s`, but not the `?` inside the string literal
+    out = to_postgres("SELECT * FROM a WHERE x='who?' AND y=?")
+    assert out.count("%s") == 1 and "'who?'" in out
+    # datetime('now') → now()
+    assert "NOW()" in to_postgres("UPDATE t SET ts=datetime('now') WHERE id=?").upper()
+    # SQLite INTEGER widened to 64-bit BIGINT (incl. the identity PK)
+    ddl = to_postgres("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, n INTEGER)")
+    assert "BIGINT" in ddl.upper() and "INTEGER" not in ddl.upper() and "IDENTITY" in ddl.upper()
+    # PRAGMA → no-op
+    assert to_postgres("PRAGMA journal_mode=WAL").strip() == ""
+    # INSERT OR REPLACE → ON CONFLICT (DO UPDATE for multi-col, DO NOTHING for PK-only)
+    multi = to_postgres("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").upper()
+    assert "ON CONFLICT" in multi and "DO UPDATE SET" in multi and "EXCLUDED.VALUE" in multi
+    single = to_postgres("INSERT OR REPLACE INTO leader_lease (id) VALUES (?)").upper()
+    assert "ON CONFLICT" in single and "DO NOTHING" in single
+    # scalar MIN/MAX with a non-digit arg → LEAST/GREATEST (the regex couldn't)
+    assert "LEAST" in to_postgres("SELECT MIN(0, count) AS c FROM t").upper()
 
 
 def test_pg_adapter_units():
