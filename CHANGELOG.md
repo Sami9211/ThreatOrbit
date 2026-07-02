@@ -9,6 +9,29 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-02 — real-data readiness (go-live pass)
+- **`DASHBOARD_ENGINE=off` — the real-data switch.** Live mode can now run with
+  the synthetic-telemetry engine fully disabled: no first-boot priming, boots
+  paused on every start (operator env wins; the UI toggle can still resume it
+  deliberately). Wired through compose, Helm (`config.engine`) and
+  `.env.example`.
+- **`docs/GOING_LIVE.md`** — the production runbook: secrets/hardening gate,
+  real-data mode, OSINT keys, and log forwarding from Windows/**Active
+  Directory** (NXLog → `/siem/ingest/raw`, audit-policy prerequisites),
+  **AWS/CloudTrail** (S3 puller), Linux (collector agent), and syslog senders —
+  plus verification and day-2 operations. README points at it.
+- **Honest empty states on Overview** — the Intel Brief no longer shows
+  fabricated headlines badged "Live", the hourly timeline no longer renders a
+  fake volume shape, and the MITRE heatmap no longer falls back to invented
+  counts when the store is empty (fresh real-data installs start empty and now
+  say so).
+- **`windows-test.bat`** now installs the `-dev` requirement files — without
+  them the FastAPI suites fail loudly on the missing `httpx2` (the pytest.ini
+  deprecation gate). `windows-start.bat` re-verified end to end (launcher
+  serving path smoke-tested).
+- Live bootstrap no longer marks the admin as MFA-enrolled before a TOTP
+  secret exists (the flag now honestly reflects enrolment state).
+
 ### 2026-07-02 — plan.md audit-fix pass
 - **SP-signed SAML AuthnRequest (B9 residual)** — with `SAML_SP_PRIVATE_KEY` set
   the SP signs its AuthnRequest per the HTTP‑Redirect binding (detached
