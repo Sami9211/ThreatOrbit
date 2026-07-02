@@ -11,6 +11,17 @@ const ThreatGlobe = dynamic(() => import('@/components/effects/ThreatGlobe'), {
   ssr: false,
   loading: () => <ScenePlaceholder />,
 })
+// Preload the ThreatGlobe chunk before the section is reached so the user never
+// waits seconds for the WebGL canvas to appear (same pattern as ScrollStory).
+if (typeof window !== 'undefined') {
+  const preload = () => import('@/components/effects/ThreatGlobe')
+  if (document.readyState === 'complete') {
+    setTimeout(preload, 800)
+  } else {
+    window.addEventListener('load', () => setTimeout(preload, 800), { once: true })
+  }
+}
+
 
 const REGIONS = [
   { name: 'North America', pct: 34, color: '#FF2E97' },

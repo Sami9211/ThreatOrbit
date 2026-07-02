@@ -12,6 +12,17 @@ const IOCNetworkScene = dynamic(() => import('@/components/effects/IOCNetworkSce
   ssr: false,
   loading: () => <ScenePlaceholder />,
 })
+// Preload the IOCNetworkScene chunk before the section is reached so the user never
+// waits seconds for the WebGL canvas to appear (same pattern as ScrollStory).
+if (typeof window !== 'undefined') {
+  const preload = () => import('@/components/effects/IOCNetworkScene')
+  if (document.readyState === 'complete') {
+    setTimeout(preload, 800)
+  } else {
+    window.addEventListener('load', () => setTimeout(preload, 800), { once: true })
+  }
+}
+
 
 const IOC_TYPES = [
   { label: 'IP Address',   color: '#FF2E97', dot: 'bg-magenta'  },

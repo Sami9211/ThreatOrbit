@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -227,8 +227,13 @@ function GlobeGroup({ arcCount, nodeCount, animate }: {
 
 export default function ThreatGlobe() {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  // Mount the GL context only near the viewport; unmount well off-screen.
-  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
+  // Mount the GL context well before the viewport, then KEEP it mounted (the
+  // `mounted` latch — same fix as the other scenes): a scroll-away must never
+  // tear down the context, or scrolling back shows a blank while it rebuilds.
+  // The render loop pauses off-screen instead (frameloop demand).
+  const { ref, visible } = useInViewport<HTMLDivElement>('800px')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
 
   const animate   = !prefersReducedMotion
@@ -238,12 +243,14 @@ export default function ThreatGlobe() {
 
   return (
     <div ref={ref} className="w-full h-full">
-      {visible ? (
+      {mounted ? (
         <Canvas
-          frameloop={animate ? 'always' : 'demand'}
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0, 6.2], fov: 42 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
+          // Phone sharpness: cap dpr at 1.75–2 (was 1.25–1.5, visibly pixelated
+          // on dpr≈3 phones); AdaptiveDpr still lowers it under real load.
+          dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
           <ambientLight intensity={0.5} />
@@ -255,7 +262,7 @@ export default function ThreatGlobe() {
             </EffectComposer>
           )}
           <PerformanceMonitor onDecline={() => setDegraded(true)} />
-          <AdaptiveDpr pixelated />
+          <AdaptiveDpr />
         </Canvas>
       ) : (
         <ScenePlaceholder />

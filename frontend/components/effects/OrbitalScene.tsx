@@ -185,7 +185,9 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
           frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0.8, camZ], fov: 46 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
+          // Phone sharpness: cap dpr at 1.75–2 (was 1.25–1.5, visibly pixelated
+          // on dpr≈3 phones); AdaptiveDpr still lowers it under real load.
+          dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
           <ambientLight intensity={0.12} />
@@ -202,7 +204,7 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
             </EffectComposer>
           )}
           <PerformanceMonitor onDecline={() => setDegraded(true)} />
-          <AdaptiveDpr pixelated />
+          <AdaptiveDpr />
         </Canvas>
       ) : (
         <ScenePlaceholder />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -155,8 +155,15 @@ function SceneGroup({ nodeCount, animate }: { nodeCount: number; animate: boolea
 
 export default function IOCNetworkScene() {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
-  // Mount the GL context only near the viewport; unmount well off-screen.
-  const { ref, visible } = useInViewport<HTMLDivElement>('400px')
+  // Mount the GL context well before the viewport, then KEEP it mounted (the
+  // `mounted` latch — same fix as HeroScene/OrbitalScene). Unmounting on
+  // scroll-away tore down the WebGL context, so scrolling back showed the
+  // placeholder for seconds while it rebuilt — the "graph disappears when I
+  // scroll" bug. The render loop still pauses off-screen (frameloop demand),
+  // so the kept context costs zero GPU while hidden.
+  const { ref, visible } = useInViewport<HTMLDivElement>('800px')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
 
   const animate   = !prefersReducedMotion
@@ -165,12 +172,15 @@ export default function IOCNetworkScene() {
 
   return (
     <div ref={ref} className="w-full h-full">
-      {visible ? (
+      {mounted ? (
         <Canvas
-          frameloop={animate ? 'always' : 'demand'}
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 1, 8], fov: 52 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          dpr={degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]}
+          // Phones are dpr≈3: capping at 1.25–1.5 read as visibly pixelated.
+          // Cap at 1.75–2 for sharpness; AdaptiveDpr (smooth, not nearest-
+          // neighbour) still lowers resolution under real GPU load.
+          dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
           <ambientLight intensity={0.5} />
@@ -181,7 +191,7 @@ export default function IOCNetworkScene() {
             </EffectComposer>
           )}
           <PerformanceMonitor onDecline={() => setDegraded(true)} />
-          <AdaptiveDpr pixelated />
+          <AdaptiveDpr />
         </Canvas>
       ) : (
         <ScenePlaceholder />

@@ -130,8 +130,10 @@ export default function HeroScene({ mouseX, mouseY }: {
   const bloomOn   = !isLowPower && !degraded
   const bright    = !bloomOn   // brighten emissive when bloom can't carry the glow
   const starCount = isLowPower ? 50 : 120
-  // Full-screen canvas → keep pixel count modest; bloom cost scales with pixels².
-  const dpr: [number, number] | number = degraded ? 1 : isLowPower ? [1, 1.25] : [1, 1.5]
+  // Phones are dpr≈3: capping at 1.25–1.5 read as visibly pixelated. Cap at
+  // 1.75–2 for sharpness; AdaptiveDpr (smooth, not nearest-neighbour) still
+  // lowers resolution under real GPU load, and bloom drops out when degraded.
+  const dpr: [number, number] | number = degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]
 
   return (
     <div ref={ref} className="w-full h-full">
@@ -156,7 +158,7 @@ export default function HeroScene({ mouseX, mouseY }: {
             </EffectComposer>
           )}
           <PerformanceMonitor onDecline={() => setDegraded(true)} />
-          <AdaptiveDpr pixelated />
+          <AdaptiveDpr />
         </Canvas>
       ) : (
         <ScenePlaceholder />
