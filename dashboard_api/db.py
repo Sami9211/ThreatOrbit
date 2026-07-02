@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class SchemaVersionError(RuntimeError):
@@ -687,6 +687,16 @@ CREATE TABLE IF NOT EXISTS user_org_roles (
 CREATE TABLE IF NOT EXISTS saml_replay (
     assertion_id TEXT PRIMARY KEY,
     expires_at   REAL NOT NULL
+);
+
+-- Delivery cursor for the external audit sink (outbox pattern). The committed
+-- audit_log IS the durable queue; this single row records the last audit_log id
+-- successfully delivered, so a sink outage or process restart replays the
+-- undelivered tail instead of losing it (at-least-once, in id order).
+CREATE TABLE IF NOT EXISTS audit_sink_cursor (
+    id       INTEGER PRIMARY KEY CHECK (id = 1),
+    last_id  INTEGER NOT NULL DEFAULT 0,
+    updated  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_ts ON scans(ts DESC);
