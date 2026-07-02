@@ -9,6 +9,29 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-02 — real-feeds hardening + landing 3D fixes
+- **No fabricated data on a real deployment.** Swept the dashboard for widgets
+  that showed demo constants when their API store was empty — the exact state a
+  fresh real-feeds install is in — and made each honest: the SIEM alert queue &
+  MITRE distribution, SOAR cases & playbooks, the CTI feeds board (+ its
+  `Math.random()` "incoming threat" simulator), CTI IOC-type counts, the assets
+  inventory & fleet vulnerabilities all now start empty and render the API's
+  real response (even when empty), falling back to the demo set ONLY when the
+  API is unreachable (offline preview), never on an empty live store. The
+  per-user admin drawer's fabricated "sessions" panel is removed and its
+  activity log is wired to the real audit trail filtered by that user.
+- **Production overlay — real feeds only, one command:**
+  `docker-compose.prod.yml` pins live mode + `DASHBOARD_ENGINE=off` +
+  `DASHBOARD_REQUIRE_SECRETS=true` + closed registration and makes a missing
+  secret abort `up` rather than boot insecure. Documented in GOING_LIVE.
+- **Landing 3D scenes fixed** — the IOC-network cluster and orbital scene (and
+  the threat globe) no longer tear down their WebGL context on scroll (they
+  latch mounted once seen, pausing the render loop off-screen instead), so they
+  stop vanishing and re-appearing; both now preload their chunk so they render
+  promptly instead of after several seconds; and the mobile device-pixel-ratio
+  cap was raised (1.25–1.5 → 1.75–2, smooth AdaptiveDpr) to fix the pixelation
+  on phones.
+
 ### 2026-07-02 — real-data readiness (go-live pass)
 - **`DASHBOARD_ENGINE=off` — the real-data switch.** Live mode can now run with
   the synthetic-telemetry engine fully disabled: no first-boot priming, boots

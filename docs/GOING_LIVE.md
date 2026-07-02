@@ -69,7 +69,10 @@ DASHBOARD_DATA_MODE=live
 DASHBOARD_ENGINE=off
 ```
 
-- **docker compose:** put both in `.env` (compose passes them through).
+- **docker compose (recommended):** use the production overlay, which pins
+  these plus the hardening gate in one command — no per-var wiring:
+  `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d`.
+  (Or set both in `.env` and use the base file for an evaluation run.)
 - **Helm:** `--set config.dataMode=live --set config.engine=off`.
 - **Windows launcher:** set them as *system* environment variables before
   double-clicking `windows-start.bat` (the launcher inherits them; it defaults
@@ -262,8 +265,17 @@ Work down this list; each line has a place to look:
 1. EC2 `t3.large`+ (4 vCPU/8 GB to track LOAD_LIMITS), Docker + compose plugin.
 2. Security group: 443 in, nothing else public; the containers publish only to
    localhost behind nginx/ALB TLS.
-3. `cp .env.example .env` → fill Steps 0–2 → `docker compose up --build -d`
-   (+ `--profile backup` for scheduled snapshots to the backup volume/S3).
+3. `cp .env.example .env` → fill the Step-0 secrets → bring it up with the
+   **production overlay** (real feeds only, one command):
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+   # add scheduled backups:  … -f docker-compose.prod.yml --profile backup up -d
+   ```
+   The overlay pins `DASHBOARD_DATA_MODE=live`, `DASHBOARD_ENGINE=off`,
+   `DASHBOARD_REQUIRE_SECRETS=true` and closed registration, and makes a missing
+   secret abort the command instead of booting insecure — so you can't
+   accidentally ship demo mode. (Plain `docker compose up` without the overlay
+   stays in demo mode for evaluation.)
 4. CloudTrail via **3d**; EC2/EKS workload logs via the collector (**3a**);
    VPC appliances via syslog-TLS (**3b**).
 
