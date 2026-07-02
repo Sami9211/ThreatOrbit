@@ -532,8 +532,10 @@ def bootstrap_live():
             conn.execute(
                 "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
                 "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                # mfa_enabled=0: no TOTP secret exists yet, so the flag says so
+                # honestly — the admin enrols via Config → Security → 2FA.
                 (str(uuid.uuid4()), SEED_ADMIN_EMAIL, "Admin Operator", "admin", "active",
-                 ph, salt, "#FF2E97", 1, None, _iso(_now())),
+                 ph, salt, "#FF2E97", 0, None, _iso(_now())),
             )
             _seed_settings(conn)
             from dashboard_api.tenancy import ensure_default_org

@@ -13,5 +13,6 @@ data:
   OPENCTI_URL: {{ .Values.config.opencti.url | quote }}
   # dashboard_api
   DASHBOARD_DATA_MODE: {{ .Values.config.dataMode | quote }}
+  DASHBOARD_ENGINE: {{ .Values.config.engine | default "on" | quote }}
   DASHBOARD_ALLOW_REGISTRATION: {{ .Values.config.allowRegistration | quote }}
   DASHBOARD_CORS_ORIGINS: {{ default (printf "http://%s" .Values.ingress.host) .Values.config.corsOrigins | quote }}
