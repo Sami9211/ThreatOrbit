@@ -104,6 +104,14 @@ ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lowe
 DETECTION_WORKERS = max(1, int(os.environ.get("DASHBOARD_DETECTION_WORKERS", "1")))
 
 # --- Data lifecycle -------------------------------------------------------------
+# Opt-in PII/secret redaction of raw log text at the ingest seam, BEFORE
+# persistence. Comma-separated categories: email, secret, cc, ssn (see
+# dashboard_api/redaction.py + docs/PII_HANDLING.md). Empty = store verbatim.
+# Redaction is lossy and irreversible; structured pivot fields (src_ip,
+# username, hostname) are always retained for detection.
+LOG_REDACT = [c.strip().lower() for c in
+              os.environ.get("DASHBOARD_LOG_REDACT", "").split(",") if c.strip()]
+
 # When set to a writable directory, retention enforcement archives each batch of
 # purged rows to compressed NDJSON there BEFORE deleting them, so compliance can
 # keep raw logs cheaply. Unset = purge-only (unless an object store is set below).
