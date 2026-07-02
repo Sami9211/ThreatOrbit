@@ -9,6 +9,7 @@ import {
   Globe, Skull, DollarSign, Megaphone, Flame, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk } from '@/lib/colors'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction' | 'Disruption'
@@ -317,33 +318,33 @@ const ACTORS: ThreatActor[] = [
 
 /* ─── Config / lookups ──────────────────────────────────────────────── */
 const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ComponentType<any> }> = {
-  Espionage:   { color: '#7A3CFF', icon: Globe },
-  Financial:   { color: '#34F5C5', icon: DollarSign },
-  Hacktivism:  { color: '#FFB23E', icon: Megaphone },
-  Destruction: { color: '#FF4D6D', icon: Flame },
-  Disruption:  { color: '#FF4D6D', icon: Flame },
+  Espionage:   { color: tk('violet'), icon: Globe },
+  Financial:   { color: tk('safe'), icon: DollarSign },
+  Hacktivism:  { color: tk('amber'), icon: Megaphone },
+  Destruction: { color: tk('threat'), icon: Flame },
+  Disruption:  { color: tk('threat'), icon: Flame },
 }
 // Neutral fallback so an unrecognised motivation/threat value from the API can
 // never crash the page (the lookups below are all `?? FALLBACK_*`).
 const FALLBACK_MOTIVATION = { color: '#8A7DA3', icon: Crosshair }
 
 const TYPE_CFG: Record<ActorType, { color: string; icon: React.ComponentType<any> }> = {
-  'Nation-State': { color: '#FF2E97', icon: Globe },
-  Cybercrime:     { color: '#FFB23E', icon: DollarSign },
-  Hacktivist:     { color: '#34F5C5', icon: Megaphone },
+  'Nation-State': { color: tk('magenta'), icon: Globe },
+  Cybercrime:     { color: tk('amber'), icon: DollarSign },
+  Hacktivist:     { color: tk('safe'), icon: Megaphone },
 }
 
 const THREAT_CFG: Record<ThreatActor['threatLevel'], { color: string; label: string }> = {
-  critical: { color: '#FF2E97', label: 'Critical' },
-  high:     { color: '#FF4D6D', label: 'High' },
-  elevated: { color: '#FFB23E', label: 'Elevated' },
+  critical: { color: tk('magenta'), label: 'Critical' },
+  high:     { color: tk('threat'), label: 'High' },
+  elevated: { color: tk('amber'), label: 'Elevated' },
 }
-const FALLBACK_THREAT = { color: '#FFB23E', label: 'Elevated' }
+const FALLBACK_THREAT = { color: tk('amber'), label: 'Elevated' }
 // Lookup that tolerates any string the API might send.
 const threatCfg = (lvl: string) => THREAT_CFG[lvl as ThreatActor['threatLevel']] ?? FALLBACK_THREAT
 
 /* ─── Sophistication meter ──────────────────────────────────────────── */
-function SophMeter({ level, color = '#FF2E97' }: { level: number; color?: string }) {
+function SophMeter({ level, color = tk('magenta') }: { level: number; color?: string }) {
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((n) => (
@@ -575,10 +576,10 @@ function SectionHead({ icon: Icon, title }: { icon: React.ComponentType<any>; ti
 
 /* ─── KPI strip ─────────────────────────────────────────────────────── */
 const KPIS: { label: string; value: string | number; icon: React.ComponentType<any>; color: string; sub: string }[] = [
-  { label: 'Tracked Actors',     value: 47, icon: Users,    color: '#7A3CFF', sub: 'in library' },
-  { label: 'Active Campaigns',   value: 12, icon: Activity, color: '#FF2E97', sub: 'ongoing' },
-  { label: 'Nation-State',       value: 23, icon: Globe,    color: '#FF4D6D', sub: 'APT groups' },
-  { label: 'Ransomware Groups',  value: 16, icon: Skull,    color: '#FFB23E', sub: 'RaaS / extortion' },
+  { label: 'Tracked Actors',     value: 47, icon: Users,    color: tk('violet'), sub: 'in library' },
+  { label: 'Active Campaigns',   value: 12, icon: Activity, color: tk('magenta'), sub: 'ongoing' },
+  { label: 'Nation-State',       value: 23, icon: Globe,    color: tk('threat'), sub: 'APT groups' },
+  { label: 'Ransomware Groups',  value: 16, icon: Skull,    color: tk('amber'), sub: 'RaaS / extortion' },
 ]
 
 /* ─── Filter pill ───────────────────────────────────────────────────── */

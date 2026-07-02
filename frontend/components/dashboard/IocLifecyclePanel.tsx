@@ -1,4 +1,5 @@
 'use client'
+import { tk } from '@/lib/colors'
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -13,16 +14,16 @@ import {
 } from '@/lib/api'
 
 const VERDICT_COLOR: Record<string, string> = {
-  malicious: '#FF2E97', suspicious: '#FFB23E', benign: '#34F5C5', clean: '#34F5C5', unknown: '#665B7D',
+  malicious: tk('magenta'), suspicious: tk('amber'), benign: tk('safe'), clean: tk('safe'), unknown: '#665B7D',
 }
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
+  critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'), info: tk('violet'),
 }
 const STATUS_STYLE: Record<string, { color: string; label: string }> = {
-  active: { color: '#34F5C5', label: 'Active' },
+  active: { color: tk('safe'), label: 'Active' },
   expired: { color: '#665B7D', label: 'Expired' },
-  'known-good': { color: '#7A3CFF', label: 'Known-good' },
+  'known-good': { color: tk('violet'), label: 'Known-good' },
 }
 const FILTERS = ['all', 'active', 'expired', 'known-good']
 
@@ -155,11 +156,11 @@ export default function IocLifecyclePanel() {
               <div className="w-24 shrink-0 hidden sm:block">
                 <div className="flex items-center justify-between text-[9px] mb-0.5">
                   <span className="text-ink-600 flex items-center gap-0.5">{decayed && <TrendingDown className="w-2.5 h-2.5 text-amber" />}conf</span>
-                  <span style={{ color: SEV_COLOR[i.severity] ?? '#7A3CFF' }}>{i.effectiveConfidence}<span className="text-ink-700">/{i.confidence}</span></span>
+                  <span style={{ color: SEV_COLOR[i.severity] ?? tk('violet') }}>{i.effectiveConfidence}<span className="text-ink-700">/{i.confidence}</span></span>
                 </div>
                 <div className="h-1.5 rounded-full bg-white/8 overflow-hidden relative">
                   <div className="absolute inset-y-0 left-0 rounded-full bg-white/15" style={{ width: `${i.confidence}%` }} />
-                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${i.effectiveConfidence}%`, background: SEV_COLOR[i.severity] ?? '#7A3CFF' }} />
+                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${i.effectiveConfidence}%`, background: SEV_COLOR[i.severity] ?? tk('violet') }} />
                 </div>
               </div>
             </button>
@@ -200,7 +201,7 @@ export default function IocLifecyclePanel() {
                       </div>
                       <div className="h-2 rounded-full bg-white/8 overflow-hidden relative">
                         <div className="absolute inset-y-0 left-0 rounded-full bg-white/15" style={{ width: `${lc.assertedConfidence}%` }} />
-                        <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${lc.effectiveConfidence}%`, background: SEV_COLOR[detail.severity] ?? '#7A3CFF' }} />
+                        <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${lc.effectiveConfidence}%`, background: SEV_COLOR[detail.severity] ?? tk('violet') }} />
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center">

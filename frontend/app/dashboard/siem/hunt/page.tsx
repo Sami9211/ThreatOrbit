@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EventSearchPanel from '@/components/dashboard/EventSearchPanel'
+import { tk } from '@/lib/colors'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type TimeRange = '1h' | '6h' | '24h' | '7d'
@@ -412,10 +413,10 @@ export default function ThreatHuntPage() {
         transition={{ delay: 0.05 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-4"
       >
-        <MetricCard label="Queries Run Today" value={47}  icon={Activity}      color="#7A3CFF" sub="↑ 12 vs yesterday" />
-        <MetricCard label="IOCs Confirmed"    value={3}   icon={AlertTriangle}  color="#FF4D6D" sub="from 3 hunt sessions" />
-        <MetricCard label="Hosts Investigated"value={12}  icon={Search}         color="#34F5C5" sub="across 4 hunts" />
-        <MetricCard label="Open Hypotheses"   value={8}   icon={Zap}            color="#FF2E97" sub="2 critical priority" />
+        <MetricCard label="Queries Run Today" value={47}  icon={Activity}      color={tk('violet')} sub="↑ 12 vs yesterday" />
+        <MetricCard label="IOCs Confirmed"    value={3}   icon={AlertTriangle}  color={tk('threat')} sub="from 3 hunt sessions" />
+        <MetricCard label="Hosts Investigated"value={12}  icon={Search}         color={tk('safe')} sub="across 4 hunts" />
+        <MetricCard label="Open Hypotheses"   value={8}   icon={Zap}            color={tk('magenta')} sub="2 critical priority" />
       </motion.div>
 
       {/* ── Event-stream search (real field-operator language over raw events) ── */}

@@ -7,6 +7,7 @@ import type { Feature, Geometry } from 'geojson'
 import worldTopo from 'world-atlas/countries-110m.json'
 import { NUM_TO_META, ISO2_TO_NUM } from '@/lib/geo/countryMeta'
 import { fetchGeo, type GeoCountry } from '@/lib/api'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* ── Geometry, computed once at module load (identical for every mount) ──────
    The world-atlas TopoJSON ships inside the npm package (no network), keyed by
@@ -31,14 +32,15 @@ const SHAPES = FEATURES.map((f) => {
 
 /* ── Colour scale: cold land (no attacks) -> hot magenta (most attacks) ── */
 const NODATA = '#1b1830'
-const SCALE = ['#34214F', '#5C2A78', '#92297F', '#C92D86', '#FF2E97']
+// Choropleth ramp: the accent at rising opacity, so it follows the theme.
+const SCALE = [0.16, 0.3, 0.48, 0.7, 1].map((a) => withAlpha(tk('magenta'), a))
 function colorFor(count: number, max: number): string {
   if (count <= 0) return NODATA
   const t = Math.sqrt(count / Math.max(1, max))            // sqrt spreads the low end
   return SCALE[Math.min(SCALE.length - 1, Math.floor(t * SCALE.length))]
 }
 
-const SEV = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E' }
+const SEV = { critical: tk('magenta'), high: tk('threat'), medium: tk('amber') }
 
 /** ISO-2 -> flag emoji (regional indicator letters). */
 function flag(iso2: string | null): string {
@@ -173,7 +175,7 @@ export default function WorldMap() {
         {/* Map */}
         <div ref={wrapRef} className="relative min-h-0" onMouseLeave={onLeave}>
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet"
-            style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 30%, rgba(122,60,255,0.07), transparent 70%)' }}>
+            style={{ background: `radial-gradient(ellipse 80% 80% at 50% 30%, ${withAlpha(tk('violet'), 0.07)}, transparent 70%)` }}>
             {paths}
           </svg>
 

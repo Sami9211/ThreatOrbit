@@ -7,6 +7,7 @@ import {
   Brain, Settings, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk } from '@/lib/colors'
 
 type Item = {
   label: string
@@ -18,13 +19,13 @@ type Item = {
 }
 
 const ITEMS: Item[] = [
-  { label: 'Overview',       description: 'Dashboard home & threat map', href: '/dashboard/',         icon: Globe,    color: '#7A3CFF', keys: ['G', 'O'] },
-  { label: 'Threat Feeds',   description: 'Live OSINT threat intelligence', href: '/dashboard/feeds/',  icon: Radio,    color: '#FF2E97', keys: ['G', 'F'] },
-  { label: 'Threat Scanner', description: 'Scan URLs, IPs, and hashes',   href: '/dashboard/scanner/', icon: Search,   color: '#FFB23E', keys: ['G', 'S'] },
-  { label: 'Asset Surface',  description: 'Manage and scan your assets',  href: '/dashboard/assets/',  icon: Server,   color: '#2DD4BF', keys: ['G', 'A'] },
-  { label: 'SIEM Dashboard', description: 'Live event log & alert rules',  href: '/dashboard/siem/',    icon: Activity, color: '#FF4D6D', keys: ['G', 'L'] },
-  { label: 'SOAR Dashboard', description: 'Playbooks & incident queue',   href: '/dashboard/soar/',    icon: Zap,      color: '#34F5C5', keys: ['G', 'R'] },
-  { label: 'CTI Intelligence',description:'Threat actors & MITRE heatmap',href: '/dashboard/cti/',     icon: Brain,    color: '#FF2E97', keys: ['G', 'C'] },
+  { label: 'Overview',       description: 'Dashboard home & threat map', href: '/dashboard/',         icon: Globe,    color: tk('violet'), keys: ['G', 'O'] },
+  { label: 'Threat Feeds',   description: 'Live OSINT threat intelligence', href: '/dashboard/feeds/',  icon: Radio,    color: tk('magenta'), keys: ['G', 'F'] },
+  { label: 'Threat Scanner', description: 'Scan URLs, IPs, and hashes',   href: '/dashboard/scanner/', icon: Search,   color: tk('amber'), keys: ['G', 'S'] },
+  { label: 'Asset Surface',  description: 'Manage and scan your assets',  href: '/dashboard/assets/',  icon: Server,   color: tk('teal'), keys: ['G', 'A'] },
+  { label: 'SIEM Dashboard', description: 'Live event log & alert rules',  href: '/dashboard/siem/',    icon: Activity, color: tk('threat'), keys: ['G', 'L'] },
+  { label: 'SOAR Dashboard', description: 'Playbooks & incident queue',   href: '/dashboard/soar/',    icon: Zap,      color: tk('safe'), keys: ['G', 'R'] },
+  { label: 'CTI Intelligence',description:'Threat actors & MITRE heatmap',href: '/dashboard/cti/',     icon: Brain,    color: tk('magenta'), keys: ['G', 'C'] },
   { label: 'Configuration',  description: 'API keys, feeds, integrations', href: '/dashboard/config/',  icon: Settings, color: '#665B7D', keys: ['G', ','] },
 ]
 

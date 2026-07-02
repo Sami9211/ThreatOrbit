@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { tk } from '@/lib/colors'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type StepType = 'check' | 'action' | 'decision' | 'notify' | 'human' | 'sub-playbook'
@@ -55,10 +56,10 @@ const STEP_ICON: Record<StepType, React.ComponentType<any>> = {
 }
 
 const STEP_COLOR: Record<StepType, string> = {
-  check:           '#7A3CFF',   // violet
-  action:          '#FF2E97',   // magenta
-  decision:        '#FFB23E',   // amber
-  notify:          '#34F5C5',   // safe
+  check:           tk('violet'),   // violet
+  action:          tk('magenta'),   // magenta
+  decision:        tk('amber'),   // amber
+  notify:          tk('safe'),   // safe
   human:           '#FFFFFF',   // white
   'sub-playbook':  '#3B82F6',   // blue
 }

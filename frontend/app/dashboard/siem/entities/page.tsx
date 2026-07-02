@@ -5,12 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Users, User, Server, Globe, X, ExternalLink, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchEntities, fetchEntityDetail, type RiskEntity, type EntityDetail } from '@/lib/api'
+import { tk } from '@/lib/colors'
 
 const BAND_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', elevated: '#FFB23E', normal: '#34F5C5',
+  critical: tk('magenta'), high: tk('threat'), elevated: tk('amber'), normal: tk('safe'),
 }
 const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5', info: '#7A3CFF',
+  critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'), info: tk('violet'),
 }
 const TYPE_ICON: Record<string, React.ComponentType<any>> = { user: User, host: Server, ip: Globe }
 
@@ -128,7 +129,7 @@ export default function EntityRiskPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="px-3 py-2.5 rounded-xl bg-surface-2/60 border border-white/8">
-                  <div className="text-lg font-bold font-mono" style={{ color: selected.risk >= 45 ? '#FF2E97' : '#34F5C5' }}>{selected.risk}</div>
+                  <div className="text-lg font-bold font-mono" style={{ color: selected.risk >= 45 ? tk('magenta') : tk('safe') }}>{selected.risk}</div>
                   <div className="text-[10px] text-ink-500">risk score</div>
                 </div>
                 <div className="px-3 py-2.5 rounded-xl bg-surface-2/60 border border-white/8">
@@ -165,7 +166,7 @@ export default function EntityRiskPage() {
                   <p className="text-[11px] text-ink-300 mt-1.5">
                     Today <b className="font-mono text-white">{selected.baseline.current}</b> vs norm{' '}
                     <span className="font-mono">{selected.baseline.mean}±{selected.baseline.stdDev}</span>/day ·
-                    z-score <b className="font-mono" style={{ color: selected.baseline.deviating ? '#FF2E97' : '#34F5C5' }}>{selected.baseline.zScore}</b>
+                    z-score <b className="font-mono" style={{ color: selected.baseline.deviating ? tk('magenta') : tk('safe') }}>{selected.baseline.zScore}</b>
                   </p>
                 </div>
               )}

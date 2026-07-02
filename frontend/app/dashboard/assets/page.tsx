@@ -14,6 +14,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import AttackSurfacePanel from '@/components/dashboard/AttackSurfacePanel'
 import { fetchAssets, fetchAsset, createAsset, deleteAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
@@ -41,24 +42,24 @@ type Asset = {
 
 /* ── Meta ───────────────────────────────────────────────────────── */
 const TYPE_META: Record<AssetType, { icon: React.ComponentType<any>; label: string; color: string }> = {
-  domain:   { icon: Globe,      label: 'Domain',     color: '#7A3CFF' },
-  ip:       { icon: Wifi,       label: 'IP / Host',  color: '#2DD4BF' },
-  server:   { icon: Server,     label: 'Server',     color: '#FF2E97' },
-  cloud:    { icon: Cloud,      label: 'Cloud',      color: '#FFB23E' },
-  database: { icon: Database,   label: 'Database',   color: '#FF4D6D' },
-  endpoint: { icon: Smartphone, label: 'Endpoint',   color: '#34F5C5' },
+  domain:   { icon: Globe,      label: 'Domain',     color: tk('violet') },
+  ip:       { icon: Wifi,       label: 'IP / Host',  color: tk('teal') },
+  server:   { icon: Server,     label: 'Server',     color: tk('magenta') },
+  cloud:    { icon: Cloud,      label: 'Cloud',      color: tk('amber') },
+  database: { icon: Database,   label: 'Database',   color: tk('threat') },
+  endpoint: { icon: Smartphone, label: 'Endpoint',   color: tk('safe') },
 }
 
 const STATUS_META: Record<ScanStatus, { label: string; color: string; bg: string }> = {
-  clean:     { label: 'Clean',     color: '#34F5C5', bg: 'bg-safe/10'    },
-  scanning:  { label: 'Scanning',  color: '#7A3CFF', bg: 'bg-violet/10'  },
-  'at-risk': { label: 'At Risk',   color: '#FFB23E', bg: 'bg-amber/10'   },
-  critical:  { label: 'Critical',  color: '#FF2E97', bg: 'bg-magenta/10' },
+  clean:     { label: 'Clean',     color: tk('safe'), bg: 'bg-safe/10'    },
+  scanning:  { label: 'Scanning',  color: tk('violet'), bg: 'bg-violet/10'  },
+  'at-risk': { label: 'At Risk',   color: tk('amber'), bg: 'bg-amber/10'   },
+  critical:  { label: 'Critical',  color: tk('magenta'), bg: 'bg-magenta/10' },
   unscanned: { label: 'Unscanned', color: '#665B7D', bg: 'bg-white/5'    },
 }
 
 const CRIT_COLOR: Record<Criticality, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5',
+  critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'),
 }
 
 /* ── Seed data ──────────────────────────────────────────────────── */
@@ -148,10 +149,10 @@ function RiskRing({ score, size = 52 }: { score: number; size?: number }) {
 
 function CveBadges({ cves }: { cves: Asset['cves'] }) {
   const items = [
-    { label: 'C', count: cves.critical, color: '#FF2E97' },
-    { label: 'H', count: cves.high,     color: '#FF4D6D' },
-    { label: 'M', count: cves.medium,   color: '#FFB23E' },
-    { label: 'L', count: cves.low,      color: '#34F5C5' },
+    { label: 'C', count: cves.critical, color: tk('magenta') },
+    { label: 'H', count: cves.high,     color: tk('threat') },
+    { label: 'M', count: cves.medium,   color: tk('amber') },
+    { label: 'L', count: cves.low,      color: tk('safe') },
   ]
   return (
     <div className="flex items-center gap-1">
@@ -729,10 +730,10 @@ export default function AssetsPage() {
                   <div className="space-y-2">
                     <p className="text-[10px] text-ink-600 uppercase tracking-wide">CVE Breakdown</p>
                     {[
-                      { label: 'Critical', count: a.cves.critical, color: '#FF2E97' },
-                      { label: 'High',     count: a.cves.high,     color: '#FF4D6D' },
-                      { label: 'Medium',   count: a.cves.medium,   color: '#FFB23E' },
-                      { label: 'Low',      count: a.cves.low,      color: '#34F5C5' },
+                      { label: 'Critical', count: a.cves.critical, color: tk('magenta') },
+                      { label: 'High',     count: a.cves.high,     color: tk('threat') },
+                      { label: 'Medium',   count: a.cves.medium,   color: tk('amber') },
+                      { label: 'Low',      count: a.cves.low,      color: tk('safe') },
                     ].map(({ label, count, color }) => (
                       <div key={label} className="flex items-center gap-2">
                         <span className="text-[10px] text-ink-400 w-14">{label}</span>
@@ -752,12 +753,12 @@ export default function AssetsPage() {
                       </div>
                       {breakdown.components.map(({ axis, value, contribution }) => {
                         const meta: Record<string, { label: string; color: string }> = {
-                          vulnerability: { label: 'Vulnerabilities', color: '#FF2E97' },
-                          exposure:      { label: 'Exposure',        color: '#FFB23E' },
-                          patch:         { label: 'Patch Hygiene',   color: '#7A3CFF' },
-                          alerts:        { label: 'Alert Pressure',  color: '#FF4D6D' },
+                          vulnerability: { label: 'Vulnerabilities', color: tk('magenta') },
+                          exposure:      { label: 'Exposure',        color: tk('amber') },
+                          patch:         { label: 'Patch Hygiene',   color: tk('violet') },
+                          alerts:        { label: 'Alert Pressure',  color: tk('threat') },
                         }
-                        const m = meta[axis] ?? { label: axis, color: '#34F5C5' }
+                        const m = meta[axis] ?? { label: axis, color: tk('safe') }
                         return (
                           <div key={axis} className="flex items-center gap-2">
                             <span className="text-[10px] text-ink-400 w-24 shrink-0">{m.label}</span>
@@ -813,8 +814,8 @@ export default function AssetsPage() {
                         {activity.vulnFindings.slice(0, 3).map((v) => (
                           <div key={v.cve} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5">
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
-                              style={{ color: v.severity === 'critical' ? '#FF2E97' : '#FF4D6D',
-                                       background: v.severity === 'critical' ? '#FF2E9718' : '#FF4D6D18' }}>
+                              style={{ color: v.severity === 'critical' ? tk('magenta') : tk('threat'),
+                                       background: v.severity === 'critical' ? withAlpha(tk('magenta'), 0.09) : withAlpha(tk('threat'), 0.09) }}>
                               {v.cvss.toFixed(1)}
                             </span>
                             <span className="text-[10px] font-mono text-ink-200 truncate">{v.cve}</span>
@@ -825,7 +826,7 @@ export default function AssetsPage() {
                           <a key={al.id} href={`/dashboard/siem?q=${encodeURIComponent(al.srcIp ?? a.name)}`}
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5 hover:border-white/15 transition-colors">
                             <span className="w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{ background: { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5' }[al.severity] ?? '#7A3CFF' }} />
+                              style={{ background: { critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe') }[al.severity] ?? tk('violet') }} />
                             <span className="text-[10px] text-ink-300 truncate flex-1">{al.title}</span>
                             <span className="text-[9px] text-ink-600 capitalize shrink-0">{al.status}</span>
                           </a>
@@ -886,10 +887,10 @@ export default function AssetsPage() {
             <div>
               <p className="text-[10px] text-ink-600 uppercase tracking-wide mb-2">Total CVEs</p>
               {[
-                { label: 'Critical', value: assets.reduce((s,a)=>s+a.cves.critical,0), color: '#FF2E97' },
-                { label: 'High',     value: assets.reduce((s,a)=>s+a.cves.high,0),     color: '#FF4D6D' },
-                { label: 'Medium',   value: assets.reduce((s,a)=>s+a.cves.medium,0),   color: '#FFB23E' },
-                { label: 'Low',      value: assets.reduce((s,a)=>s+a.cves.low,0),      color: '#34F5C5' },
+                { label: 'Critical', value: assets.reduce((s,a)=>s+a.cves.critical,0), color: tk('magenta') },
+                { label: 'High',     value: assets.reduce((s,a)=>s+a.cves.high,0),     color: tk('threat') },
+                { label: 'Medium',   value: assets.reduce((s,a)=>s+a.cves.medium,0),   color: tk('amber') },
+                { label: 'Low',      value: assets.reduce((s,a)=>s+a.cves.low,0),      color: tk('safe') },
               ].map(({ label, value, color }) => (
                 <div key={label} className="flex items-center gap-2 mb-1.5">
                   <span className="text-[10px] text-ink-400 w-12">{label}</span>
@@ -921,9 +922,9 @@ export default function AssetsPage() {
             <div>
               <p className="text-[10px] text-ink-600 uppercase tracking-wide mb-2">Patch Health</p>
               {[
-                { label: 'Up to date (≤7d)',   count: assets.filter(a => (a.patchAge ?? 0) <= 7).length,  color: '#34F5C5' },
-                { label: 'Needs update (8-30d)', count: assets.filter(a => (a.patchAge ?? 0) > 7 && (a.patchAge ?? 0) <= 30).length, color: '#FFB23E' },
-                { label: 'Overdue (>30d)',       count: assets.filter(a => (a.patchAge ?? 0) > 30).length, color: '#FF2E97' },
+                { label: 'Up to date (≤7d)',   count: assets.filter(a => (a.patchAge ?? 0) <= 7).length,  color: tk('safe') },
+                { label: 'Needs update (8-30d)', count: assets.filter(a => (a.patchAge ?? 0) > 7 && (a.patchAge ?? 0) <= 30).length, color: tk('amber') },
+                { label: 'Overdue (>30d)',       count: assets.filter(a => (a.patchAge ?? 0) > 30).length, color: tk('magenta') },
               ].map(({ label, count, color }) => (
                 <div key={label} className="flex items-center gap-2 mb-1.5">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />

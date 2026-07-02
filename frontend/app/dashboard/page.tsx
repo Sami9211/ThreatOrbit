@@ -1,4 +1,5 @@
 'use client'
+import { tk, withAlpha } from '@/lib/colors'
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
@@ -25,10 +26,10 @@ import {
 } from '@/lib/api'
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#FF2E97',
-  high:     '#FF4D6D',
-  medium:   '#FFB23E',
-  low:      '#34F5C5',
+  critical: tk('magenta'),
+  high:     tk('threat'),
+  medium:   tk('amber'),
+  low:      tk('safe'),
 } as const
 
 /* ── KPI Card ────────────────────────────────────────────────────── */
@@ -108,7 +109,7 @@ function TrendingCVEs() {
       <div className="divide-y divide-white/4">
         {cves.map((cve, i) => {
           const tag = cve.kev ? 'KEV' : cve.exploit ? 'Exploit' : (cve.severity || 'CVE')
-          const color = cve.cvss >= 9 ? '#FF2E97' : cve.cvss >= 7 ? '#FF4D6D' : '#FFB23E'
+          const color = cve.cvss >= 9 ? tk('magenta') : cve.cvss >= 7 ? tk('threat') : tk('amber')
           const affected = cve.products?.[0] ?? cve.summary ?? '—'
           return (
           <motion.div
@@ -211,8 +212,8 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
 
 // Aligned with the platform-wide STATUS_COLORS semantics (lib/colors.ts):
 // open work = threat red, active alerts = magenta, resolved work = safe green.
-const STATUS_COLOR: Record<string, string> = { active: '#FF2E97', triaged: '#FFB23E', open: '#FF4D6D', 'in-progress': '#FFB23E', resolved: '#34F5C5', closed: '#34F5C5' }
-const STATUS_BG:    Record<string, string> = { active: '#FF2E9710', triaged: '#FFB23E10', open: '#FF4D6D10', 'in-progress': '#FFB23E10', resolved: '#34F5C510', closed: '#34F5C510' }
+const STATUS_COLOR: Record<string, string> = { active: tk('magenta'), triaged: tk('amber'), open: tk('threat'), 'in-progress': tk('amber'), resolved: tk('safe'), closed: tk('safe') }
+const STATUS_BG:    Record<string, string> = { active: withAlpha(tk('magenta'), 0.06), triaged: withAlpha(tk('amber'), 0.06), open: withAlpha(tk('threat'), 0.06), 'in-progress': withAlpha(tk('amber'), 0.06), resolved: withAlpha(tk('safe'), 0.06), closed: withAlpha(tk('safe'), 0.06) }
 
 function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
   return (
@@ -238,10 +239,10 @@ function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
           <>
             <div className="flex h-1.5 mx-5 mt-3 rounded-full overflow-hidden gap-px">
               {[
-                { pct: Math.round(crit/tot*100), color: '#FF2E97' },
-                { pct: Math.round(high/tot*100), color: '#FF4D6D' },
-                { pct: Math.round(med/tot*100),  color: '#FFB23E' },
-                { pct: Math.max(0, 100 - Math.round(crit/tot*100) - Math.round(high/tot*100) - Math.round(med/tot*100)), color: '#2DD4BF' },
+                { pct: Math.round(crit/tot*100), color: tk('magenta') },
+                { pct: Math.round(high/tot*100), color: tk('threat') },
+                { pct: Math.round(med/tot*100),  color: tk('amber') },
+                { pct: Math.max(0, 100 - Math.round(crit/tot*100) - Math.round(high/tot*100) - Math.round(med/tot*100)), color: tk('teal') },
               ].map(({ pct, color }, i) => (
                 <motion.div key={i} initial={{ width: 0 }} animate={{ width: `${pct}%` }}
                   transition={{ duration: 0.8, delay: i * 0.1, ease: 'easeOut' }}
@@ -335,7 +336,7 @@ function RecentAlerts({ alerts }: { alerts: OverviewAlert[] }) {
   )
 }
 
-const ACTOR_COLORS = ['#FF2E97', '#7A3CFF', '#FFB23E', '#2DD4BF', '#FF4D6D']
+const ACTOR_COLORS = [tk('magenta'), tk('violet'), tk('amber'), tk('teal'), tk('threat')]
 
 function TopActors({ actors }: { actors: TopActor[] }) {
   return (
@@ -405,10 +406,10 @@ function AttackVectors({ vectors }: { vectors: ThreatVector[] }) {
 }
 
 const RISK_AXIS_META: Record<string, { label: string; color: string }> = {
-  vulnerability: { label: 'Vulnerabilities', color: '#FF2E97' },
-  exposure:      { label: 'Exposure',        color: '#FFB23E' },
-  patch:         { label: 'Patch Hygiene',   color: '#7A3CFF' },
-  alerts:        { label: 'Alert Pressure',  color: '#FF4D6D' },
+  vulnerability: { label: 'Vulnerabilities', color: tk('magenta') },
+  exposure:      { label: 'Exposure',        color: tk('amber') },
+  patch:         { label: 'Patch Hygiene',   color: tk('violet') },
+  alerts:        { label: 'Alert Pressure',  color: tk('threat') },
 }
 
 function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
@@ -425,7 +426,7 @@ function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
       </div>
       {/* Band summary */}
       <div className="flex items-center gap-2 mb-4">
-        {([['critical', '#FF2E97'], ['at-risk', '#FFB23E'], ['clean', '#34F5C5']] as const).map(([band, color]) => (
+        {([['critical', tk('magenta')], ['at-risk', tk('amber')], ['clean', tk('safe')]] as const).map(([band, color]) => (
           <div key={band} className="flex-1 rounded-lg border border-white/6 bg-white/[0.02] px-2 py-1.5 text-center">
             <p className="text-base font-bold" style={{ color }}>{dist.bands[band] ?? 0}</p>
             <p className="text-[9px] text-ink-600 capitalize">{band}</p>
@@ -435,7 +436,7 @@ function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
       {/* Mean contribution per axis */}
       <div className="space-y-3">
         {dist.axisContribution.map((a) => {
-          const m = RISK_AXIS_META[a.axis] ?? { label: a.axis, color: '#34F5C5' }
+          const m = RISK_AXIS_META[a.axis] ?? { label: a.axis, color: tk('safe') }
           return (
             <div key={a.axis}>
               <div className="flex items-center justify-between mb-1">
@@ -483,7 +484,7 @@ function EventTimeline({ hourly }: { hourly: number[] }) {
             transition={{ delay: i * 0.02, duration: 0.6, ease: 'easeOut' }}
             className="flex-1 rounded-sm min-w-0"
             style={{
-              background: v > 50 ? '#FF2E97' : v > 35 ? '#FFB23E' : 'rgba(122,60,255,0.5)',
+              background: v > 50 ? tk('magenta') : v > 35 ? tk('amber') : withAlpha(tk('violet'), 0.5),
             }}
             title={`Hour ${i}: ${v} events`}
           />
@@ -522,10 +523,10 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
 
   function heatColor(v: number) {
     const t = v / maxV
-    if (t > 0.8) return '#FF2E97'
-    if (t > 0.6) return '#FF4D6D'
-    if (t > 0.4) return '#FFB23E'
-    if (t > 0.2) return '#7A3CFF'
+    if (t > 0.8) return tk('magenta')
+    if (t > 0.6) return tk('threat')
+    if (t > 0.4) return tk('amber')
+    if (t > 0.2) return tk('violet')
     return 'rgba(255,255,255,0.05)'
   }
 
@@ -534,7 +535,7 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-white">{live ? 'MITRE Tactic Heatmap (7d)' : 'Threat Heatmap (7d)'}</h3>
         <div className="flex items-center gap-1.5 text-[9px] text-ink-600">
-          {[['Low','#7A3CFF'],['Med','#FFB23E'],['High','#FF4D6D'],['Crit','#FF2E97']].map(([l,c]) => (
+          {[['Low',tk('violet')],['Med',tk('amber')],['High',tk('threat')],['Crit',tk('magenta')]].map(([l,c]) => (
             <span key={l} className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-sm" style={{ background: c }} />{l}
             </span>
@@ -938,10 +939,10 @@ export default function DashboardOverview() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Active Threats" value={kpis.threats.toLocaleString()} sub="across all sources" icon={AlertTriangle} color="#FF2E97" />
-        <KPICard label="IOCs Tracked"   value={kpis.iocs.toLocaleString()}    sub="in threat database" icon={Eye}           color="#7A3CFF" />
-        <KPICard label="Sources Online" value={`${kpis.sources}`}             sub="active feeds"       icon={Globe}         color="#2DD4BF" />
-        <KPICard label="Avg Risk Score" value={fmtScore}                      sub="weighted mean"      icon={Shield}        color="#FFB23E" />
+        <KPICard label="Active Threats" value={kpis.threats.toLocaleString()} sub="across all sources" icon={AlertTriangle} color={tk('magenta')} />
+        <KPICard label="IOCs Tracked"   value={kpis.iocs.toLocaleString()}    sub="in threat database" icon={Eye}           color={tk('violet')} />
+        <KPICard label="Sources Online" value={`${kpis.sources}`}             sub="active feeds"       icon={Globe}         color={tk('teal')} />
+        <KPICard label="Avg Risk Score" value={fmtScore}                      sub="weighted mean"      icon={Shield}        color={tk('amber')} />
       </div>
 
       {/* SOC operations metrics (Power User only) */}
@@ -1021,8 +1022,8 @@ export default function DashboardOverview() {
                 />
                 <defs>
                   <linearGradient id="postureGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#7A3CFF" />
-                    <stop offset="100%" stopColor="#34F5C5" />
+                    <stop offset="0%" stopColor={tk('violet')} />
+                    <stop offset="100%" stopColor={tk('safe')} />
                   </linearGradient>
                 </defs>
               </svg>
@@ -1065,11 +1066,11 @@ export default function DashboardOverview() {
           <h3 className="text-sm font-semibold text-white mb-4">Quick Actions</h3>
           <div className="space-y-2">
             {[
-              { label: 'Run Threat Scan',     href: '/dashboard/scanner', icon: Activity,  color: '#FF2E97' },
-              { label: 'View Live Feeds',     href: '/dashboard/feeds',   icon: Zap,        color: '#7A3CFF' },
-              { label: 'Open SIEM',           href: '/dashboard/siem',    icon: Eye,        color: '#FFB23E' },
-              { label: 'CTI Intelligence',    href: '/dashboard/cti',     icon: Shield,     color: '#2DD4BF' },
-              { label: 'SOAR Playbooks',      href: '/dashboard/soar',    icon: ArrowUpRight,color: '#FF4D6D' },
+              { label: 'Run Threat Scan',     href: '/dashboard/scanner', icon: Activity,  color: tk('magenta') },
+              { label: 'View Live Feeds',     href: '/dashboard/feeds',   icon: Zap,        color: tk('violet') },
+              { label: 'Open SIEM',           href: '/dashboard/siem',    icon: Eye,        color: tk('amber') },
+              { label: 'CTI Intelligence',    href: '/dashboard/cti',     icon: Shield,     color: tk('teal') },
+              { label: 'SOAR Playbooks',      href: '/dashboard/soar',    icon: ArrowUpRight,color: tk('threat') },
             ].map(({ label, href, icon: Icon, color }) => (
               <Link
                 key={href}
@@ -1090,10 +1091,10 @@ export default function DashboardOverview() {
             <h4 className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold mb-3">Geopolitical Risk</h4>
             <div className="space-y-2">
               {[
-                { region: 'Russia / Ukraine', level: 'Critical', color: '#FF2E97', pct: 95 },
-                { region: 'China / Taiwan', level: 'High', color: '#FF4D6D', pct: 78 },
-                { region: 'Iran / Israel', level: 'High', color: '#FF4D6D', pct: 72 },
-                { region: 'DPRK / Global', level: 'Elevated', color: '#FFB23E', pct: 65 },
+                { region: 'Russia / Ukraine', level: 'Critical', color: tk('magenta'), pct: 95 },
+                { region: 'China / Taiwan', level: 'High', color: tk('threat'), pct: 78 },
+                { region: 'Iran / Israel', level: 'High', color: tk('threat'), pct: 72 },
+                { region: 'DPRK / Global', level: 'Elevated', color: tk('amber'), pct: 65 },
               ].map(({ region, level, color, pct }) => (
                 <div key={region} className="flex items-center gap-2">
                   <div className="flex-1 min-w-0">

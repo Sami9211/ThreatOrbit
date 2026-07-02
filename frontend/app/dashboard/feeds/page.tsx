@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
+import { tk } from '@/lib/colors'
 
 /* Classify a raw IOC string for the CTI store; returns null for values that
  * are not importable indicators (filenames, command lines, …). */
@@ -204,18 +205,18 @@ const LIVE_UNCONFIRMED: Partial<ThreatEntry>[] = [
 
 const SEV_COLOR: Record<Severity, string> = {
   critical: 'bg-magenta/15 text-magenta border-magenta/20',
-  high:     'bg-threat/15 text-[#FF4D6D] border-threat/20',
+  high:     `bg-threat/15 text-[${tk('threat')}] border-threat/20`,
   medium:   'bg-amber/15 text-amber border-amber/20',
   low:      'bg-safe/15 text-safe border-safe/20',
   info:     'bg-violet/15 text-violet border-violet/20',
 }
 
 const SEV_DOT: Record<Severity, string> = {
-  critical: '#FF2E97',
-  high:     '#FF4D6D',
-  medium:   '#FFB23E',
-  low:      '#34F5C5',
-  info:     '#7A3CFF',
+  critical: tk('magenta'),
+  high:     tk('threat'),
+  medium:   tk('amber'),
+  low:      tk('safe'),
+  info:     tk('violet'),
 }
 
 let liveCounter = 0

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk } from '@/lib/colors'
 
 export interface CreateField {
   key: string
@@ -21,7 +22,7 @@ export interface CreateField {
  * New Hunt flows. Renders the given fields, validates required ones, and
  * submits the collected values; the caller does the API call.
  */
-export default function CreateModal({ title, icon: Icon, accent = '#FF2E97', fields, submitLabel, onSubmit, onClose }: {
+export default function CreateModal({ title, icon: Icon, accent = tk('magenta'), fields, submitLabel, onSubmit, onClose }: {
   title: string
   icon: React.ComponentType<any>
   accent?: string

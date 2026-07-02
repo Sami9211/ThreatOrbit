@@ -9,6 +9,7 @@ import {
   Maximize2, Route, MousePointer2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type Zone = 'dmz' | 'internal' | 'cloud' | 'ot'
@@ -36,16 +37,16 @@ interface Link {
 
 /* ── Meta ───────────────────────────────────────────────────────── */
 const ZONE_META: Record<Zone, { label: string; color: string }> = {
-  dmz:      { label: 'DMZ',      color: '#FFB23E' },
-  internal: { label: 'Internal', color: '#7A3CFF' },
-  cloud:    { label: 'Cloud',    color: '#2DD4BF' },
-  ot:       { label: 'OT / ICS', color: '#FF2E97' },
+  dmz:      { label: 'DMZ',      color: tk('amber') },
+  internal: { label: 'Internal', color: tk('violet') },
+  cloud:    { label: 'Cloud',    color: tk('teal') },
+  ot:       { label: 'OT / ICS', color: tk('magenta') },
 }
 
 const RISK_META: Record<Risk, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: '#FF4D6D' },
-  warning:  { label: 'Warning',  color: '#FFB23E' },
-  healthy:  { label: 'Healthy',  color: '#34F5C5' },
+  critical: { label: 'Critical', color: tk('threat') },
+  warning:  { label: 'Warning',  color: tk('amber') },
+  healthy:  { label: 'Healthy',  color: tk('safe') },
 }
 
 const TYPE_ICON: Record<NodeType, React.ComponentType<any>> = {
@@ -466,15 +467,15 @@ export default function NetworkMapPage() {
               <stop offset="100%" stopColor="#0A0612" stopOpacity="0" />
             </radialGradient>
             <linearGradient id="nm-link" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#7A3CFF" stopOpacity="0.55" />
-              <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0.4" />
+              <stop offset="0%" stopColor={tk('violet')} stopOpacity="0.55" />
+              <stop offset="100%" stopColor={tk('teal')} stopOpacity="0.4" />
             </linearGradient>
             <filter id="nm-glow" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="3.5" result="b" />
               <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
             <pattern id="nm-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(122,60,255,0.07)" strokeWidth="1" />
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke={withAlpha(tk('violet'), 0.07)} strokeWidth="1" />
             </pattern>
           </defs>
 
@@ -514,13 +515,13 @@ export default function NetworkMapPage() {
               return (
                 <g key={pid}>
                   <path id={pid} d={d} fill="none"
-                    stroke={onAttackPath ? '#FF2E97' : active ? '#B98AFF' : 'url(#nm-link)'}
+                    stroke={onAttackPath ? tk('magenta') : active ? '#B98AFF' : 'url(#nm-link)'}
                     strokeWidth={onAttackPath ? 2.4 : active ? 1.8 : 1.1}
                     strokeOpacity={dim ? 0.07 : onAttackPath ? 0.95 : active ? 0.85 : 0.4} />
                   {/* Traffic particle */}
                   {!dim && (
                     <circle r={onAttackPath ? 3 : 1.8}
-                      fill={onAttackPath ? '#FF2E97' : '#B98AFF'}
+                      fill={onAttackPath ? tk('magenta') : '#B98AFF'}
                       opacity={onAttackPath ? 1 : 0.75}
                       filter={onAttackPath ? 'url(#nm-glow)' : undefined}>
                       <animateMotion dur={`${2.4 + (i % 5) * 0.45}s`} repeatCount="indefinite"
@@ -539,7 +540,7 @@ export default function NetworkMapPage() {
             {visibleNodes.map((n) => {
               const Icon = TYPE_ICON[n.type]
               const riskColor = RISK_META[n.risk].color
-              const zoneColor = n.id === 'inet' ? '#FF2E97' : ZONE_META[n.zone].color
+              const zoneColor = n.id === 'inet' ? tk('magenta') : ZONE_META[n.zone].color
               const isSel = selectedId === n.id
               const isFocus = focusId === n.id
               const inHood = !focusId || neighborhood?.has(n.id)
@@ -560,7 +561,7 @@ export default function NetworkMapPage() {
 
                   {/* Critical pulse / selection ring */}
                   {(isSel || isMatch || (n.risk === 'critical' && !dim)) && (
-                    <circle r={r + 11} fill="none" stroke={isMatch ? '#34F5C5' : riskColor} strokeWidth={1.2} opacity={0.5}>
+                    <circle r={r + 11} fill="none" stroke={isMatch ? tk('safe') : riskColor} strokeWidth={1.2} opacity={0.5}>
                       <animate attributeName="r" values={`${r + 7};${r + 15};${r + 7}`} dur="2.2s" repeatCount="indefinite" />
                       <animate attributeName="opacity" values="0.5;0;0.5" dur="2.2s" repeatCount="indefinite" />
                     </circle>
@@ -579,7 +580,7 @@ export default function NetworkMapPage() {
                     filter={n.risk === 'critical' && !dim ? 'url(#nm-glow)' : undefined} />
                   <circle r={r} fill={riskColor} fillOpacity={0.1} />
                   {n.live && (
-                    <circle cx={r - 3} cy={-r + 3} r={3.4} fill="#34F5C5" stroke="#0A0612" strokeWidth={1.4}>
+                    <circle cx={r - 3} cy={-r + 3} r={3.4} fill={tk('safe')} stroke="#0A0612" strokeWidth={1.4}>
                       <animate attributeName="opacity" values="1;0.4;1" dur="1.8s" repeatCount="indefinite" />
                     </circle>
                   )}

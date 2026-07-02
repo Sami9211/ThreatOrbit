@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { tk } from '@/lib/colors'
 
 /* ─────────────────────────────────────────────────────────────────────
    Entity relationship / investigation graph.
@@ -66,8 +67,8 @@ export default function EntityGraph({ data }: { data: GraphData }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ maxHeight: 460 }}>
         <defs>
           <radialGradient id="eg-center" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#FF2E97" />
-            <stop offset="100%" stopColor="#7A3CFF" />
+            <stop offset="0%" stopColor={tk('magenta')} />
+            <stop offset="100%" stopColor={tk('violet')} />
           </radialGradient>
           <filter id="eg-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2.5" result="b" />

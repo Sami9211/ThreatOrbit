@@ -15,6 +15,7 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
 import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, fetchCtiSummary, type SavedHunt as ApiSavedHunt, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
+import { tk } from '@/lib/colors'
 
 /* ── Threat Actors ───────────────────────────────────────────────── */
 type Actor = {
@@ -139,19 +140,19 @@ const HEAT_LEVELS: Record<string, number> = {
 }
 
 function heatColor(level: number) {
-  if (level >= 80) return '#FF2E97'
-  if (level >= 60) return '#FF4D6D'
-  if (level >= 40) return '#FFB23E'
-  if (level > 0)  return '#7A3CFF'
+  if (level >= 80) return tk('magenta')
+  if (level >= 60) return tk('threat')
+  if (level >= 40) return tk('amber')
+  if (level > 0)  return tk('violet')
   return 'transparent'
 }
 
 /* ── IOC counts ──────────────────────────────────────────────────── */
 const IOC_TYPES = [
-  { type: 'IP Addresses',   count: 4821,  icon: Globe,  color: '#FF2E97' },
-  { type: 'Domains',        count: 3247,  icon: Network, color: '#7A3CFF' },
-  { type: 'File Hashes',    count: 8914,  icon: Hash,   color: '#FFB23E' },
-  { type: 'URLs',           count: 2103,  icon: Target,  color: '#2DD4BF' },
+  { type: 'IP Addresses',   count: 4821,  icon: Globe,  color: tk('magenta') },
+  { type: 'Domains',        count: 3247,  icon: Network, color: tk('violet') },
+  { type: 'File Hashes',    count: 8914,  icon: Hash,   color: tk('amber') },
+  { type: 'URLs',           count: 2103,  icon: Target,  color: tk('teal') },
 ]
 
 /* ── Actor card ──────────────────────────────────────────────────── */
@@ -301,15 +302,15 @@ function buildGraph(actor: Actor): GraphData {
     center: { label: actor.name, sub: `${actor.flag} ${actor.origin} · ${actor.type}` },
     groups: [
       {
-        kind: 'Campaigns', color: '#FF2E97',
+        kind: 'Campaigns', color: tk('magenta'),
         nodes: campaigns.map((c, i) => ({ id: `c-${actor.id}-${i}`, label: c })),
       },
       {
-        kind: 'TTPs', color: '#7A3CFF',
+        kind: 'TTPs', color: tk('violet'),
         nodes: actor.ttps.map((t) => ({ id: `t-${actor.id}-${t}`, label: t, meta: 'MITRE' })),
       },
       {
-        kind: 'IOCs', color: '#FFB23E',
+        kind: 'IOCs', color: tk('amber'),
         nodes: [
           { id: `i-${actor.id}-hash`, label: 'File Hashes', meta: hashK.toLocaleString() },
           { id: `i-${actor.id}-dom`,  label: 'Domains',     meta: domK.toLocaleString() },
@@ -317,7 +318,7 @@ function buildGraph(actor: Actor): GraphData {
         ],
       },
       {
-        kind: 'Target Sectors', color: '#2DD4BF',
+        kind: 'Target Sectors', color: tk('teal'),
         nodes: actor.sectors.map((s, i) => ({ id: `s-${actor.id}-${i}`, label: s })),
       },
     ],
@@ -333,7 +334,7 @@ const HUNTS = [
   { id: 'h4', name: 'C2 via DNS tunneling',        hypothesis: 'DNS-based C2 beaconing masked in legitimate DNS traffic',   status: 'paused' as HuntStatus, artifacts: 1, analyst: 'Charlie', progress: 28, created: '6d ago' },
 ]
 
-const HUNT_COLOR: Record<HuntStatus, string> = { active: '#34F5C5', completed: '#7A3CFF', paused: '#FFB23E' }
+const HUNT_COLOR: Record<HuntStatus, string> = { active: tk('safe'), completed: tk('violet'), paused: tk('amber') }
 const HUNT_ICON: Record<HuntStatus, React.ComponentType<any>> = { active: Play, completed: CheckCircle, paused: Pause }
 
 type PanelHunt = typeof HUNTS[number]
@@ -388,7 +389,7 @@ function ThreatHuntPanel() {
           <CreateModal
             title="New Threat Hunt"
             icon={Crosshair}
-            accent="#7A3CFF"
+            accent={tk('violet')}
             submitLabel="Create Hunt"
             onClose={() => setShowNew(false)}
             onSubmit={handleCreate}
@@ -504,7 +505,7 @@ function SectorTargeting({ actors }: { actors: Actor[] }) {
                 animate={{ width: `${score}%` }}
                 transition={{ delay: i * 0.07, duration: 0.8, ease: 'easeOut' }}
                 className="h-full rounded-full"
-                style={{ background: score >= 80 ? '#FF2E97' : score >= 65 ? '#FF4D6D' : '#FFB23E' }}
+                style={{ background: score >= 80 ? tk('magenta') : score >= 65 ? tk('threat') : tk('amber') }}
               />
             </div>
           </div>
@@ -524,7 +525,7 @@ function NormalCTI() {
     fetchActors().then((data) => setActors(data.map(apiActorToPage))).catch(() => {})
   }, [])
 
-  const SEV_COLOR: Record<string, string> = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#7A3CFF' }
+  const SEV_COLOR: Record<string, string> = { critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('violet') }
   // Severity proxy from the actor's (real) sophistication rating.
   const sevFor = (s: string) => /expert|advanced/i.test(s) ? 'critical' : /high/i.test(s) ? 'high' : 'medium'
   // Active threat briefs derived from the live tracked actors - real description,
@@ -532,10 +533,10 @@ function NormalCTI() {
   const briefs = actors.filter((a) => a.active).sort((a, b) => b.iocCount - a.iocCount).slice(0, 4)
 
   const SUMMARY = [
-    { label: 'Tracked Actors', value: (sum?.trackedActors ?? 0).toLocaleString(), icon: Target, color: '#FF2E97' },
-    { label: 'Total IOCs',     value: (sum?.totalIocs ?? 0).toLocaleString(),     icon: Hash,   color: '#7A3CFF' },
-    { label: 'Campaigns',      value: (sum?.activeCampaigns ?? 0).toLocaleString(), icon: Shield, color: '#FFB23E' },
-    { label: 'Active IOCs',    value: (sum?.activeIocs ?? 0).toLocaleString(),    icon: Globe,  color: '#2DD4BF' },
+    { label: 'Tracked Actors', value: (sum?.trackedActors ?? 0).toLocaleString(), icon: Target, color: tk('magenta') },
+    { label: 'Total IOCs',     value: (sum?.totalIocs ?? 0).toLocaleString(),     icon: Hash,   color: tk('violet') },
+    { label: 'Campaigns',      value: (sum?.activeCampaigns ?? 0).toLocaleString(), icon: Shield, color: tk('amber') },
+    { label: 'Active IOCs',    value: (sum?.activeIocs ?? 0).toLocaleString(),    icon: Globe,  color: tk('teal') },
   ]
 
   return (
@@ -699,15 +700,15 @@ export default function CTIPage() {
       .then((rows) => {
         if (rows.length === 0) return
         const display: Record<string, { label: string; icon: typeof Globe; color: string }> = {
-          ip:     { label: 'IP Addresses', icon: Globe,   color: '#FF2E97' },
-          domain: { label: 'Domains',      icon: Network, color: '#7A3CFF' },
-          hash:   { label: 'File Hashes',  icon: Hash,    color: '#FFB23E' },
-          url:    { label: 'URLs',         icon: Target,  color: '#2DD4BF' },
-          email:  { label: 'Emails',       icon: Target,  color: '#34F5C5' },
-          cve:    { label: 'CVEs',         icon: Target,  color: '#FF4D6D' },
+          ip:     { label: 'IP Addresses', icon: Globe,   color: tk('magenta') },
+          domain: { label: 'Domains',      icon: Network, color: tk('violet') },
+          hash:   { label: 'File Hashes',  icon: Hash,    color: tk('amber') },
+          url:    { label: 'URLs',         icon: Target,  color: tk('teal') },
+          email:  { label: 'Emails',       icon: Target,  color: tk('safe') },
+          cve:    { label: 'CVEs',         icon: Target,  color: tk('threat') },
         }
         setIocTypes(rows.slice(0, 4).map((r) => {
-          const d = display[r.label] ?? { label: r.label, icon: Hash, color: '#7A3CFF' }
+          const d = display[r.label] ?? { label: r.label, icon: Hash, color: tk('violet') }
           return { type: d.label, count: r.count, icon: d.icon, color: d.color }
         }))
       })
@@ -804,10 +805,10 @@ export default function CTIPage() {
               <h3 className="text-sm font-semibold text-white">MITRE ATT&CK Heatmap</h3>
               <div className="flex items-center gap-4 text-[9px] text-ink-500">
                 {[
-                  { label: '> 80%', color: '#FF2E97' },
-                  { label: '60-80%', color: '#FF4D6D' },
-                  { label: '40-60%', color: '#FFB23E' },
-                  { label: '< 40%', color: '#7A3CFF' },
+                  { label: '> 80%', color: tk('magenta') },
+                  { label: '60-80%', color: tk('threat') },
+                  { label: '40-60%', color: tk('amber') },
+                  { label: '< 40%', color: tk('violet') },
                 ].map(({ label, color }) => (
                   <div key={label} className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded" style={{ background: color }} />
@@ -864,7 +865,7 @@ export default function CTIPage() {
                 <div key={name} className="flex items-start gap-4 pl-7 relative">
                   <div className="absolute left-2 top-1.5 w-2 h-2 rounded-full border border-white/20"
                     style={{
-                      background: severity === 'critical' ? '#FF2E97' : severity === 'high' ? '#FF4D6D' : '#FFB23E',
+                      background: severity === 'critical' ? tk('magenta') : severity === 'high' ? tk('threat') : tk('amber'),
                     }}
                   />
                   <div className="flex-1 min-w-0">

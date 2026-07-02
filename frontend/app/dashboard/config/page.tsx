@@ -32,6 +32,7 @@ import {
   useDashboardPrefs, ACCENT_PRESETS,
 } from '@/lib/useDashboardTheme'
 import { useCursorEffect } from '@/lib/useCursorEffect'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* ── Two-factor authentication (real TOTP, per-user) ─────────────── */
 function MyMfaPanel() {
@@ -541,7 +542,7 @@ function ExperienceModeCard() {
       id: 'normal' as const,
       label: 'Normal',
       icon: User,
-      color: '#2DD4BF',
+      color: tk('teal'),
       tagline: 'Simplified, analyst-first view',
       features: [
         'Top-5 most critical alerts, pre-triaged',
@@ -555,7 +556,7 @@ function ExperienceModeCard() {
       id: 'power' as const,
       label: 'Power User',
       icon: Zap,
-      color: '#FF2E97',
+      color: tk('magenta'),
       tagline: 'Full access - dense data, raw controls',
       features: [
         'Full alert queue with all 15+ fields',
@@ -570,7 +571,7 @@ function ExperienceModeCard() {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       className="rounded-xl border border-violet/25 overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, rgba(122,60,255,0.08), rgba(255,46,151,0.05))' }}>
+      style={{ background: `linear-gradient(135deg, ${withAlpha(tk('violet'), 0.08)}, ${withAlpha(tk('magenta'), 0.05)})` }}>
       <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4 border-b border-white/8">
         <div className="p-2 rounded-lg bg-violet/15 shrink-0">
           <BarChart2 className="w-4 h-4 text-violet" />
@@ -984,13 +985,13 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
 /* ── Page ────────────────────────────────────────────────────────── */
 /* ── Audit trail ─────────────────────────────────────────────────── */
 const ACTION_COLOR: Record<string, string> = {
-  create: '#34F5C5', update: '#FFB23E', delete: '#FF4D6D',
-  revoke: '#FF4D6D', toggle: '#7A3CFF', run: '#FF2E97',
+  create: tk('safe'), update: tk('amber'), delete: tk('threat'),
+  revoke: tk('threat'), toggle: tk('violet'), run: tk('magenta'),
 }
 
 function actionTint(action: string): string {
   const verb = action.split('.')[1] ?? action
-  return ACTION_COLOR[verb] ?? '#7A3CFF'
+  return ACTION_COLOR[verb] ?? tk('violet')
 }
 
 function relativeTime(iso: string): string {
@@ -1036,7 +1037,7 @@ function ChangePassword() {
   }
 
   return (
-    <Section title="Change Password" icon={Key} color="#FFB23E">
+    <Section title="Change Password" icon={Key} color={tk('amber')}>
       <form onSubmit={submit} className="space-y-4 max-w-sm">
         <Field label="Current password" type="password" value={current} onChange={setCurrent} />
         <Field label="New password" type="password" value={next} onChange={setNext}
@@ -1155,7 +1156,7 @@ function AuditTrail() {
   }, [])
 
   return (
-    <Section title="Audit Trail" icon={ScrollText} color="#7A3CFF">
+    <Section title="Audit Trail" icon={ScrollText} color={tk('violet')}>
       <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
         <p className="text-[11px] text-ink-500">
           Every state change - alerts, cases, rules, users, keys, feeds - captured with actor and target.
@@ -1208,7 +1209,7 @@ function WorkspaceCard() {
   const [org, setOrg] = useState<Org | null>(null)
   useEffect(() => { fetchCurrentOrg().then(setOrg).catch(() => {}) }, [])
   return (
-    <Section title="Workspace" icon={Globe} color="#34F5C5">
+    <Section title="Workspace" icon={Globe} color={tk('safe')}>
       {!org ? (
         <p className="text-xs text-ink-600">Loading workspace…</p>
       ) : (
@@ -1239,7 +1240,7 @@ function StorageCard() {
   useEffect(() => { fetchDatabaseInfo().then(setDb).catch(() => {}) }, [])
   if (!db) return null
   return (
-    <Section title="Storage" icon={Database} color="#34F5C5">
+    <Section title="Storage" icon={Database} color={tk('safe')}>
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[180px]">
           <p className="text-sm font-semibold text-white capitalize">{db.backend}
@@ -1275,7 +1276,7 @@ function LicenseCard() {
 
   const bar = (used: number, limit: number | null) => limit === null ? 0 : Math.min(100, (used / limit) * 100)
   return (
-    <Section title="License" icon={Key} color="#FFB23E">
+    <Section title="License" icon={Key} color={tk('amber')}>
       {!lic ? <p className="text-xs text-ink-600">Loading license…</p> : (
         <div className="space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
@@ -1353,7 +1354,7 @@ function BillingCard() {
   // Honest degrade: billing not enabled on this deployment.
   if (!bs.configured) {
     return (
-      <Section title="Billing" icon={CreditCard} color="#7A3CFF">
+      <Section title="Billing" icon={CreditCard} color={tk('violet')}>
         <p className="text-xs text-ink-400 leading-relaxed">
           Self-serve billing (Stripe) is not configured on this deployment. Activate a
           <b className="text-ink-200"> license key</b> above to change plan, or contact sales for
@@ -1365,7 +1366,7 @@ function BillingCard() {
 
   const others = bs.plans.filter((p) => p.plan !== bs.currentPlan)
   return (
-    <Section title="Billing" icon={CreditCard} color="#7A3CFF">
+    <Section title="Billing" icon={CreditCard} color={tk('violet')}>
       <div className="flex items-center gap-3 flex-wrap mb-4">
         <div className="flex-1 min-w-[160px]">
           <p className="text-sm font-semibold text-white capitalize">
@@ -1442,7 +1443,7 @@ function LiveEngineCard() {
 
   if (status && status.mode !== 'live') {
     return (
-      <Section title="Live Processing Engine" icon={Zap} color="#FF2E97">
+      <Section title="Live Processing Engine" icon={Zap} color={tk('magenta')}>
         <p className="text-xs text-ink-400">
           Running in <b className="text-ink-200">demo mode</b> - showing seeded sample data. To run the
           live engine (continuous telemetry → real SIEM alerts, CTI indicators, SOAR cases & dark-web
@@ -1453,7 +1454,7 @@ function LiveEngineCard() {
   }
 
   return (
-    <Section title="Live Processing Engine" icon={Zap} color="#FF2E97">
+    <Section title="Live Processing Engine" icon={Zap} color={tk('magenta')}>
       <div className="flex items-center gap-3 mb-4">
         <span className={cn('flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border font-semibold',
           status?.running ? 'border-safe/25 bg-safe/10 text-safe' : 'border-amber/25 bg-amber/10 text-amber')}>
@@ -1507,7 +1508,7 @@ function BackgroundJobs() {
   }, [])
 
   return (
-    <Section title="Background Jobs" icon={Zap} color="#FFB23E">
+    <Section title="Background Jobs" icon={Zap} color={tk('amber')}>
       <p className="text-[11px] text-ink-500 mb-4">
         Heavy operations - Threat-API IOC syncs, log analyses, fleet risk recomputes -
         are recorded here with their outcome.
@@ -1614,7 +1615,7 @@ export default function ConfigPage() {
               {/* ── Dashboard Theme ─────────────────────────────────── */}
               <ThemeCard saveTick={saveTick} />
 
-              <Section title="Platform Settings" icon={Settings} color="#7A3CFF">
+              <Section title="Platform Settings" icon={Settings} color={tk('violet')}>
                 <div className="space-y-4">
                   <Field label="Platform Name" value={settings.platform_name ?? ''} onChange={setSetting('platform_name')} />
                   <Field label="Organization" value={settings.organization ?? ''} onChange={setSetting('organization')} />
@@ -1627,7 +1628,7 @@ export default function ConfigPage() {
                 </div>
               </Section>
 
-              <Section title="Display Preferences" icon={Eye} color="#2DD4BF">
+              <Section title="Display Preferences" icon={Eye} color={tk('teal')}>
                 <p className="text-[11px] text-ink-500 mb-3">
                   Theme, accent colour, UI scale, motion and density now live in <b className="text-ink-300">Appearance</b> above.
                 </p>
@@ -1639,20 +1640,20 @@ export default function ConfigPage() {
           )}
 
           {tab === 'api' && (
-            <Section title="API Keys" icon={Key} color="#FFB23E">
+            <Section title="API Keys" icon={Key} color={tk('amber')}>
               <LiveApiKeys />
             </Section>
           )}
 
           {tab === 'sources' && (
-            <Section title="Threat Feed Sources" icon={Globe} color="#FF2E97">
+            <Section title="Threat Feed Sources" icon={Globe} color={tk('magenta')}>
               <div className="mb-4 text-xs text-ink-400">Enable or disable threat intelligence feeds. Changes persist immediately and take effect on the next scheduled sync.</div>
               <LiveFeedSources />
             </Section>
           )}
 
           {tab === 'alerts' && (
-            <Section title="Notification Settings" icon={Bell} color="#FF4D6D">
+            <Section title="Notification Settings" icon={Bell} color={tk('threat')}>
               <MySlackRouting />
               <div className="space-y-4 mb-5">
                 <Field label="Alert Email" type="email" value={settings.alert_email ?? ''} onChange={setSetting('alert_email')} placeholder="soc-team@yourcompany.com" />
@@ -1673,7 +1674,7 @@ export default function ConfigPage() {
           )}
 
           {tab === 'security' && (
-            <Section title="Security Settings" icon={Shield} color="#34F5C5">
+            <Section title="Security Settings" icon={Shield} color={tk('safe')}>
               <div className="space-y-4 mb-5">
                 <div>
                   <label className="block text-xs font-medium text-ink-300 mb-1.5">Authentication Method</label>
@@ -1705,7 +1706,7 @@ export default function ConfigPage() {
           {tab === 'security' && <AuditTrail />}
 
           {tab === 'integrations' && (
-            <Section title="Integrations" icon={Plug} color="#FFB23E">
+            <Section title="Integrations" icon={Plug} color={tk('amber')}>
               <LiveIntegrations />
             </Section>
           )}

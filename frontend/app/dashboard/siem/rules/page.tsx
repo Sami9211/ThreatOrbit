@@ -16,6 +16,7 @@ import RuleEditor from '@/components/dashboard/RuleEditor'
 import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
 import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
 import StarterPackButton from '@/components/dashboard/StarterPackButton'
+import { tk } from '@/lib/colors'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -346,19 +347,19 @@ AND NOT source.ip: (lookup TI_ALLOWLIST ip)
 
 /* ─── Severity config ───────────────────────────────────────────────── */
 const SEV_CONFIG: Record<Severity, { bg: string; text: string; border: string; dot: string; label: string }> = {
-  critical: { bg: 'bg-magenta/15',  text: 'text-magenta',  border: 'border-magenta/30',  dot: '#FF2E97', label: 'Critical' },
-  high:     { bg: 'bg-threat/15',   text: 'text-threat',   border: 'border-threat/30',   dot: '#FF4D6D', label: 'High' },
-  medium:   { bg: 'bg-amber/15',    text: 'text-amber',    border: 'border-amber/30',    dot: '#FFB23E', label: 'Medium' },
-  low:      { bg: 'bg-safe/15',     text: 'text-safe',     border: 'border-safe/30',     dot: '#34F5C5', label: 'Low' },
-  info:     { bg: 'bg-violet/15',   text: 'text-violet',   border: 'border-violet/30',   dot: '#7A3CFF', label: 'Info' },
+  critical: { bg: 'bg-magenta/15',  text: 'text-magenta',  border: 'border-magenta/30',  dot: tk('magenta'), label: 'Critical' },
+  high:     { bg: 'bg-threat/15',   text: 'text-threat',   border: 'border-threat/30',   dot: tk('threat'), label: 'High' },
+  medium:   { bg: 'bg-amber/15',    text: 'text-amber',    border: 'border-amber/30',    dot: tk('amber'), label: 'Medium' },
+  low:      { bg: 'bg-safe/15',     text: 'text-safe',     border: 'border-safe/30',     dot: tk('safe'), label: 'Low' },
+  info:     { bg: 'bg-violet/15',   text: 'text-violet',   border: 'border-violet/30',   dot: tk('violet'), label: 'Info' },
 }
 
 const CAT_COLOR: Record<Category, string> = {
-  Network:      '#7A3CFF',
-  Endpoint:     '#FF4D6D',
-  Cloud:        '#34F5C5',
-  Identity:     '#FFB23E',
-  'Threat Intel': '#FF2E97',
+  Network:      tk('violet'),
+  Endpoint:     tk('threat'),
+  Cloud:        tk('safe'),
+  Identity:     tk('amber'),
+  'Threat Intel': tk('magenta'),
 }
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
@@ -459,12 +460,12 @@ function RulePanel({ rule, onClose, onToggle }: {
         {/* Quick stats */}
         <div className="flex items-center gap-3 mt-4 flex-wrap">
           {[
-            { label: 'Hits (24h)',      value: rule.hits24h.toString(), color: rule.hits24h > 0 ? '#FF2E97' : '#665B7D' },
-            { label: 'FP Rate',         value: `${rule.fpRate}%`,       color: rule.fpRate > 25 ? '#FFB23E' : '#34F5C5' },
+            { label: 'Hits (24h)',      value: rule.hits24h.toString(), color: rule.hits24h > 0 ? tk('magenta') : '#665B7D' },
+            { label: 'FP Rate',         value: `${rule.fpRate}%`,       color: rule.fpRate > 25 ? tk('amber') : tk('safe') },
             ...(rule.noise ? [{ label: 'Noise', value: rule.noise,
-                color: rule.noise === 'high' ? '#FF6B6B' : rule.noise === 'medium' ? '#FFB23E' : '#34F5C5' }] : []),
+                color: rule.noise === 'high' ? '#FF6B6B' : rule.noise === 'medium' ? tk('amber') : tk('safe') }] : []),
             { label: 'Last Fired',      value: rule.lastFired,          color: '#8A7DA3' },
-            { label: 'Status',          value: rule.status,             color: rule.status === 'enabled' ? '#34F5C5' : rule.status === 'suppressed' ? '#FFB23E' : '#665B7D' },
+            { label: 'Status',          value: rule.status,             color: rule.status === 'enabled' ? tk('safe') : rule.status === 'suppressed' ? tk('amber') : '#665B7D' },
           ].map(({ label, value, color }) => (
             <div key={label} className="flex flex-col px-3 py-1.5 rounded-lg bg-surface-2 border border-white/6">
               <span className="text-[9px] text-ink-600 uppercase tracking-wide">{label}</span>
@@ -764,10 +765,10 @@ export default function RulesEnginePage() {
         className="grid grid-cols-2 sm:grid-cols-4 gap-4"
       >
         {[
-          { label: 'Total Rules',  value: totalRules, icon: Layers,       color: '#7A3CFF', sub: 'across all categories' },
-          { label: 'Active',       value: active,     icon: CheckCircle,  color: '#34F5C5', sub: `${Math.round(active / totalRules * 100)}% of total` },
-          { label: 'Suppressed',   value: suppressed, icon: MinusCircle,  color: '#FFB23E', sub: 'temporarily silenced' },
-          { label: 'Custom Rules', value: 44,         icon: Zap,          color: '#FF2E97', sub: 'author-created' },
+          { label: 'Total Rules',  value: totalRules, icon: Layers,       color: tk('violet'), sub: 'across all categories' },
+          { label: 'Active',       value: active,     icon: CheckCircle,  color: tk('safe'), sub: `${Math.round(active / totalRules * 100)}% of total` },
+          { label: 'Suppressed',   value: suppressed, icon: MinusCircle,  color: tk('amber'), sub: 'temporarily silenced' },
+          { label: 'Custom Rules', value: 44,         icon: Zap,          color: tk('magenta'), sub: 'author-created' },
         ].map(({ label, value, icon: Icon, color, sub }) => (
           <div
             key={label}
