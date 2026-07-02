@@ -9,6 +9,38 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-02 — plan.md audit-fix pass
+- **SP-signed SAML AuthnRequest (B9 residual)** — with `SAML_SP_PRIVATE_KEY` set
+  the SP signs its AuthnRequest per the HTTP‑Redirect binding (detached
+  SigAlg/Signature over the transmitted query octets, RSA‑ or ECDSA‑SHA256) for
+  IdPs that require signed requests. Unset = unsigned, as before.
+- **Audit sink: persisted cursor + replay** — delivery is now an outbox drain
+  over the committed `audit_log` with a persisted cursor (`audit_sink_cursor`,
+  schema v3): at‑least‑once across restarts and sink outages, in order, with
+  backoff and a single drainer elected via the DB lease. Rolled‑back actions are
+  no longer mirrored; consumers can dedupe on the shipped event `id`.
+- **Multi‑tenancy end‑to‑end validation** (`tests/test_tenant_e2e.py`) — the
+  full tenant journey through the real API; it caught and fixed five isolation
+  gaps (manual‑alert workspace stamping; cross‑org guards on alert get/patch,
+  asset get, case patch; per‑workspace IOC‑import dedup, removing a cross‑tenant
+  existence oracle). Flipping `DASHBOARD_MULTI_TENANT` on is now purely a
+  deployment decision.
+- **Packaged scheduled-backup job** — opt‑in compose service
+  (`--profile backup`, interval + retention pruning via `scripts/backup_loop.sh`)
+  and a Helm CronJob (`backup.enabled`, dedicated PVC), both wrapping the same
+  consistent tar.gz snapshot of all three databases.
+- **PII handling & redaction** — `docs/PII_HANDLING.md` (what is stored where,
+  retention/erasure reach, operator checklist) plus opt‑in
+  `DASHBOARD_LOG_REDACT` redaction (email/secret/cc/ssn) applied to raw log text
+  at the single ingest seam before persistence; detection pivots retained.
+- **Theme tokens everywhere** — completed the `lib/colors.ts` migration across
+  every dashboard page and shared panel (per‑page severity/status maps, SVG
+  chart gradients, network‑topology hues, world‑map choropleth as an
+  accent‑opacity ramp). Zero hardcoded theme hex remains in the dashboard;
+  report print HTML and marketing 3D scenes stay fixed by design.
+- Fixed a date‑rotted enrichment test (WHOIS "<30d = suspicious" fixture now
+  computed relative to run time).
+
 ### Security & hardening
 - **SSRF defence at send time** — outbound calls to user‑supplied URLs (webhooks,
   per‑user Slack routing, scheduled‑report delivery) re‑validate, pin the

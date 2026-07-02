@@ -99,8 +99,13 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       live Postgres 16 locally (full dashboard suite: 386 passed / 2 SQLite-only
       skipped) and in CI's backend-postgres job; SQLite default unchanged (388
       passed). Postgres extras live in `dashboard_api/requirements-postgres.txt`.
-- [ ] **B9 residual — SP-signed SAML AuthnRequest** is still unimplemented
-      (IdP-dependent); the request is sent unsigned. Add when an IdP requires it.
+- [x] **B9 residual — SP-signed SAML AuthnRequest.** DONE (2026-07-02): with
+      `SAML_SP_PRIVATE_KEY` set (PEM, RSA or EC) the SP signs its AuthnRequest per
+      the HTTP-Redirect binding (Bindings §3.4.4.1 detached SigAlg/Signature over
+      the transmitted `SAMLRequest=…&RelayState=…&SigAlg=…` octets) for IdPs that
+      require WantAuthnRequestsSigned. Unset = unsigned, exactly as before. Tests
+      verify the signature IdP-side (RSA + ECDSA), parameter ordering, tamper
+      detection, and unsupported-key rejection.
 - [x] **Test-only: Starlette `TestClient` httpx deprecation.** DONE (2026-06-22):
       migrated the TestClient to its sanctioned successor `httpx2` (Tom Christie /
       Pydantic; Starlette's own deprecation points there). Added as a *test-only*
@@ -143,18 +148,20 @@ item is a large, multi-part feature.
       added a shared floating Save affordance (`SaveBar`) that appears at the
       top-right while there are unsaved changes, so config can be saved from any
       scroll position; wired into the Settings page.
-- [~] **Theme/colour palette doesn't reach everything.** IN PROGRESS (2026-06-22):
-      `lib/colors.ts` is now token-based — `rgb(var(--token))` values plus `tk()`
-      and a `withAlpha()` helper (so the old `${hex}NN` alpha-append sites convert
-      cleanly) — the single theme-aware source of truth for severity/status colour.
-      Migrated the highest-traffic surfaces off their local hardcoded maps onto it:
-      the TopBar (every page), the DetailDrawer (every page) and the SOC Console, so
-      a theme switch now reaches them. Remaining (mechanical, same pattern): the
-      per-page maps in the Overview / SIEM / CTI / assets pages, the SVG chart
-      gradients and the network-topology / world-map hues. Note: the report
-      print/download HTML keeps concrete hex on purpose — it renders in a detached
-      window without the theme's CSS variables. (3D marketing scenes stay
-      brand-fixed by design, outside ThemeScope.)
+- [x] **Theme/colour palette doesn't reach everything.** DONE (2026-07-02):
+      the migration onto token-based `lib/colors.ts` (`tk()` / `withAlpha()`) is
+      complete across the whole dashboard — all per-page severity/status maps
+      (Overview, SIEM + attack/entities/hunt/rules/sources, CTI + actors/hunt,
+      SOAR + metrics/playbooks/integrations, assets + network/vulns, dark web,
+      feeds, scanner, config + users/sources), the SVG chart gradients, the
+      network-topology hues, and the world-map choropleth (now an accent-opacity
+      ramp, so it themes too) plus the shared panels (CommandPalette, CreateModal,
+      EntityGraph, PlaybookBuilder/Runs, IocLifecycle, LogAnalysis, WorldMap).
+      Zero hardcoded theme hex remains under `app/dashboard`/`components/dashboard`.
+      Deliberate exceptions, unchanged: the report print/download HTML (renders in
+      a detached window without the theme's CSS variables), non-token accent hues
+      (lavender/orange in CHART_PALETTE), and the marketing site / 3D scenes
+      (brand-fixed, outside ThemeScope). Verified: tsc + production build green.
 - [x] **"SOC Metrics" reads thin and has an empty section.** DONE (2026-06-22):
       both formerly "sample" charts are now live — new GET /overview/alert-analytics
       returns real 7-day alert volume by severity and the disposition breakdown
@@ -218,16 +225,22 @@ plus external compliance attestations.
       Remaining: flip the engine to **ingest-only** by default, and partition or
       externalise the event store (ClickHouse / OpenSearch behind the same hunt
       API, with predicate push-down).
-- [~] **Finish multi-tenancy for GA** — all data-path isolation is in
-      (per-org ingest context, org-scoped API keys, tenant lifecycle, per-tenant
-      quotas + retention, org-scoped search/SSE). Remaining: an end-to-end
-      validation pass, then flip `DASHBOARD_MULTI_TENANT` on by default for MSSP
-      builds (a deployment decision).
+- [x] **Finish multi-tenancy for GA.** DONE (2026-07-02): the end-to-end
+      validation pass is in (`tests/test_tenant_e2e.py` — a second workspace with
+      its own admin drives create→stamp→list→detail→mutate across SIEM/SOAR/
+      assets/CTI, aggregate scoping, per-workspace import dedup) and it caught +
+      fixed five real isolation gaps (manual-alert org stamping, alert get/patch
+      and asset get cross-org guards, case patch scoping, cross-tenant IOC-import
+      dedup oracle). Flipping `DASHBOARD_MULTI_TENANT` on is now purely a
+      per-deployment decision for MSSP builds (set it in that environment).
 - [~] **HA / DR / zero-downtime** — Helm chart, DB-backed leader lease,
-      schema-version boot gate, full-stack backup/restore drill, and multi-AZ
-      Postgres guidance shipped. Remaining: an actual **tested** failover drill
-      (needs live multi-AZ infra), and a packaged scheduled-backup job
-      (cron/timer image).
+      schema-version boot gate, full-stack backup/restore drill, multi-AZ
+      Postgres guidance, and (2026-07-02) the **packaged scheduled-backup job**
+      shipped: an opt-in compose service (`--profile backup`,
+      `scripts/backup_loop.sh`, interval + retention pruning) and a Helm CronJob
+      (`backup.enabled`, dedicated PVC, co-scheduled with the service pods) —
+      both wrapping the same consistent tar.gz snapshot. Remaining: an actual
+      **tested** failover drill (needs live multi-AZ infra).
 - [~] **Vendor compliance posture** — DPA template, GDPR data-subject tooling,
       data-residency doc, and a SOC 2 / ISO 27001 control self-assessment
       shipped. Remaining (external, can't self-certify): an independent **SOC 2
@@ -240,9 +253,14 @@ plus external compliance attestations.
       sign published **container images** once a registry push pipeline exists.
 - [ ] **Detection content** — grow the rule packs toward a **Sigma
       community-pack import**, fed through the existing content-update channel.
-- [ ] **Compliance & data lifecycle** — a **PII handling / redaction policy**
-      for stored logs; a persisted cursor + replay for the audit sink
-      (at-least-once across restarts) plus native syslog / object-lock writers.
+- [~] **Compliance & data lifecycle** — DONE (2026-07-02): the **PII handling /
+      redaction policy** (`docs/PII_HANDLING.md` + opt-in `DASHBOARD_LOG_REDACT`
+      redaction at the single ingest seam — email/secret/cc/ssn masked in raw
+      text before persistence, pivots retained) and the **audit-sink persisted
+      cursor + replay** (outbox drain over the committed `audit_log` with a
+      persisted cursor: at-least-once across restarts/outages, ordered, one
+      drainer via the DB lease). Remaining: native syslog / object-lock writers
+      for the audit sink.
 - [ ] **Platform SRE / self-observability** — distributed tracing, SLOs +
       error budgets, alerting on the platform's *own* health, and synthetic
       checks (`/metrics` exists today but the rest is missing).
