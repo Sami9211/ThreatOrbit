@@ -146,12 +146,6 @@ function TrendingCVEs() {
 }
 
 /* ── Intel Brief ─────────────────────────────────────────────────── */
-const BRIEF_ITEMS_FALLBACK = [
-  { headline: 'Lazarus Group activity surge - 3 new C2 IPs blocked', severity: 'critical', age: '2h ago', src: 'ThreatFox / MISP' },
-  { headline: 'CISA KEV updated with 2 new FortiOS exploits',        severity: 'high',     age: '5h ago', src: 'CISA KEV' },
-  { headline: 'Novel MFA-bypass technique targeting Azure AD',       severity: 'high',     age: '8h ago', src: 'Microsoft TI' },
-  { headline: 'Ransomware campaign targets EU healthcare sector',    severity: 'critical', age: '11h ago',src: 'Europol' },
-]
 
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
@@ -162,14 +156,17 @@ function timeAgo(iso: string) {
 }
 
 function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
-  const items = alerts.length > 0
+  // Honest empty state: an empty store means "no briefs yet", never fabricated
+  // headlines badged as live (fresh real-data installs start empty).
+  const live = alerts.length > 0
+  const items = live
     ? alerts.slice(0, 4).map((a) => ({
         headline: a.title,
         severity: a.severity,
         age: timeAgo(a.time),
         src: a.src,
       }))
-    : BRIEF_ITEMS_FALLBACK
+    : []
   return (
     <div className="glass border border-white/5 rounded-xl overflow-hidden flex flex-col h-full">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
@@ -177,8 +174,18 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
           <BookOpen className="w-3.5 h-3.5 text-violet" />
           <h3 className="text-sm font-semibold text-white">Today&apos;s Intel Brief</h3>
         </div>
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-safe font-medium">Live</span>
+        {live && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-safe/10 border border-safe/20 text-safe font-medium">Live</span>
+        )}
       </div>
+      {!live ? (
+        <div className="flex-1 flex items-center justify-center px-5 py-8">
+          <p className="text-[11px] text-ink-500 text-center leading-relaxed">
+            No intel briefs yet — they appear as alerts arrive.<br />
+            Connect feeds (Feeds → Sources) or forward logs (SIEM → Sources).
+          </p>
+        </div>
+      ) : (
       <div className="flex-1 divide-y divide-white/4">
         {items.map((item, i) => (
           <div key={i}
@@ -200,6 +207,7 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
           </div>
         ))}
       </div>
+      )}
       <div className="px-5 py-2.5 border-t border-white/5 bg-white/1">
         <div className="flex items-center justify-between text-[10px] text-ink-600">
           <span>Aggregated across your intelligence sources</span>
@@ -461,11 +469,12 @@ function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
   )
 }
 
-const HOURLY_FALLBACK = [12, 18, 9, 24, 31, 15, 28, 44, 38, 52, 47, 61, 58, 43, 39, 55, 67, 71, 63, 58, 49, 44, 37, 29]
 
 function EventTimeline({ hourly }: { hourly: number[] }) {
-  const data = hourly.length === 24 ? hourly : HOURLY_FALLBACK
-  const max = Math.max(...data)
+  // Honest empty state: no 24h series yet → flat zero bars, never a fabricated
+  // volume shape (fresh real-data installs start empty).
+  const data = hourly.length === 24 ? hourly : Array(24).fill(0)
+  const max = Math.max(...data, 1)
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -497,27 +506,16 @@ function EventTimeline({ hourly }: { hourly: number[] }) {
   )
 }
 
-/* ── Threat Heatmap by Category ──────────────────────────────────── */
-const HEATMAP_ROWS = [
-  { label: 'Mon', vals: [4, 12, 8, 24, 18, 6, 31] },
-  { label: 'Tue', vals: [9, 15, 22, 17, 28, 11, 19] },
-  { label: 'Wed', vals: [6, 18, 14, 31, 9, 22, 27] },
-  { label: 'Thu', vals: [14, 8, 25, 12, 34, 16, 8] },
-  { label: 'Fri', vals: [19, 24, 11, 29, 21, 33, 14] },
-  { label: 'Sat', vals: [3, 6, 8, 11, 5, 4, 7] },
-  { label: 'Sun', vals: [2, 5, 4, 7, 3, 6, 4] },
-]
-const HEATMAP_COLS = ['RCE', 'Phish', 'C2', 'SQLi', 'Brute', 'Exfil', 'DDoS']
+/* ── Threat Heatmap ──────────────────────────────────────────────── */
 
 function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }> }) {
-  // Live rows are MITRE tactics over six ~28h windows; static fallback is
-  // day-of-week × attack type. Column headers adapt to whichever shape arrived.
+  // Live rows are MITRE tactics over six ~28h windows. Honest empty state when
+  // no detections exist yet — never a fabricated heatmap on a fresh install.
   const live = rows.length > 0
-  const data = live ? rows : HEATMAP_ROWS
+  const data = rows
   const nCols = data[0]?.vals.length ?? 6
-  const cols: string[] = live
-    ? Array.from({ length: nCols }, (_, i) => (i === nCols - 1 ? 'Now' : `-${nCols - 1 - i}d`))
-    : HEATMAP_COLS
+  const cols: string[] = Array.from({ length: nCols }, (_, i) =>
+    (i === nCols - 1 ? 'Now' : `-${nCols - 1 - i}d`))
   const allVals = data.flatMap((r) => r.vals)
   const maxV = Math.max(...allVals, 1)
 
@@ -530,10 +528,20 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
     return 'rgba(255,255,255,0.05)'
   }
 
+  if (!live) {
+    return (
+      <div className="glass border border-white/5 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-white mb-4">MITRE Tactic Heatmap (7d)</h3>
+        <p className="text-[11px] text-ink-500 text-center py-8 leading-relaxed">
+          No detections in the last 7 days — the heatmap builds as alerts arrive.
+        </p>
+      </div>
+    )
+  }
   return (
     <div className="glass border border-white/5 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">{live ? 'MITRE Tactic Heatmap (7d)' : 'Threat Heatmap (7d)'}</h3>
+        <h3 className="text-sm font-semibold text-white">MITRE Tactic Heatmap (7d)</h3>
         <div className="flex items-center gap-1.5 text-[9px] text-ink-600">
           {[['Low',tk('violet')],['Med',tk('amber')],['High',tk('threat')],['Crit',tk('magenta')]].map(([l,c]) => (
             <span key={l} className="flex items-center gap-1">
@@ -542,7 +550,7 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
           ))}
         </div>
       </div>
-      <div className="grid" style={{ gridTemplateColumns: `${live ? '110px' : '28px'} repeat(${cols.length}, 1fr)`, gap: '2px' }}>
+      <div className="grid" style={{ gridTemplateColumns: `110px repeat(${cols.length}, 1fr)`, gap: '2px' }}>
         <div />
         {cols.map((c) => (
           <div key={c} className="text-center text-[8px] text-ink-600 truncate pb-0.5">{c}</div>

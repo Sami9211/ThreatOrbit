@@ -56,7 +56,7 @@ honest framing (the strong parts stand on their own without inflating the rest):
 
 | Getting started | Using it | Reference | Direction |
 | --- | --- | --- | --- |
-| [Architecture](#1-architecture-at-a-glance) · [Structure](#2-project-structure) · [Requirements](#3-requirements) · [Quick start](#4-quick-start--pick-the-path-for-your-machine) | [How the engine works](#2a-how-the-threatorbit-engine-works-the-real-data-pipeline) · [By role & task](#2b-using-the-dashboard--by-role-and-by-task) · [Real vs demo data](#4a-real-data-vs-demo-mode) | [Auth](#5-authentication-two-tier-api-keys) · [API reference](#10-api-reference) · [Testing](#11-testing) · [Troubleshooting](#12-troubleshooting) | [Roadmap & direction](#14-roadmap--direction) · [Limitations](#15-limitations--honest-caveats) · [Contributing](#16-contributing--extending) · [FAQ](#faq) |
+| [Architecture](#1-architecture-at-a-glance) · [Structure](#2-project-structure) · [Requirements](#3-requirements) · [Quick start](#4-quick-start--pick-the-path-for-your-machine) · [**Going live**](docs/GOING_LIVE.md) | [How the engine works](#2a-how-the-threatorbit-engine-works-the-real-data-pipeline) · [By role & task](#2b-using-the-dashboard--by-role-and-by-task) · [Real vs demo data](#4a-real-data-vs-demo-mode) | [Auth](#5-authentication-two-tier-api-keys) · [API reference](#10-api-reference) · [Testing](#11-testing) · [Troubleshooting](#12-troubleshooting) | [Roadmap & direction](#14-roadmap--direction) · [Limitations](#15-limitations--honest-caveats) · [Contributing](#16-contributing--extending) · [FAQ](#faq) |
 
 ---
 
@@ -224,7 +224,9 @@ ThreatOrbit-V2/
 configs, env checklist), **`OPERATIONS.md`** (backup/restore, retention,
 runbook), **`SUPPORTED_SOURCES.md`** (the parser/source matrix — which vendor
 log shapes normalise onto the detection vocabulary), **`API_VERSIONING.md`**
-(the `/v1` contract + deprecation policy) and **`DATA_RESIDENCY.md`** (every
+(the `/v1` contract + deprecation policy), **`GOING_LIVE.md`** (the real-data
+production runbook: AD/Windows, AWS, Linux log forwarding, hardening),
+**`PII_HANDLING.md`** (what is stored, redaction, DSAR reach) and **`DATA_RESIDENCY.md`** (every
 external egress point + how to pin/disable each for in-region installs). HA/scale
 deployers: see **`POSTGRES_HA.md`** (multi-AZ Postgres) and **`LOAD_LIMITS.md`**.
 
@@ -507,6 +509,9 @@ First run takes a few minutes (npm download + build); after that pages open
 * **Real data:** the launcher runs in **live mode** — the dashboard starts
   empty and fills itself from real OSINT feeds within a couple of minutes
   (needs internet). See [§4a Real data vs demo](#4a-real-data-vs-demo-mode).
+  For a production install on **your logs only** (no synthetic telemetry), set
+  the system environment variable `DASHBOARD_ENGINE=off` before launching and
+  follow [`docs/GOING_LIVE.md`](docs/GOING_LIVE.md).
 * **Stop:** close the four windows the script opened.
 * **Test:** double-click **`windows-test.bat`** — it runs all backend tests
   and prints `ALL TESTS PASSED` at the end.
@@ -663,6 +668,12 @@ The dashboard runs in one of two modes, set by `DASHBOARD_DATA_MODE`:
 * In live mode the dashboard bootstraps only the admin account + settings (no
   fake alerts/actors/assets) and a background scheduler keeps pulling real
   indicators on each connector's interval.
+* **Deploying on real data only?** Set `DASHBOARD_ENGINE=off` as well — it
+  disables the synthetic telemetry engine completely (no first-boot priming,
+  boots paused every start), so the only events you ever see are your own
+  forwarded logs and connector intel. The full production runbook — secrets,
+  TLS, forwarding logs from **Windows/Active Directory**, **AWS/CloudTrail**,
+  Linux and syslog senders — is **[`docs/GOING_LIVE.md`](docs/GOING_LIVE.md)**.
 
 ### Connectors — where real data comes from
 

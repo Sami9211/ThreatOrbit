@@ -254,6 +254,18 @@ CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", 
 ENGINE_TICK_SECONDS = int(os.environ.get("DASHBOARD_ENGINE_TICK_SECONDS", "20"))
 ENGINE_EVENTS_PER_TICK = int(os.environ.get("DASHBOARD_ENGINE_EVENTS_PER_TICK", "6"))
 
+# Synthetic-telemetry switch — THE knob for real-data deployments.
+#   "on"  (default) → live mode generates representative environment telemetry
+#                     continuously so the console is alive before any log
+#                     forwarding exists (evaluation / demo liveliness).
+#   "off"           → REAL DATA ONLY: no first-boot prime, and the engine
+#                     boots paused on every start (the UI toggle can still
+#                     resume it deliberately for a demo burst; the next boot
+#                     re-pauses). Real ingestion — log uploads, the collector,
+#                     syslog/file listeners, connectors, TAXII push — is
+#                     unaffected. See docs/GOING_LIVE.md.
+ENGINE_MODE = os.environ.get("DASHBOARD_ENGINE", "on").strip().lower()
+
 # Ingest backpressure: the max detection backlog (pending events) before the
 # /siem/ingest endpoint sheds load with HTTP 429 instead of growing the queue
 # unboundedly. Generous by default so normal use never hits it; 0 disables the

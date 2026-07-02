@@ -166,6 +166,23 @@ def _engine_loop():
         time.sleep(ENGINE_TICK_SECONDS)
 
 
+def _apply_engine_mode() -> bool:
+    """Boot-time application of DASHBOARD_ENGINE. In real-data mode ("off") the
+    engine is paused on EVERY start — the operator's env wins at boot, while the
+    UI toggle can still resume it deliberately until the next restart. Returns
+    True when synthetic telemetry is disabled."""
+    from dashboard_api.config import ENGINE_MODE
+    if ENGINE_MODE != "off":
+        return False
+    with get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) "
+                     "VALUES ('engine_enabled','false')")
+        conn.commit()
+    logger.info("Real-data mode (DASHBOARD_ENGINE=off): synthetic engine disabled; "
+                "only ingested/connector data will appear")
+    return True
+
+
 def _startup():
     import threading
     # JWT_SECRET is now always a strong value: an explicit env var, or a
@@ -193,8 +210,10 @@ def _startup():
         seed_builtin_rules()
         from dashboard_api.playbook_engine import seed_builtin_playbooks
         seed_builtin_playbooks()
+        engine_off = _apply_engine_mode()
         if first_boot:
             logger.info("Live mode: bootstrapped admin + settings (no demo data)")
+        if first_boot and not engine_off:
             # Prime the stores so the first login isn't an empty screen - these
             # are live engine ticks (real pipeline), not static seed data.
             try:

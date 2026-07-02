@@ -70,6 +70,9 @@ services:
       - DASHBOARD_ALLOW_REGISTRATION=${DASHBOARD_ALLOW_REGISTRATION:-true}
       # demo = seeded showcase data; live = empty start + real OSINT ingestion.
       - DASHBOARD_DATA_MODE=${DASHBOARD_DATA_MODE:-demo}
+      # off = REAL DATA ONLY: no synthetic telemetry, engine boots paused
+      # (docs/GOING_LIVE.md). on = live-mode demo liveliness (default).
+      - DASHBOARD_ENGINE=${DASHBOARD_ENGINE:-on}
       # Service bridge: lets the dashboard proxy the ingestion + log engines.
       - THREAT_API_URL=http://threat_api:8000
       - LOG_API_URL=http://log_api:8000

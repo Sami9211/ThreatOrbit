@@ -38,6 +38,7 @@ secrets:
 # Non-secret configuration.
 config:
   dataMode: "demo"            # demo = seeded showcase data; live = empty + real OSINT ingestion
+  engine: "on"                # off = REAL DATA ONLY (no synthetic telemetry; docs/GOING_LIVE.md)
   allowRegistration: true
   corsOrigins: ""             # dashboard CORS allowlist; defaults to the ingress host when set
   rateLimitPerMinute: 120
