@@ -169,13 +169,15 @@ def create_alert(body: AlertCreate, user: dict = Depends(require_perm("siem.writ
             "rule_name,mitre_tactic,mitre_tactic_id,mitre_tech,mitre_tech_id,src_ip,src_country,"
             "src_port,src_hostname,src_asn,dest_ip,dest_port,dest_service,username,hostname,"
             "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,bytes_out,"
-            "detect_latency_sec,ack_latency_sec,respond_latency_sec) "
+            "detect_latency_sec,ack_latency_sec,respond_latency_sec,org_id) "
             "VALUES (?,?,?,?,'new','undetermined','',?,'R-MANUAL',?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,"
-            "NULL,NULL,?,?,NULL,NULL,NULL,?,?,1,?,0,0,NULL,NULL)",
+            "NULL,NULL,?,?,NULL,NULL,NULL,?,?,1,?,0,0,NULL,NULL,?)",
             (aid, now, title, body.severity, risk, body.rule_name,
              body.mitre_tactic, body.mitre_tactic_id, body.mitre_tech, body.mitre_tech_id,
              body.src_ip, body.src_country, body.username, body.hostname,
-             body.description or title, f"{now} {body.rule_name}: {title}", body.ti_hits),
+             body.description or title, f"{now} {body.rule_name}: {title}", body.ti_hits,
+             # A manually-raised alert belongs to the raising analyst's workspace.
+             tenancy.org_of(user)),
         )
         audit(conn, user["email"], "alert.create", aid, f"title={title} severity={body.severity}")
         conn.commit()
@@ -187,10 +189,11 @@ def create_alert(body: AlertCreate, user: dict = Depends(require_perm("siem.writ
 
 
 @router.get("/alerts/{alert_id}")
-def get_alert(alert_id: str):
+def get_alert(alert_id: str, user: dict = Depends(current_user)):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
-    if not row:
+    # Id-addressed reads 404 across workspaces (same contract as cases/assets).
+    if not row or tenancy.cross_org(row, user):
         raise HTTPException(status_code=404, detail="Alert not found")
     return row_to_dict(row)
 
@@ -205,8 +208,11 @@ def update_alert(alert_id: str, body: AlertUpdate, user: dict = Depends(require_
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
     values.append(alert_id)
+    # Org-scope the UPDATE itself so a cross-workspace id 404s without a write.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        cur = conn.execute(f"UPDATE alerts SET {','.join(fields)} WHERE id=?", values)
+        cur = conn.execute(f"UPDATE alerts SET {','.join(fields)} WHERE id=? {sc}",
+                           values + sp)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Alert not found")
         changed = ",".join(f.split("=")[0] for f in fields)
