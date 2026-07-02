@@ -24,7 +24,10 @@ if errorlevel 1 (
 )
 
 echo Installing test dependencies (fast after the first run)...
-%PY% -m pip install -q -r dashboard_api\requirements.txt -r threat_api\requirements.txt -r log_api\requirements.txt
+REM The -dev files carry httpx2, which the FastAPI test suites REQUIRE (their
+REM pytest.ini turns the Starlette TestClient deprecation into an error, so a
+REM missing httpx2 fails the run loudly). threat_api is Flask - no dev file.
+%PY% -m pip install -q -r dashboard_api\requirements.txt -r threat_api\requirements.txt -r log_api\requirements.txt -r dashboard_api\requirements-dev.txt -r log_api\requirements-dev.txt
 if errorlevel 1 (
     echo [ERROR] Installing Python packages failed - see the messages above.
     pause
