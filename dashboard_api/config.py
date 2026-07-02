@@ -214,6 +214,11 @@ SAML_IDP_CERT = os.environ.get("SAML_IDP_CERT", "").strip()          # PEM or ba
 SAML_SP_ENTITY_ID = os.environ.get("SAML_SP_ENTITY_ID", "threatorbit-dashboard").strip()
 SAML_SP_ACS_URL = os.environ.get("SAML_SP_ACS_URL",
                                  "http://localhost:8002/auth/saml/acs").strip()
+# Optional SP signing key (PEM, RSA or EC). When set, the SP signs its
+# AuthnRequest per the HTTP-Redirect binding (detached SigAlg + Signature query
+# parameters) for IdPs that require signed requests (WantAuthnRequestsSigned).
+# Unset = requests are sent unsigned, exactly as before.
+SAML_SP_PRIVATE_KEY = os.environ.get("SAML_SP_PRIVATE_KEY", "").strip()
 # Attribute names carrying email / display name / groups (IdP-specific; sensible
 # defaults below also try the SAML NameID and common friendly names).
 SAML_EMAIL_ATTR = os.environ.get("SAML_EMAIL_ATTR", "").strip()

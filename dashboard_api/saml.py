@@ -16,7 +16,10 @@ Security model (the parts that matter):
   * assertion IDs are one-time-use (DB-backed replay cache) within their
     validity window;
   * XML is parsed by signxml's hardened parser (no external entities / DTD), so
-    XXE/SSRF via a crafted DOCTYPE is not reachable.
+    XXE/SSRF via a crafted DOCTYPE is not reachable;
+  * with SAML_SP_PRIVATE_KEY set, the SP signs its AuthnRequest per the
+    HTTP-Redirect binding (detached SigAlg/Signature over the transmitted
+    query octets, RSA- or ECDSA-SHA256) for IdPs that require signed requests.
 
 The replay cache is a shared DB table (`saml_replay`), so one-time-use holds
 across workers/replicas and survives a restart - not a per-process set. The time
@@ -36,6 +39,7 @@ from dashboard_api.config import (
     JWT_SECRET, SAML_ALLOWED_DOMAINS, SAML_DEFAULT_ROLE, SAML_EMAIL_ATTR,
     SAML_GROUPS_ATTR, SAML_IDP_CERT, SAML_IDP_ENTITY_ID, SAML_IDP_SSO_URL,
     SAML_NAME_ATTR, SAML_ROLE_MAP, SAML_SP_ACS_URL, SAML_SP_ENTITY_ID,
+    SAML_SP_PRIVATE_KEY,
 )
 
 NS = {
@@ -90,10 +94,47 @@ def cert_pem() -> str:
 
 # ── SP-initiated request ──────────────────────────────────────────────────────
 
-def make_authn_request() -> tuple[str, str]:
-    """Build an AuthnRequest and the IdP redirect URL (HTTP-Redirect binding).
-    Returns (request_id, redirect_url). The caller carries request_id in a signed
-    RelayState so the ACS can check InResponseTo."""
+# Redirect-binding signature algorithm URIs (xmldsig-more).
+_SIG_RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+_SIG_ECDSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"
+
+
+def sp_signing_configured() -> bool:
+    """True when an SP private key is configured (AuthnRequests get signed)."""
+    return bool(SAML_SP_PRIVATE_KEY)
+
+
+def _sign_redirect_query(query: str) -> str:
+    """Sign a redirect-binding query string per SAML 2.0 Bindings §3.4.4.1.
+
+    The detached signature covers the exact transmitted octets of
+    `SAMLRequest=…&RelayState=…&SigAlg=…` (in that order, values URL-encoded);
+    the base64 signature is then appended as the `Signature` parameter. This is
+    what IdPs verify when WantAuthnRequestsSigned is on — no XML-DSig involved
+    for this binding. RSA-SHA256 and ECDSA-SHA256 keys are supported.
+    """
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+    key = serialization.load_pem_private_key(SAML_SP_PRIVATE_KEY.encode(), password=None)
+    if isinstance(key, rsa.RSAPrivateKey):
+        alg = _SIG_RSA_SHA256
+    elif isinstance(key, ec.EllipticCurvePrivateKey):
+        alg = _SIG_ECDSA_SHA256
+    else:
+        raise ValueError("SAML_SP_PRIVATE_KEY must be an RSA or EC private key")
+    to_sign = f"{query}&{urlencode({'SigAlg': alg})}"
+    if alg == _SIG_RSA_SHA256:
+        sig = key.sign(to_sign.encode(), padding.PKCS1v15(), hashes.SHA256())
+    else:
+        sig = key.sign(to_sign.encode(), ec.ECDSA(hashes.SHA256()))
+    return f"{to_sign}&{urlencode({'Signature': base64.b64encode(sig).decode()})}"
+
+
+def make_login_redirect(return_to: str | None = None) -> str:
+    """Build the full IdP redirect URL for SP-initiated login (HTTP-Redirect
+    binding): AuthnRequest + signed RelayState (carrying our request ID for the
+    ACS's InResponseTo check), plus the detached SigAlg/Signature parameters
+    when an SP signing key is configured."""
     rid = "_" + secrets.token_hex(20)
     issue = _now().strftime("%Y-%m-%dT%H:%M:%SZ")
     xml = (
@@ -109,8 +150,14 @@ def make_authn_request() -> tuple[str, str]:
     # HTTP-Redirect binding: raw DEFLATE + base64 + urlencode.
     deflated = zlib.compress(xml.encode())[2:-4]
     saml_req = base64.b64encode(deflated).decode()
+    relay = make_relay_state(rid, return_to)
+    # Parameter order is load-bearing when signing: SAMLRequest, RelayState,
+    # SigAlg are signed as transmitted, Signature appended last.
+    query = f"{urlencode({'SAMLRequest': saml_req})}&{urlencode({'RelayState': relay})}"
+    if sp_signing_configured():
+        query = _sign_redirect_query(query)
     sep = "&" if "?" in SAML_IDP_SSO_URL else "?"
-    return rid, f"{SAML_IDP_SSO_URL}{sep}{urlencode({'SAMLRequest': saml_req})}"
+    return f"{SAML_IDP_SSO_URL}{sep}{query}"
 
 
 def _xml_attr(s: str) -> str:
