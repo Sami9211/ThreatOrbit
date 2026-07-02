@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Crosshair, X, ShieldCheck, ShieldAlert, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchAttackCoverage, type AttackCoverage, type AttackTechnique } from '@/lib/api'
+import { tk } from '@/lib/colors'
 
 export default function AttackNavigatorPage() {
   const [cov, setCov] = useState<AttackCoverage | null>(null)
@@ -20,10 +21,10 @@ export default function AttackNavigatorPage() {
 
   function cellColor(t: AttackTechnique): string {
     if (!t.covered) return 'rgba(255,255,255,0.04)'
-    if (t.alerts >= 20) return '#FF2E97'
-    if (t.alerts >= 5) return '#FF4D6D'
-    if (t.alerts > 0) return '#FFB23E'
-    return '#34F5C5'  // covered, no alerts yet
+    if (t.alerts >= 20) return tk('magenta')
+    if (t.alerts >= 5) return tk('threat')
+    if (t.alerts > 0) return tk('amber')
+    return tk('safe')  // covered, no alerts yet
   }
 
   const kpis = [
@@ -44,7 +45,7 @@ export default function AttackNavigatorPage() {
           <p className="text-xs text-ink-500 mt-0.5">Detection coverage by MITRE technique - green = covered, brighter = more alerts, dim = gap</p>
         </div>
         <div className="flex items-center gap-3 text-[9px] text-ink-500">
-          {[['Gap', 'rgba(255,255,255,0.12)'], ['Covered', '#34F5C5'], ['Active', '#FFB23E'], ['Hot', '#FF2E97']].map(([l, c]) => (
+          {[['Gap', 'rgba(255,255,255,0.12)'], ['Covered', tk('safe')], ['Active', tk('amber')], ['Hot', tk('magenta')]].map(([l, c]) => (
             <div key={l} className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ background: c as string }} />{l}</div>
           ))}
         </div>

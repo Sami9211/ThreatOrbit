@@ -17,6 +17,7 @@ import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
+import { tk } from '@/lib/colors'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -394,12 +395,12 @@ const SPARKLINE_DATA = {
 
 // MITRE tactic distribution
 const MITRE_DIST = [
-  { tactic: 'Initial Access',     count: 847, color: '#FF2E97'  },
-  { tactic: 'Credential Access',  count: 412, color: '#FF4D6D'  },
-  { tactic: 'Exfiltration',       count: 298, color: '#FFB23E'  },
-  { tactic: 'Defense Evasion',    count: 387, color: '#7A3CFF'  },
-  { tactic: 'Command & Control',  count: 523, color: '#34F5C5'  },
-  { tactic: 'Discovery',          count: 189, color: '#2DD4BF'  },
+  { tactic: 'Initial Access',     count: 847, color: tk('magenta')  },
+  { tactic: 'Credential Access',  count: 412, color: tk('threat')  },
+  { tactic: 'Exfiltration',       count: 298, color: tk('amber')  },
+  { tactic: 'Defense Evasion',    count: 387, color: tk('violet')  },
+  { tactic: 'Command & Control',  count: 523, color: tk('safe')  },
+  { tactic: 'Discovery',          count: 189, color: tk('teal')  },
   { tactic: 'Privilege Escalation', count: 142, color: '#FF9B2E'},
   { tactic: 'Persistence',        count: 49,  color: '#A78BFA'  },
 ]
@@ -408,7 +409,7 @@ const MITRE_DIST = [
 const COVERED_TECH_IDS = new Set(RULES.map((r) => r.mitreTechId))
 
 const MITRE_MATRIX = [
-  { tacticId: 'TA0001', tactic: 'Initial Access',      color: '#FF2E97', techniques: [
+  { tacticId: 'TA0001', tactic: 'Initial Access',      color: tk('magenta'), techniques: [
     { id: 'T1190',     name: 'Exploit Public-Facing Application' },
     { id: 'T1133',     name: 'External Remote Services' },
     { id: 'T1566.001', name: 'Spearphishing Attachment' },
@@ -416,7 +417,7 @@ const MITRE_MATRIX = [
     { id: 'T1566.002', name: 'Spearphishing via Service' },
     { id: 'T1195',     name: 'Supply Chain Compromise' },
   ]},
-  { tacticId: 'TA0002', tactic: 'Execution',            color: '#FF4D6D', techniques: [
+  { tacticId: 'TA0002', tactic: 'Execution',            color: tk('threat'), techniques: [
     { id: 'T1059.001', name: 'PowerShell' },
     { id: 'T1059.003', name: 'Windows Command Shell' },
     { id: 'T1204',     name: 'User Execution' },
@@ -438,7 +439,7 @@ const MITRE_MATRIX = [
     { id: 'T1548',     name: 'Abuse Elevation Control' },
     { id: 'T1134',     name: 'Access Token Manipulation' },
   ]},
-  { tacticId: 'TA0005', tactic: 'Defense Evasion',      color: '#7A3CFF', techniques: [
+  { tacticId: 'TA0005', tactic: 'Defense Evasion',      color: tk('violet'), techniques: [
     { id: 'T1562.001', name: 'Impair Defenses: AMSI Bypass' },
     { id: 'T1070',     name: 'Indicator Removal' },
     { id: 'T1036',     name: 'Masquerading' },
@@ -446,7 +447,7 @@ const MITRE_MATRIX = [
     { id: 'T1218',     name: 'System Binary Proxy Exec.' },
     { id: 'T1140',     name: 'Deobfuscate / Decode' },
   ]},
-  { tacticId: 'TA0006', tactic: 'Credential Access',    color: '#FF4D6D', techniques: [
+  { tacticId: 'TA0006', tactic: 'Credential Access',    color: tk('threat'), techniques: [
     { id: 'T1621',     name: 'MFA Request Generation' },
     { id: 'T1110.003', name: 'Brute Force: Password Spray' },
     { id: 'T1003.001', name: 'LSASS Memory' },
@@ -454,34 +455,34 @@ const MITRE_MATRIX = [
     { id: 'T1552',     name: 'Unsecured Credentials' },
     { id: 'T1056',     name: 'Input Capture' },
   ]},
-  { tacticId: 'TA0007', tactic: 'Discovery',            color: '#2DD4BF', techniques: [
+  { tacticId: 'TA0007', tactic: 'Discovery',            color: tk('teal'), techniques: [
     { id: 'T1046',     name: 'Network Service Discovery' },
     { id: 'T1083',     name: 'File & Directory Discovery' },
     { id: 'T1082',     name: 'System Info Discovery' },
     { id: 'T1087',     name: 'Account Discovery' },
     { id: 'T1069',     name: 'Permission Groups Discovery' },
   ]},
-  { tacticId: 'TA0008', tactic: 'Lateral Movement',     color: '#34F5C5', techniques: [
+  { tacticId: 'TA0008', tactic: 'Lateral Movement',     color: tk('safe'), techniques: [
     { id: 'T1021',     name: 'Remote Services' },
     { id: 'T1550',     name: 'Use Alt. Auth Material' },
     { id: 'T1534',     name: 'Internal Spearphishing' },
     { id: 'T1570',     name: 'Lateral Tool Transfer' },
   ]},
-  { tacticId: 'TA0010', tactic: 'Exfiltration',         color: '#FFB23E', techniques: [
+  { tacticId: 'TA0010', tactic: 'Exfiltration',         color: tk('amber'), techniques: [
     { id: 'T1048',     name: 'Exfil Over Alt Protocol' },
     { id: 'T1537',     name: 'Transfer to Cloud Account' },
     { id: 'T1567',     name: 'Exfil Over Web Service' },
     { id: 'T1020',     name: 'Automated Exfiltration' },
     { id: 'T1041',     name: 'Exfil Over C2 Channel' },
   ]},
-  { tacticId: 'TA0011', tactic: 'Command & Control',    color: '#34F5C5', techniques: [
+  { tacticId: 'TA0011', tactic: 'Command & Control',    color: tk('safe'), techniques: [
     { id: 'T1071.004', name: 'App Layer Protocol: DNS' },
     { id: 'T1071.001', name: 'App Layer Protocol: HTTP' },
     { id: 'T1573',     name: 'Encrypted Channel' },
     { id: 'T1090',     name: 'Proxy' },
     { id: 'T1095',     name: 'Non-App Layer Protocol' },
   ]},
-  { tacticId: 'TA0040', tactic: 'Impact',               color: '#FF2E97', techniques: [
+  { tacticId: 'TA0040', tactic: 'Impact',               color: tk('magenta'), techniques: [
     { id: 'T1486',     name: 'Data Encrypted for Impact' },
     { id: 'T1485',     name: 'Data Destruction' },
     { id: 'T1490',     name: 'Inhibit System Recovery' },
@@ -492,11 +493,11 @@ const MITRE_MATRIX = [
 
 /* ── Shared helpers ───────────────────────────────────────────────── */
 const SEV: Record<Severity, { bg: string; text: string; border: string; dot: string }> = {
-  critical: { bg: 'bg-magenta/15', text: 'text-magenta', border: 'border-magenta/30', dot: '#FF2E97' },
-  high:     { bg: 'bg-threat/15',  text: 'text-threat',  border: 'border-threat/30',  dot: '#FF4D6D' },
-  medium:   { bg: 'bg-amber/15',   text: 'text-amber',   border: 'border-amber/30',   dot: '#FFB23E' },
-  low:      { bg: 'bg-safe/15',    text: 'text-safe',    border: 'border-safe/30',    dot: '#34F5C5' },
-  info:     { bg: 'bg-violet/15',  text: 'text-violet',  border: 'border-violet/30',  dot: '#7A3CFF' },
+  critical: { bg: 'bg-magenta/15', text: 'text-magenta', border: 'border-magenta/30', dot: tk('magenta') },
+  high:     { bg: 'bg-threat/15',  text: 'text-threat',  border: 'border-threat/30',  dot: tk('threat') },
+  medium:   { bg: 'bg-amber/15',   text: 'text-amber',   border: 'border-amber/30',   dot: tk('amber') },
+  low:      { bg: 'bg-safe/15',    text: 'text-safe',    border: 'border-safe/30',    dot: tk('safe') },
+  info:     { bg: 'bg-violet/15',  text: 'text-violet',  border: 'border-violet/30',  dot: tk('violet') },
 }
 
 const STATUS_LABEL: Record<AlertStatus, { label: string; color: string }> = {
@@ -572,7 +573,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
         <div className="flex items-center gap-3 mt-3">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface-2 border border-white/8">
             <div className="text-[10px] text-ink-500">Risk</div>
-            <div className="text-sm font-bold" style={{ color: alert.riskScore >= 90 ? '#FF2E97' : alert.riskScore >= 70 ? '#FF4D6D' : '#FFB23E' }}>
+            <div className="text-sm font-bold" style={{ color: alert.riskScore >= 90 ? tk('magenta') : alert.riskScore >= 70 ? tk('threat') : tk('amber') }}>
               {alert.riskScore}
             </div>
           </div>
@@ -993,9 +994,9 @@ function NormalSIEM({
   const medium = open.filter((a) => a.severity === 'medium')
 
   const COLS = [
-    { key: 'critical', label: 'Critical', items: critical, color: '#FF2E97', border: 'border-magenta/25', header: 'bg-magenta/10 text-magenta' },
-    { key: 'high',     label: 'High',     items: high,     color: '#FF4D6D', border: 'border-threat/25',  header: 'bg-threat/10 text-threat'   },
-    { key: 'medium',   label: 'Medium',   items: medium,   color: '#FFB23E', border: 'border-amber/25',   header: 'bg-amber/10 text-amber'     },
+    { key: 'critical', label: 'Critical', items: critical, color: tk('magenta'), border: 'border-magenta/25', header: 'bg-magenta/10 text-magenta' },
+    { key: 'high',     label: 'High',     items: high,     color: tk('threat'), border: 'border-threat/25',  header: 'bg-threat/10 text-threat'   },
+    { key: 'medium',   label: 'Medium',   items: medium,   color: tk('amber'), border: 'border-amber/25',   header: 'bg-amber/10 text-amber'     },
   ]
 
   return (
@@ -1393,10 +1394,10 @@ export default function SIEMPage() {
               {/* Metric trend row */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: 'Alert Volume (7d)', data: SPARKLINE_DATA.alertVolume, color: '#FF4D6D', unit: 'alerts/day' },
-                  { label: 'MTTD (min)',        data: SPARKLINE_DATA.mttd,        color: '#34F5C5', unit: 'minutes' },
-                  { label: 'MTTR (min)',        data: SPARKLINE_DATA.mttr,        color: '#FFB23E', unit: 'minutes' },
-                  { label: 'False Positive %',  data: SPARKLINE_DATA.fpRate,      color: '#7A3CFF', unit: 'percent' },
+                  { label: 'Alert Volume (7d)', data: SPARKLINE_DATA.alertVolume, color: tk('threat'), unit: 'alerts/day' },
+                  { label: 'MTTD (min)',        data: SPARKLINE_DATA.mttd,        color: tk('safe'), unit: 'minutes' },
+                  { label: 'MTTR (min)',        data: SPARKLINE_DATA.mttr,        color: tk('amber'), unit: 'minutes' },
+                  { label: 'False Positive %',  data: SPARKLINE_DATA.fpRate,      color: tk('violet'), unit: 'percent' },
                 ].map((m) => (
                   <div key={m.label} className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
                     <p className="text-[11px] text-ink-500">{m.label}</p>
@@ -1477,11 +1478,11 @@ export default function SIEMPage() {
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
                   <p className="text-xs font-semibold text-white mb-4">Alert Triage Funnel</p>
                   {[
-                    { stage: 'Total Alerts',    count: alerts.length, color: '#7A3CFF' },
-                    { stage: 'Acknowledged',    count: alerts.filter(a => a.status !== 'new').length, color: '#FFB23E' },
-                    { stage: 'Investigated',    count: alerts.filter(a => ['in-progress','resolved','closed'].includes(a.status)).length, color: '#2DD4BF' },
-                    { stage: 'Escalated',       count: alerts.filter(a => ['resolved','closed'].includes(a.status)).length, color: '#FF4D6D' },
-                    { stage: 'True Positives',  count: alerts.filter(a => a.disposition === 'true-positive').length, color: '#FF2E97' },
+                    { stage: 'Total Alerts',    count: alerts.length, color: tk('violet') },
+                    { stage: 'Acknowledged',    count: alerts.filter(a => a.status !== 'new').length, color: tk('amber') },
+                    { stage: 'Investigated',    count: alerts.filter(a => ['in-progress','resolved','closed'].includes(a.status)).length, color: tk('teal') },
+                    { stage: 'Escalated',       count: alerts.filter(a => ['resolved','closed'].includes(a.status)).length, color: tk('threat') },
+                    { stage: 'True Positives',  count: alerts.filter(a => a.disposition === 'true-positive').length, color: tk('magenta') },
                   ].map((f, i, arr) => (
                     <div key={f.stage} className="flex items-center gap-3 mb-2">
                       <span className="text-[11px] text-ink-400 w-36 shrink-0">{f.stage}</span>
@@ -1504,11 +1505,11 @@ export default function SIEMPage() {
                   <p className="text-xs font-semibold text-white mb-4">Severity Distribution</p>
                   {(() => {
                     const sevs = [
-                      { sev: 'Critical', key: 'critical', color: '#FF2E97' },
-                      { sev: 'High',     key: 'high',     color: '#FF4D6D' },
-                      { sev: 'Medium',   key: 'medium',   color: '#FFB23E' },
-                      { sev: 'Low',      key: 'low',      color: '#34F5C5' },
-                      { sev: 'Info',     key: 'info',     color: '#7A3CFF' },
+                      { sev: 'Critical', key: 'critical', color: tk('magenta') },
+                      { sev: 'High',     key: 'high',     color: tk('threat') },
+                      { sev: 'Medium',   key: 'medium',   color: tk('amber') },
+                      { sev: 'Low',      key: 'low',      color: tk('safe') },
+                      { sev: 'Info',     key: 'info',     color: tk('violet') },
                     ].map((s) => ({ ...s, count: alerts.filter(a => a.severity === s.key).length }))
                     const max = Math.max(1, ...sevs.map(s => s.count))
                     return sevs.map((s, i) => (

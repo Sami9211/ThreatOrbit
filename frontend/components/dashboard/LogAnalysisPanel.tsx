@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { FileSearch, Upload, Loader2, CheckCircle, XCircle, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { analyseLogFile, fetchServicesStatus, type LogAnalysisResult } from '@/lib/api'
+import { tk, withAlpha } from '@/lib/colors'
 
 const FORMATS = [
   { value: 'apache', label: 'Apache access log' },
@@ -14,7 +15,7 @@ const FORMATS = [
 ]
 
 const SEV_COLOR: Record<string, string> = {
-  CRITICAL: '#FF2E97', HIGH: '#FF4D6D', MEDIUM: '#FFB23E', LOW: '#2DD4BF',
+  CRITICAL: tk('magenta'), HIGH: tk('threat'), MEDIUM: tk('amber'), LOW: tk('teal'),
 }
 
 /**
@@ -163,7 +164,7 @@ export default function LogAnalysisPanel() {
                   {findings.map((f, i) => (
                     <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-2/40 border border-white/5">
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 mt-0.5"
-                        style={{ color: SEV_COLOR[f.severity ?? 'LOW'] ?? '#2DD4BF', background: `${SEV_COLOR[f.severity ?? 'LOW'] ?? '#2DD4BF'}18` }}>
+                        style={{ color: SEV_COLOR[f.severity ?? 'LOW'] ?? tk('teal'), background: withAlpha(SEV_COLOR[f.severity ?? 'LOW'] ?? tk('teal'), 0.09) }}>
                         {f.severity ?? 'LOW'}
                       </span>
                       <div className="flex-1 min-w-0">

@@ -2902,7 +2902,11 @@ def test_enrichment_live_providers(monkeypatch):
             return _Resp(200, {"ports": [22, 23, 7547], "vulns": ["CVE-2024-3400"],
                                "org": "BadCloud", "os": None, "country_name": "X"})
         if "whoisxmlapi" in url:
-            return _Resp(200, {"WhoisRecord": {"createdDate": "2026-06-01T00:00:00Z",
+            # created ~10d ago, computed at run time so the <30d "suspicious"
+            # branch stays exercised regardless of when the suite runs
+            from datetime import datetime, timedelta, timezone
+            recent = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%dT00:00:00Z")
+            return _Resp(200, {"WhoisRecord": {"createdDate": recent,
                                                "registrarName": "CheapNames"}})
         return _Resp(404, {})
 

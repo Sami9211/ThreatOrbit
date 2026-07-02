@@ -10,6 +10,7 @@ import {
   ChevronRight, ToggleLeft, ToggleRight, X, Code,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk } from '@/lib/colors'
 
 type IntStatus = 'connected' | 'degraded' | 'disconnected' | 'pending'
 type IntCategory = 'EDR' | 'Firewall' | 'SIEM' | 'Ticketing' | 'Communication' | 'Threat Intel' | 'Identity' | 'Cloud'
@@ -48,7 +49,7 @@ const INTEGRATIONS: Integration[] = [
 
 const CAT_COLORS: Record<IntCategory, string> = {
   EDR: 'bg-magenta/15 text-magenta border-magenta/20',
-  Firewall: 'bg-threat/15 text-[#FF4D6D] border-threat/20',
+  Firewall: `bg-threat/15 text-[${tk('threat')}] border-threat/20`,
   SIEM: 'bg-violet/15 text-violet border-violet/20',
   Ticketing: 'bg-amber/15 text-amber border-amber/20',
   Communication: 'bg-safe/15 text-safe border-safe/20',
@@ -422,7 +423,7 @@ export default function SoarIntegrationsPage() {
           <CreateModal
             title="Connect Tool"
             icon={Link}
-            accent="#34F5C5"
+            accent={tk('safe')}
             submitLabel="Connect"
             onClose={() => setShowConnect(false)}
             onSubmit={handleConnect}

@@ -134,6 +134,9 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     tags_json = json.dumps(body.tags, separators=(",", ":"))
     imported = duplicates = skipped = 0
+    # Dedup within the caller's workspace only: another tenant's indicators must
+    # be neither an existence oracle nor a silent drop for this import.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         for item in body.indicators:
             val = item.value.strip()
@@ -141,7 +144,7 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
             if not val or itype not in _IOC_TYPES:
                 skipped += 1
                 continue
-            if conn.execute("SELECT 1 FROM iocs WHERE value=?", (val,)).fetchone():
+            if conn.execute(f"SELECT 1 FROM iocs WHERE value=? {sc}", (val, *sp)).fetchone():
                 duplicates += 1
                 continue
             conn.execute(

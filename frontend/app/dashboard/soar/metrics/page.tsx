@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* ── Static data ─────────────────────────────────────────────────── */
 const KPI_DATA = [
@@ -91,7 +92,7 @@ const KPI_DATA = [
 ]
 
 // Bar palette for the (live) analyst-throughput chart.
-const ANALYST_COLORS = ['#FF2E97', '#7A3CFF', '#34F5C5', '#FFB23E', '#FF4D6D']
+const ANALYST_COLORS = [tk('magenta'), tk('violet'), tk('safe'), tk('amber'), tk('threat')]
 type ThroughputRow = { name: string; closed: number; color: string }
 
 // MITRE ATT&CK tactic → navigator id, for labelling the live coverage derived
@@ -107,17 +108,17 @@ const TACTIC_ID: Record<string, string> = {
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 function coverageColor(pct: number): string {
-  if (pct >= 80) return '#34F5C5'
-  if (pct >= 60) return '#7A3CFF'
-  if (pct >= 40) return '#FFB23E'
-  return '#FF4D6D'
+  if (pct >= 80) return tk('safe')
+  if (pct >= 60) return tk('violet')
+  if (pct >= 40) return tk('amber')
+  return tk('threat')
 }
 
 function mitreHeatBg(pct: number): string {
-  if (pct >= 80) return 'rgba(52,245,197,0.18)'
-  if (pct >= 60) return 'rgba(122,60,255,0.18)'
-  if (pct >= 40) return 'rgba(255,178,62,0.18)'
-  return 'rgba(255,77,109,0.18)'
+  if (pct >= 80) return withAlpha(tk('safe'), 0.18)
+  if (pct >= 60) return withAlpha(tk('violet'), 0.18)
+  if (pct >= 40) return withAlpha(tk('amber'), 0.18)
+  return withAlpha(tk('threat'), 0.18)
 }
 
 /* ── Sub-components ───────────────────────────────────────────────── */
@@ -129,7 +130,7 @@ function AlertVolumeChart({ data }: { data: AlertVolumeDay[] }) {
   const BAR_W = 32
   const GAP = 20
   const HEIGHT = 120
-  const COLORS = { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5' }
+  const COLORS = { critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe') }
 
   if (!hasData) {
     return <p className="text-xs text-ink-500 py-10 text-center">No alerts recorded in the last 7 days.</p>
@@ -352,14 +353,14 @@ export default function SOCMetricsPage() {
 
   // Live alert disposition split (real `disposition` column; null = untriaged).
   const DISP_COLOR: Record<string, string> = {
-    'true-positive': '#FF2E97', 'false-positive': '#FF4D6D', benign: '#34F5C5',
-    duplicate: '#FFB23E', untriaged: '#7A3CFF',
+    'true-positive': tk('magenta'), 'false-positive': tk('threat'), benign: tk('safe'),
+    duplicate: tk('amber'), untriaged: tk('violet'),
   }
   const dispTotal = (analytics?.disposition ?? []).reduce((s, d) => s + d.count, 0)
   const dispSegments = (analytics?.disposition ?? []).map((d) => ({
     label: d.label,
     value: dispTotal ? Math.round((d.count / dispTotal) * 100) : 0,
-    color: DISP_COLOR[d.key] ?? '#7A3CFF',
+    color: DISP_COLOR[d.key] ?? tk('violet'),
   }))
   const topDisp = dispSegments[0]
 
@@ -456,8 +457,8 @@ export default function SOCMetricsPage() {
             <div className="flex-1 flex items-center justify-center">
               <DonutChart
                 segments={[
-                  { label: 'Automated', value: autoPct, color: '#7A3CFF' },
-                  { label: 'Manual',    value: 100 - autoPct, color: '#FFB23E' },
+                  { label: 'Automated', value: autoPct, color: tk('violet') },
+                  { label: 'Manual',    value: 100 - autoPct, color: tk('amber') },
                 ]}
                 label={`${autoPct}%`}
                 sublabel="Automated"
@@ -500,10 +501,10 @@ export default function SOCMetricsPage() {
             </div>
             <div className="flex items-center gap-3 text-[10px]">
               {[
-                { label: '≥80%',  color: '#34F5C5' },
-                { label: '60-80%',color: '#7A3CFF' },
-                { label: '40-60%',color: '#FFB23E' },
-                { label: '<40%',  color: '#FF4D6D' },
+                { label: '≥80%',  color: tk('safe') },
+                { label: '60-80%',color: tk('violet') },
+                { label: '40-60%',color: tk('amber') },
+                { label: '<40%',  color: tk('threat') },
               ].map((l) => (
                 <span key={l.label} className="flex items-center gap-1 text-ink-500">
                   <span className="w-2 h-2 rounded-sm" style={{ background: l.color }} />

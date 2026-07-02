@@ -271,9 +271,12 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(require_per
     from datetime import datetime, timezone
     fields.append("updated=?"); values.append(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
     values.append(case_id)
+    # Org-scope the UPDATE itself so a cross-workspace id 404s without a write.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         prev = conn.execute("SELECT status FROM cases WHERE id=?", (case_id,)).fetchone()
-        cur = conn.execute(f"UPDATE cases SET {','.join(fields)} WHERE id=?", values)
+        cur = conn.execute(f"UPDATE cases SET {','.join(fields)} WHERE id=? {sc}",
+                           values + sp)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Case not found")
         changed = ",".join(f.split("=")[0] for f in fields[:-1])

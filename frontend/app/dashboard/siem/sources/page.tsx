@@ -12,6 +12,7 @@ import { fetchSiemSources, createLogSource } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import LogAnalysisPanel from '@/components/dashboard/LogAnalysisPanel'
 import LogCollectorPanel from '@/components/dashboard/LogCollectorPanel'
+import { tk } from '@/lib/colors'
 
 type SourceStatus = 'healthy' | 'degraded' | 'offline' | 'paused'
 type SourceType = 'Syslog' | 'Windows Event' | 'CEF/ArcSight' | 'API Pull' | 'Kafka' | 'S3 Bucket' | 'Splunk Forwarder'
@@ -269,7 +270,7 @@ export default function SiemSourcesPage() {
           <CreateModal
             title="Add Log Source"
             icon={Database}
-            accent="#7A3CFF"
+            accent={tk('violet')}
             submitLabel="Add Source"
             onClose={() => setShowAdd(false)}
             onSubmit={handleAddSource}

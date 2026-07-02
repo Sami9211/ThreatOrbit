@@ -366,10 +366,11 @@ def asset_activity(asset_id: str):
 
 
 @router.get("/{asset_id}")
-def get_asset(asset_id: str):
+def get_asset(asset_id: str, user: dict = Depends(current_user)):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM assets WHERE id=?", (asset_id,)).fetchone()
-    if not row:
+    # Id-addressed reads 404 across workspaces (same contract as cases).
+    if not row or tenancy.cross_org(row, user):
         raise HTTPException(status_code=404, detail="Asset not found")
     asset = row_to_dict(row)
     # Attach a transparent per-axis explanation of the stored risk score.

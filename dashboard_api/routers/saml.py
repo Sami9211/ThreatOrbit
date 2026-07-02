@@ -36,10 +36,9 @@ def status():
 def login(return_to: str | None = Query(default=None)):
     if not saml.configured():
         raise HTTPException(status_code=404, detail="SAML is not configured on this deployment.")
-    rid, url = saml.make_authn_request()
-    relay = saml.make_relay_state(rid, return_to)
-    sep = "&" if "?" in url else "?"
-    return RedirectResponse(url=f"{url}{sep}RelayState={quote(relay)}", status_code=302)
+    # The redirect URL carries the AuthnRequest + signed RelayState, plus the
+    # detached SigAlg/Signature parameters when SAML_SP_PRIVATE_KEY is set.
+    return RedirectResponse(url=saml.make_login_redirect(return_to), status_code=302)
 
 
 def _provision(conn, u: dict) -> dict:

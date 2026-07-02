@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils'
 import { fetchSiemSources, createLogSource, fetchSettings, updateSettings, type LogSource } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
+import { tk } from '@/lib/colors'
 
 /* Keywords that link a connector to a live SIEM log source by name. A connector
  * shows "Connected" when a matching source is ingesting (not offline). */
@@ -45,25 +46,25 @@ interface CustomSourceType {
 /* ── Seed data ───────────────────────────────────────────────────── */
 const CONNECTORS: Connector[] = [
   // Cloud
-  { id: 'aws',    name: 'Amazon Web Services', vendor: 'AWS',              category: 'Cloud',    status: 'connected',    color: '#FFB23E', dataTypes: ['CloudTrail', 'GuardDuty', 'VPC Flow Logs'],     endpoint: 'https://cloudtrail.us-east-1.amazonaws.com' },
-  { id: 'azure',  name: 'Microsoft Azure',     vendor: 'Azure',           category: 'Cloud',    status: 'connected',    color: '#7A3CFF', dataTypes: ['Activity Logs', 'Defender for Cloud', 'NSG Flow'], endpoint: 'https://management.azure.com' },
-  { id: 'gcp',    name: 'Google Cloud',        vendor: 'GCP',             category: 'Cloud',    status: 'unconfigured', color: '#34F5C5', dataTypes: ['Cloud Audit Logs', 'SCC Findings'],            endpoint: '' },
+  { id: 'aws',    name: 'Amazon Web Services', vendor: 'AWS',              category: 'Cloud',    status: 'connected',    color: tk('amber'), dataTypes: ['CloudTrail', 'GuardDuty', 'VPC Flow Logs'],     endpoint: 'https://cloudtrail.us-east-1.amazonaws.com' },
+  { id: 'azure',  name: 'Microsoft Azure',     vendor: 'Azure',           category: 'Cloud',    status: 'connected',    color: tk('violet'), dataTypes: ['Activity Logs', 'Defender for Cloud', 'NSG Flow'], endpoint: 'https://management.azure.com' },
+  { id: 'gcp',    name: 'Google Cloud',        vendor: 'GCP',             category: 'Cloud',    status: 'unconfigured', color: tk('safe'), dataTypes: ['Cloud Audit Logs', 'SCC Findings'],            endpoint: '' },
   // Identity
-  { id: 'okta',   name: 'Okta',                vendor: 'Okta',            category: 'Identity', status: 'connected',    color: '#7A3CFF', dataTypes: ['System Log', 'MFA Events', 'Session Events'],   endpoint: 'https://acme.okta.com/api/v1/logs' },
-  { id: 'aad',    name: 'Azure AD / Entra ID', vendor: 'Microsoft',       category: 'Identity', status: 'connected',    color: '#FF2E97', dataTypes: ['Sign-in Logs', 'Audit Logs', 'Risk Detections'], endpoint: 'https://graph.microsoft.com/v1.0/auditLogs' },
-  { id: 'gws',    name: 'Google Workspace',    vendor: 'Google',          category: 'Identity', status: 'unconfigured', color: '#34F5C5', dataTypes: ['Admin Audit', 'Login Audit', 'Drive Audit'],   endpoint: '' },
+  { id: 'okta',   name: 'Okta',                vendor: 'Okta',            category: 'Identity', status: 'connected',    color: tk('violet'), dataTypes: ['System Log', 'MFA Events', 'Session Events'],   endpoint: 'https://acme.okta.com/api/v1/logs' },
+  { id: 'aad',    name: 'Azure AD / Entra ID', vendor: 'Microsoft',       category: 'Identity', status: 'connected',    color: tk('magenta'), dataTypes: ['Sign-in Logs', 'Audit Logs', 'Risk Detections'], endpoint: 'https://graph.microsoft.com/v1.0/auditLogs' },
+  { id: 'gws',    name: 'Google Workspace',    vendor: 'Google',          category: 'Identity', status: 'unconfigured', color: tk('safe'), dataTypes: ['Admin Audit', 'Login Audit', 'Drive Audit'],   endpoint: '' },
   // Endpoint
-  { id: 'crwd',   name: 'CrowdStrike Falcon',  vendor: 'CrowdStrike',     category: 'Endpoint', status: 'connected',    color: '#FF4D6D', dataTypes: ['Detections', 'Process Events', 'Network Conn'], endpoint: 'https://api.crowdstrike.com/sensors/queries/detects' },
-  { id: 's1',     name: 'SentinelOne',         vendor: 'SentinelOne',     category: 'Endpoint', status: 'connected',    color: '#7A3CFF', dataTypes: ['Threats', 'Deep Visibility', 'Agent Events'],   endpoint: 'https://acme.sentinelone.net/web/api/v2.1' },
-  { id: 'mde',    name: 'Microsoft Defender',  vendor: 'Microsoft',       category: 'Endpoint', status: 'unconfigured', color: '#FF2E97', dataTypes: ['Alerts', 'Device Events', 'Advanced Hunting'], endpoint: '' },
+  { id: 'crwd',   name: 'CrowdStrike Falcon',  vendor: 'CrowdStrike',     category: 'Endpoint', status: 'connected',    color: tk('threat'), dataTypes: ['Detections', 'Process Events', 'Network Conn'], endpoint: 'https://api.crowdstrike.com/sensors/queries/detects' },
+  { id: 's1',     name: 'SentinelOne',         vendor: 'SentinelOne',     category: 'Endpoint', status: 'connected',    color: tk('violet'), dataTypes: ['Threats', 'Deep Visibility', 'Agent Events'],   endpoint: 'https://acme.sentinelone.net/web/api/v2.1' },
+  { id: 'mde',    name: 'Microsoft Defender',  vendor: 'Microsoft',       category: 'Endpoint', status: 'unconfigured', color: tk('magenta'), dataTypes: ['Alerts', 'Device Events', 'Advanced Hunting'], endpoint: '' },
   // Network
-  { id: 'palo',   name: 'Palo Alto NGFW',      vendor: 'Palo Alto',       category: 'Network',  status: 'connected',    color: '#FFB23E', dataTypes: ['Traffic', 'Threat', 'URL Filtering'],          endpoint: 'https://panorama.acme.com/api' },
-  { id: 'cisco',  name: 'Cisco Firepower',     vendor: 'Cisco',           category: 'Network',  status: 'unconfigured', color: '#34F5C5', dataTypes: ['Intrusion Events', 'Connection Events'],       endpoint: '' },
-  { id: 'forti',  name: 'Fortinet FortiGate',  vendor: 'Fortinet',        category: 'Network',  status: 'connected',    color: '#FF4D6D', dataTypes: ['Traffic Logs', 'IPS Events', 'Web Filter'],    endpoint: 'https://fortigate.acme.com/api/v2' },
+  { id: 'palo',   name: 'Palo Alto NGFW',      vendor: 'Palo Alto',       category: 'Network',  status: 'connected',    color: tk('amber'), dataTypes: ['Traffic', 'Threat', 'URL Filtering'],          endpoint: 'https://panorama.acme.com/api' },
+  { id: 'cisco',  name: 'Cisco Firepower',     vendor: 'Cisco',           category: 'Network',  status: 'unconfigured', color: tk('safe'), dataTypes: ['Intrusion Events', 'Connection Events'],       endpoint: '' },
+  { id: 'forti',  name: 'Fortinet FortiGate',  vendor: 'Fortinet',        category: 'Network',  status: 'connected',    color: tk('threat'), dataTypes: ['Traffic Logs', 'IPS Events', 'Web Filter'],    endpoint: 'https://fortigate.acme.com/api/v2' },
   // SaaS
-  { id: 'o365',   name: 'Microsoft 365',       vendor: 'Microsoft',       category: 'SaaS',     status: 'connected',    color: '#FF2E97', dataTypes: ['Unified Audit', 'Exchange', 'SharePoint'],     endpoint: 'https://manage.office.com/api/v1.0' },
-  { id: 'slack',  name: 'Slack',               vendor: 'Slack',           category: 'SaaS',     status: 'connected',    color: '#7A3CFF', dataTypes: ['Audit Logs', 'Access Logs'],                   endpoint: 'https://api.slack.com/audit/v1/logs' },
-  { id: 'github', name: 'GitHub',              vendor: 'GitHub',          category: 'SaaS',     status: 'unconfigured', color: '#34F5C5', dataTypes: ['Audit Log', 'Secret Scanning', 'Code Scan'],   endpoint: '' },
+  { id: 'o365',   name: 'Microsoft 365',       vendor: 'Microsoft',       category: 'SaaS',     status: 'connected',    color: tk('magenta'), dataTypes: ['Unified Audit', 'Exchange', 'SharePoint'],     endpoint: 'https://manage.office.com/api/v1.0' },
+  { id: 'slack',  name: 'Slack',               vendor: 'Slack',           category: 'SaaS',     status: 'connected',    color: tk('violet'), dataTypes: ['Audit Logs', 'Access Logs'],                   endpoint: 'https://api.slack.com/audit/v1/logs' },
+  { id: 'github', name: 'GitHub',              vendor: 'GitHub',          category: 'SaaS',     status: 'unconfigured', color: tk('safe'), dataTypes: ['Audit Log', 'Secret Scanning', 'Code Scan'],   endpoint: '' },
 ]
 
 const CUSTOM_SOURCES: CustomSourceType[] = [
@@ -75,11 +76,11 @@ const CUSTOM_SOURCES: CustomSourceType[] = [
 ]
 
 const CATEGORIES: { id: ConnCategory; icon: React.ComponentType<any>; color: string }[] = [
-  { id: 'Cloud',    icon: Cloud,             color: '#FFB23E' },
-  { id: 'Identity', icon: Fingerprint,       color: '#7A3CFF' },
-  { id: 'Endpoint', icon: MonitorSmartphone, color: '#FF4D6D' },
-  { id: 'Network',  icon: Network,           color: '#34F5C5' },
-  { id: 'SaaS',     icon: AppWindow,         color: '#FF2E97' },
+  { id: 'Cloud',    icon: Cloud,             color: tk('amber') },
+  { id: 'Identity', icon: Fingerprint,       color: tk('violet') },
+  { id: 'Endpoint', icon: MonitorSmartphone, color: tk('threat') },
+  { id: 'Network',  icon: Network,           color: tk('safe') },
+  { id: 'SaaS',     icon: AppWindow,         color: tk('magenta') },
 ]
 
 /* ── Config form panel ───────────────────────────────────────────── */
@@ -313,7 +314,7 @@ const customToConnector = (c: StoredCustomConnector): Connector => ({
   vendor: c.vendor,
   category: c.category,
   status: 'connected',
-  color: '#34F5C5',
+  color: tk('safe'),
   dataTypes: c.dataTypes,
   endpoint: c.endpoint,
 })
@@ -505,7 +506,7 @@ export default function DataSourcesPage() {
           <CreateModal
             title="Add Your Own Connector"
             icon={Database}
-            accent="#34F5C5"
+            accent={tk('safe')}
             submitLabel="Add Connector"
             onClose={() => setShowAddConnector(false)}
             onSubmit={addCustomConnector}
@@ -531,7 +532,7 @@ export default function DataSourcesPage() {
           <CreateModal
             title={`Add ${customSource.name} Source`}
             icon={customSource.icon}
-            accent="#7A3CFF"
+            accent={tk('violet')}
             submitLabel="Add Source"
             onClose={() => setCustomSource(null)}
             onSubmit={addCustomSource}

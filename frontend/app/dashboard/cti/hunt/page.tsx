@@ -9,6 +9,7 @@ import {
   ExternalLink, User, Calendar, Lightbulb, XCircle, Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk } from '@/lib/colors'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type HuntStatus = 'active' | 'paused' | 'completed'
@@ -236,15 +237,15 @@ const HUNTS: Hunt[] = [
 
 /* ─── Status config ──────────────────────────────────────────────────── */
 const HUNT_STATUS: Record<HuntStatus, { label: string; color: string; icon: React.ComponentType<any> }> = {
-  active:    { label: 'Active',    color: '#34F5C5', icon: Play },
-  paused:    { label: 'Paused',    color: '#FFB23E', icon: Pause },
-  completed: { label: 'Completed', color: '#7A3CFF', icon: CheckCircle },
+  active:    { label: 'Active',    color: tk('safe'), icon: Play },
+  paused:    { label: 'Paused',    color: tk('amber'), icon: Pause },
+  completed: { label: 'Completed', color: tk('violet'), icon: CheckCircle },
 }
 
 const HYP_STATUS: Record<HypothesisStatus, { label: string; color: string; icon: React.ComponentType<any> }> = {
-  confirmed:     { label: 'Confirmed',     color: '#FF4D6D', icon: CheckCircle },
-  refuted:       { label: 'Refuted',       color: '#34F5C5', icon: XCircle },
-  investigating: { label: 'Investigating', color: '#FFB23E', icon: Search },
+  confirmed:     { label: 'Confirmed',     color: tk('threat'), icon: CheckCircle },
+  refuted:       { label: 'Refuted',       color: tk('safe'), icon: XCircle },
+  investigating: { label: 'Investigating', color: tk('amber'), icon: Search },
 }
 
 /* ─── MITRE coverage matrix tactics ──────────────────────────────────── */
@@ -470,8 +471,8 @@ function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
   }, [hunts])
 
   function cellColor(count: number) {
-    if (count >= 2) return '#FF2E97'
-    if (count === 1) return '#7A3CFF'
+    if (count >= 2) return tk('magenta')
+    if (count === 1) return tk('violet')
     return 'rgba(255,255,255,0.04)'
   }
 
@@ -484,8 +485,8 @@ function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
         </div>
         <div className="flex items-center gap-4 text-[9px] text-ink-500">
           {[
-            { label: '2+ hunts', color: '#FF2E97' },
-            { label: '1 hunt', color: '#7A3CFF' },
+            { label: '2+ hunts', color: tk('magenta') },
+            { label: '1 hunt', color: tk('violet') },
             { label: 'none', color: 'rgba(255,255,255,0.08)' },
           ].map(({ label, color }) => (
             <div key={label} className="flex items-center gap-1">
@@ -571,10 +572,10 @@ export default function ThreatHuntPage() {
 
   // KPI tiles derived from real hunts + ATT&CK coverage (no hardcoded values).
   const kpis = [
-    { label: 'Active Hunts',    value: String(hunts.filter((h) => h.status === 'active').length), icon: Crosshair,   color: '#FF2E97', sub: 'in progress' },
-    { label: 'Saved Hunts',     value: String(hunts.length), icon: FlaskConical, color: '#7A3CFF', sub: 'hypotheses tracked' },
-    { label: 'Completed',       value: String(hunts.filter((h) => h.status === 'completed').length), icon: ShieldCheck, color: '#34F5C5', sub: 'hunts run' },
-    { label: 'ATT&CK Coverage', value: coverage == null ? '-' : `${coverage}%`, icon: Layers, color: '#FFB23E', sub: 'techniques mapped' },
+    { label: 'Active Hunts',    value: String(hunts.filter((h) => h.status === 'active').length), icon: Crosshair,   color: tk('magenta'), sub: 'in progress' },
+    { label: 'Saved Hunts',     value: String(hunts.length), icon: FlaskConical, color: tk('violet'), sub: 'hypotheses tracked' },
+    { label: 'Completed',       value: String(hunts.filter((h) => h.status === 'completed').length), icon: ShieldCheck, color: tk('safe'), sub: 'hunts run' },
+    { label: 'ATT&CK Coverage', value: coverage == null ? '-' : `${coverage}%`, icon: Layers, color: tk('amber'), sub: 'techniques mapped' },
   ]
 
   return (

@@ -1,4 +1,5 @@
 'use client'
+import { tk } from '@/lib/colors'
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -77,19 +78,19 @@ const USERS: TeamUser[] = [
 
 const ROLES: Role[] = [
   {
-    name: 'Admin', color: '#FF2E97', description: 'Full platform control', userCount: 1,
+    name: 'Admin', color: tk('magenta'), description: 'Full platform control', userCount: 1,
     permissions: { 'View Alerts': true, 'Manage Playbooks': true, 'Configure Sources': true, 'Manage Users': true, 'Export Data': true, 'Run Response Actions': true },
   },
   {
-    name: 'SOC Manager', color: '#7A3CFF', description: 'Team oversight & operations', userCount: 1,
+    name: 'SOC Manager', color: tk('violet'), description: 'Team oversight & operations', userCount: 1,
     permissions: { 'View Alerts': true, 'Manage Playbooks': true, 'Configure Sources': true, 'Manage Users': false, 'Export Data': true, 'Run Response Actions': true },
   },
   {
-    name: 'Senior Analyst', color: '#34F5C5', description: 'Investigate & respond', userCount: 2,
+    name: 'Senior Analyst', color: tk('safe'), description: 'Investigate & respond', userCount: 2,
     permissions: { 'View Alerts': true, 'Manage Playbooks': true, 'Configure Sources': false, 'Manage Users': false, 'Export Data': true, 'Run Response Actions': true },
   },
   {
-    name: 'Analyst', color: '#FFB23E', description: 'Triage & enrichment', userCount: 4,
+    name: 'Analyst', color: tk('amber'), description: 'Triage & enrichment', userCount: 4,
     permissions: { 'View Alerts': true, 'Manage Playbooks': false, 'Configure Sources': false, 'Manage Users': false, 'Export Data': false, 'Run Response Actions': true },
   },
   {
@@ -97,18 +98,18 @@ const ROLES: Role[] = [
     permissions: { 'View Alerts': true, 'Manage Playbooks': false, 'Configure Sources': false, 'Manage Users': false, 'Export Data': false, 'Run Response Actions': false },
   },
   {
-    name: 'Auditor', color: '#FF4D6D', description: 'Compliance & export', userCount: 1,
+    name: 'Auditor', color: tk('threat'), description: 'Compliance & export', userCount: 1,
     permissions: { 'View Alerts': true, 'Manage Playbooks': false, 'Configure Sources': false, 'Manage Users': false, 'Export Data': true, 'Run Response Actions': false },
   },
 ]
 
 const ROLE_COLORS: Record<RoleName, string> = {
-  Admin: '#FF2E97',
-  'SOC Manager': '#7A3CFF',
-  'Senior Analyst': '#34F5C5',
-  Analyst: '#FFB23E',
+  Admin: tk('magenta'),
+  'SOC Manager': tk('violet'),
+  'Senior Analyst': tk('safe'),
+  Analyst: tk('amber'),
   'Read-Only': '#8A7DA3',
-  Auditor: '#FF4D6D',
+  Auditor: tk('threat'),
 }
 
 const STATUS_CFG: Record<UserStatus, { label: string; cls: string }> = {

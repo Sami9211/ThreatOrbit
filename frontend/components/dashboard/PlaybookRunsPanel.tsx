@@ -1,4 +1,5 @@
 'use client'
+import { tk } from '@/lib/colors'
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -13,16 +14,16 @@ import {
 } from '@/lib/api'
 
 const RUN_STYLE: Record<string, { color: string; label: string }> = {
-  'success': { color: '#34F5C5', label: 'Success' },
-  'failed': { color: '#FF4D6D', label: 'Failed' },
-  'awaiting-approval': { color: '#FFB23E', label: 'Awaiting approval' },
+  'success': { color: tk('safe'), label: 'Success' },
+  'failed': { color: tk('threat'), label: 'Failed' },
+  'awaiting-approval': { color: tk('amber'), label: 'Awaiting approval' },
   'rejected': { color: '#665B7D', label: 'Rejected' },
 }
 const STEP_ICON: Record<PlaybookRunStep['status'], { icon: React.ComponentType<any>; color: string }> = {
-  'success': { icon: CheckCircle2, color: '#34F5C5' },
-  'failed': { icon: XCircle, color: '#FF4D6D' },
+  'success': { icon: CheckCircle2, color: tk('safe') },
+  'failed': { icon: XCircle, color: tk('threat') },
   'skipped': { icon: MinusCircle, color: '#665B7D' },
-  'pending-approval': { icon: ShieldQuestion, color: '#FFB23E' },
+  'pending-approval': { icon: ShieldQuestion, color: tk('amber') },
 }
 
 function relTime(iso: string | null): string {

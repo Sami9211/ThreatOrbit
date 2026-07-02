@@ -13,17 +13,18 @@ import {
 } from '@/lib/api'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import { tk } from '@/lib/colors'
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
-  'credential-leak': { label: 'Credential Leak',  icon: KeyRound,      color: '#FF2E97' },
-  'data-for-sale':   { label: 'Data for Sale',    icon: ShoppingCart,  color: '#FF4D6D' },
-  'brand-mention':   { label: 'Brand Mention',    icon: AtSign,        color: '#FFB23E' },
-  'actor-chatter':   { label: 'Actor Chatter',    icon: MessageSquare, color: '#7A3CFF' },
-  'infrastructure':  { label: 'Access Listing',   icon: Network,       color: '#2DD4BF' },
+  'credential-leak': { label: 'Credential Leak',  icon: KeyRound,      color: tk('magenta') },
+  'data-for-sale':   { label: 'Data for Sale',    icon: ShoppingCart,  color: tk('threat') },
+  'brand-mention':   { label: 'Brand Mention',    icon: AtSign,        color: tk('amber') },
+  'actor-chatter':   { label: 'Actor Chatter',    icon: MessageSquare, color: tk('violet') },
+  'infrastructure':  { label: 'Access Listing',   icon: Network,       color: tk('teal') },
 }
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5',
+  critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'),
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {

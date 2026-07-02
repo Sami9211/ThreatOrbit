@@ -1,4 +1,5 @@
 'use client'
+import { tk } from '@/lib/colors'
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
@@ -20,7 +21,7 @@ const KIND_ICON: Record<string, React.ComponentType<any>> = {
   close_alerts: CheckCircle2, notify: Bell, webhook: Webhook, approval: UserCheck,
 }
 const TYPE_COLOR: Record<string, string> = {
-  check: '#7A3CFF', decision: '#FFB23E', action: '#FF4D6D', notify: '#34F5C5', human: '#FF2E97',
+  check: tk('violet'), decision: tk('amber'), action: tk('threat'), notify: tk('safe'), human: tk('magenta'),
 }
 
 type EditStep = BuilderStep & { _id: string }
@@ -136,7 +137,7 @@ export default function PlaybookBuilder({ playbook, onClose, onSaved }: {
               return (
                 <button key={p.kind} onClick={() => add(p.kind)}
                   className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] text-ink-300 hover:bg-white/5 hover:text-white transition-colors text-left">
-                  <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: TYPE_COLOR[p.type] ?? '#7A3CFF' }} />
+                  <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: TYPE_COLOR[p.type] ?? tk('violet') }} />
                   <span className="truncate">{p.label}</span>
                 </button>
               )
@@ -170,7 +171,7 @@ export default function PlaybookBuilder({ playbook, onClose, onSaved }: {
                 {steps.map((s, i) => {
                   const m = meta(s.kind)
                   const Icon = KIND_ICON[s.kind] ?? Plus
-                  const color = TYPE_COLOR[m?.type ?? 'action'] ?? '#FF4D6D'
+                  const color = TYPE_COLOR[m?.type ?? 'action'] ?? tk('threat')
                   return (
                     <div key={s._id}>
                       <div draggable onDragStart={() => setDragIdx(i)}

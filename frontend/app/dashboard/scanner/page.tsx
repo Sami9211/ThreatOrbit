@@ -9,6 +9,7 @@ import {
   TrendingUp, Clock, Database, Zap, Bookmark, BookmarkCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* ── Recent-scan history row (populated live from /scans; empty on a fresh
    install rather than showing invented history) ──────────────────── */
@@ -184,7 +185,7 @@ function relativeTime(iso: string): string {
 
 /* ── Verdict gauge ────────────────────────────────────────────────── */
 function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
-  const color = verdict === 'malicious' ? '#FF2E97' : verdict === 'suspicious' ? '#FFB23E' : '#34F5C5'
+  const color = verdict === 'malicious' ? tk('magenta') : verdict === 'suspicious' ? tk('amber') : tk('safe')
   const pct   = score * 100
   const r = 44
   const circ = 2 * Math.PI * r
@@ -435,9 +436,9 @@ export default function ScannerPage() {
         {/* Stats row */}
         <div className="flex items-center gap-3 flex-wrap">
           {[
-            { label: 'Scans today', value: stats ? stats.scansToday.toLocaleString() : '-', icon: Zap,          color: '#7A3CFF' },
-            { label: 'Malicious',   value: stats ? stats.malicious.toLocaleString() : '-',  icon: AlertTriangle, color: '#FF2E97' },
-            { label: 'Engines',     value: '90+',   icon: Database,      color: '#2DD4BF' },
+            { label: 'Scans today', value: stats ? stats.scansToday.toLocaleString() : '-', icon: Zap,          color: tk('violet') },
+            { label: 'Malicious',   value: stats ? stats.malicious.toLocaleString() : '-',  icon: AlertTriangle, color: tk('magenta') },
+            { label: 'Engines',     value: '90+',   icon: Database,      color: tk('teal') },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="glass border border-white/5 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg" style={{ background: `${color}18` }}>
@@ -455,7 +456,7 @@ export default function ScannerPage() {
       {/* Scanner card */}
       <div className="glass border border-white/8 rounded-2xl p-6 mb-6 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(255,46,151,0.06), transparent 60%)' }}
+          style={{ background: `radial-gradient(ellipse at 50% 0%, ${withAlpha(tk('magenta'), 0.06)}, transparent 60%)` }}
         />
         <div className="relative">
           {/* Type tabs */}
@@ -634,10 +635,10 @@ export default function ScannerPage() {
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
           >
             {[
-              { icon: Link,   title: 'URLs',   desc: 'Phishing, malware delivery & C2 domains', color: '#FF2E97', example: 'https://example.com/path' },
-              { icon: Globe,  title: 'IPs',    desc: 'Reputation, geolocation & ASN context',   color: '#7A3CFF', example: '45.95.147.236' },
-              { icon: Hash,   title: 'Hashes', desc: 'MD5 / SHA-1 / SHA-256 file fingerprints',  color: '#FFB23E', example: 'a3f8e92b1d47…' },
-              { icon: File,   title: 'Files',  desc: 'Static analysis across 90+ engines',       color: '#2DD4BF', example: 'invoice.pdf' },
+              { icon: Link,   title: 'URLs',   desc: 'Phishing, malware delivery & C2 domains', color: tk('magenta'), example: 'https://example.com/path' },
+              { icon: Globe,  title: 'IPs',    desc: 'Reputation, geolocation & ASN context',   color: tk('violet'), example: '45.95.147.236' },
+              { icon: Hash,   title: 'Hashes', desc: 'MD5 / SHA-1 / SHA-256 file fingerprints',  color: tk('amber'), example: 'a3f8e92b1d47…' },
+              { icon: File,   title: 'Files',  desc: 'Static analysis across 90+ engines',       color: tk('teal'), example: 'invoice.pdf' },
             ].map((c) => (
               <div key={c.title} className="glass border border-white/5 rounded-2xl p-5">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: `${c.color}18` }}>
@@ -664,7 +665,7 @@ export default function ScannerPage() {
             {/* Overview row */}
             <div className="glass border border-white/8 rounded-2xl p-6 grid md:grid-cols-[auto_1fr_auto] gap-8 items-center relative overflow-hidden">
               <div className="absolute inset-0 pointer-events-none"
-                style={{ background: result.verdict === 'malicious' ? 'radial-gradient(ellipse at 0% 50%, rgba(255,46,151,0.05), transparent 60%)' : 'radial-gradient(ellipse at 0% 50%, rgba(52,245,197,0.05), transparent 60%)' }}
+                style={{ background: result.verdict === 'malicious' ? `radial-gradient(ellipse at 0% 50%, ${withAlpha(tk('magenta'), 0.05)}, transparent 60%)` : `radial-gradient(ellipse at 0% 50%, ${withAlpha(tk('safe'), 0.05)}, transparent 60%)` }}
               />
               <VerdictGauge score={result.score} verdict={result.verdict} />
               <div>

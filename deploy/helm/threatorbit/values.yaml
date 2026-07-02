@@ -60,6 +60,18 @@ postgres:
   # postgresql://user:password@host:5432/threatorbit  (or supply via existingSecret key databaseUrl)
   url: ""
 
+# Scheduled backups: a CronJob snapshots the SQLite stores into timestamped
+# tar.gz archives on a dedicated PVC and prunes past the retention window.
+# The job co-schedules with the service pods (RWO volumes). With
+# postgres.enabled it covers the two ingestion services; dump the dashboard
+# database with pg_dump instead (docs/OPERATIONS.md). Ship the archive PVC
+# off-cluster for real DR.
+backup:
+  enabled: false
+  schedule: "0 2 * * *"     # daily 02:00 UTC
+  retentionDays: 14         # 0 = keep everything
+  size: 10Gi
+
 # Default container resources (overridable per component below).
 resources:
   requests: { cpu: 100m, memory: 256Mi }

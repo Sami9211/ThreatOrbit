@@ -24,8 +24,11 @@ tenant only sees detections from its own logs. The *synthetic* background engine
 default workspace - they are demo/deployment infrastructure, not a tenant's real
 data, which flows in through the per-org ingest path. Tenant lifecycle
 (suspend/export/delete-with-purge) and per-tenant quotas/retention complete the
-MSSP controls. The remaining step before flipping `MULTI_TENANT` on by default
-is end-to-end validation of the whole multi-tenant path.
+MSSP controls. The whole path is validated end-to-end in
+`tests/test_tenant_e2e.py` (create→stamp→list→detail→mutate across every core
+domain, plus aggregate scoping and per-workspace import dedup); flipping
+`DASHBOARD_MULTI_TENANT` on is now purely a per-deployment decision (set it in
+the MSSP build's environment).
 """
 import os
 import uuid

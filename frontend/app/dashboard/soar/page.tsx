@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
+import { tk } from '@/lib/colors'
 
 /* ── Types ────────────────────────────────────────────────────────── */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
@@ -364,12 +365,12 @@ const STEP_ICON: Record<StepType, React.ComponentType<any>> = {
 }
 
 const STEP_COLOR: Record<StepType, string> = {
-  check:          '#2DD4BF',
-  action:         '#7A3CFF',
-  decision:       '#FFB23E',
-  notify:         '#34F5C5',
-  human:          '#FF4D6D',
-  'sub-playbook': '#FF2E97',
+  check:          tk('teal'),
+  action:         tk('violet'),
+  decision:       tk('amber'),
+  notify:         tk('safe'),
+  human:          tk('threat'),
+  'sub-playbook': tk('magenta'),
 }
 
 // War-room timestamps arrive as ISO strings from the API (or HH:MM:SS from
@@ -479,7 +480,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
           {(() => {
             const pct = slaPercent(c.created, c.slaHours)
             const label = slaLabel(c.created, c.slaHours)
-            const barColor = pct > 80 ? '#FF2E97' : pct > 60 ? '#FFB23E' : '#34F5C5'
+            const barColor = pct > 80 ? tk('magenta') : pct > 60 ? tk('amber') : tk('safe')
             return (
               <div>
                 <div className="flex items-center justify-between text-[10px] mb-1">
@@ -556,7 +557,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                     <a key={a.id} href={`/dashboard/siem?q=${encodeURIComponent(a.srcIp ?? a.hostname ?? a.title)}`}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/5 hover:border-white/15 transition-colors">
                       <span className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ background: { critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5' }[a.severity] ?? '#7A3CFF' }} />
+                        style={{ background: { critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe') }[a.severity] ?? tk('violet') }} />
                       <span className="text-[11px] text-ink-200 truncate flex-1">{a.title}</span>
                       {a.mitreTechId && <span className="text-[9px] font-mono text-violet shrink-0">{a.mitreTechId}</span>}
                       <span className="text-[9px] text-ink-600 shrink-0 capitalize">{a.status}</span>
@@ -730,12 +731,12 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 function NormalSOAR({ cases: casesData }: { cases: CaseRecord[] }) {
   const CASES = casesData
   const SEV_COLOR: Record<string, string> = {
-    critical: '#FF2E97', high: '#FF4D6D', medium: '#FFB23E', low: '#34F5C5',
+    critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'),
   }
   const COLS = [
-    { id: 'todo',       label: 'New',         statuses: ['new'],                                  color: '#FFB23E', border: 'border-amber/25',   header: 'bg-amber/10 text-amber'   },
-    { id: 'inprogress', label: 'In Progress',  statuses: ['assigned', 'in-progress', 'pending'],  color: '#7A3CFF', border: 'border-violet/25',  header: 'bg-violet/10 text-violet' },
-    { id: 'done',       label: 'Resolved',     statuses: ['resolved', 'closed'],                  color: '#34F5C5', border: 'border-safe/25',    header: 'bg-safe/10 text-safe'     },
+    { id: 'todo',       label: 'New',         statuses: ['new'],                                  color: tk('amber'), border: 'border-amber/25',   header: 'bg-amber/10 text-amber'   },
+    { id: 'inprogress', label: 'In Progress',  statuses: ['assigned', 'in-progress', 'pending'],  color: tk('violet'), border: 'border-violet/25',  header: 'bg-violet/10 text-violet' },
+    { id: 'done',       label: 'Resolved',     statuses: ['resolved', 'closed'],                  color: tk('safe'), border: 'border-safe/25',    header: 'bg-safe/10 text-safe'     },
   ]
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1196,12 +1197,12 @@ export default function SOARPage() {
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
                   <p className="text-xs font-semibold text-white mb-4">Cases by Type (Last 30 days)</p>
                   {[
-                    { type: 'Phishing',            count: 284, color: '#FF4D6D' },
-                    { type: 'Endpoint / Malware',  count: 127, color: '#FF2E97' },
-                    { type: 'Account Compromise',  count: 94,  color: '#FFB23E' },
-                    { type: 'Cloud Security',      count: 41,  color: '#7A3CFF' },
-                    { type: 'Network / C2',        count: 38,  color: '#34F5C5' },
-                    { type: 'Data Exfiltration',   count: 22,  color: '#2DD4BF' },
+                    { type: 'Phishing',            count: 284, color: tk('threat') },
+                    { type: 'Endpoint / Malware',  count: 127, color: tk('magenta') },
+                    { type: 'Account Compromise',  count: 94,  color: tk('amber') },
+                    { type: 'Cloud Security',      count: 41,  color: tk('violet') },
+                    { type: 'Network / C2',        count: 38,  color: tk('safe') },
+                    { type: 'Data Exfiltration',   count: 22,  color: tk('teal') },
                     { type: 'Vulnerability',       count: 18,  color: '#A78BFA' },
                   ].map((t, i) => (
                     <div key={t.type} className="flex items-center gap-3 mb-2">
@@ -1311,7 +1312,7 @@ function CaseRow({ c, idx, selected, onClick }: {
 }) {
   const st = STATUS_STYLE[c.status]
   const pct = slaPercent(c.created, c.slaHours)
-  const slaColor = pct > 80 ? '#FF2E97' : pct > 60 ? '#FFB23E' : '#34F5C5'
+  const slaColor = pct > 80 ? tk('magenta') : pct > 60 ? tk('amber') : tk('safe')
 
   return (
     <motion.div
@@ -1326,7 +1327,7 @@ function CaseRow({ c, idx, selected, onClick }: {
       )}
     >
       <span className="w-2 h-2 rounded-full shrink-0"
-        style={{ background: c.severity === 'critical' ? '#FF2E97' : c.severity === 'high' ? '#FF4D6D' : c.severity === 'medium' ? '#FFB23E' : '#34F5C5' }} />
+        style={{ background: c.severity === 'critical' ? tk('magenta') : c.severity === 'high' ? tk('threat') : c.severity === 'medium' ? tk('amber') : tk('safe') }} />
 
       <div className="min-w-0">
         <p className="text-xs text-ink-200 truncate">{c.title}</p>

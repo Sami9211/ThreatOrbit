@@ -201,6 +201,88 @@ def test_status_and_login_redirect(client):
     assert r.status_code == 302
     loc = r.headers["location"]
     assert loc.startswith("https://idp.example/sso?") and "SAMLRequest=" in loc and "RelayState=" in loc
+    # No SP key configured → the request is sent unsigned (the default).
+    assert "SigAlg=" not in loc and "Signature=" not in loc
+
+
+# ── SP-signed AuthnRequest (HTTP-Redirect detached signature, B9 residual) ───
+
+def _decode_authn_request(loc: str):
+    """Pull the deflated AuthnRequest back out of a login redirect URL."""
+    import zlib
+    from urllib.parse import parse_qs, urlsplit
+    q = parse_qs(urlsplit(loc).query)
+    xml = zlib.decompress(base64.b64decode(q["SAMLRequest"][0]), -15)
+    return etree.fromstring(xml), q
+
+
+def _verify_redirect_signature(loc: str, private_key_pem: bytes):
+    """Verify the detached signature over the EXACT transmitted octets
+    (…&SigAlg=… before &Signature=…), the way an IdP does."""
+    from urllib.parse import unquote
+    from cryptography.hazmat.primitives.asymmetric import ec, padding
+    query = loc.split("?", 1)[1]
+    signed_part, _, sig_part = query.rpartition("&Signature=")
+    assert signed_part and sig_part, "Signature parameter missing"
+    sig = base64.b64decode(unquote(sig_part))
+    pub = serialization.load_pem_private_key(private_key_pem, password=None).public_key()
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+    if isinstance(pub, RSAPublicKey):
+        pub.verify(sig, signed_part.encode(), padding.PKCS1v15(), hashes.SHA256())
+    else:
+        pub.verify(sig, signed_part.encode(), ec.ECDSA(hashes.SHA256()))
+    return signed_part
+
+
+def test_sp_signed_authn_request_rsa(client, monkeypatch):
+    sp_key, _ = _mint_idp()  # any RSA key works as the SP key
+    monkeypatch.setattr("dashboard_api.saml.SAML_SP_PRIVATE_KEY", sp_key.decode())
+    r = client.get("/auth/saml/login", follow_redirects=False)
+    assert r.status_code == 302
+    loc = r.headers["location"]
+    signed_part = _verify_redirect_signature(loc, sp_key)
+    # Spec ordering: SAMLRequest, then RelayState, then SigAlg — as transmitted.
+    assert signed_part.index("SAMLRequest=") < signed_part.index("RelayState=") \
+        < signed_part.index("SigAlg=")
+    assert "rsa-sha256" in signed_part
+    # The signed RelayState still round-trips and matches the request ID inside
+    # the AuthnRequest, so the ACS InResponseTo check keeps working.
+    req, q = _decode_authn_request(loc)
+    assert saml.read_relay_state(q["RelayState"][0])["r"] == req.get("ID")
+    assert req.get("Destination") == "https://idp.example/sso"
+
+
+def test_sp_signed_authn_request_ec(client, monkeypatch):
+    from cryptography.hazmat.primitives.asymmetric import ec
+    key = ec.generate_private_key(ec.SECP256R1())
+    pem = key.private_bytes(serialization.Encoding.PEM,
+                            serialization.PrivateFormat.PKCS8,
+                            serialization.NoEncryption())
+    monkeypatch.setattr("dashboard_api.saml.SAML_SP_PRIVATE_KEY", pem.decode())
+    loc = client.get("/auth/saml/login", follow_redirects=False).headers["location"]
+    signed_part = _verify_redirect_signature(loc, pem)
+    assert "ecdsa-sha256" in signed_part
+
+
+def test_sp_signing_tamper_is_detectable(monkeypatch):
+    # Flipping anything in the signed octets must fail IdP-side verification —
+    # proves the signature actually covers SAMLRequest + RelayState + SigAlg.
+    sp_key, _ = _mint_idp()
+    monkeypatch.setattr("dashboard_api.saml.SAML_SP_PRIVATE_KEY", sp_key.decode())
+    loc = saml.make_login_redirect(None)
+    tampered = loc.replace("SAMLRequest=", "SAMLRequest=X", 1)
+    with pytest.raises(Exception):
+        _verify_redirect_signature(tampered, sp_key)
+
+
+def test_sp_signing_rejects_unsupported_key(monkeypatch):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    pem = Ed25519PrivateKey.generate().private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption())
+    monkeypatch.setattr("dashboard_api.saml.SAML_SP_PRIVATE_KEY", pem.decode())
+    with pytest.raises(ValueError, match="RSA or EC"):
+        saml.make_login_redirect(None)
 
 
 def test_acs_valid_issues_token(client):

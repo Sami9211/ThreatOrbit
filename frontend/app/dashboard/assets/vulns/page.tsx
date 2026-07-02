@@ -8,6 +8,7 @@ import {
   User, Server, FileText, Wrench, Activity, ChevronRight, Zap, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { tk } from '@/lib/colors'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -36,31 +37,31 @@ interface Vuln {
 
 /* ── Meta ───────────────────────────────────────────────────────── */
 const SEVERITY_META: Record<Severity, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: '#FF2E97' },
-  high:     { label: 'High',     color: '#FF4D6D' },
-  medium:   { label: 'Medium',   color: '#FFB23E' },
-  low:      { label: 'Low',      color: '#34F5C5' },
+  critical: { label: 'Critical', color: tk('magenta') },
+  high:     { label: 'High',     color: tk('threat') },
+  medium:   { label: 'Medium',   color: tk('amber') },
+  low:      { label: 'Low',      color: tk('safe') },
 }
 
 const STATUS_META: Record<VulnStatus, { label: string; color: string; bg: string }> = {
-  open:          { label: 'Open',          color: '#FF4D6D', bg: 'bg-threat/10' },
-  'in-progress': { label: 'In Progress',   color: '#FFB23E', bg: 'bg-amber/10'  },
-  patched:       { label: 'Patched',       color: '#34F5C5', bg: 'bg-safe/10'   },
-  accepted:      { label: 'Accepted Risk', color: '#7A3CFF', bg: 'bg-violet/10' },
+  open:          { label: 'Open',          color: tk('threat'), bg: 'bg-threat/10' },
+  'in-progress': { label: 'In Progress',   color: tk('amber'), bg: 'bg-amber/10'  },
+  patched:       { label: 'Patched',       color: tk('safe'), bg: 'bg-safe/10'   },
+  accepted:      { label: 'Accepted Risk', color: tk('violet'), bg: 'bg-violet/10' },
 }
 
 const EXPLOIT_META: Record<ExploitMaturity, { label: string; color: string }> = {
-  kev:        { label: 'KEV',        color: '#FF2E97' },
-  weaponized: { label: 'Weaponized', color: '#FF4D6D' },
-  poc:        { label: 'PoC',        color: '#FFB23E' },
+  kev:        { label: 'KEV',        color: tk('magenta') },
+  weaponized: { label: 'Weaponized', color: tk('threat') },
+  poc:        { label: 'PoC',        color: tk('amber') },
   none:       { label: 'None',       color: '#665B7D' },
 }
 
 function cvssColor(score: number): string {
-  if (score >= 9.0) return '#FF2E97'
-  if (score >= 7.0) return '#FF4D6D'
-  if (score >= 4.0) return '#FFB23E'
-  return '#34F5C5'
+  if (score >= 9.0) return tk('magenta')
+  if (score >= 7.0) return tk('threat')
+  if (score >= 4.0) return tk('amber')
+  return tk('safe')
 }
 
 function severityFromCvss(score: number): Severity {
@@ -536,7 +537,7 @@ export default function VulnsPage() {
                       {[
                         { label: 'Severity', value: SEVERITY_META[v.severity].label, color: SEVERITY_META[v.severity].color },
                         { label: 'CVSS', value: v.cvss.toFixed(1), color: cvssColor(v.cvss) },
-                        { label: 'Finding Age', value: `${v.ageDays}d`, color: v.ageDays > 30 ? '#FF4D6D' : '#FFB23E' },
+                        { label: 'Finding Age', value: `${v.ageDays}d`, color: v.ageDays > 30 ? tk('threat') : tk('amber') },
                       ].map(({ label, value, color }) => (
                         <div key={label} className="rounded-xl border border-white/8 bg-white/3 px-3 py-2">
                           <p className="text-[9px] text-ink-600 uppercase tracking-wider">{label}</p>

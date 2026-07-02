@@ -1001,6 +1001,7 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
     multi-tenancy the alerts they trigger land in that tenant (per-org ingest
     context). The default workspace is used by deployment-level collectors (the
     syslog/file listeners) and single-tenant installs."""
+    from dashboard_api import redaction
     from dashboard_api.engine import run_detection, seed_builtin_rules
     seed_builtin_rules()
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -1010,6 +1011,9 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
             ev = parse_line(line, fmt)
             if ev is None:
                 continue
+            # Opt-in PII/secret redaction of the raw text before it persists
+            # (no-op unless DASHBOARD_LOG_REDACT is set; pivots stay intact).
+            ev["raw"] = redaction.redact(ev.get("raw"))
             conn.execute(
                 "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
                 "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,"
