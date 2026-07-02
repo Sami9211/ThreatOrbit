@@ -35,6 +35,28 @@ with the deployment's `DASHBOARD_ENCRYPTION_KEY`, so **back the key up
 separately and securely** (a backup without the key cannot decrypt stored
 connector/integration credentials; everything else restores fine).
 
+### Packaged scheduled-backup job
+
+You don't have to wire cron yourself — the repo ships the schedule in both
+deployment shapes, wrapping the same consistent tar.gz backup
+(`python -m dashboard_api.backup`, all three databases):
+
+* **docker-compose:** an opt-in `backup` service —
+  `docker compose --profile backup up -d`. Daily by default, archives land on
+  the `backup_data` volume, and archives older than the retention window are
+  pruned. Tune with `BACKUP_INTERVAL_SECONDS` / `BACKUP_RETENTION_DAYS`
+  (`scripts/backup_loop.sh` is the entrypoint; any external cron/systemd timer
+  can call it with `BACKUP_ONESHOT=1`).
+* **Helm:** set `backup.enabled=true` — a `CronJob` (default `0 2 * * *`)
+  snapshots onto a dedicated PVC with the same retention pruning
+  (`backup.schedule` / `backup.retentionDays` / `backup.size`). It
+  co-schedules with the service pods because the data volumes are
+  ReadWriteOnce. With `postgres.enabled` it covers the two ingestion
+  services; dump the dashboard database with `pg_dump` (below).
+
+Either way, ship the archive directory/PVC off-box for real DR — a backup on
+the same disk as the database it protects is not a disaster-recovery story.
+
 ### Postgres (opt-in backend)
 
 Use the native tooling — `GET /config/backup` deliberately refuses on

@@ -99,7 +99,32 @@ services:
     depends_on:
       - dashboard_api
 
+  # Opt-in scheduled-backup job: `docker compose --profile backup up -d`.
+  # Snapshots all three databases into timestamped tar.gz archives on the
+  # backup_data volume (daily by default) and prunes past the retention window.
+  # Runs as root: it only reads the service volumes and writes the root-owned
+  # backup volume; the service containers themselves stay non-root.
+  backup:
+    build:
+      context: ./dashboard_api
+    container_name: threatorbit_backup
+    restart: unless-stopped
+    profiles: ["backup"]
+    user: "0"
+    entrypoint: ["/bin/sh", "/backup_loop.sh"]
+    environment:
+      - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-86400}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}
+      - BACKUP_DBS=dashboard=/vol/dashboard/dashboard.db,threat=/vol/threat/threat_api.db,log=/vol/log/log_api.db
+    volumes:
+      - ./scripts/backup_loop.sh:/backup_loop.sh:ro
+      - dashboard_data:/vol/dashboard
+      - threat_data:/vol/threat
+      - log_data:/vol/log
+      - backup_data:/backups
+
 volumes:
   threat_data:
   log_data:
   dashboard_data:
+  backup_data:

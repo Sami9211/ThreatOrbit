@@ -1,0 +1,107 @@
+{{- if .Values.backup.enabled -}}
+{{- $fn := include "threatorbit.fullname" . -}}
+{{- $pg := .Values.postgres.enabled -}}
+{{- /* With Postgres enabled the dashboard store is not a SQLite file: this job
+     then covers the two ingestion services; dump the dashboard DB with pg_dump
+     (docs/OPERATIONS.md). RWO volumes mean this pod must land on the node that
+     holds the service PVCs — the affinity below co-schedules it with the
+     dashboard API, which is the common single-writer topology. */ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fn }}-backup
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "threatorbit.selectorLabels" (dict "root" . "component" "backup") | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "threatorbit.serviceAccountName" . }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      {{- include "threatorbit.selectorLabels" (dict "root" . "component" (ternary "threat-api" "dashboard-api" $pg)) | nindent 22 }}
+          containers:
+            - name: backup
+              image: {{ include "threatorbit.image" (dict "root" . "repo" .Values.images.dashboardApi) }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  args=""
+                  for pair in $(echo "$BACKUP_DBS" | tr ',' ' '); do
+                    path="${pair#*=}"
+                    [ -f "$path" ] && args="$args --db $pair" || echo "skip $pair (no db yet)" >&2
+                  done
+                  [ -n "$args" ] && python -m dashboard_api.backup backup --out /backups $args
+                  if [ "${BACKUP_RETENTION_DAYS:-0}" -gt 0 ]; then
+                    find /backups -name 'threatorbit-backup-*.tar.gz' \
+                      -mtime +"$BACKUP_RETENTION_DAYS" -delete 2>/dev/null || true
+                  fi
+              env:
+                - name: BACKUP_RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | quote }}
+                - name: BACKUP_DBS
+                  {{- if $pg }}
+                  value: "threat=/vol/threat/threat_api.db,log=/vol/log/log_api.db"
+                  {{- else }}
+                  value: "dashboard=/vol/dashboard/dashboard.db,threat=/vol/threat/threat_api.db,log=/vol/log/log_api.db"
+                  {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              volumeMounts:
+                {{- if not $pg }}
+                - { name: dashboard-data, mountPath: /vol/dashboard }
+                {{- end }}
+                - { name: threat-data, mountPath: /vol/threat }
+                - { name: log-data, mountPath: /vol/log }
+                - { name: backups, mountPath: /backups }
+          volumes:
+            {{- if not $pg }}
+            - name: dashboard-data
+              persistentVolumeClaim: { claimName: {{ $fn }}-dashboard-api-data }
+            {{- end }}
+            - name: threat-data
+              persistentVolumeClaim: { claimName: {{ $fn }}-threat-api-data }
+            - name: log-data
+              persistentVolumeClaim: { claimName: {{ $fn }}-log-api-data }
+            - name: backups
+              persistentVolumeClaim: { claimName: {{ $fn }}-backups }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fn }}-backups
+  labels:
+    {{- include "threatorbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  accessModes: [{{ .Values.persistence.accessMode }}]
+  resources:
+    requests:
+      storage: {{ .Values.backup.size }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+{{- end }}
