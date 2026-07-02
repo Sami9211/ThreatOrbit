@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, CheckCircle, Clock, AlertTriangle, X, Shield, User,
@@ -925,10 +925,14 @@ export default function SOARPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'cases' | 'playbooks' | 'metrics'>('cases')
-  const [cases, setCases] = useState<CaseRecord[]>(CASES)
+  // Empty until the API answers — cases/playbooks are the API's to fill. An
+  // empty case board on a real deployment is honest; the demo constants are an
+  // offline-only fallback (loadedRef gates them to a first-load failure).
+  const [cases, setCases] = useState<CaseRecord[]>([])
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
   const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
-  const [playbooks, setPlaybooks] = useState<Playbook[]>(PLAYBOOKS)
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const loadedRef = useRef({ cases: false, playbooks: false })
   const [soarApi, setSoarApi] = useState<SoarMetrics | null>(null)
   const [showNewCase, setShowNewCase] = useState(false)
   const selectedPB = playbooks.find((p) => p.id === selectedPBId) ?? null
@@ -941,11 +945,11 @@ export default function SOARPage() {
   // Load from API
   useEffect(() => {
     fetchCases()
-      .then((data) => { if (data.length > 0) setCases(data as unknown as CaseRecord[]) })
-      .catch(() => {})
+      .then((data) => { setCases(data as unknown as CaseRecord[]); loadedRef.current.cases = true })
+      .catch(() => { if (!loadedRef.current.cases) setCases(CASES) })
     fetchPlaybooks()
-      .then((data) => { if (data.length > 0) setPlaybooks(data as unknown as Playbook[]) })
-      .catch(() => {})
+      .then((data) => { setPlaybooks(data as unknown as Playbook[]); loadedRef.current.playbooks = true })
+      .catch(() => { if (!loadedRef.current.playbooks) setPlaybooks(PLAYBOOKS) })
     fetchSoarMetrics().then(setSoarApi).catch(() => {})
   }, [])
 

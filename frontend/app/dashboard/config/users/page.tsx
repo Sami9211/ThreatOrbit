@@ -3,7 +3,7 @@ import { tk } from '@/lib/colors'
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchUsers, patchUser, createUser, deleteUser, type User as ApiUser, type UserRole } from '@/lib/api'
+import { fetchUsers, patchUser, createUser, deleteUser, fetchAuditLog, type User as ApiUser, type UserRole, type AuditEntry } from '@/lib/api'
 
 /* Display role ↔ backend role mapping. The UI exposes richer display names
  * (Senior Analyst, Auditor) that collapse onto the backend's four roles. */
@@ -13,7 +13,7 @@ const ROLE_TO_API: Record<string, UserRole> = {
 }
 import {
   Users, Plus, X, ShieldCheck, ShieldOff, Check, Minus, Mail,
-  Clock, Activity, KeyRound, Ban, Monitor, ChevronDown, Trash2, Loader2,
+  Clock, Activity, KeyRound, Ban, ChevronDown, Trash2, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -29,18 +29,6 @@ interface TeamUser {
   lastActive: string
   mfa: boolean
   status: UserStatus
-}
-
-interface Session {
-  device: string
-  ip: string
-  location: string
-  current: boolean
-}
-
-interface ActivityEntry {
-  action: string
-  time: string
 }
 
 const PERMISSIONS = [
@@ -117,20 +105,6 @@ const STATUS_CFG: Record<UserStatus, { label: string; cls: string }> = {
   suspended: { label: 'Suspended', cls: 'text-threat border-threat/20 bg-threat/10' },
   invited:   { label: 'Invited',   cls: 'text-amber border-amber/20 bg-amber/10'  },
 }
-
-const SAMPLE_SESSIONS: Session[] = [
-  { device: 'Chrome on macOS', ip: '203.0.113.42',  location: 'London, UK',     current: true  },
-  { device: 'Safari on iOS',   ip: '198.51.100.17',  location: 'London, UK',     current: false },
-  { device: 'Firefox on Linux',ip: '192.0.2.88',     location: 'Amsterdam, NL',  current: false },
-]
-
-const SAMPLE_ACTIVITY: ActivityEntry[] = [
-  { action: 'Closed incident INC-2041 (Confirmed Phishing)', time: '12m ago' },
-  { action: 'Ran playbook "Isolate Endpoint" on WS-4471',    time: '1h ago'  },
-  { action: 'Exported alert report (CSV, 248 rows)',         time: '3h ago'  },
-  { action: 'Updated detection rule R-117',                  time: '1d ago'  },
-  { action: 'Signed in from London, UK',                     time: '1d ago'  },
-]
 
 /* ── Initials avatar ─────────────────────────────────────────────── */
 function Avatar({ name, color, size = 'md' }: { name: string; color: string; size?: 'sm' | 'md' }) {
@@ -244,6 +218,14 @@ function InviteModal({ onClose, onInvite }: {
 }
 
 /* ── User detail panel ───────────────────────────────────────────── */
+function timeAgo(iso: string) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return `${Math.floor(diff)}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
+}
+
 function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, onDelete }: {
   user: TeamUser
   onClose: () => void
@@ -253,6 +235,18 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
   onDelete: () => void
 }) {
   const color = ROLE_COLORS[user.role]
+
+  // Real activity for this user from the audit trail (filtered by actor email),
+  // not fabricated samples. Empty is honest — the user simply hasn't acted yet.
+  const [activity, setActivity] = useState<AuditEntry[] | null>(null)
+  useEffect(() => {
+    let live = true
+    fetchAuditLog(500)
+      .then((rows) => { if (live) setActivity(rows.filter((r) => r.actor === user.email).slice(0, 8)) })
+      .catch(() => { if (live) setActivity([]) })
+    return () => { live = false }
+  }, [user.email])
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -317,33 +311,21 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
             </div>
           </div>
 
-          {/* Activity log */}
+          {/* Activity log — real audit-trail entries for this user */}
           <div>
             <p className="text-xs font-medium text-ink-300 mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Activity Log</p>
             <div className="space-y-2">
-              {SAMPLE_ACTIVITY.map((a, i) => (
-                <div key={i} className="flex items-start gap-2 text-[11px]">
+              {activity === null && <p className="text-[11px] text-ink-600">Loading…</p>}
+              {activity !== null && activity.length === 0 && (
+                <p className="text-[11px] text-ink-600">No recorded activity for this user yet.</p>
+              )}
+              {activity?.map((a) => (
+                <div key={a.id} className="flex items-start gap-2 text-[11px]">
                   <span className="w-1.5 h-1.5 rounded-full bg-violet mt-1 shrink-0" />
                   <div>
-                    <p className="text-ink-200">{a.action}</p>
-                    <p className="text-ink-600 text-[10px]">{a.time}</p>
+                    <p className="text-ink-200">{a.action}{a.target ? ` · ${a.target}` : ''}</p>
+                    <p className="text-ink-600 text-[10px]">{timeAgo(a.ts)}</p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sessions */}
-          <div>
-            <p className="text-xs font-medium text-ink-300 mb-2 flex items-center gap-1.5"><Monitor className="w-3.5 h-3.5" /> Active Sessions</p>
-            <div className="space-y-2">
-              {SAMPLE_SESSIONS.map((s, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface-2 border border-white/5">
-                  <div>
-                    <p className="text-[11px] text-ink-200">{s.device} {s.current && <span className="text-safe">&middot; current</span>}</p>
-                    <p className="text-[10px] text-ink-600 font-mono">{s.ip} &middot; {s.location}</p>
-                  </div>
-                  {!s.current && <button className="text-[10px] text-threat hover:underline">Revoke</button>}
                 </div>
               ))}
             </div>

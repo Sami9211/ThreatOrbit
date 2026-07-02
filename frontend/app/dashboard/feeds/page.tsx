@@ -519,8 +519,12 @@ const SOURCES_FALLBACK = [
 
 /* ── Main Page ───────────────────────────────────────────────────── */
 export default function FeedsPage() {
-  const [confirmed, setConfirmed] = useState<ThreatEntry[]>(CONFIRMED_SEED)
-  const [unconfirmed, setUnconfirmed] = useState<ThreatEntry[]>(UNCONFIRMED_SEED)
+  // Start EMPTY, not seeded. On a real deployment the IOC store is the source of
+  // truth — an empty store is an honest "no threats yet", never a cue to show
+  // fabricated demo threats. The hardcoded seeds + random simulator are an
+  // OFFLINE-only fallback (API unreachable), gated on `demoMode` below.
+  const [confirmed, setConfirmed] = useState<ThreatEntry[]>([])
+  const [unconfirmed, setUnconfirmed] = useState<ThreatEntry[]>([])
   const [apiFeeds, setApiFeeds] = useState<ApiFeed[]>([])
   const [feedsSummary, setFeedsSummary] = useState<FeedsSummary | null>(null)
   const [newIds, setNewIds] = useState<Set<string>>(new Set())
@@ -528,10 +532,12 @@ export default function FeedsPage() {
   const [liveCount, setLiveCount] = useState(0)
   const [pulse, setPulse] = useState(false)
 
-  // When the IOC store has real indicators we show those and turn OFF the
-  // demo simulator. Empty store → keep the demo seed + simulator so an
-  // evaluator still sees a populated page.
+  // liveMode: the API answered (we show its data, even if empty).
+  // demoMode: the API was unreachable → show the seed + simulator as an offline
+  // preview. Both start false so nothing renders until the fetch resolves —
+  // a real deployment therefore NEVER flashes demo data.
   const [liveMode, setLiveMode] = useState(false)
+  const [demoMode, setDemoMode] = useState(false)
 
   // Map a real IOC into the rich threat-feed card shape (faithfully, no fabrication).
   const iocToEntry = useCallback((i: Ioc): ThreatEntry => ({
@@ -559,18 +565,25 @@ export default function FeedsPage() {
     fetchFeeds().then(setApiFeeds).catch(() => {})
     fetchFeedsSummary().then(setFeedsSummary).catch(() => {})
     fetchIocs({ limit: '60', sort: 'last_seen', order: 'desc' }).then(({ items }) => {
-      if (items.length === 0) return   // empty store → demo mode
+      // The API answered — we are LIVE, even when the store is empty (fresh
+      // real-feeds install). Render its real indicators; never fall back to seeds.
       const entries = items.map(iocToEntry)
       setConfirmed(entries.filter(e => e.status === 'confirmed'))
       setUnconfirmed(entries.filter(e => e.status === 'unconfirmed'))
       setLiveCount(items.length)
       setLiveMode(true)
-    }).catch(() => {})
+    }).catch(() => {
+      // API unreachable (e.g. the static marketing preview) → offline demo.
+      setConfirmed(CONFIRMED_SEED)
+      setUnconfirmed(UNCONFIRMED_SEED)
+      setDemoMode(true)
+    })
   }, [iocToEntry])
 
-  // Demo-only simulator: fabricate incoming threats. Disabled in live mode.
+  // Offline-only simulator: fabricate incoming threats. Runs ONLY in the
+  // API-unreachable demo preview — never on a real deployment.
   useEffect(() => {
-    if (liveMode) return
+    if (!demoMode) return
     const jitter = () => 8000 + Math.random() * 6000
     let timer: ReturnType<typeof setTimeout>
     const schedule = () => {
@@ -661,7 +674,7 @@ export default function FeedsPage() {
             </span>
           </div>
           <p className="text-xs text-ink-500 mt-0.5">
-            Real-time threat intelligence from {apiFeeds.length || SOURCES_FALLBACK.length} sources · {liveCount} new today
+            Real-time threat intelligence from {demoMode ? SOURCES_FALLBACK.length : apiFeeds.length} sources · {liveCount} new today
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -679,7 +692,10 @@ export default function FeedsPage() {
       <div className="px-6 py-2.5 border-b border-white/4 bg-white/[0.01] shrink-0 overflow-x-auto">
         <div className="flex items-center gap-2 min-w-max">
           <span className="text-[10px] text-ink-600 uppercase tracking-widest mr-1">Sources</span>
-          {(apiFeeds.length > 0 ? apiFeeds.map(f => ({ name: f.name, status: f.status === 'active' ? 'live' : 'degraded', rate: `${f.indicators}` })) : SOURCES_FALLBACK).map(src => (
+          {(apiFeeds.length > 0
+            ? apiFeeds.map(f => ({ name: f.name, status: f.status === 'active' ? 'live' : 'degraded', rate: `${f.indicators}` }))
+            : demoMode ? SOURCES_FALLBACK : []
+          ).map(src => (
             <div key={src.name} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/8">
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full',
@@ -689,6 +705,9 @@ export default function FeedsPage() {
               <span className="text-[10px] text-ink-600">{src.rate}</span>
             </div>
           ))}
+          {apiFeeds.length === 0 && !demoMode && (
+            <span className="text-[10px] text-ink-600">No sources configured yet — add one under <span className="text-violet">Sources</span>.</span>
+          )}
         </div>
       </div>
 

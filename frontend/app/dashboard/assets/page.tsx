@@ -171,7 +171,10 @@ function CveBadges({ cves }: { cves: Asset['cves'] }) {
 
 /* ── Main page ─────────────────────────────────────────────────── */
 export default function AssetsPage() {
-  const [assets, setAssets] = useState<Asset[]>(SEED)
+  // Empty by default — the API is the source of truth. On a real deployment an
+  // empty inventory is honest ("no assets yet"), never a cue to show demo hosts.
+  // SEED is used only if the API is unreachable (offline/marketing preview).
+  const [assets, setAssets] = useState<Asset[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<AssetType | 'all'>('all')
@@ -183,8 +186,10 @@ export default function AssetsPage() {
   // Load from API
   const loadAssets = () => {
     fetchAssets({ limit: '200' })
-      .then(({ items }) => { if (items.length > 0) setAssets(items as unknown as Asset[]) })
-      .catch(() => {})
+      // The API answered → show its inventory, even when empty (real deployment).
+      .then(({ items }) => setAssets(items as unknown as Asset[]))
+      // Unreachable → offline preview with the demo inventory.
+      .catch(() => setAssets(SEED))
   }
   useEffect(() => { loadAssets() }, [])
 
@@ -201,7 +206,7 @@ export default function AssetsPage() {
     scanAssetVulns(id)
       .then(async () => {
         const { items } = await fetchAssets({ limit: '200' })
-        if (items.length > 0) setAssets(items as unknown as Asset[])
+        setAssets(items as unknown as Asset[])
       })
       .catch(() => {
         // API unreachable - restore status rather than fabricate results.
@@ -247,7 +252,7 @@ export default function AssetsPage() {
     try {
       await recomputeAssetRisk()
       const { items } = await fetchAssets({ limit: '200' })
-      if (items.length > 0) setAssets(items as unknown as Asset[])
+      setAssets(items as unknown as Asset[])
     } catch { /* leave current data in place */ }
     finally { setRecomputing(false) }
   }

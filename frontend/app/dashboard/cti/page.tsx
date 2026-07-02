@@ -680,7 +680,9 @@ function apiActorToPage(a: ApiActor): Actor {
 export default function CTIPage() {
   const [actors, setActors] = useState<Actor[]>(ACTORS)
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
-  const [iocTypes, setIocTypes] = useState(IOC_TYPES)
+  // Empty until the API answers — the per-type counts are the store's, never
+  // the demo constants. IOC_TYPES shows only if the fetch fails (offline).
+  const [iocTypes, setIocTypes] = useState<typeof IOC_TYPES>([])
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
   const graph = buildGraph(selectedActor)
@@ -698,7 +700,6 @@ export default function CTIPage() {
     // Live IOC counts per indicator type, keeping the static strip as fallback.
     fetchIocTypes()
       .then((rows) => {
-        if (rows.length === 0) return
         const display: Record<string, { label: string; icon: typeof Globe; color: string }> = {
           ip:     { label: 'IP Addresses', icon: Globe,   color: tk('magenta') },
           domain: { label: 'Domains',      icon: Network, color: tk('violet') },
@@ -712,7 +713,7 @@ export default function CTIPage() {
           return { type: d.label, count: r.count, icon: d.icon, color: d.color }
         }))
       })
-      .catch(() => {})
+      .catch(() => setIocTypes(IOC_TYPES))   // offline preview only
   }, [])
 
   if (!isPower) return <NormalCTI />

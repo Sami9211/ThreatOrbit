@@ -305,15 +305,17 @@ function ExploitBadge({ exploit }: { exploit: ExploitMaturity }) {
 
 /* ── Main page ─────────────────────────────────────────────────── */
 export default function VulnsPage() {
-  const [vulns, setVulns] = useState<Vuln[]>(SEED)
+  // Empty by default; real findings from the scanner replace it. SEED shows only
+  // when the API is unreachable (offline preview) — never on a real deployment
+  // with an empty vuln store (which is honestly "nothing found yet").
+  const [vulns, setVulns] = useState<Vuln[]>([])
   const [vsum, setVsum] = useState<VulnSummary | null>(null)
   useEffect(() => { fetchVulnSummary().then(setVsum).catch(() => {}) }, [])
 
   useEffect(() => {
-    // Real per-CVE findings from the scanner (grouped fleet-wide). When the API
-    // returns rows they REPLACE the static showcase set entirely.
+    // Real per-CVE findings from the scanner (grouped fleet-wide). The API
+    // response REPLACES the list, even when empty.
     fetchFleetVulnFindings().then((rows: FleetVulnFinding[]) => {
-      if (rows.length === 0) return
       const ageDays = (iso: string) =>
         Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 86400000))
       setVulns(rows.map((r) => ({
@@ -339,7 +341,7 @@ export default function VulnsPage() {
           : ['Apply the vendor patch for this CVE.'],
         references: [r.reference],
       })))
-    }).catch(() => {})
+    }).catch(() => setVulns(SEED))   // API unreachable → offline preview only
   }, [])
   const [search, setSearch] = useState('')
   const [sevFilter, setSevFilter] = useState<Severity | 'all'>('all')

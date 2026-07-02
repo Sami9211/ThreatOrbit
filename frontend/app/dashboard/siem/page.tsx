@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -1099,26 +1099,33 @@ export default function SIEMPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources' | 'hunt'>('queue')
-  const [alerts, setAlerts] = useState<SiemAlert[]>(ALERTS)
+  // Empty until the API answers — the alert queue is the API's to fill. An empty
+  // queue on a real deployment is honest ("nothing detected yet"), not a cue to
+  // show demo alerts. ALERTS is a first-load-offline fallback only (see loadSiem).
+  const [alerts, setAlerts] = useState<SiemAlert[]>([])
+  const loadedRef = useRef(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedAlert = alerts.find((a) => a.id === selectedId) ?? null
 
   const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
   const [correlations, setCorrelations] = useState<Correlation[]>([])
-  const [mitreDist, setMitreDist] = useState(MITRE_DIST)
+  const [mitreDist, setMitreDist] = useState<typeof MITRE_DIST>([])
 
   // Load alerts from API
   // Live refresh: the engine produces new alerts continuously, so poll the
   // queue and KPIs. Lifted to a callback so the Refresh button reuses it.
   const loadSiem = useCallback(() => {
     fetchSiemAlerts({ limit: '140', sort: 'ts', order: 'desc' })
-      .then(({ items }) => { if (items.length > 0) setAlerts(items as unknown as SiemAlert[]) })
-      .catch(() => {})
+      // The API answered → show its queue, even empty. Real deployment: honest.
+      .then(({ items }) => { setAlerts(items as unknown as SiemAlert[]); loadedRef.current = true })
+      // Only a FIRST-load failure (genuinely offline) falls back to the demo
+      // set; a transient poll failure after a good load must not fabricate.
+      .catch(() => { if (!loadedRef.current) setAlerts(ALERTS) })
     fetchSiemKpis().then(setApiKpis).catch(() => {})
     fetchCorrelations(2).then(setCorrelations).catch(() => {})
     fetchMitreDistribution()
-      .then((rows) => { if (rows.length > 0) setMitreDist(rows) })
-      .catch(() => {})
+      .then((rows) => setMitreDist(rows))
+      .catch(() => { if (!loadedRef.current) setMitreDist(MITRE_DIST) })
   }, [])
 
   useEffect(() => {
