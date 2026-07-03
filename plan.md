@@ -39,6 +39,11 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       guessable. Fix before enabling multi-tenancy for an MSSP build: thread the
       caller through and 404 on `cross_org` (same pattern as the list/detail
       endpoints already hardened). Not exploitable in a single-tenant deploy.
+- [x] **ReDoS in detection-rule `regex` conditions** — DONE (2026-07-03,
+      CHANGELOG): a catastrophic-backtracking pattern could hang the detection
+      thread (whole-deployment DoS). `rule_engine.is_safe_regex` now rejects
+      unsafe patterns at authoring (create/update/backtest → 400) and skips them
+      at eval, with input length capped. Guarded by test_pipeline_e2e.py.
 - [x] **RBAC: write endpoints gated only by `current_user`** — DONE (2026-07-03,
       CHANGELOG): 13 mutating endpoints (ingest, detection-rule edit, sources,
       hunts, asset create/recompute, feed manage, integration test) now enforce

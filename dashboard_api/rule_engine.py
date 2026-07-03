@@ -101,6 +101,49 @@ def _coerce_num(v):
         return None
 
 
+# ── ReDoS guard ──────────────────────────────────────────────────────────────
+# Detection rules accept analyst-authored `regex` conditions, and Python's `re`
+# has no match timeout. A catastrophic-backtracking pattern (e.g. `(a+)+$`) run
+# against a crafted field can hang the detection thread for seconds→minutes —
+# freezing the engine tick and, on the ingest path, the HTTP request. Since
+# rules run synchronously per event over every batch, one bad pattern is a
+# denial of service for the whole deployment.
+#
+# ReDoS detection is undecidable in general, so we use a conservative
+# heuristic: reject nested quantifiers (a quantified group whose body is itself
+# quantified) and over-long patterns, and cap the input a regex is run against.
+# These stop the patterns that actually hang `re` without a new dependency.
+_NESTED_QUANT = re.compile(r"\([^()]*[+*][^()]*\)\s*[+*]|\([^()]*[+*][^()]*\)\s*\{\d")
+_REGEX_MAX_PATTERN = 512      # reject absurdly long patterns outright
+_REGEX_INPUT_CAP = 8192       # bound the input a regex evaluates (defence in depth)
+
+
+def is_safe_regex(pattern: str) -> bool:
+    """Whether `pattern` is safe to run: syntactically valid, not too long, and
+    free of the nested-quantifier shape that drives catastrophic backtracking."""
+    if not isinstance(pattern, str) or len(pattern) > _REGEX_MAX_PATTERN:
+        return False
+    if _NESTED_QUANT.search(pattern):
+        return False
+    try:
+        re.compile(pattern)
+    except re.error:
+        return False
+    return True
+
+
+def unsafe_regex_in(definition: dict | None) -> str | None:
+    """First unsafe `regex` condition value in a rule definition, or None. Used
+    at rule-authoring time to reject a dangerous pattern with clear feedback,
+    rather than silently dropping it at evaluation."""
+    for cond in (definition or {}).get("conditions") or []:
+        if cond.get("op") == "regex":
+            val = str(cond.get("value", ""))
+            if not is_safe_regex(val):
+                return val
+    return None
+
+
 def _match_condition(event: dict, cond: dict) -> bool:
     field = canonical_field(cond.get("field"))
     op = cond.get("op")
@@ -121,8 +164,13 @@ def _match_condition(event: dict, cond: dict) -> bool:
             return False
         return {"gt": a > e, "lt": a < e, "gte": a >= e, "lte": a <= e}[op]
     if op == "regex":
+        pat = str(expected)
+        # An unsafe/invalid pattern never runs — it can't match, and more
+        # importantly can't hang the detection thread (ReDoS guard).
+        if not is_safe_regex(pat):
+            return False
         try:
-            return actual is not None and re.search(str(expected), str(actual)) is not None
+            return actual is not None and re.search(pat, str(actual)[:_REGEX_INPUT_CAP]) is not None
         except re.error:
             return False
     if op == "cidr":

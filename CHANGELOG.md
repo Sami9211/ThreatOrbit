@@ -21,6 +21,21 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   never show fake keys, even for a moment); the demo set is an offline-only
   fallback.
 
+### 2026-07-03 — ReDoS guard on detection rules + core-pipeline test
+- **Fixed a detection-rule ReDoS (DoS).** `regex` conditions are analyst-authored
+  and Python's `re` has no match timeout, so a catastrophic-backtracking pattern
+  (e.g. `(a+)+$`) run against a crafted field hangs the detection thread —
+  freezing the engine tick and, on the ingest path, the HTTP request (verified:
+  `(a+)+$` on 35 chars runs >3s). Rules run per-event over every batch, so one
+  bad pattern is a whole-deployment DoS. Added a conservative guard
+  (`rule_engine.is_safe_regex`): unsafe patterns are rejected at authoring
+  (create/update/backtest → 400 with clear feedback) and skipped at evaluation,
+  and regex input is length-capped as defence in depth.
+- **Core-pipeline end-to-end test** (`test_pipeline_e2e.py`): forwarded logs →
+  detection rule fires → alert carries the right rule + MITRE (T1110 / Credential
+  Access) → correlated critical alerts on one pivot auto-escalate into a SOAR
+  case with the standard IR task list. Guards the product's central promise.
+
 ### 2026-07-03 — RBAC gap on write endpoints (security)
 - **Fixed under-privileged write access.** Thirteen mutating endpoints were
   gated only by `current_user` (any authenticated principal) instead of the
