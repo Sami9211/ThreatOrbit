@@ -29,6 +29,21 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
 
 ### New findings (open)
 
+- [ ] **MSSP-only: id-addressed sub-resource GETs lack a cross-org guard.**
+      (2026-07-03) Several read endpoints take no `user` param, so they can't
+      run `tenancy.cross_org`: `soar/cases/{id}/related`, `assets/{id}/vulns`,
+      `assets/{id}/activity`, `cti/reports/{id}` (+MISP export),
+      `cti/attribute/case/{id}`, `cti/iocs/{id}/enrichment`. INERT while
+      `DASHBOARD_MULTI_TENANT` is off (the default single-tenant posture), but a
+      cross-tenant read leak once it's on — worse because `CASE-####` ids are
+      guessable. Fix before enabling multi-tenancy for an MSSP build: thread the
+      caller through and 404 on `cross_org` (same pattern as the list/detail
+      endpoints already hardened). Not exploitable in a single-tenant deploy.
+- [x] **RBAC: write endpoints gated only by `current_user`** — DONE (2026-07-03,
+      CHANGELOG): 13 mutating endpoints (ingest, detection-rule edit, sources,
+      hunts, asset create/recompute, feed manage, integration test) now enforce
+      their documented capability; a read-scoped key/viewer gets 403. Guarded by
+      test_ingest_authz.py.
 - [x] **Several dashboard widgets render hardcoded demo data as if live** —
       DONE (2026-06-22): see CHANGELOG. Overview Trending CVEs → /assets/vuln-findings;
       CTI Sector Targeting + Threat Briefs → derived from live actors; SOC-metrics

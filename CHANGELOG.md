@@ -9,6 +9,18 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-03 — hunt console honesty + credential-page polish
+- **SIEM hunt console:** a failed query no longer fabricates beacon results —
+  it shows an honest "query couldn't run" error state instead. The header
+  metric cards (previously hardcoded "47 queries today", "3 IOCs confirmed",
+  …) are now derived from the real saved-hunt store (saved count, summed
+  findings, distinct ATT&CK techniques, last-run hits). Removed the dead
+  fabricated beacon-result constant.
+- **Config → API keys/webhooks:** start empty instead of flashing fabricated
+  key/webhook metadata before the API responds (a credentials page should
+  never show fake keys, even for a moment); the demo set is an offline-only
+  fallback.
+
 ### 2026-07-03 — RBAC gap on write endpoints (security)
 - **Fixed under-privileged write access.** Thirteen mutating endpoints were
   gated only by `current_user` (any authenticated principal) instead of the

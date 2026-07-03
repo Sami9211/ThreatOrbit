@@ -233,8 +233,10 @@ const remoteWebhookToRow = (w: RemoteWebhook): WebhookEndpoint => ({
 export default function ApiKeysPage() {
   const [showModal, setShowModal] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const [keys, setKeys] = useState<ApiKey[]>(API_KEYS)
-  const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>(WEBHOOKS)
+  // Empty until the API answers — never flash fabricated key/webhook metadata on
+  // a credentials page. The seed constants are an offline-only fallback (catch).
+  const [keys, setKeys] = useState<ApiKey[]>([])
+  const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([])
   const [webhooksLive, setWebhooksLive] = useState(false)
   const [newHookUrl, setNewHookUrl] = useState('')
   const [newHookEvent, setNewHookEvent] = useState('alert.created')
@@ -243,11 +245,11 @@ export default function ApiKeysPage() {
   const [newSecret, setNewSecret] = useState<{ url: string; secret: string } | null>(null)
 
   useEffect(() => {
-    fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => {})
+    fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => setKeys(API_KEYS))
     fetchWebhooks().then((data) => {
       setWebhooks(data.map(remoteWebhookToRow))
       setWebhooksLive(true)
-    }).catch(() => {})
+    }).catch(() => setWebhooks(WEBHOOKS))
   }, [])
 
   function addWebhook() {

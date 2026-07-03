@@ -156,16 +156,6 @@ const SAVED_HUNTS: SavedHunt[] = [
 ]
 
 /* ─── Seed: Beaconing hunt results ───────────────────────────────────── */
-const BEACONING_RESULTS: HuntResult[] = [
-  { ts: '2024-11-12T14:15:00Z', srcIp: '10.44.0.87',  destIp: '185.220.101.1',  destPort: 443, protocol: 'HTTPS', bytes: 847,   interval: 58,  host: 'DESKTOP-FIN-087' },
-  { ts: '2024-11-12T14:01:12Z', srcIp: '10.8.1.45',   destIp: '91.92.251.103',  destPort: 443, protocol: 'HTTPS', bytes: 1024,  interval: 120, host: 'WS-HR-045' },
-  { ts: '2024-11-12T13:48:33Z', srcIp: '10.50.3.12',  destIp: '104.21.55.210',  destPort: 8080,protocol: 'HTTP',  bytes: 512,   interval: 55,  host: 'WS-SALES-112' },
-  { ts: '2024-11-12T13:22:48Z', srcIp: '10.5.0.88',   destIp: '45.95.147.200',  destPort: 443, protocol: 'HTTPS', bytes: 2048,  interval: 180, host: 'WS-DEV-088' },
-  { ts: '2024-11-12T13:09:05Z', srcIp: '10.22.0.10',  destIp: '185.220.101.45', destPort: 443, protocol: 'HTTPS', bytes: 768,   interval: 62,  host: 'FILE-SRV-01' },
-  { ts: '2024-11-12T12:55:17Z', srcIp: '10.1.0.50',   destIp: '88.80.148.104',  destPort: 443, protocol: 'HTTPS', bytes: 634,   interval: 90,  host: 'DEPLOY-SRV-01' },
-  { ts: '2024-11-12T12:40:31Z', srcIp: '10.44.1.102', destIp: '95.217.163.22',  destPort: 443, protocol: 'HTTPS', bytes: 920,   interval: 47,  host: 'DESKTOP-FIN-102' },
-]
-
 /* ─── Default query (beaconing hunt pre-loaded) ─────────────────────── */
 const DEFAULT_QUERY = SAVED_HUNTS[0].query
 
@@ -249,6 +239,7 @@ export default function ThreatHuntPage() {
   // No pre-populated results — the "Run a query to see results" empty state
   // shows until the analyst actually runs a hunt (never fabricated beacon hits).
   const [runResult, setRunResult] = useState<HuntRun | null>(null)
+  const [runError, setRunError] = useState(false)
   // Saved hunts are NOT seeded in live mode → start empty; SAVED_HUNTS is an
   // offline-only fallback (see the fetch below).
   const [savedHunts, setSavedHunts] = useState<SavedHunt[]>([])
@@ -286,6 +277,7 @@ export default function ThreatHuntPage() {
     if (running) return
     setRunning(true)
     setRunResult(null)
+    setRunError(false)
     const t = timeRange
     runHuntQuery(query, t)
       .then((out) => {
@@ -309,15 +301,9 @@ export default function ThreatHuntPage() {
         })
       })
       .catch(() => {
-        setRunResult({
-          id:      `run-${Date.now()}`,
-          query,
-          range:   t,
-          scanned: TIME_RANGE_EVENTS[t],
-          elapsed: '0.92s',
-          hits:    BEACONING_RESULTS.length,
-          results: BEACONING_RESULTS,
-        })
+        // Honest failure — never fabricate hits. Surface an error state instead.
+        setRunResult(null)
+        setRunError(true)
       })
       .finally(() => setRunning(false))
   }, [running, query, timeRange])
@@ -409,10 +395,11 @@ export default function ThreatHuntPage() {
         transition={{ delay: 0.05 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-4"
       >
-        <MetricCard label="Queries Run Today" value={47}  icon={Activity}      color={tk('violet')} sub="↑ 12 vs yesterday" />
-        <MetricCard label="IOCs Confirmed"    value={3}   icon={AlertTriangle}  color={tk('threat')} sub="from 3 hunt sessions" />
-        <MetricCard label="Hosts Investigated"value={12}  icon={Search}         color={tk('safe')} sub="across 4 hunts" />
-        <MetricCard label="Open Hypotheses"   value={8}   icon={Zap}            color={tk('magenta')} sub="2 critical priority" />
+        {/* Derived from the real saved-hunt store (+ the last run) — no fabricated stats. */}
+        <MetricCard label="Saved Hunts"        value={savedHunts.length} icon={BookOpen}     color={tk('violet')} sub="in this workspace" />
+        <MetricCard label="Findings (saved)"   value={savedHunts.reduce((s, h) => s + (h.hitCount || 0), 0)} icon={AlertTriangle} color={tk('threat')} sub="across saved hunts" />
+        <MetricCard label="Techniques Covered" value={new Set(savedHunts.map((h) => h.technique).filter((t) => t && t !== '-')).size} icon={Search} color={tk('safe')} sub="distinct ATT&CK IDs" />
+        <MetricCard label="Last Run Hits"      value={runResult ? runResult.hits : '—'} icon={Zap} color={tk('magenta')} sub={runResult ? 'from your last query' : 'run a query'} />
       </motion.div>
 
       {/* ── Event-stream search (real field-operator language over raw events) ── */}
@@ -660,11 +647,20 @@ export default function ThreatHuntPage() {
             </AnimatePresence>
 
             {/* Empty state */}
-            {!running && !runResult && (
+            {!running && !runResult && !runError && (
               <div className="flex flex-col items-center justify-center py-14 gap-2 text-ink-700">
                 <Search className="w-8 h-8 opacity-30" />
                 <p className="text-sm">Run a query to see results</p>
                 <p className="text-[10px]">Select a saved hunt or write your own KQL</p>
+              </div>
+            )}
+
+            {/* Error state — the query could not run (never fabricated hits) */}
+            {!running && runError && (
+              <div className="flex flex-col items-center justify-center py-14 gap-2 text-ink-500">
+                <AlertTriangle className="w-7 h-7 text-amber opacity-70" />
+                <p className="text-sm">Query couldn&apos;t run</p>
+                <p className="text-[10px] text-ink-700">Check the query syntax, or that the dashboard API is reachable.</p>
               </div>
             )}
 
