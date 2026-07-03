@@ -53,6 +53,73 @@ def record_request(method: str, path: str, status: int, seconds: float) -> None:
         _LATENCY_SUM[key] += seconds
 
 
+class BodySizeLimitMiddleware:
+    """Pure-ASGI ingress body cap (DoS guard). Rejects an over-large request
+    body with 413 BEFORE the app buffers it into memory — the line-count check
+    inside /siem/ingest runs only after the whole body is read/parsed, so
+    without this a multi-GB POST (or one enormous line) exhausts memory first.
+
+    Two layers: a fast reject on a declared `content-length`, plus a streaming
+    byte counter that trips even when the length is absent or understated
+    (chunked / lying clients). GET-like requests carry no body and pass through.
+    """
+
+    def __init__(self, app, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def _reject(self, send):
+        await send({"type": "http.response.start", "status": 413,
+                    "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body",
+                    "body": b'{"error":"Request body too large"}'})
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or self.max_bytes <= 0:
+            return await self.app(scope, receive, send)
+        # Fast path: a declared content-length over the cap is rejected outright.
+        for name, value in scope.get("headers", []):
+            if name == b"content-length":
+                try:
+                    if int(value) > self.max_bytes:
+                        return await self._reject(send)
+                except ValueError:
+                    pass
+                break
+
+        counted = 0
+        too_big = False
+
+        async def receive_capped():
+            # Bounds memory even when content-length is absent/understated
+            # (chunked or lying clients): once the cap trips we stop handing bytes
+            # to the app and signal end-of-body, so it can buffer at most
+            # ~max_bytes + one chunk rather than the whole payload.
+            nonlocal counted, too_big
+            if too_big:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            message = await receive()
+            if message["type"] == "http.request":
+                counted += len(message.get("body", b""))
+                if counted > self.max_bytes:
+                    too_big = True
+                    return {"type": "http.request", "body": b"", "more_body": False}
+            return message
+
+        # Prefer a clean 413 when the app hasn't already responded (the
+        # content-length fast path covers well-behaved clients cleanly).
+        started = {"v": False}
+
+        async def send_guard(message):
+            if message["type"] == "http.response.start":
+                started["v"] = True
+            await send(message)
+
+        await self.app(scope, receive_capped, send_guard)
+        if too_big and not started["v"]:
+            await self._reject(send)
+
+
 class MetricsMiddleware:
     """Pure-ASGI middleware (no BaseHTTPMiddleware buffering): times every
     request and records it under the resolved route template, so

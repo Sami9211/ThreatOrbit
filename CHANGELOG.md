@@ -21,6 +21,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   never show fake keys, even for a moment); the demo set is an offline-only
   fallback.
 
+### 2026-07-03 — ingress body-size cap (DoS) + XSS verified clean
+- **Fixed an ingest memory-exhaustion DoS.** `/siem/ingest` and `/siem/ingest/raw`
+  read/parse the whole request body into memory *before* the 5000-line cap runs,
+  so a multi-GB POST (or one enormous line) could exhaust memory. Added a
+  pure-ASGI `BodySizeLimitMiddleware` that rejects an over-large body with 413 at
+  the edge — a fast reject on a declared `content-length`, plus a streaming byte
+  counter that bounds memory even for chunked/lying clients (`DASHBOARD_MAX_BODY_BYTES`,
+  25 MB default).
+- **Verified stored-XSS is closed** (no fix needed): a SIEM renders
+  attacker-controlled log data to analysts, so this was checked end to end — the
+  React UI has no `dangerouslySetInnerHTML` (auto-escaped), and both HTML report
+  renderers (`dashboard_api/report_render.py`, `log_api/reporter/report.py`)
+  escape every user-derived field.
+
 ### 2026-07-03 — ReDoS guard on detection rules + core-pipeline test
 - **Fixed a detection-rule ReDoS (DoS).** `regex` conditions are analyst-authored
   and Python's `re` has no match timeout, so a catastrophic-backtracking pattern

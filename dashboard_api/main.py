@@ -47,6 +47,10 @@ app = FastAPI(title="ThreatOrbit Dashboard API", version="1.0.0", lifespan=lifes
 
 app.add_middleware(observability.MetricsMiddleware)
 app.add_middleware(observability.SecurityHeadersMiddleware)
+# Ingress body cap (DoS): reject an over-large body with 413 before the app
+# buffers it. Added after the two above so it wraps them (runs earlier on ingress).
+from dashboard_api.config import MAX_BODY_BYTES  # noqa: E402
+app.add_middleware(observability.BodySizeLimitMiddleware, max_bytes=MAX_BODY_BYTES)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED,

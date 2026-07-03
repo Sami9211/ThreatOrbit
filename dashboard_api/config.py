@@ -272,6 +272,12 @@ ENGINE_MODE = os.environ.get("DASHBOARD_ENGINE", "on").strip().lower()
 # guard. This is the bounded-queue half of the event-pipeline backpressure work.
 INGEST_MAX_BACKLOG = int(os.environ.get("DASHBOARD_INGEST_MAX_BACKLOG", "100000"))
 
+# Max HTTP request body accepted, in bytes (DoS guard). Rejected with 413 at the
+# ASGI edge BEFORE the app buffers it — the ingest line-count cap only applies
+# after the whole body is read, so this bounds memory against a huge POST (or one
+# enormous line). 25 MB comfortably fits a 5000-line log batch; 0 disables it.
+MAX_BODY_BYTES = int(os.environ.get("DASHBOARD_MAX_BODY_BYTES", str(25 * 1024 * 1024)))
+
 # --- Seed -------------------------------------------------------------------
 # Deterministic seed so generated demo data is stable across restarts.
 SEED_RANDOM = int(os.environ.get("DASHBOARD_SEED", "1337"))
