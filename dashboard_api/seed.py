@@ -520,9 +520,11 @@ def seed(force: bool = False):
 
 
 def bootstrap_live():
-    """Live-mode bootstrap: create the admin user, default settings, and the
-    real feed catalogue - but NO demo alerts/actors/assets. Indicators arrive
-    from the connector engine. Idempotent (no-op once a user exists)."""
+    """Live-mode bootstrap: create the admin user and default settings, seed the
+    real threat-actor *reference* library (public CTI knowledge base, like the
+    ATT&CK matrix — not fabricated activity), and NOTHING else. No demo alerts,
+    cases, assets, integrations, IOCs, or feeds — those arrive only from real
+    ingestion and connectors. Idempotent (the admin/settings block runs once)."""
     from dashboard_api.auth import hash_password
     from dashboard_api.threat_actor_library import seed_actor_library, recompute_actor_activity
     with get_conn() as conn:
