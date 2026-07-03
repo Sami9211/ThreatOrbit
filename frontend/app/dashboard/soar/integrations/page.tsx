@@ -147,10 +147,11 @@ function CredentialsForm({ integration, onSaved }: {
 }
 
 export default function SoarIntegrationsPage() {
-  const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS)
-  const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(
-    Object.fromEntries(INTEGRATIONS.map(i => [i.id, i.enabled]))
-  )
+  // Empty until the API answers — integrations are NOT seeded in live mode, so
+  // an empty list is the honest truth on a real deployment. Demo vendors would
+  // misrepresent what SOAR can actually act on, so they're offline-only.
+  const [integrations, setIntegrations] = useState<Integration[]>([])
+  const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [catFilter, setCatFilter] = useState<string>('All')
   const [showConnect, setShowConnect] = useState(false)
@@ -158,12 +159,13 @@ export default function SoarIntegrationsPage() {
 
   useEffect(() => {
     fetchSoarIntegrations().then((data) => {
-      if (data.length > 0) {
-        const mapped = data.map(apiToIntegration)
-        setIntegrations(mapped)
-        setEnabledMap(Object.fromEntries(mapped.map(i => [i.id, i.enabled])))
-      }
-    }).catch(() => {})
+      const mapped = data.map(apiToIntegration)   // applied even when empty
+      setIntegrations(mapped)
+      setEnabledMap(Object.fromEntries(mapped.map(i => [i.id, i.enabled])))
+    }).catch(() => {
+      setIntegrations(INTEGRATIONS)               // API unreachable → offline preview
+      setEnabledMap(Object.fromEntries(INTEGRATIONS.map(i => [i.id, i.enabled])))
+    })
   }, [])
 
   function note(msg: string) {

@@ -243,20 +243,16 @@ export default function ThreatHuntPage() {
   useExperienceMode()
 
   /* Query editor state */
-  const [query,     setQuery]     = useState(DEFAULT_QUERY)
+  const [query,     setQuery]     = useState(DEFAULT_QUERY)   // starter template only
   const [timeRange, setTimeRange] = useState<TimeRange>('6h')
   const [running,   setRunning]   = useState(false)
-  const [runResult, setRunResult] = useState<HuntRun | null>({
-    id:      'run-init',
-    query:   DEFAULT_QUERY,
-    range:   '6h',
-    scanned: TIME_RANGE_EVENTS['6h'],
-    elapsed: '0.71s',
-    hits:    BEACONING_RESULTS.length,
-    results: BEACONING_RESULTS,
-  })
-  const [savedHunts, setSavedHunts] = useState<SavedHunt[]>(SAVED_HUNTS)
-  const [selectedHuntId, setSelectedHuntId] = useState<string>(SAVED_HUNTS[0].id)
+  // No pre-populated results — the "Run a query to see results" empty state
+  // shows until the analyst actually runs a hunt (never fabricated beacon hits).
+  const [runResult, setRunResult] = useState<HuntRun | null>(null)
+  // Saved hunts are NOT seeded in live mode → start empty; SAVED_HUNTS is an
+  // offline-only fallback (see the fetch below).
+  const [savedHunts, setSavedHunts] = useState<SavedHunt[]>([])
+  const [selectedHuntId, setSelectedHuntId] = useState<string>('')
 
   const mapApiHunt = (h: ApiSavedHunt & { query?: string; technique?: string }): SavedHunt => ({
     id: h.id,
@@ -270,9 +266,9 @@ export default function ThreatHuntPage() {
   })
 
   useEffect(() => {
-    fetchSiemHunts().then((data) => {
-      if (data.length > 0) setSavedHunts(data.map(mapApiHunt))
-    }).catch(() => {})
+    fetchSiemHunts()
+      .then((data) => setSavedHunts(data.map(mapApiHunt)))   // applied even when empty
+      .catch(() => setSavedHunts(SAVED_HUNTS))               // offline preview only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -456,6 +452,11 @@ export default function ThreatHuntPage() {
                 className="overflow-hidden"
               >
                 <div className="space-y-2">
+                  {savedHunts.length === 0 && (
+                    <p className="text-[11px] text-ink-600 px-1 py-2">
+                      No saved hunts yet — write a query and Save Hunt to keep it here.
+                    </p>
+                  )}
                   {savedHunts.map((hunt) => {
                     const isActive = selectedHuntId === hunt.id
                     return (

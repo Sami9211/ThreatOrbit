@@ -524,8 +524,10 @@ function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
 
 /* ─── Page ───────────────────────────────────────────────────────────── */
 export default function ThreatHuntPage() {
-  const [expandedId, setExpandedId] = useState<string | null>(HUNTS[0].id)
-  const [hunts, setHunts] = useState<Hunt[]>(HUNTS)
+  // Empty until the API answers — hunts are NOT seeded in live mode, so an empty
+  // list is honest on a real deployment. HUNTS is an offline-only fallback.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [hunts, setHunts] = useState<Hunt[]>([])
   const [coverage, setCoverage] = useState<number | null>(null)
 
   // Execute a hunt against the live IOC store; mark it running while the
@@ -546,27 +548,26 @@ export default function ThreatHuntPage() {
 
   useEffect(() => {
     fetchCtiHunts().then((data: ApiSavedHunt[]) => {
-      if (data.length > 0) {
-        const merged: Hunt[] = data.map((h) => {
-          const seed = HUNTS.find((s) => s.id === h.id || s.name === h.name)
-          return seed
-            ? { ...seed, progress: h.progress, analyst: h.analyst }
-            : {
-                id: h.id,
-                name: h.name,
-                description: h.hypothesis,
-                status: (h.status === 'active' ? 'active' : h.status === 'completed' ? 'completed' : 'paused') as HuntStatus,
-                analyst: h.analyst,
-                techniques: [],
-                progress: h.progress,
-                started: h.created,
-                hypotheses: [],
-              }
-        })
-        setHunts(merged)
-        if (merged.length > 0) setExpandedId(merged[0].id)
-      }
-    }).catch(() => {})
+      // Applied even when empty — a real deployment with no hunts shows none.
+      const merged: Hunt[] = data.map((h) => {
+        const seed = HUNTS.find((s) => s.id === h.id || s.name === h.name)
+        return seed
+          ? { ...seed, progress: h.progress, analyst: h.analyst }
+          : {
+              id: h.id,
+              name: h.name,
+              description: h.hypothesis,
+              status: (h.status === 'active' ? 'active' : h.status === 'completed' ? 'completed' : 'paused') as HuntStatus,
+              analyst: h.analyst,
+              techniques: [],
+              progress: h.progress,
+              started: h.created,
+              hypotheses: [],
+            }
+      })
+      setHunts(merged)
+      if (merged.length > 0) setExpandedId(merged[0].id)
+    }).catch(() => { setHunts(HUNTS); setExpandedId(HUNTS[0].id) })   // offline preview only
     fetchAttackCoverage().then((c) => setCoverage(c.summary.coveragePct)).catch(() => {})
   }, [])
 
@@ -633,6 +634,11 @@ export default function ThreatHuntPage() {
             <span className="text-[10px] text-ink-600">{hunts.length} total</span>
           </div>
           <div className="space-y-3">
+            {hunts.length === 0 && (
+              <p className="text-[11px] text-ink-600 py-6 text-center">
+                No hunt campaigns yet — start one to track a hypothesis here.
+              </p>
+            )}
             {hunts.map((hunt) => (
               <HuntCard
                 key={hunt.id}

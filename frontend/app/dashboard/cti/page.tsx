@@ -352,13 +352,15 @@ const apiHuntToPanel = (h: ApiSavedHunt & { created?: string }): PanelHunt => ({
 
 function ThreatHuntPanel() {
   const [selected, setSelected] = useState<string | null>(null)
-  const [hunts, setHunts] = useState<PanelHunt[]>(HUNTS)
+  // Empty until the API answers (hunts aren't seeded in live mode); HUNTS is an
+  // offline-only fallback.
+  const [hunts, setHunts] = useState<PanelHunt[]>([])
   const [showNew, setShowNew] = useState(false)
 
   useEffect(() => {
-    fetchCtiHunts().then((data) => {
-      if (data.length > 0) setHunts(data.map(apiHuntToPanel))
-    }).catch(() => {})
+    fetchCtiHunts()
+      .then((data) => setHunts(data.map(apiHuntToPanel)))   // applied even when empty
+      .catch(() => setHunts(HUNTS))                          // offline preview only
   }, [])
 
   async function handleCreate(values: Record<string, string>) {
@@ -402,6 +404,9 @@ function ThreatHuntPanel() {
         )}
       </AnimatePresence>
       <div className="divide-y divide-white/4">
+        {hunts.length === 0 && (
+          <p className="text-[11px] text-ink-600 px-5 py-6 text-center">No active hunts yet.</p>
+        )}
         {hunts.map((hunt) => {
           const Icon = HUNT_ICON[hunt.status]
           const color = HUNT_COLOR[hunt.status]

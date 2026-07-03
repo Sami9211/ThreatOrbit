@@ -9,6 +9,21 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-02 — real-feeds hardening (sub-page sweep + prod-boot verification)
+- **Fabrication sweep, round 2 (sub-pages).** Extended the empty-store honesty
+  fix to the remaining surfaces: SOAR **integrations** (NOT seeded in live mode,
+  so a real deployment showed fake Splunk/CrowdStrike connectors that
+  misrepresented what SOAR could act on), the SIEM **hunt** console (no more
+  pre-populated fake beacon results, and saved hunts start empty), and the CTI
+  **hunt** campaigns (page + overview panel). Each shows the API's real response
+  even when empty, with honest empty states, and falls back to the demo set only
+  when the API is unreachable.
+- **Production posture verified by boot test.** Confirmed `REQUIRE_SECRETS=true`
+  aborts (exit 1) on a default admin password or a missing JWT secret, and that a
+  clean live+engine-off boot with real secrets closes registration (403), pauses
+  the engine (zero synthetic alerts), and returns empty stores — including zero
+  integrations, proving the fabrication fix holds server-side.
+
 ### 2026-07-02 — real-feeds hardening + landing 3D fixes
 - **No fabricated data on a real deployment.** Swept the dashboard for widgets
   that showed demo constants when their API store was empty — the exact state a
