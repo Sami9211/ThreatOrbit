@@ -738,7 +738,7 @@ def _ingest_core(lines: list[str], fmt: str, source: str, actor_email: str,
 
 
 @router.post("/ingest")
-def ingest(body: IngestBody, user: dict = Depends(current_user)):
+def ingest(body: IngestBody, user: dict = Depends(require_perm("siem.write"))):
     """Native log collector: POST raw log lines (syslog/apache/json/kv/auto),
     they're parsed into events and the detection rules + threat-intel matching
     fire on them. This is how production logs stream into the SIEM."""
@@ -773,7 +773,7 @@ async def ingest_raw(
     request: Request,
     format: str = Query("auto", description=f"one of {list(_INGEST_FORMATS)}"),
     source: str = Query("collector"),
-    user: dict = Depends(current_user),
+    user: dict = Depends(require_perm("siem.write")),
 ):
     """Vendor-friendly ingest for certified Fluent Bit / Vector / Filebeat
     configs: POST raw text (newline-delimited), NDJSON, or a JSON array — no
@@ -886,7 +886,7 @@ def test_rule(body: RuleTest):
 
 
 @router.patch("/rules/{rule_id}")
-def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(current_user)):
+def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(require_perm("siem.write"))):
     valid_statuses = {"enabled", "disabled", "suppressed"}
     if body.status and body.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"status must be one of {sorted(valid_statuses)}")
@@ -943,7 +943,7 @@ def list_sources(user: dict = Depends(current_user)):
 
 
 @router.post("/sources", status_code=201)
-def create_source(body: SourceCreate, user: dict = Depends(current_user)):
+def create_source(body: SourceCreate, user: dict = Depends(require_perm("siem.write"))):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Source name is required")
@@ -1031,7 +1031,7 @@ def list_hunts(user: dict = Depends(current_user)):
 
 
 @router.post("/hunts", status_code=201)
-def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
+def create_hunt(body: HuntCreate, user: dict = Depends(require_perm("siem.write"))):
     from dashboard_api.hunting import create_saved_hunt
     name = body.name.strip()
     if not name:
@@ -1041,7 +1041,7 @@ def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
 
 
 @router.post("/hunts/{hunt_id}/run")
-def run_hunt(hunt_id: str, user: dict = Depends(current_user)):
+def run_hunt(hunt_id: str, user: dict = Depends(require_perm("siem.write"))):
     from dashboard_api.hunting import run_saved_hunt
     result = run_saved_hunt("siem", hunt_id, user["email"])
     if result is None:

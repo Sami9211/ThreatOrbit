@@ -852,7 +852,7 @@ def update_integration(integration_id: str, body: IntegrationUpdate,
 
 
 @router.post("/integrations/{integration_id}/test")
-def test_integration(integration_id: str, user: dict = Depends(current_user)):
+def test_integration(integration_id: str, user: dict = Depends(require_perm("soar.write"))):
     """Record a connectivity check: stamps last_sync and marks the connector live."""
     now = _now_iso()
     with get_conn() as conn:

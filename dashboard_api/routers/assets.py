@@ -53,7 +53,7 @@ def list_assets(type: str | None = None, criticality: str | None = None,
 
 
 @router.post("", status_code=201)
-def create_asset(body: AssetCreate, user: dict = Depends(current_user)):
+def create_asset(body: AssetCreate, user: dict = Depends(require_perm("assets.write"))):
     name = body.name.strip()
     value = body.value.strip()
     if not name or not value:
@@ -255,7 +255,7 @@ def promote_discovered(body: PromoteBody, user: dict = Depends(require_perm("ass
 
 
 @router.post("/recompute-risk")
-def recompute_risk(user: dict = Depends(current_user)):
+def recompute_risk(user: dict = Depends(require_perm("assets.write"))):
     """Recalculate every asset's risk from current CVEs and live alert pressure."""
     with get_conn() as conn:
         count = recompute_asset_risk(conn)

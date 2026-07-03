@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-03 — RBAC gap on write endpoints (security)
+- **Fixed under-privileged write access.** Thirteen mutating endpoints were
+  gated only by `current_user` (any authenticated principal) instead of the
+  capability the catalogue documents, so a **read-scoped API key or a viewer
+  user could write to shared SOC data** — inject forged events/alerts via
+  `/siem/ingest[/raw]`, and most dangerously **edit/disable detection rules**
+  (`PATCH /siem/rules/{id}`) to blind the SIEM. Also affected: SIEM sources &
+  hunts, CTI hunts, asset create + fleet risk recompute, feed create/toggle,
+  and the SOAR integration-test trigger. Each now enforces the right capability
+  (`siem.write` / `cti.write` / `assets.write` / `connectors.manage` /
+  `soar.write`); the write-scoped collector key (analyst role) is unaffected.
+  Regression-tested: a viewer now gets 403 on all of them (and specifically
+  cannot disable a rule), while an analyst still succeeds.
+
 ### 2026-07-02 — real-feeds hardening (sub-page sweep + prod-boot verification)
 - **Fabrication sweep, round 2 (sub-pages).** Extended the empty-store honesty
   fix to the remaining surfaces: SOAR **integrations** (NOT seeded in live mode,

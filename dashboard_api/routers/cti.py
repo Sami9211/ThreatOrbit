@@ -623,7 +623,7 @@ def list_hunts(user: dict = Depends(current_user)):
 
 
 @router.post("/hunts", status_code=201)
-def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
+def create_hunt(body: HuntCreate, user: dict = Depends(require_perm("cti.write"))):
     from dashboard_api.hunting import create_saved_hunt
     name = body.name.strip()
     if not name:
@@ -633,7 +633,7 @@ def create_hunt(body: HuntCreate, user: dict = Depends(current_user)):
 
 
 @router.post("/hunts/{hunt_id}/run")
-def run_hunt(hunt_id: str, user: dict = Depends(current_user)):
+def run_hunt(hunt_id: str, user: dict = Depends(require_perm("cti.write"))):
     from dashboard_api.hunting import run_saved_hunt
     result = run_saved_hunt("cti", hunt_id, user["email"])
     if result is None:
