@@ -596,6 +596,18 @@ def _reject_unsafe_regex(definition: dict | None) -> None:
                     f"catastrophic backtracking): {bad[:120]}"))
 
 
+def _reject_invalid_rule(definition: dict | None) -> None:
+    """Authoring-time validation for a detection-rule definition: reject an unsafe
+    regex (ReDoS) and a non-evaluable aggregation (non-numeric threshold/window),
+    so a broken rule is caught with clear feedback instead of silently firing
+    nothing — or, before the engine was hardened, crashing the detection batch."""
+    _reject_unsafe_regex(definition)
+    from dashboard_api.rule_engine import invalid_aggregation_in
+    bad = invalid_aggregation_in(definition)
+    if bad is not None:
+        raise HTTPException(status_code=400, detail=f"Invalid detection rule: {bad}")
+
+
 @router.post("/rules", status_code=201)
 def create_rule(body: RuleCreate, user: dict = Depends(require_perm("siem.write"))):
     name = body.name.strip()
@@ -603,7 +615,7 @@ def create_rule(body: RuleCreate, user: dict = Depends(require_perm("siem.write"
         raise HTTPException(status_code=400, detail="Rule name is required")
     if body.severity not in SEVERITIES:
         raise HTTPException(status_code=400, detail=f"Severity must be one of {sorted(SEVERITIES)}")
-    _reject_unsafe_regex(body.definition)
+    _reject_invalid_rule(body.definition)
     rid = f"R-{uuid.uuid4().hex[:6].upper()}"
     now = _now_iso()
     from dashboard_api.db import dumps
@@ -892,7 +904,7 @@ def test_rule(body: RuleTest):
     creating any alerts, so analysts can tune before enabling."""
     if not (body.definition.get("conditions")):
         raise HTTPException(status_code=400, detail="Rule needs at least one condition")
-    _reject_unsafe_regex(body.definition)   # never backtest a ReDoS pattern
+    _reject_invalid_rule(body.definition)   # never backtest a ReDoS / broken-agg rule
     from dashboard_api.engine import run_detection
     with get_conn() as conn:
         return run_detection(conn, preview_rule={"id": "preview", "name": "preview",
@@ -912,7 +924,7 @@ def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(require_per
     if body.suppression_window is not None:
         fields.append("suppression_window=?"); values.append(body.suppression_window)
     if body.definition is not None:
-        _reject_unsafe_regex(body.definition)
+        _reject_invalid_rule(body.definition)
         from dashboard_api.db import dumps
         fields.append("definition=?"); values.append(dumps(body.definition))
     if not fields:

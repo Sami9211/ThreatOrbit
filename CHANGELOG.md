@@ -9,6 +9,23 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-04 — detection engine: a broken rule can't blind the SIEM
+- **Fixed a whole-SIEM denial-of-detection from one malformed rule.**
+  `rule_engine.evaluate` did `int(agg["threshold"])` / `int(agg["windowMinutes"])`
+  with no guard, so a detection rule stored with a non-numeric aggregation
+  (`threshold: "high"`, `windowMinutes: "5m"` — an analyst typo or a malformed
+  imported rule) raised `ValueError` *inside the per-batch detection loop*. That
+  exception propagated out of `run_detection`, so **every other rule and event in
+  that tick was skipped** — the SIEM silently stopped detecting until the rule
+  was removed. Two-layer fix: (1) `evaluate` now coerces the aggregation numerics
+  defensively (a broken threshold → the rule fires nothing, never raises); (2)
+  `run_detection` wraps each rule's evaluation in try/except so *any* latent
+  per-rule error is isolated and logged, and the rest of the batch still runs.
+  Added authoring-time validation (`invalid_aggregation_in`) so create/update/
+  backtest reject a broken aggregation with a clear 400, mirroring the existing
+  ReDoS guard. 5 tests: coercion tolerance, the detector, API rejection, and a
+  crashing-rule-doesn't-blind-the-batch end-to-end.
+
 ### 2026-07-04 — correlation engine: window-based grouping (no silent misses)
 - **Fixed a real detection miss in the SOAR auto-escalation.**
   `_maybe_escalate_case` correlated only the **200 most-recent** unresolved

@@ -23,6 +23,7 @@ Each section stays distinct:
   DarkWeb = external exposure monitoring (credentials, mentions, chatter)
 """
 import ipaddress
+import logging
 import os
 import random
 import uuid
@@ -30,6 +31,8 @@ from datetime import datetime, timedelta, timezone
 
 from dashboard_api.db import audit, dumps, get_conn
 from dashboard_api.detections import _insert_alert, _TACTIC  # reuse the alert writer
+
+logger = logging.getLogger("dashboard_api.engine")
 
 # ── Realistic value pools ───────────────────────────────────────────────────────
 _INTERNAL_HOSTS = ["DC-PROD-01", "WEB-LB-01", "PROD-API-04", "JENKINS-CI-01",
@@ -438,7 +441,16 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
     fired_rule_ids: list = []
     for rule in rules:
         rule_created = 0
-        for m in evaluate(rule, events):
+        try:
+            matches = evaluate(rule, events)
+        except Exception:
+            # Belt-and-suspenders: one malformed rule must never abort detection
+            # for the whole batch — that would silently blind the SIEM for every
+            # other rule and event in the tick. Skip it; the rest still run.
+            logger.exception("detection rule %s failed to evaluate; skipping",
+                             rule.get("id"))
+            continue
+        for m in matches:
             ev = m["event"]
             sid = _suppressed(rule["id"], ev) if suppressions else None
             if sid:

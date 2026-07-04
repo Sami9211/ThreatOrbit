@@ -144,6 +144,26 @@ def unsafe_regex_in(definition: dict | None) -> str | None:
     return None
 
 
+def invalid_aggregation_in(definition: dict | None) -> str | None:
+    """Return a human-readable reason if the rule's aggregation is un-evaluable
+    (non-numeric / non-positive threshold or window), else None.
+
+    Used at rule-authoring time to reject a broken aggregated rule with clear
+    feedback. `evaluate` is separately tolerant of already-stored bad values (it
+    fires nothing rather than crash), but catching it at authoring stops the typo
+    reaching the engine at all."""
+    agg = (definition or {}).get("aggregation")
+    if not agg or not agg.get("threshold"):
+        return None
+    thr = _coerce_num(agg.get("threshold"))
+    if thr is None or thr < 1:
+        return f"aggregation.threshold must be a positive number (got {agg.get('threshold')!r})"
+    wm = agg.get("windowMinutes")
+    if wm not in (None, "") and (_coerce_num(wm) is None or _coerce_num(wm) <= 0):
+        return f"aggregation.windowMinutes must be a positive number (got {wm!r})"
+    return None
+
+
 def _match_condition(event: dict, cond: dict) -> bool:
     field = canonical_field(cond.get("field"))
     op = cond.get("op")
@@ -207,10 +227,20 @@ def evaluate(rule: dict, events: list[dict], now: datetime | None = None) -> lis
         return [{"entity": e.get("src_ip") or e.get("hostname") or e.get("username") or "-",
                  "event": e, "count": 1} for e in matching]
 
+    # Aggregation is configured. Coerce its numerics defensively: a rule stored
+    # with a non-numeric threshold/window (e.g. "high", "5m" — analyst typo or a
+    # malformed imported rule) must NOT raise here, or the exception propagates
+    # out of the per-batch detection loop and blinds the SIEM for every rule and
+    # event in the tick. A broken threshold → this rule fires nothing (it can't
+    # be evaluated), rather than crashing the batch or flooding per-event alerts.
+    threshold = _coerce_num(agg.get("threshold"))
+    if threshold is None or threshold < 1:
+        return []
+    threshold = int(threshold)
     now = now or datetime.now(timezone.utc)
-    window = timedelta(minutes=int(agg.get("windowMinutes") or 60))
+    window_min = _coerce_num(agg.get("windowMinutes"))
+    window = timedelta(minutes=int(window_min) if window_min and window_min > 0 else 60)
     group_by = agg.get("groupBy") or "src_ip"
-    threshold = int(agg["threshold"])
     groups: dict[str, list[dict]] = {}
     for e in matching:
         try:
