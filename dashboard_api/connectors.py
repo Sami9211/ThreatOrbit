@@ -20,6 +20,7 @@ tests can drive the parsers without network access.
 import csv as csvmod
 import io
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -30,7 +31,44 @@ from dashboard_api.config import THREAT_API_URL, SERVICES_API_KEY
 from dashboard_api.db import audit, dumps, get_conn, record_job
 
 _TIMEOUT = 20.0
+# Cap the response body a feed may return (DoS guard). httpx reads the whole
+# body into memory before .json()/.text, so a malicious, compromised, or simply
+# buggy feed returning a multi-GB dump would exhaust memory — and the per-request
+# `limit` params we send are advisory (a hostile server ignores them). We stream
+# and reject past this bound. 64 MB is generous for an OSINT indicator feed.
+_MAX_FEED_BYTES = int(os.environ.get("DASHBOARD_MAX_FEED_BYTES", str(64 * 1024 * 1024)))
 _IOC_TYPES = {"ip", "domain", "url", "hash", "email", "cve"}
+
+
+class _CappedResponse:
+    """A minimal response wrapper exposing the `.json()` / `.text` the fetchers
+    use, over a body already read under the size cap."""
+
+    def __init__(self, content: bytes):
+        self._content = content
+
+    @property
+    def text(self) -> str:
+        return self._content.decode("utf-8", errors="replace")
+
+    def json(self):
+        return json.loads(self._content)
+
+
+def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
+    """Fetch with a streamed, size-bounded body read. Raises for HTTP status and
+    for a body exceeding `_MAX_FEED_BYTES` (so it never buffers unboundedly)."""
+    with httpx.stream(method, url, timeout=_TIMEOUT, follow_redirects=True, **kwargs) as r:
+        r.raise_for_status()                       # status is known before the body
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in r.iter_bytes():
+            total += len(chunk)
+            if total > _MAX_FEED_BYTES:
+                raise ValueError(
+                    f"feed response exceeds {_MAX_FEED_BYTES} bytes — refusing to buffer")
+            chunks.append(chunk)
+    return _CappedResponse(b"".join(chunks))
 
 # Connector presets surfaced to the UI's "Add connector" form.
 KIND_PRESETS = {
@@ -121,19 +159,16 @@ def _http_get(url: str, headers: dict | None = None, params: dict | None = None)
     # CDN), unlike the push sinks which pin + block redirects.
     from dashboard_api.net_guard import validate_external_url
     validate_external_url(url)
-    r = httpx.get(url, headers=headers or {}, params=params or {}, timeout=_TIMEOUT,
-                  follow_redirects=True)
-    r.raise_for_status()
-    return r
+    # Streamed, size-capped read: a hostile/buggy feed can't OOM us with a
+    # multi-GB body (the `limit` params we send are advisory, ignored by a
+    # hostile server), and `run_connector` records the ValueError as last_error.
+    return _read_capped("GET", url, headers=headers or {}, params=params or {})
 
 
 def _http_post(url: str, headers: dict | None = None, json_body: dict | None = None):
     from dashboard_api.net_guard import validate_external_url
     validate_external_url(url)
-    r = httpx.post(url, headers=headers or {}, json=json_body or {}, timeout=_TIMEOUT,
-                   follow_redirects=True)
-    r.raise_for_status()
-    return r
+    return _read_capped("POST", url, headers=headers or {}, json=json_body or {})
 
 
 # ── Normalisation + import ─────────────────────────────────────────────────────

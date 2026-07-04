@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-04 — connector feed DoS guard (outbound OSINT fetch)
+- **Fixed a memory-exhaustion DoS on the threat-intel connectors** — the
+  scheduled outbound path that fetches attacker-adjacent, third-party feed URLs
+  (NVD, OTX, custom JSON/CSV/STIX, dark-web). `_http_get`/`_http_post` called
+  `httpx.get`/`.post`, which read the entire response body into memory before
+  `.json()`/`.text`, so a compromised, hostile, or simply buggy feed returning a
+  multi-GB body would OOM the dashboard — and the per-request `limit` params we
+  send are advisory (a hostile server ignores them). Both fetchers now stream via
+  a size-capped reader (`_read_capped`) that rejects any body past
+  `_MAX_FEED_BYTES` (64 MB, env `DASHBOARD_MAX_FEED_BYTES`) with a `ValueError`;
+  `run_connector` already records that as `last_error` with `status='error'`, so
+  a flooding feed degrades one connector gracefully instead of taking down the
+  service. SSRF re-validation at send time and per-connector error isolation were
+  already in place; this closes the remaining unbounded-read gap. 4 tests cover
+  the cap (boundary, under, over, end-to-end graceful degradation).
+
 ### 2026-07-03 — hunt console honesty + credential-page polish
 - **SIEM hunt console:** a failed query no longer fabricates beacon results —
   it shows an honest "query couldn't run" error state instead. The header
