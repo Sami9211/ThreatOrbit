@@ -194,6 +194,21 @@ def _startup():
     # old shared default). DASHBOARD_REQUIRE_SECRETS makes an explicit value
     # mandatory in production.
     init_db()
+    # Guardrail: a multi-worker detection pool has NO throughput benefit on
+    # SQLite (single writer) and measurably regresses it under lock contention —
+    # it only helps on Postgres (docs/LOAD_LIMITS.md). Warn an operator who set
+    # workers > 1 on the default SQLite backend so they don't silently footgun.
+    try:
+        from dashboard_api.config import DETECTION_WORKERS
+        from dashboard_api import db_backend
+        if DETECTION_WORKERS > 1 and not db_backend.is_postgres():
+            logger.warning(
+                "DASHBOARD_DETECTION_WORKERS=%d on SQLite has no benefit and is "
+                "slightly slower (single writer). Use 1 worker on SQLite, or the "
+                "Postgres backend to scale detection. See docs/LOAD_LIMITS.md.",
+                DETECTION_WORKERS)
+    except Exception:
+        pass
     # Secrets-at-rest migration: encrypt any legacy plaintext credentials.
     try:
         from dashboard_api.db import get_conn

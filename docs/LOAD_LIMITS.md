@@ -43,7 +43,9 @@ realistic event mix (failed logins, large egress, process starts, beacons):
    write parallelism. The pool exists for **correctness** (a concurrency-safe,
    restart-resilient claim contract) and to **scale on Postgres** (real
    row-level locking + concurrent writers), *not* to speed up SQLite. Run the
-   pool at 1 worker on SQLite.
+   pool at 1 worker on SQLite — the app **logs a startup warning** if
+   `DASHBOARD_DETECTION_WORKERS > 1` on the SQLite backend, so this misconfig is
+   hard to hit silently.
 
 3. **To go materially higher**: switch the dashboard to the **Postgres backend**
    (`DASHBOARD_DB_BACKEND=postgres`) and raise `DASHBOARD_DETECTION_WORKERS`; for

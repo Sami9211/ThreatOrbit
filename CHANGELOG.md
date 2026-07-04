@@ -21,6 +21,18 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   never show fake keys, even for a moment); the demo set is an offline-only
   fallback.
 
+### 2026-07-03 — load/perf validation + detection-worker guardrail
+- **Validated the published EPS limits** by running `bench.py` on 4 vCPU:
+  ingest+detect ~8–13k EPS and detection-drain ~10k (1 worker) — meeting or
+  exceeding `docs/LOAD_LIMITS.md`'s conservative baseline, so the README's
+  "~10k ingest / ~7k detection" claim holds. Confirmed (and consistent with the
+  docs) that the detection pool is *slower* at 4 workers than 1 on SQLite.
+- **Startup guardrail:** the app now logs a warning if
+  `DASHBOARD_DETECTION_WORKERS > 1` on the SQLite backend — that config has no
+  throughput benefit and regresses under lock contention (it only helps on
+  Postgres). Prevents a silent throughput footgun. Tests cover the warn/no-warn
+  matrix and keep `bench.py` runnable.
+
 ### 2026-07-03 — deep fabrication sweep: hardcoded stats wired to real data
 - **Overview "Security Posture" gauge** showed a hardcoded 74/100 "Good" with a
   fabricated "1 integration degraded". Now derived from the live org-risk score
