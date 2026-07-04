@@ -177,6 +177,24 @@ def _severity_from_confidence(c: int) -> str:
     return "critical" if c >= 85 else "high" if c >= 70 else "medium" if c >= 40 else "low"
 
 
+def _to_confidence(raw, default: int = 50) -> int:
+    """Coerce a feed-supplied confidence into an int in [0, 100].
+
+    Real feeds are messy: confidence arrives as an int, a float, a numeric
+    string ("75", "75.0", "75%"), null/empty, or plain junk ("high", "n/a").
+    A single unparseable value must NOT abort the whole import — that would
+    silently discard a feed's worth of good indicators — so junk falls back to
+    `default` and the record is still imported. `None`/`""` also use the default;
+    anything numeric is clamped into range.
+    """
+    if raw is None or raw == "":
+        return default
+    try:
+        return max(0, min(100, int(float(str(raw).strip().rstrip("%").strip()))))
+    except (ValueError, TypeError):
+        return default
+
+
 # Cap on how many SIEM alerts a single connector run may raise from critical
 # indicators, so a large feed can't flood the alert queue.
 _MAX_INTEL_ALERTS_PER_RUN = 10
@@ -199,7 +217,7 @@ def _import(indicators: list[dict], source: str) -> dict:
             if conn.execute("SELECT 1 FROM iocs WHERE value=?", (value,)).fetchone():
                 duplicates += 1
                 continue
-            conf = max(0, min(100, int(ind.get("confidence") or 50)))
+            conf = _to_confidence(ind.get("confidence"))
             severity = ind.get("severity") or _severity_from_confidence(conf)
             conn.execute(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
@@ -233,14 +251,16 @@ def _fetch_threatorbit(c: dict) -> list[dict]:
     headers = {"X-API-Key": SERVICES_API_KEY} if SERVICES_API_KEY else {}
     rows = _http_get(f"{base}/iocs", headers=headers, params={"limit": 1000}).json()
     out = []
-    for it in rows:
+    for it in rows if isinstance(rows, list) else []:
+        if not isinstance(it, dict):
+            continue
         t = _THREATORBIT_TYPE.get((it.get("ioc_type") or "").lower())
         if not t:
             continue
         out.append({
             "type": t, "value": it.get("value"),
             "threat_type": it.get("threat_type") or "malicious-activity",
-            "confidence": int(it.get("confidence") or 50),
+            "confidence": _to_confidence(it.get("confidence")),
             "actor": it.get("malware_family") or "",
             "source": f"threatorbit:{it.get('source') or 'osint'}",
             "tags": list(it.get("tags") or []),
@@ -262,10 +282,14 @@ def _fetch_otx(c: dict) -> list[dict]:
     data = _http_get(f"{base}/api/v1/pulses/subscribed",
                      headers=headers, params={"limit": 30}).json()
     out = []
-    for pulse in data.get("results", []):
+    for pulse in (data.get("results", []) if isinstance(data, dict) else []):
+        if not isinstance(pulse, dict):
+            continue
         name = pulse.get("name", "OTX pulse")
         tags = list(pulse.get("tags") or [])[:5]
         for ind in pulse.get("indicators", []):
+            if not isinstance(ind, dict):
+                continue
             t = _OTX_TYPE.get(ind.get("type"))
             if not t:
                 continue
@@ -284,16 +308,19 @@ def _fetch_nvd(c: dict) -> list[dict]:
     base = (c.get("url") or "https://services.nvd.nist.gov/rest/json/cves/2.0")
     headers = {"apiKey": c["api_key"]} if c.get("api_key") else {}
     data = _http_get(base, headers=headers, params={"resultsPerPage": 100}).json()
+    if not isinstance(data, dict):
+        raise ValueError("NVD source did not return a JSON object")
+    vulns = [v for v in data.get("vulnerabilities", []) if isinstance(v, dict)]
     # Live feed → scanner catalogue: parse CPE product/version ranges so the
     # vulnerability scanner can match assets against fresh NVD records too.
     from dashboard_api.vuln_scanner import nvd_to_catalogue, upsert_catalogue
-    cat_rows = nvd_to_catalogue(data.get("vulnerabilities", []))
+    cat_rows = nvd_to_catalogue(vulns)
     if cat_rows:
         with get_conn() as conn:
             upsert_catalogue(conn, cat_rows)
             conn.commit()
     out = []
-    for item in data.get("vulnerabilities", []):
+    for item in vulns:
         cve = item.get("cve", {})
         cid = cve.get("id")
         if not cid:
@@ -330,7 +357,7 @@ def _apply_field_map(record: dict, field_map: dict) -> dict:
         "value": str(value) if value is not None else "",
         "type": pick("type"),  # guess_type fills this when absent
         "threat_type": pick("threat_type") or "imported-indicator",
-        "confidence": int(pick("confidence") or 50),
+        "confidence": _to_confidence(pick("confidence")),
         "severity": pick("severity"),
         "actor": pick("actor") or "",
         "tags": [t.strip() for t in str(pick("tags") or "").split(",") if t.strip()],
@@ -377,9 +404,11 @@ def _fetch_stix(c: dict) -> list[dict]:
     if c.get("api_key"):
         headers[c.get("auth_header") or "Authorization"] = c["api_key"]
     bundle = _http_get(c["url"], headers=headers).json()
+    if not isinstance(bundle, dict):
+        raise ValueError("STIX source did not return a bundle object")
     out = []
     for obj in bundle.get("objects", []):
-        if obj.get("type") != "indicator":
+        if not isinstance(obj, dict) or obj.get("type") != "indicator":
             continue
         # STIX patterns look like: [ipv4-addr:value = '1.2.3.4']
         pattern = obj.get("pattern", "")
@@ -394,7 +423,7 @@ def _fetch_stix(c: dict) -> list[dict]:
         out.append({
             "type": t, "value": value,
             "threat_type": obj.get("name") or "stix-indicator",
-            "confidence": int(obj.get("confidence") or 60),
+            "confidence": _to_confidence(obj.get("confidence"), default=60),
             "source": "stix", "tags": list(obj.get("labels") or []),
         })
     return out

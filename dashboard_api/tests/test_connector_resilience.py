@@ -85,3 +85,70 @@ def test_connector_oversized_feed_degrades_gracefully(client, auth, monkeypatch)
     assert "error" in run["result"]
     assert run["connector"]["status"] == "error"
     assert "exceeds" in (run["connector"].get("last_error") or run["result"]["error"])
+
+
+# ── Malformed-record tolerance: one bad row must not discard a whole feed ──────
+
+@pytest.mark.parametrize("raw,expected", [
+    (75, 75), ("75", 75), ("75.0", 75), ("75%", 75), (75.9, 75),
+    (None, 50), ("", 50), ("high", 50), ("n/a", 50), ({}, 50),
+    (-5, 0), (250, 100), ("120", 100),
+])
+def test_to_confidence_coerces_messy_feed_values(raw, expected):
+    assert conn_mod._to_confidence(raw) == expected
+
+
+def test_to_confidence_honours_default():
+    assert conn_mod._to_confidence(None, default=60) == 60
+    assert conn_mod._to_confidence("junk", default=60) == 60
+    assert conn_mod._to_confidence("42", default=60) == 42
+
+
+def _fake_resp(data=None, text=""):
+    class _R:
+        def __init__(self):
+            self.text = text
+        def json(self):
+            return data
+    return _R()
+
+
+def test_json_feed_bad_confidence_does_not_lose_the_feed(client, auth, monkeypatch):
+    """A record whose confidence is non-numeric ('high') must still import — with
+    the default confidence — instead of aborting the whole feed with a ValueError."""
+    payload = {"data": [
+        {"indicator": "192.0.2.171", "kind": "ip", "conf": "high"},   # junk conf
+        {"indicator": "192.0.2.172", "kind": "ip", "conf": "82%"},    # percent
+        {"indicator": "192.0.2.173", "kind": "ip", "conf": None},     # null
+    ]}
+    monkeypatch.setattr(conn_mod, "_http_get",
+                        lambda url, headers=None, params=None: _fake_resp(data=payload))
+    c = client.post("/connectors", json={
+        "name": "Messy Feed", "kind": "json", "url": "https://feed.invalid/messy",
+        "field_map": {"value": "indicator", "type": "kind", "confidence": "conf"}}, headers=auth)
+    run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert run["connector"]["status"] == "ok"
+    # All three survived parsing (none aborted the batch); total is the
+    # parse-produced count, deterministic regardless of prior dedup state.
+    assert run["result"]["total"] == 3
+    assert run["result"]["skipped"] == 0
+    # The "82%" record coerced to 82 (proves the percent path).
+    hit = client.get("/cti/lookup?value=192.0.2.172", headers=auth).json()
+    assert hit["found"] and hit["confidence"] == 82
+
+
+def test_json_feed_non_dict_rows_are_skipped(client, auth, monkeypatch):
+    """A feed array containing junk (strings, null) alongside real records imports
+    the real ones and skips the junk, rather than crashing the parse."""
+    payload = ["not-a-dict", None, 42,
+               {"indicator": "192.0.2.181", "kind": "ip"}]
+    monkeypatch.setattr(conn_mod, "_http_get",
+                        lambda url, headers=None, params=None: _fake_resp(data=payload))
+    c = client.post("/connectors", json={
+        "name": "Junky Feed", "kind": "json", "url": "https://feed.invalid/junky",
+        "field_map": {"value": "indicator", "type": "kind"}}, headers=auth)
+    run = client.post(f"/connectors/{c.json()['id']}/run", headers=auth).json()
+    assert run["connector"]["status"] == "ok"
+    # Only the one dict row is parsed; the 3 junk elements are dropped, not
+    # crashed. `total` is the parse count (deterministic vs. DB dedup state).
+    assert run["result"]["total"] == 1

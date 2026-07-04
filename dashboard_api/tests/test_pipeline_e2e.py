@@ -86,3 +86,41 @@ def test_detection_rule_with_redos_regex_is_rejected(client, auth):
                                         "value": r"failed password for \w+"}], "logic": "and"}},
         headers=auth)
     assert ok.status_code == 201, ok.text
+
+
+def test_correlation_survives_high_open_alert_volume(client, auth):
+    """A busy SOC (hundreds of open critical/high alerts) must NOT hide a genuine
+    3-alert pivot from escalation. The old engine scanned only the 200 most-recent
+    alerts, so under volume a real incident could silently never open a case; the
+    correlation now groups over a recency window, not a fixed row count.
+    """
+    host = f"CROWD-{uuid.uuid4().hex[:8]}"
+    from datetime import datetime, timedelta, timezone
+    older = (datetime.now(timezone.utc) - timedelta(hours=2)).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        # The real correlated incident: 3 alerts sharing one host, timestamped 2h
+        # ago (well within the 48h correlation window, but OLDER than the noise).
+        for i in range(3):
+            aid = _insert_alert(conn, title=f"real {i} on {host}", severity="critical",
+                                risk=95, rule_name="R-REAL", hostname=host,
+                                mitre_tech_id="T1071.001")
+            conn.execute("UPDATE alerts SET ts=? WHERE id=?", (older, aid))
+        # Bury the signal: 250 unrelated open critical alerts at "now", each on
+        # its own host so none of THEM correlate — pure recency noise. Under the
+        # old `ORDER BY ts DESC LIMIT 200`, these 250 newer alerts would fill the
+        # scan window and the 3 older real ones would be excluded → no case.
+        for i in range(250):
+            _insert_alert(conn, title=f"noise {i}", severity="critical", risk=90,
+                          rule_name="R-NOISE", hostname=f"NOISE-{uuid.uuid4().hex[:8]}",
+                          mitre_tech_id="T1059")
+        conn.commit()
+        created = _maybe_escalate_case(conn)
+        conn.commit()
+    assert created >= 1, "correlated pivot lost behind 250 noise alerts — window scan regressed"
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT alert_count FROM cases WHERE entities LIKE ? "
+            "AND status NOT IN ('resolved','closed') ORDER BY created DESC LIMIT 1",
+            (f'%{host}%',)).fetchone()
+    assert row is not None, "no case opened for the buried correlated pivot"
+    assert row["alert_count"] >= 3

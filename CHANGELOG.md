@@ -9,6 +9,36 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-04 — correlation engine: window-based grouping (no silent misses)
+- **Fixed a real detection miss in the SOAR auto-escalation.**
+  `_maybe_escalate_case` correlated only the **200 most-recent** unresolved
+  critical/high alerts (`ORDER BY ts DESC LIMIT 200`) and bucketed them in
+  Python. In a busy SOC — exactly what real feeds produce — once more than 200
+  critical/high alerts are open, three genuinely-correlated alerts on one host
+  could fall outside that window and **never escalate into a case**: a silent,
+  volume-dependent incident miss. Correlation now groups **in SQL over a recency
+  window** (`DASHBOARD_CORRELATION_WINDOW_HOURS`, default 48) with
+  `GROUP BY <pivot> HAVING COUNT(*) >= 3`, so every in-window pivot is
+  considered regardless of total open-alert volume, and the scan is bounded by
+  time rather than an arbitrary row count. New regression test buries a real
+  3-alert pivot behind 250 newer noise alerts and asserts the case still opens
+  (this also fixes an intermittent full-suite test flake from the same cause).
+
+### 2026-07-04 — connector parser robustness (messy real feeds)
+- **A single malformed record no longer discards a whole feed import.** Every
+  fetcher coerced feed-supplied confidence via `int(<value> or <default>)`, so a
+  record with a non-numeric confidence (`"high"`, `"75%"`, `null`, `"n/a"`) —
+  routine in real feeds — raised inside the per-record loop and aborted the
+  entire import, silently dropping every good indicator in the batch. Added
+  `_to_confidence`, which safely coerces ints/floats/numeric-strings/percent,
+  clamps to `[0,100]`, and falls back to the default on junk; wired it into all
+  fetchers (`threatorbit`, `json`/`csv`/`darkweb` field-map, `stix`) and the
+  importer. Also guarded every per-record loop (`threatorbit`, `otx`, `nvd`,
+  `stix`) with `isinstance` checks so a non-dict element in a feed array is
+  skipped, not crashed, and non-object top-level responses raise a clear error.
+  16 tests cover the coercion matrix and the "one bad row doesn't lose the feed"
+  guarantee.
+
 ### 2026-07-04 — connector feed DoS guard (outbound OSINT fetch)
 - **Fixed a memory-exhaustion DoS on the threat-intel connectors** — the
   scheduled outbound path that fetches attacker-adjacent, third-party feed URLs

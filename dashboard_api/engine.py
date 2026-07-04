@@ -23,9 +23,10 @@ Each section stays distinct:
   DarkWeb = external exposure monitoring (credentials, mentions, chatter)
 """
 import ipaddress
+import os
 import random
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from dashboard_api.db import audit, dumps, get_conn
 from dashboard_api.detections import _insert_alert, _TACTIC  # reuse the alert writer
@@ -541,51 +542,67 @@ def _write_ioc(conn, ioc: dict, source: str):
     return True
 
 
+# How far back the correlation engine looks. Correlation over stale alerts is
+# meaningless, and a recency window is the natural, safe bound on the working set
+# — replacing the old fixed "200 most-recent alerts" cap, which in a busy SOC
+# (>200 open critical/high alerts) could silently push genuinely-correlated
+# alerts out of the window so an incident never escalated to a case.
+_CORRELATION_WINDOW_HOURS = int(os.environ.get("DASHBOARD_CORRELATION_WINDOW_HOURS", "48"))
+
+
 def _maybe_escalate_case(conn, actor_email="engine") -> int:
     """Correlate unresolved critical/high alerts by host/user/ip; open a SOAR
-    case for any pivot with >= 3 contributing alerts not already cased."""
-    rows = conn.execute(
-        "SELECT id, title, severity, src_ip, hostname, username, ts FROM alerts "
-        "WHERE status NOT IN ('resolved','closed') AND severity IN ('critical','high') "
-        "ORDER BY ts DESC LIMIT 200"
-    ).fetchall()
-    buckets: dict[tuple, list] = {}
-    for r in rows:
-        for pk, pv in (("host", r["hostname"]), ("user", r["username"]), ("ip", r["src_ip"])):
-            if pv:
-                buckets.setdefault((pk, pv), []).append(dict(r))
+    case for any pivot with >= 3 contributing alerts not already cased.
+
+    Grouping is done in SQL over a recency window (not a fixed row count) so a
+    high open-alert volume can't drop correlatable alerts from the scan — every
+    in-window pivot with >= 3 unresolved critical/high alerts is considered."""
+    cutoff = (datetime.now(timezone.utc)
+              - timedelta(hours=_CORRELATION_WINDOW_HOURS)).replace(microsecond=0).isoformat()
     created = 0
-    for (pk, pv), alerts in buckets.items():
-        if len(alerts) < 3:
-            continue
-        # already an open case for this pivot?
-        like = f'%"{pv}"%'
-        if conn.execute("SELECT 1 FROM cases WHERE status NOT IN ('resolved','closed') AND entities LIKE ?",
-                        (like,)).fetchone():
-            continue
-        sev = "critical" if any(a["severity"] == "critical" for a in alerts) else "high"
-        cid = f"CASE-{random.randint(1000, 9999)}"
-        if conn.execute("SELECT 1 FROM cases WHERE id=?", (cid,)).fetchone():
+    # One grouped query per pivot dimension. A single alert with both a hostname
+    # and a username contributes to both pivots — same as the prior bucketing.
+    for pk, col in (("host", "hostname"), ("user", "username"), ("ip", "src_ip")):
+        # `col`/`pk` are fixed literals from this tuple, never user input.
+        rows = conn.execute(
+            f"SELECT {col} AS pv, COUNT(*) AS n, "
+            f"MAX(CASE WHEN severity='critical' THEN 1 ELSE 0 END) AS has_crit "
+            f"FROM alerts "
+            f"WHERE status NOT IN ('resolved','closed') AND severity IN ('critical','high') "
+            f"AND {col} IS NOT NULL AND {col} != '' AND ts >= ? "
+            f"GROUP BY {col} HAVING COUNT(*) >= 3",
+            (cutoff,),
+        ).fetchall()
+        for r in rows:
+            pv, count = r["pv"], r["n"]
+            # already an open case for this pivot?
+            like = f'%"{pv}"%'
+            if conn.execute("SELECT 1 FROM cases WHERE status NOT IN ('resolved','closed') AND entities LIKE ?",
+                            (like,)).fetchone():
+                continue
+            sev = "critical" if r["has_crit"] else "high"
             cid = f"CASE-{random.randint(1000, 9999)}"
-        now = _now()
-        entities = [{"type": pk, "value": pv}]
-        war = [{"ts": now, "actor": "correlation-engine", "type": "system",
-                "content": f"Auto-opened: {len(alerts)} correlated {sev} alerts share {pk}={pv}."}]
-        tasks = [{"id": f"T{i+1}", "phase": p, "name": n, "status": "pending", "assignee": None, "notes": ""}
-                 for i, (p, n) in enumerate([("Triage", "Validate correlated alerts"),
-                                             ("Containment", f"Isolate {pv}"),
-                                             ("Eradication", "Remove persistence"),
-                                             ("Recovery", "Restore service")])]
-        conn.execute(
-            "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
-            "alert_count,description,entities,war_room,tasks,evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (cid, f"Correlated incident on {pk} {pv}", "Intrusion", sev, "new", "", "",
-             4 if sev == "critical" else 8, now, now, len(alerts),
-             f"{len(alerts)} correlated {sev} alerts share {pk}={pv}. Auto-escalated by the correlation engine.",
-             dumps(entities), dumps(war), dumps(tasks), dumps([])),
-        )
-        audit(conn, actor_email, "case.auto_escalate", cid, f"pivot={pk}:{pv} alerts={len(alerts)}")
-        created += 1
+            if conn.execute("SELECT 1 FROM cases WHERE id=?", (cid,)).fetchone():
+                cid = f"CASE-{random.randint(1000, 9999)}"
+            now = _now()
+            entities = [{"type": pk, "value": pv}]
+            war = [{"ts": now, "actor": "correlation-engine", "type": "system",
+                    "content": f"Auto-opened: {count} correlated {sev} alerts share {pk}={pv}."}]
+            tasks = [{"id": f"T{i+1}", "phase": p, "name": nm, "status": "pending", "assignee": None, "notes": ""}
+                     for i, (p, nm) in enumerate([("Triage", "Validate correlated alerts"),
+                                                  ("Containment", f"Isolate {pv}"),
+                                                  ("Eradication", "Remove persistence"),
+                                                  ("Recovery", "Restore service")])]
+            conn.execute(
+                "INSERT INTO cases (id,title,type,severity,status,owner,playbook,sla_hours,created,updated,"
+                "alert_count,description,entities,war_room,tasks,evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, f"Correlated incident on {pk} {pv}", "Intrusion", sev, "new", "", "",
+                 4 if sev == "critical" else 8, now, now, count,
+                 f"{count} correlated {sev} alerts share {pk}={pv}. Auto-escalated by the correlation engine.",
+                 dumps(entities), dumps(war), dumps(tasks), dumps([])),
+            )
+            audit(conn, actor_email, "case.auto_escalate", cid, f"pivot={pk}:{pv} alerts={count}")
+            created += 1
     return created
 
 
