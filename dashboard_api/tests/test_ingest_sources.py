@@ -318,6 +318,31 @@ def test_deframe_syslog_octet_counting_and_newline():
     assert msgs == ["line one", "line two"] and rem == b"partial"
 
 
+def test_deframe_syslog_rejects_oversized_frames_dos_guard():
+    """A malicious octet-count frame or an unterminated giant line must be
+    rejected (ValueError), not buffered forever — the TLS listener would
+    otherwise exhaust memory. The connection handler drops the peer on this."""
+    import pytest
+    from dashboard_api.log_listeners import MAX_SYSLOG_MSG
+
+    # An over-long declared octet count → rejected, never buffered.
+    with pytest.raises(ValueError, match="declares"):
+        deframe_syslog(b"1000000000 x")
+    # A boundary-legal frame (exactly the cap) is still accepted…
+    ok = "a" * MAX_SYSLOG_MSG
+    msgs, rem = deframe_syslog(f"{MAX_SYSLOG_MSG} {ok}".encode())
+    assert msgs == [ok] and rem == b""
+    # …but one byte over the cap is rejected.
+    with pytest.raises(ValueError):
+        deframe_syslog(f"{MAX_SYSLOG_MSG + 1} ".encode() + b"b" * (MAX_SYSLOG_MSG + 1))
+    # An unterminated newline line past the cap → rejected (no infinite buffer).
+    with pytest.raises(ValueError, match="without a newline"):
+        deframe_syslog(b"Z" * (MAX_SYSLOG_MSG + 5))
+    # A normal partial frame still just waits — not every incomplete read errors.
+    msgs, rem = deframe_syslog(b"20 short")
+    assert msgs == [] and rem == b"20 short"
+
+
 def test_ingest_endpoint_stores_edr_and_firewall(client, auth):
     tag = uuid.uuid4().hex[:8]
     cs = json.dumps({"event_simpleName": "UserLogonFailed2", "ComputerName": "WS-9",

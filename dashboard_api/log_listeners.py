@@ -32,6 +32,16 @@ SYSLOG_TLS_CA = os.environ.get("DASHBOARD_SYSLOG_TLS_CA", "")
 WATCH_DIR = os.environ.get("DASHBOARD_LOG_WATCH_DIR", "")
 WATCH_INTERVAL = int(os.environ.get("DASHBOARD_LOG_WATCH_SECONDS", "10") or "10")
 
+# DoS bounds for the network-exposed listeners. A single syslog message is small
+# (RFC 5425 recommends senders support 2KB, receivers 8KB); 64KB is generous.
+# Without a cap, a malicious octet-count frame ("999999999 …") or an
+# unterminated newline line would buffer unboundedly and exhaust memory.
+MAX_SYSLOG_MSG = 65536
+# The file watcher reads at most this many bytes per file per poll, so a huge
+# append (e.g. a rotated multi-GB file) is drained over several polls, not all
+# at once into memory. The rest is picked up on the next poll via the offset.
+MAX_FILE_READ = 8 * 1024 * 1024
+
 
 def ingest_datagram(data: bytes, source: str = "syslog-udp") -> dict:
     """Decode a syslog datagram (possibly multi-line) and ingest its lines."""
@@ -50,7 +60,12 @@ def deframe_syslog(buf: bytes) -> tuple[list[str], bytes]:
     mandates for syslog over TLS) AND **non-transparent** newline framing, so it
     accepts both well-behaved RFC 5425 senders and simpler newline emitters.
     Returns ``(messages, remainder)`` where remainder is the incomplete trailing
-    bytes to carry into the next read (a frame may span TCP segments)."""
+    bytes to carry into the next read (a frame may span TCP segments).
+
+    Raises ``ValueError`` on a frame that would exceed ``MAX_SYSLOG_MSG`` (an
+    over-long declared octet count or an unterminated line past the cap) so the
+    caller drops the connection instead of buffering unboundedly (DoS guard).
+    """
     messages: list[str] = []
     while buf:
         # Octet-counting: leading ASCII digits, a single space, then exactly
@@ -60,6 +75,10 @@ def deframe_syslog(buf: bytes) -> tuple[list[str], bytes]:
             i += 1
         if 0 < i < len(buf) and buf[i] == 0x20:
             length = int(buf[:i])
+            if length > MAX_SYSLOG_MSG:
+                # A frame we could never safely buffer — the framing is
+                # untrustworthy, so reject the whole stream.
+                raise ValueError(f"syslog frame declares {length} bytes (> {MAX_SYSLOG_MSG})")
             start, end = i + 1, i + 1 + length
             if end > len(buf):
                 break                                    # frame not fully arrived
@@ -67,10 +86,14 @@ def deframe_syslog(buf: bytes) -> tuple[list[str], bytes]:
             buf = buf[end:]
             continue
         if i > 0 and i == len(buf):
+            if i > len(str(MAX_SYSLOG_MSG)):             # implausibly long digit run
+                raise ValueError("syslog octet count too long")
             break                                        # digits only so far - wait
         # Non-transparent framing: up to the next newline.
         nl = buf.find(b"\n")
         if nl < 0:
+            if len(buf) > MAX_SYSLOG_MSG:                # unterminated line, too big
+                raise ValueError(f"syslog line exceeds {MAX_SYSLOG_MSG} bytes without a newline")
             break                                        # line not yet terminated
         line = buf[:nl].decode("utf-8", errors="replace").strip()
         if line:
@@ -99,7 +122,8 @@ def scan_log_dir(directory: str, offsets: dict[str, int], source: str = "file-wa
                 continue
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
                 fh.seek(start)
-                chunk = fh.read()
+                # Bound per-poll memory: drain a huge append over several polls.
+                chunk = fh.read(MAX_FILE_READ)
                 offsets[path] = fh.tell()
             new_lines.extend(ln for ln in chunk.splitlines() if ln.strip())
         except OSError:
@@ -145,7 +169,13 @@ def _handle_tls_conn(ctx, raw_sock, addr):
             if not chunk:
                 break
             buf += chunk
-            messages, buf = deframe_syslog(buf)
+            try:
+                messages, buf = deframe_syslog(buf)
+            except ValueError as e:
+                # Oversized/untrustworthy framing → drop the connection rather
+                # than buffer unboundedly (DoS guard).
+                logger.warning("syslog TLS framing from %s rejected: %s", addr, e)
+                break
             lines = [m for m in messages if m.strip()]
             if lines:
                 ingest_lines(lines, "auto", "syslog-tls")

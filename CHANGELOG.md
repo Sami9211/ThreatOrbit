@@ -21,6 +21,19 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   never show fake keys, even for a moment); the demo set is an offline-only
   fallback.
 
+### 2026-07-03 — syslog-listener DoS guard (network-exposed ingestion)
+- **Fixed a memory-exhaustion DoS on the syslog TLS listener** — the primary
+  network log path a deployment exposes (GOING_LIVE §3b). `deframe_syslog`
+  read a leading octet-count and buffered until that many bytes arrived, so a
+  client sending an over-long declared length (`999999999 …`) or an
+  unterminated multi-MB line made the per-connection buffer grow without bound.
+  It now rejects any frame past `MAX_SYSLOG_MSG` (64 KB) with a `ValueError`,
+  and the TLS handler drops that connection instead of buffering. Also capped
+  the file-watcher's per-poll read (`MAX_FILE_READ`, 8 MB) so a huge appended
+  file drains over several polls rather than all into memory. UDP is already
+  bounded by the 64 KB datagram size. (The stdlib collector agent was already
+  well-covered by its own CI suite — 7 tests — and is unaffected.)
+
 ### 2026-07-03 — load/perf validation + detection-worker guardrail
 - **Validated the published EPS limits** by running `bench.py` on 4 vCPU:
   ingest+detect ~8–13k EPS and detection-drain ~10k (1 worker) — meeting or
