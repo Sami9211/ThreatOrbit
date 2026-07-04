@@ -48,7 +48,7 @@ TENANT_TABLES = (
     "alerts", "iocs", "cases", "assets", "detection_rules", "events",
     "dark_web_findings", "threat_actors", "log_sources", "feeds", "connectors",
     "playbooks", "playbook_runs", "saved_hunts", "scans", "suppressions",
-    "notifications", "saved_views", "report_schedules",
+    "notifications", "saved_views", "report_schedules", "intel_reports",
 )
 
 

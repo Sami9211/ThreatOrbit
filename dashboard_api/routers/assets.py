@@ -310,10 +310,11 @@ def delete_asset(asset_id: str, user: dict = Depends(require_perm("assets.write"
 
 
 @router.get("/{asset_id}/vulns")
-def asset_vuln_findings(asset_id: str):
+def asset_vuln_findings(asset_id: str, user: dict = Depends(current_user)):
     """The concrete CVE findings for one asset (highest CVSS first)."""
     with get_conn() as conn:
-        if not conn.execute("SELECT 1 FROM assets WHERE id=?", (asset_id,)).fetchone():
+        row = conn.execute("SELECT org_id FROM assets WHERE id=?", (asset_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
             raise HTTPException(status_code=404, detail="Asset not found")
         rows = conn.execute(
             "SELECT * FROM vuln_findings WHERE asset_id=? ORDER BY cvss DESC, found_at DESC",
@@ -322,13 +323,13 @@ def asset_vuln_findings(asset_id: str):
 
 
 @router.get("/{asset_id}/activity")
-def asset_activity(asset_id: str):
+def asset_activity(asset_id: str, user: dict = Depends(current_user)):
     """Everything tied to this asset, one click away: its alerts, the cases
     whose entities reference it, recent raw events, open CVE findings, and the
     playbook runs that responded - the asset↔alert↔case linkage."""
     with get_conn() as conn:
-        row = conn.execute("SELECT id, name, value FROM assets WHERE id=?", (asset_id,)).fetchone()
-        if not row:
+        row = conn.execute("SELECT id, name, value, org_id FROM assets WHERE id=?", (asset_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
             raise HTTPException(status_code=404, detail="Asset not found")
         keys = [k for k in {row["name"], row["value"]} if k]
         ph = ",".join("?" * len(keys))

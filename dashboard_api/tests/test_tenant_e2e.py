@@ -172,3 +172,55 @@ def test_ioc_import_dedup_is_per_workspace(client, auth, monkeypatch):
     # …but a true duplicate within the same workspace is still caught.
     third = client.post("/cti/iocs/import", headers=hb, json=body).json()
     assert third["imported"] == 0 and third["duplicates"] == 1
+
+
+def test_sub_resource_reads_are_cross_org_guarded(client, auth, monkeypatch):
+    """Id-addressed sub-resource GETs (case/related, asset vulns/activity, report
+    read/misp, case attribution, ioc enrichment) must 404 across workspaces —
+    the MSSP gap where a guessable id leaked another tenant's linked data."""
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    org_b, hb = _second_workspace(client)
+    mk = f"SUB-{uuid.uuid4().hex[:8]}"
+
+    # Workspace B creates the parent records.
+    case = client.post("/soar/cases", headers=hb, json={
+        "title": f"{mk} case", "severity": "high"}).json()
+    asset = client.post("/assets", headers=hb, json={
+        "name": f"{mk}-host", "type": "server", "value": f"{mk.lower()}.beta.test",
+        "criticality": "high"}).json()
+    report = client.post("/cti/reports", headers=hb, json={
+        "title": f"{mk} report", "summary": "s"}).json()
+    client.post("/cti/iocs/import", headers=hb, json={
+        "indicators": [{"type": "domain", "value": f"{mk.lower()}.evil.test"}],
+        "source": "e2e", "severity": "high", "threat_type": "c2", "confidence": 80})
+    with get_conn() as conn:
+        ioc_id = conn.execute("SELECT id FROM iocs WHERE value=?",
+                              (f"{mk.lower()}.evil.test",)).fetchone()["id"]
+
+    # The other workspace (org-default admin) gets 404 on every sub-resource…
+    denied = [
+        ("get", f"/soar/cases/{case['id']}/related"),
+        ("get", f"/assets/{asset['id']}/vulns"),
+        ("get", f"/assets/{asset['id']}/activity"),
+        ("get", f"/cti/reports/{report['id']}"),
+        ("get", f"/cti/reports/{report['id']}/misp"),
+        ("get", f"/cti/attribution/case/{case['id']}"),
+        ("get", f"/cti/iocs/{ioc_id}/enrichment"),
+    ]
+    for method, path in denied:
+        r = getattr(client, method)(path, headers=auth)
+        assert r.status_code == 404, f"{path}: expected 404 cross-org, got {r.status_code}"
+    # …and cross-org mutations on the report 404 without effect.
+    assert client.patch(f"/cti/reports/{report['id']}", headers=auth,
+                        json={"summary": "hijacked"}).status_code == 404
+    assert client.delete(f"/cti/reports/{report['id']}", headers=auth).status_code == 404
+    # The report list is scoped: the default workspace never sees B's report.
+    assert not any(r["id"] == report["id"]
+                   for r in client.get("/cti/reports", headers=auth).json())
+
+    # …while the owning workspace reads them all fine (guard denies, doesn't break).
+    for method, path in denied:
+        r = getattr(client, method)(path, headers=hb)
+        assert r.status_code == 200, f"{path}: owner expected 200, got {r.status_code}"
+    assert any(r["id"] == report["id"]
+               for r in client.get("/cti/reports", headers=hb).json())

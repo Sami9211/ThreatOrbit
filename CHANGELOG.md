@@ -21,6 +21,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   never show fake keys, even for a moment); the demo set is an offline-only
   fallback.
 
+### 2026-07-03 — closed the MSSP cross-org read gap (multi-tenancy)
+- **Sub-resource GETs now enforce tenant isolation.** Several id-addressed reads
+  took no caller and so couldn't run `cross_org`, leaking another workspace's
+  linked data under multi-tenancy (worsened by guessable `CASE-####` ids):
+  `soar/cases/{id}/related`, `assets/{id}/vulns`, `assets/{id}/activity`,
+  `cti/attribution/case/{id}`, `cti/iocs/{id}/enrichment`. Each now 404s across
+  workspaces.
+- **Intel reports were missed from the tenancy pass entirely** — `intel_reports`
+  had no `org_id`, so every workspace could read/edit/delete every other's
+  reports. Added the column (schema v4 migration, default keeps single-tenant
+  unchanged) and to `TENANT_TABLES`; scoped create (stamps org), list (filters),
+  and read/MISP-export/patch/delete (404 cross-org). Guarded by
+  `test_tenant_e2e.py`. All inert while `DASHBOARD_MULTI_TENANT` is off (the
+  single-tenant default) — this closes the tracked pre-condition for enabling
+  multi-tenancy on an MSSP build.
+
 ### 2026-07-03 — ingress body-size cap (DoS) + XSS verified clean
 - **Fixed an ingest memory-exhaustion DoS.** `/siem/ingest` and `/siem/ingest/raw`
   read/parse the whole request body into memory *before* the 5000-line cap runs,

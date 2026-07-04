@@ -331,9 +331,13 @@ _TLP = {"white", "green", "amber", "red"}
 
 
 @router.get("/reports")
-def list_reports(status: str | None = None):
-    where = "WHERE status=?" if status else ""
-    params = [status] if status else []
+def list_reports(status: str | None = None, user: dict = Depends(current_user)):
+    clauses, params = [], []
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
+    if status:
+        clauses.append("status=?"); params.append(status)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT * FROM intel_reports {where} ORDER BY updated_at DESC", params).fetchall()
@@ -353,9 +357,10 @@ def create_report(body: ReportCreate, user: dict = Depends(require_perm("cti.wri
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO intel_reports (id,title,tlp,status,summary,body,actors,iocs,tags,"
-            "author,created_at,updated_at) VALUES (?,?,?,'draft',?,?,?,?,?,?,?,?)",
+            "author,created_at,updated_at,org_id) VALUES (?,?,?,'draft',?,?,?,?,?,?,?,?,?)",
             (rid, title, body.tlp, body.summary, body.body, dumps(body.actors),
-             dumps(body.iocs), dumps(body.tags), user["email"], now, now))
+             dumps(body.iocs), dumps(body.tags), user["email"], now, now,
+             tenancy.org_of(user)))
         audit(conn, user["email"], "intel.report_create", rid, f"title={title}")
         conn.commit()
         row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (rid,)).fetchone()
@@ -363,10 +368,10 @@ def create_report(body: ReportCreate, user: dict = Depends(require_perm("cti.wri
 
 
 @router.get("/reports/{report_id}")
-def get_report(report_id: str):
+def get_report(report_id: str, user: dict = Depends(current_user)):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (report_id,)).fetchone()
-    if not row:
+    if not row or tenancy.cross_org(row, user):
         raise HTTPException(status_code=404, detail="Report not found")
     return row_to_dict(row)
 
@@ -392,8 +397,11 @@ def update_report(report_id: str, body: ReportUpdate, user: dict = Depends(requi
     fields.append("updated_at=?")
     values.append(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
     values.append(report_id)
+    # Org-scope the UPDATE so a cross-workspace id 404s without a write.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        cur = conn.execute(f"UPDATE intel_reports SET {','.join(fields)} WHERE id=?", values)
+        cur = conn.execute(f"UPDATE intel_reports SET {','.join(fields)} WHERE id=? {sc}",
+                           values + sp)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Report not found")
         audit(conn, user["email"], "intel.report_update", report_id)
@@ -404,8 +412,9 @@ def update_report(report_id: str, body: ReportUpdate, user: dict = Depends(requi
 
 @router.delete("/reports/{report_id}", status_code=204)
 def delete_report(report_id: str, user: dict = Depends(require_perm("cti.write"))):
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        cur = conn.execute("DELETE FROM intel_reports WHERE id=?", (report_id,))
+        cur = conn.execute(f"DELETE FROM intel_reports WHERE id=? {sc}", (report_id, *sp))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Report not found")
         audit(conn, user["email"], "intel.report_delete", report_id)
@@ -414,12 +423,12 @@ def delete_report(report_id: str, user: dict = Depends(require_perm("cti.write")
 
 
 @router.get("/reports/{report_id}/misp")
-def export_report_misp(report_id: str):
+def export_report_misp(report_id: str, user: dict = Depends(current_user)):
     """Export an intel report (its referenced indicators) as a MISP Event."""
     from dashboard_api import misp
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM intel_reports WHERE id=?", (report_id,)).fetchone()
-        if not row:
+        if not row or tenancy.cross_org(row, user):
             raise HTTPException(status_code=404, detail="Report not found")
         report = row_to_dict(row)
         values = report.get("iocs") or []
@@ -507,10 +516,14 @@ def attribute(body: AttributionQuery):
 
 
 @router.get("/attribution/case/{case_id}")
-def attribute_case_endpoint(case_id: str):
+def attribute_case_endpoint(case_id: str, user: dict = Depends(current_user)):
     """Attribute a SOAR case from its linked alerts' techniques + indicators."""
     from dashboard_api.attribution import attribute_case
     with get_conn() as conn:
+        # Cross-org guard on the parent case (attribute_case reads its alerts/IOCs).
+        crow = conn.execute("SELECT org_id FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not crow or tenancy.cross_org(crow, user):
+            raise HTTPException(status_code=404, detail="Case not found")
         result = attribute_case(conn, case_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -539,12 +552,12 @@ def enrich_ioc(ioc_id: str, refresh: bool = False, user: dict = Depends(require_
 
 
 @router.get("/iocs/{ioc_id}/enrichment")
-def ioc_enrichment(ioc_id: str):
+def ioc_enrichment(ioc_id: str, user: dict = Depends(current_user)):
     """Latest enrichment (from cache, no re-run) + the enrichment history."""
     from dashboard_api.enrichment import enrich, history
     with get_conn() as conn:
-        row = conn.execute("SELECT value, type FROM iocs WHERE id=?", (ioc_id,)).fetchone()
-        if not row:
+        row = conn.execute("SELECT value, type, org_id FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
             raise HTTPException(status_code=404, detail="IOC not found")
         current = enrich(conn, row["value"], row["type"])  # served from cache when fresh
         past = history(conn, row["value"])

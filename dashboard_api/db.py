@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class SchemaVersionError(RuntimeError):
@@ -453,7 +453,8 @@ CREATE TABLE IF NOT EXISTS intel_reports (
     tags        TEXT NOT NULL DEFAULT '[]',
     author      TEXT,
     created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    updated_at  TEXT NOT NULL,
+    org_id      TEXT NOT NULL DEFAULT 'org-default'
 );
 
 -- Cached per-IOC enrichment results + history (enrichment pipeline).
@@ -854,6 +855,10 @@ _MIGRATIONS = [
     # MFA anti-replay: the last accepted TOTP time-step counter at login, so a
     # still-valid code can't be reused inside its ±1-step window.
     ("users", "mfa_last_counter", "INTEGER"),
+    # Intel-report tenant ownership: reports were missed from the tenancy pass, so
+    # under multi-tenancy every workspace could read every other's reports. Scope
+    # them like the rest of TENANT_TABLES (default keeps single-tenant unchanged).
+    ("intel_reports", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
 ]
 
 

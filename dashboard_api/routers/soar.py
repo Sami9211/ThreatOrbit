@@ -160,12 +160,12 @@ def get_case(case_id: str, user: dict = Depends(current_user)):
 
 
 @router.get("/cases/{case_id}/related")
-def case_related(case_id: str):
+def case_related(case_id: str, user: dict = Depends(current_user)):
     """Linked evidence for a case: alerts/IOCs/playbook-runs matching its
     entities, plus a MITRE-mapped merged timeline (war room + alert activity)."""
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
-        if not row:
+        if not row or tenancy.cross_org(row, user):
             raise HTTPException(status_code=404, detail="Case not found")
         case = row_to_dict(row)
         values = [e.get("value") for e in (case.get("entities") or [])

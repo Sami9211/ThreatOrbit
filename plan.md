@@ -29,16 +29,14 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
 
 ### New findings (open)
 
-- [ ] **MSSP-only: id-addressed sub-resource GETs lack a cross-org guard.**
-      (2026-07-03) Several read endpoints take no `user` param, so they can't
-      run `tenancy.cross_org`: `soar/cases/{id}/related`, `assets/{id}/vulns`,
-      `assets/{id}/activity`, `cti/reports/{id}` (+MISP export),
-      `cti/attribute/case/{id}`, `cti/iocs/{id}/enrichment`. INERT while
-      `DASHBOARD_MULTI_TENANT` is off (the default single-tenant posture), but a
-      cross-tenant read leak once it's on — worse because `CASE-####` ids are
-      guessable. Fix before enabling multi-tenancy for an MSSP build: thread the
-      caller through and 404 on `cross_org` (same pattern as the list/detail
-      endpoints already hardened). Not exploitable in a single-tenant deploy.
+- [x] **MSSP: id-addressed sub-resource GETs lack a cross-org guard** — DONE
+      (2026-07-03, CHANGELOG): threaded the caller through and 404 on
+      `cross_org` for `soar/cases/{id}/related`, `assets/{id}/vulns`,
+      `assets/{id}/activity`, `cti/attribution/case/{id}`,
+      `cti/iocs/{id}/enrichment`, and the full `intel_reports` set
+      (read/misp/patch/delete + scoped list/create). `intel_reports` was also
+      missing from the tenancy migration entirely — added `org_id` (schema v4)
+      and to `TENANT_TABLES`. Guarded by `test_tenant_e2e.py`.
 - [x] **ReDoS in detection-rule `regex` conditions** — DONE (2026-07-03,
       CHANGELOG): a catastrophic-backtracking pattern could hang the detection
       thread (whole-deployment DoS). `rule_engine.is_safe_regex` now rejects
