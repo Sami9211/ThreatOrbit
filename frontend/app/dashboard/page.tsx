@@ -19,10 +19,10 @@ import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
   fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
   fetchRiskDistribution, fetchHeatmap, fetchSiemKpis, fetchSoarMetrics,
-  fetchFleetVulnFindings,
+  fetchFleetVulnFindings, fetchServicesStatus,
   type OverviewKpis, type OverviewAlert, type Incident,
   type TopActor, type ThreatVector, type LiveFeedItem, type RiskDistribution,
-  type SiemKpis, type SoarMetrics, type FleetVulnFinding,
+  type SiemKpis, type SoarMetrics, type FleetVulnFinding, type ServicesStatus,
 } from '@/lib/api'
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -903,6 +903,7 @@ export default function DashboardOverview() {
   const [heatmap, setHeatmap]               = useState<Array<{ label: string; vals: number[] }>>([])
   const [siemKpis, setSiemKpis]             = useState<SiemKpis | null>(null)
   const [soarMetrics, setSoarMetrics]       = useState<SoarMetrics | null>(null)
+  const [services, setServices]             = useState<ServicesStatus | null>(null)
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
 
@@ -918,11 +919,18 @@ export default function DashboardOverview() {
     fetchLiveFeed(20).then(setLiveFeed).catch(() => {})
     fetchRiskDistribution().then(setRiskDist).catch(() => {})
     fetchHeatmap().then(setHeatmap).catch(() => {})
+    fetchServicesStatus().then(setServices).catch(() => {})
   }, [])
 
   if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} siem={siemKpis} soar={soarMetrics} />
 
   const fmtScore = Number(kpis.score ?? 0).toFixed(1)
+  // Real security-posture HEALTH (higher = better) = inverse of the org RISK
+  // score the API returns — same derivation the Normal dashboard uses, so the
+  // gauge is never a hardcoded number.
+  const health = Math.max(0, Math.min(100, 100 - Math.round(Number(kpis.score ?? 0))))
+  const healthBand = health >= 80 ? 'Strong' : health >= 60 ? 'Good' : health >= 40 ? 'At risk' : 'Critical'
+  const healthColor = health >= 60 ? 'text-safe' : health >= 40 ? 'text-amber' : 'text-threat'
 
   return (
     <div className="p-6 space-y-6">
@@ -1025,7 +1033,7 @@ export default function DashboardOverview() {
                   strokeLinecap="round"
                   strokeDasharray={207.3}
                   initial={{ strokeDashoffset: 207.3 }}
-                  animate={{ strokeDashoffset: 207.3 * (1 - 0.74) }}
+                  animate={{ strokeDashoffset: 207.3 * (1 - health / 100) }}
                   transition={{ duration: 1.4, ease: 'easeOut', delay: 0.3 }}
                 />
                 <defs>
@@ -1036,37 +1044,40 @@ export default function DashboardOverview() {
                 </defs>
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-display text-xl font-bold text-white">74</span>
+                <span className="font-display text-xl font-bold text-white">{health}</span>
                 <span className="text-[9px] text-ink-600">/100</span>
               </div>
             </div>
             <div>
               <p className="text-xs font-semibold text-white mb-0.5">Security Posture</p>
-              <p className="text-[10px] text-safe font-medium">Good</p>
-              <p className="text-[10px] text-ink-500 mt-1">1 integration degraded</p>
+              <p className={cn('text-[10px] font-medium', healthColor)}>{healthBand}</p>
+              <p className="text-[10px] text-ink-500 mt-1">Derived from live org risk</p>
             </div>
           </div>
 
           <div className="border-t border-white/5 pt-4 space-y-2.5">
             <h3 className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">System Status</h3>
+            {/* Real service reachability from /services/status — the Dashboard API
+                is up by definition (this page loaded from it). No fabricated rows. */}
             {[
-              { label: 'Threat API',        status: 'Healthy',  color: 'safe'  },
-              { label: 'Log Ingestion',     status: 'Healthy',  color: 'safe'  },
-              { label: 'OpenCTI Sync',      status: 'Healthy',  color: 'safe'  },
-              { label: 'MISP Feed',         status: 'Degraded', color: 'amber' },
-              { label: 'Shodan',            status: 'Healthy',  color: 'safe'  },
-              { label: 'ML Engine',         status: 'Healthy',  color: 'safe'  },
-            ].map(({ label, status, color }) => (
-              <div key={label} className="flex items-center justify-between">
-                <span className="text-xs text-ink-400">{label}</span>
-                <div className="flex items-center gap-1.5">
-                  <span className={cn('w-1.5 h-1.5 rounded-full', color === 'safe' ? 'bg-safe' : color === 'amber' ? 'bg-amber animate-pulse' : 'bg-threat')} />
-                  <span className={cn('text-xs font-medium', color === 'safe' ? 'text-safe' : color === 'amber' ? 'text-amber' : 'text-threat')}>
-                    {status}
-                  </span>
+              { label: 'Dashboard API', up: true },
+              { label: 'Threat API',    up: services?.threatApi.available ?? null },
+              { label: 'Log Ingestion', up: services?.logApi.available ?? null },
+            ].map(({ label, up }) => {
+              const state = up === null ? 'Checking…' : up ? 'Healthy' : 'Unreachable'
+              const color = up === null ? 'ink' : up ? 'safe' : 'threat'
+              return (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-xs text-ink-400">{label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('w-1.5 h-1.5 rounded-full', color === 'safe' ? 'bg-safe' : color === 'threat' ? 'bg-threat animate-pulse' : 'bg-ink-600')} />
+                    <span className={cn('text-xs font-medium', color === 'safe' ? 'text-safe' : color === 'threat' ? 'text-threat' : 'text-ink-500')}>
+                      {state}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 

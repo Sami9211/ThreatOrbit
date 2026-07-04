@@ -21,6 +21,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   never show fake keys, even for a moment); the demo set is an offline-only
   fallback.
 
+### 2026-07-03 — deep fabrication sweep: hardcoded stats wired to real data
+- **Overview "Security Posture" gauge** showed a hardcoded 74/100 "Good" with a
+  fabricated "1 integration degraded". Now derived from the live org-risk score
+  (health = 100 − risk), with a real band, matching the Normal dashboard.
+- **Overview "System Status"** listed six services with invented health
+  ("MISP Feed: Degraded", "ML Engine: Healthy", …). Replaced with the real
+  reachability from `/services/status` — Dashboard API (up by definition), Threat
+  API, Log Ingestion — Healthy / Unreachable / Checking, no fake rows.
+- **SOAR Metrics KPI strip** fell back to hardcoded values (MTTD "4.2 min",
+  Alert Volume "1,284", Automation "73%", …) when the store was empty; the values
+  are wired to the live metrics but an empty real deployment showed the fake
+  fallback. Now shows a neutral "—" placeholder; removed the dead fabricated
+  fields (value/trend/trendLabel).
+- **CTI actors** page init aligned to the honest pattern (empty until the API
+  answers; the curated library is offline-only fallback).
+
 ### 2026-07-03 — closed the MSSP cross-org read gap (multi-tenancy)
 - **Sub-resource GETs now enforce tenant isolation.** Several id-addressed reads
   took no caller and so couldn't run `cross_org`, leaking another workspace's

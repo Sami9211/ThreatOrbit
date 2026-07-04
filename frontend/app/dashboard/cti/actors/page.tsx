@@ -614,13 +614,16 @@ export default function ActorProfilesPage() {
   const [filterMotivation, setFilterMotivation] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [actors, setActors] = useState<ThreatActor[]>(ACTORS)
+  // Empty until the API answers. The curated actor library is backend-seeded in
+  // both demo and live mode, so real data always comes back; ACTORS is used only
+  // as an offline fallback and to enrich display fields the API omits.
+  const [actors, setActors] = useState<ThreatActor[]>([])
   const [summary, setSummary] = useState<CtiSummary | null>(null)
 
   useEffect(() => {
     fetchCtiSummary().then(setSummary).catch(() => {})
     fetchActors().then((data: ApiActor[]) => {
-      if (data.length > 0) {
+      {
         const mapped: ThreatActor[] = data.map((a) => {
           const seed = ACTORS.find((s) => s.id === a.id || s.name === a.name)
           return {
@@ -648,7 +651,7 @@ export default function ActorProfilesPage() {
         })
         setActors(mapped)
       }
-    }).catch(() => {})
+    }).catch(() => setActors(ACTORS))   // offline preview only
   }, [])
 
   const selected = actors.find((a) => a.id === selectedId) ?? null

@@ -20,74 +20,50 @@ const KPI_DATA = [
   {
     label: 'MTTD',
     sublabel: 'Mean Time to Detect',
-    value: '4.2 min',
-    trend: -18,
-    trendLabel: '-18% vs prev period',
     color: 'text-safe',
     borderColor: 'border-safe/25',
     bgColor: 'bg-safe/8',
     icon: Clock,
-    good: true,
   },
   {
     label: 'MTTR',
     sublabel: 'Mean Time to Respond',
-    value: '18.7 min',
-    trend: -34,
-    trendLabel: '-34% vs prev period',
     color: 'text-violet',
     borderColor: 'border-violet/25',
     bgColor: 'bg-violet/8',
     icon: Zap,
-    good: true,
   },
   {
     label: 'Alert Volume',
     sublabel: 'Per day (rolling avg)',
-    value: '1,284',
-    trend: 7,
-    trendLabel: '+7% vs prev period',
     color: 'text-amber',
     borderColor: 'border-amber/25',
     bgColor: 'bg-amber/8',
     icon: AlertTriangle,
-    good: false,
   },
   {
     label: 'Automation Rate',
     sublabel: 'Actions automated',
-    value: '73%',
-    trend: 5,
-    trendLabel: '+5% vs prev period',
     color: 'text-magenta',
     borderColor: 'border-magenta/25',
     bgColor: 'bg-magenta/8',
     icon: Activity,
-    good: true,
   },
   {
     label: 'FP Rate',
     sublabel: 'False positive alerts',
-    value: '8.3%',
-    trend: -2,
-    trendLabel: '-2% vs prev period',
     color: 'text-threat',
     borderColor: 'border-threat/25',
     bgColor: 'bg-threat/8',
     icon: Target,
-    good: true,
   },
   {
     label: 'SLA Compliance',
     sublabel: 'Alerts within SLA',
-    value: '96.4%',
-    trend: 1,
-    trendLabel: '+1% vs prev period',
     color: 'text-safe',
     borderColor: 'border-safe/25',
     bgColor: 'bg-safe/8',
     icon: CheckCircle,
-    good: true,
   },
 ]
 
@@ -408,7 +384,9 @@ export default function SOCMetricsPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {KPI_DATA.map((k, i) => {
             const Icon = k.icon
-            const value = liveValue[k.label] ?? k.value
+            // Real metric or a neutral placeholder — never a fabricated fallback.
+            // An empty real deployment can't compute MTTD/MTTR yet, so show '—'.
+            const value = liveValue[k.label] ?? '—'
 
             return (
               <motion.div
