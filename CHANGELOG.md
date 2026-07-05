@@ -9,6 +9,16 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — NVD sync: one malformed CVE can't abort the catalogue
+- **Fixed a whole-sync abort in the NVD → CVE-catalogue parser.**
+  `nvd_to_catalogue` looped over the feed's CVE records with `float(baseScore
+  or 0)` and nested CPE parsing but no per-record isolation, so a single record
+  with a non-numeric `baseScore` (an NVD mirror/proxy quirk) or a non-dict entry
+  would raise and **discard every other CVE in the sync**. Each record is now
+  parsed in isolation (a bad one is skipped and logged), and `baseScore` coerces
+  defensively to `0.0` instead of raising. Regression test mixes a good CVE with
+  a bad-score record and junk entries and asserts the good ones still land.
+
 ### 2026-07-05 — RSS fetcher: ReDoS + OOM guards on hostile feed bodies
 - **Fixed a ReDoS in the RSS/Atom IOC extractor.** The domain-matching regex
   `\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b` backtracks catastrophically on a crafted

@@ -1313,6 +1313,25 @@ def test_nvd_catalogue_sync_drives_scanning(client, auth, monkeypatch):
     assert not any(f["cve"] == "CVE-2026-12345" for f in fixed_scan["findings"])
 
 
+def test_nvd_catalogue_sync_isolates_malformed_records():
+    """One malformed CVE (non-numeric baseScore, or a non-dict entry) in the NVD
+    batch must not abort the whole catalogue sync — the good records still parse."""
+    from dashboard_api.vuln_scanner import nvd_to_catalogue
+    good = {"cve": {"id": "CVE-2026-1", "metrics": {"cvssMetricV31": [
+                {"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}]},
+            "configurations": [{"nodes": [{"cpeMatch": [
+                {"vulnerable": True, "criteria": "cpe:2.3:a:acme:widget:1.0:*:*:*:*:*:*:*"}]}]}]}}
+    bad_score = {"cve": {"id": "CVE-2026-2", "metrics": {"cvssMetricV31": [
+                    {"cvssData": {"baseScore": "N/A"}}]},          # non-numeric → coerced, not fatal
+                 "configurations": [{"nodes": [{"cpeMatch": [
+                    {"vulnerable": True, "criteria": "cpe:2.3:a:acme:thing:2.0:*:*:*:*:*:*:*"}]}]}]}}
+    rows = nvd_to_catalogue([good, "not-a-dict", None, bad_score])   # must not raise
+    products = {r["product"] for r in rows}
+    assert "widget" in products, "a malformed record aborted the whole NVD sync"
+    assert "thing" in products   # bad baseScore coerced to 0.0, record still parsed
+    assert next(r["cvss"] for r in rows if r["product"] == "thing") == 0.0
+
+
 def test_connector_run_records_failure(client, auth, monkeypatch):
     """A network failure is recorded on the connector, never crashes the API."""
     import dashboard_api.connectors as conn_mod

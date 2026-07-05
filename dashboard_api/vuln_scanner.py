@@ -12,9 +12,12 @@ Version comparison is a simple dotted-numeric compare - enough for the common
 `affected: <fixed_version` and inclusive-range checks these CVEs use.
 """
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger("dashboard_api.vuln_scanner")
 
 # Real CVEs keyed by product (lowercased). `lt` = affected when version < fixed;
 # `range` = affected when min <= version <= max (inclusive). `kev` = listed in
@@ -124,53 +127,65 @@ def nvd_to_catalogue(vulnerabilities: list[dict]) -> list[dict]:
     application CPE produce nothing (no version logic to scan against)."""
     rows = []
     for item in vulnerabilities or []:
-        cve = item.get("cve", {})
-        cid = cve.get("id")
-        if not cid:
+        # Per-record isolation: one malformed CVE (e.g. a non-numeric baseScore
+        # from an NVD mirror/proxy) must not abort the whole catalogue sync and
+        # discard every other CVE in the feed.
+        try:
+            if not isinstance(item, dict):
+                continue
+            cve = item.get("cve", {})
+            cid = cve.get("id")
+            if not cid:
+                continue
+            cvss, severity = 0.0, "medium"
+            metrics = cve.get("metrics", {})
+            for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                if metrics.get(key):
+                    data = metrics[key][0].get("cvssData", {})
+                    try:
+                        cvss = float(data.get("baseScore") or 0)
+                    except (ValueError, TypeError):
+                        cvss = 0.0
+                    sev = data.get("baseSeverity") or metrics[key][0].get("baseSeverity", "")
+                    severity = _NVD_SEV.get((sev or "").upper(), "medium")
+                    break
+            summary = ""
+            for d in cve.get("descriptions", []):
+                if d.get("lang") == "en":
+                    summary = d.get("value", "")[:300]
+                    break
+            seen: set[str] = set()
+            for conf in cve.get("configurations", []) or []:
+                for node in conf.get("nodes", []) or []:
+                    for m in node.get("cpeMatch", []) or []:
+                        if not m.get("vulnerable"):
+                            continue
+                        parts = str(m.get("criteria", "")).split(":")
+                        if len(parts) < 6 or parts[2] != "a":  # applications only
+                            continue
+                        product = parts[4].replace("_", " ").strip().lower()
+                        if not product or product in seen:
+                            continue
+                        seen.add(product)
+                        vstart = m.get("versionStartIncluding") or m.get("versionStartExcluding")
+                        vstart_incl = "versionStartExcluding" not in m
+                        vend = m.get("versionEndIncluding") or m.get("versionEndExcluding")
+                        vend_incl = "versionEndIncluding" in m
+                        # an exact-version CPE (no range fields) pins both bounds
+                        if not vstart and not vend and parts[5] not in ("*", "-", ""):
+                            vstart = vend = parts[5]
+                            vstart_incl = vend_incl = True
+                        if not vstart and not vend:
+                            continue  # unbounded - nothing scannable
+                        rows.append({
+                            "cve": cid, "product": product, "cvss": cvss, "severity": severity,
+                            "vstart": vstart, "vstart_incl": vstart_incl,
+                            "vend": vend, "vend_incl": vend_incl,
+                            "fixed": m.get("versionEndExcluding"), "summary": summary,
+                        })
+        except Exception:
+            logger.warning("skipping un-parseable NVD CVE record", exc_info=True)
             continue
-        cvss, severity = 0.0, "medium"
-        metrics = cve.get("metrics", {})
-        for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
-            if metrics.get(key):
-                data = metrics[key][0].get("cvssData", {})
-                cvss = float(data.get("baseScore") or 0)
-                sev = data.get("baseSeverity") or metrics[key][0].get("baseSeverity", "")
-                severity = _NVD_SEV.get((sev or "").upper(), "medium")
-                break
-        summary = ""
-        for d in cve.get("descriptions", []):
-            if d.get("lang") == "en":
-                summary = d.get("value", "")[:300]
-                break
-        seen: set[str] = set()
-        for conf in cve.get("configurations", []) or []:
-            for node in conf.get("nodes", []) or []:
-                for m in node.get("cpeMatch", []) or []:
-                    if not m.get("vulnerable"):
-                        continue
-                    parts = str(m.get("criteria", "")).split(":")
-                    if len(parts) < 6 or parts[2] != "a":  # applications only
-                        continue
-                    product = parts[4].replace("_", " ").strip().lower()
-                    if not product or product in seen:
-                        continue
-                    seen.add(product)
-                    vstart = m.get("versionStartIncluding") or m.get("versionStartExcluding")
-                    vstart_incl = "versionStartExcluding" not in m
-                    vend = m.get("versionEndIncluding") or m.get("versionEndExcluding")
-                    vend_incl = "versionEndIncluding" in m
-                    # an exact-version CPE (no range fields) pins both bounds
-                    if not vstart and not vend and parts[5] not in ("*", "-", ""):
-                        vstart = vend = parts[5]
-                        vstart_incl = vend_incl = True
-                    if not vstart and not vend:
-                        continue  # unbounded - nothing scannable
-                    rows.append({
-                        "cve": cid, "product": product, "cvss": cvss, "severity": severity,
-                        "vstart": vstart, "vstart_incl": vstart_incl,
-                        "vend": vend, "vend_incl": vend_incl,
-                        "fixed": m.get("versionEndExcluding"), "summary": summary,
-                    })
     return rows
 
 
