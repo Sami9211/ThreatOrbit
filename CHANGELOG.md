@@ -9,6 +9,18 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — OSINT refresh: a malformed feed value can't abort the batch
+- **Fixed a whole-refresh abort in the CTI normalization stage.** `normalize_iocs`
+  had no per-IOC isolation, and `_normalize_url`/`_normalize_domain` call
+  `urlparse`, which raises `ValueError` on certain malformed inputs (e.g. an
+  unclosed IPv6 bracket like `http://[`). A single such value from any OSINT
+  source (abuse.ch / RSS / OTX / dark-web) would abort normalization for the
+  **entire refresh — discarding every IOC from every source**. Now each IOC is
+  normalized in isolation (a bad one is skipped/kept-raw, never fatal), and both
+  URL/domain normalizers catch the `urlparse` `ValueError` and fall back to the
+  raw value. Regression test mixes malformed values with good ones and asserts
+  the good IOCs still come through.
+
 ### 2026-07-04 — ingest: one crafted line can't drop the whole batch
 - **Fixed a batch-abort DoS on the log-ingest path** (the most attacker-adjacent
   surface — every forwarded line is untrusted). `ingest_lines` looped over the

@@ -25,6 +25,25 @@ def test_normalize_canonicalises_values_and_drops_invalid():
     assert len(out) == 4   # the invalid IP was dropped
 
 
+def test_normalize_survives_malformed_values():
+    """A feed value that makes urlparse raise (e.g. an unclosed IPv6 bracket)
+    must not abort the whole refresh — the bad IOC is skipped/kept-raw and the
+    good ones from every source still come through."""
+    iocs = [
+        IOC(ioc_type="ip", value="8.8.4.4", source="otx"),
+        IOC(ioc_type="url", value="http://[", source="abuse.ch"),      # urlparse raises
+        IOC(ioc_type="domain", value="http://[::1", source="rss"),     # urlparse raises
+        IOC(ioc_type="url", value="http://good.example/x", source="otx"),
+    ]
+    out = normalize_iocs(iocs)          # must not raise
+    vals = {i.value for i in out}
+    # The two well-formed IOCs always survive; the malformed ones don't take the
+    # batch down (they're skipped or preserved raw, never fatal).
+    assert "8.8.4.4" in vals
+    assert "http://good.example/x" in vals
+    assert len(out) >= 2
+
+
 def test_normalize_infers_tags():
     out = normalize_iocs([
         IOC(ioc_type="url", value="http://bank.example/secure/login", source="rss-feed"),

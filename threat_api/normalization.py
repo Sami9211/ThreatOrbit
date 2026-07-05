@@ -1,31 +1,43 @@
 from typing import List, Dict
 from urllib.parse import urlparse
 import ipaddress
+import logging
 from threat_api.models import IOC
+
+logger = logging.getLogger("threat_api.normalization")
 
 
 def normalize_iocs(iocs: List[IOC]) -> List[IOC]:
     normalized = []
     for ioc in iocs:
-        v = (ioc.value or "").strip()
-        if not v:
-            continue
-
-        if ioc.ioc_type == "domain":
-            v = _normalize_domain(v)
-        elif ioc.ioc_type == "url":
-            v = _normalize_url(v)
-        elif ioc.ioc_type == "hash":
-            v = v.lower()
-        elif ioc.ioc_type == "ip":
-            v = _normalize_ip(v)
+        # Per-IOC isolation: one malformed value from a feed (e.g. a url/domain
+        # like "http://[" that makes urlparse raise) must never abort the whole
+        # refresh — that would discard every IOC from every source. Skip it.
+        try:
+            v = (ioc.value or "").strip()
             if not v:
                 continue
 
-        ioc.value = v
-        ioc.tags = _merge_tags(ioc.tags, _infer_tags(ioc))
-        ioc.description = _enrich_description(ioc.description, ioc)
-        normalized.append(ioc)
+            if ioc.ioc_type == "domain":
+                v = _normalize_domain(v)
+            elif ioc.ioc_type == "url":
+                v = _normalize_url(v)
+            elif ioc.ioc_type == "hash":
+                v = v.lower()
+            elif ioc.ioc_type == "ip":
+                v = _normalize_ip(v)
+                if not v:
+                    continue
+
+            if not v:
+                continue
+            ioc.value = v
+            ioc.tags = _merge_tags(ioc.tags, _infer_tags(ioc))
+            ioc.description = _enrich_description(ioc.description, ioc)
+            normalized.append(ioc)
+        except Exception:
+            logger.warning("skipping un-normalizable IOC (%s)", ioc.ioc_type, exc_info=True)
+            continue
 
     return normalized
 
@@ -51,16 +63,22 @@ def boost_confidence_by_correlation(iocs: List[IOC]) -> List[IOC]:
 def _normalize_domain(domain: str) -> str:
     d = domain.strip().lower().rstrip(".")
     if d.startswith("http://") or d.startswith("https://"):
-        d = (urlparse(d).hostname or "").lower()
+        try:
+            d = (urlparse(d).hostname or "").lower()
+        except ValueError:      # malformed (e.g. unclosed IPv6 bracket) → keep raw
+            return domain.strip().lower().rstrip(".")
     return d
 
 
 def _normalize_url(url: str) -> str:
-    p = urlparse(url if "://" in url else f"http://{url}")
-    scheme = (p.scheme or "http").lower()
-    netloc = (p.netloc or "").lower()
-    path = p.path or "/"
-    query = f"?{p.query}" if p.query else ""
+    try:
+        p = urlparse(url if "://" in url else f"http://{url}")
+        scheme = (p.scheme or "http").lower()
+        netloc = (p.netloc or "").lower()
+        path = p.path or "/"
+        query = f"?{p.query}" if p.query else ""
+    except ValueError:          # malformed URL → return the raw value unchanged
+        return url.strip()
     if not netloc and p.path:
         parts = p.path.split("/", 1)
         host = parts[0].lower()
