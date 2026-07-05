@@ -593,9 +593,19 @@ def _maybe_escalate_case(conn, actor_email="engine") -> int:
                             (like,)).fetchone():
                 continue
             sev = "critical" if r["has_crit"] else "high"
-            cid = f"CASE-{random.randint(1000, 9999)}"
-            if conn.execute("SELECT 1 FROM cases WHERE id=?", (cid,)).fetchone():
-                cid = f"CASE-{random.randint(1000, 9999)}"
+            # Collision-proof case id. One call can now open several cases (it
+            # scans the whole correlation window), so the small 4-digit space
+            # collides under load — a single retry isn't enough and a duplicate
+            # id would throw an unhandled IntegrityError mid-loop. Retry until
+            # free, then fall back to a wide namespace.
+            cid = None
+            for _ in range(25):
+                candidate = f"CASE-{random.randint(1000, 9999)}"
+                if not conn.execute("SELECT 1 FROM cases WHERE id=?", (candidate,)).fetchone():
+                    cid = candidate
+                    break
+            if cid is None:
+                cid = f"CASE-{uuid.uuid4().hex[:8].upper()}"
             now = _now()
             entities = [{"type": pk, "value": pv}]
             war = [{"ts": now, "actor": "correlation-engine", "type": "system",

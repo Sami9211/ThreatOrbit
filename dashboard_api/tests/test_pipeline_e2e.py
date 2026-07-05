@@ -124,3 +124,28 @@ def test_correlation_survives_high_open_alert_volume(client, auth):
             (f'%{host}%',)).fetchone()
     assert row is not None, "no case opened for the buried correlated pivot"
     assert row["alert_count"] >= 3
+
+
+def test_case_id_collision_does_not_crash_escalation(client, auth, monkeypatch):
+    """One escalation call can open several cases (it scans the whole window), so
+    the small 4-digit CASE-id space collides under load. Forcing every 4-digit
+    draw to the SAME value must NOT crash — distinct cases still open via the
+    wide-namespace fallback (the old single-retry code threw IntegrityError)."""
+    import dashboard_api.engine as eng
+    monkeypatch.setattr(eng.random, "randint", lambda a, b: 5000)  # every id collides
+    h1 = f"COLL-A-{uuid.uuid4().hex[:8]}"
+    h2 = f"COLL-B-{uuid.uuid4().hex[:8]}"
+    with get_conn() as conn:
+        for h in (h1, h2):
+            for i in range(3):
+                _insert_alert(conn, title=f"{h} {i}", severity="critical", risk=95,
+                              rule_name="R-COLL", hostname=h, mitre_tech_id="T1071.001")
+        conn.commit()
+        created = _maybe_escalate_case(conn)   # must not raise on id collision
+        conn.commit()
+    assert created >= 2, "both correlated pivots should open cases despite id collision"
+    with get_conn() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM cases WHERE (entities LIKE ? OR entities LIKE ?) "
+            "AND status NOT IN ('resolved','closed')", (f'%{h1}%', f'%{h2}%')).fetchone()["n"]
+    assert n >= 2

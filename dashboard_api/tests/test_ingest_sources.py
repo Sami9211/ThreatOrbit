@@ -370,3 +370,49 @@ def test_ingest_endpoint_stores_windows_and_cloudtrail(client, auth):
         w = conn.execute("SELECT event_type FROM events WHERE username=?", (f"win-{tag}",)).fetchone()
         c = conn.execute("SELECT event_type FROM events WHERE username=?", (f"ct-{tag}",)).fetchone()
     assert w["event_type"] == "failed_login" and c["event_type"] == "create_access_key"
+
+
+# ── Ingest resilience: one crafted line must not abort the whole batch ─────────
+
+def test_deeply_nested_json_line_does_not_crash_parse():
+    """A pathologically deep JSON line (crafted to blow the decoder's recursion
+    stack) is handled as a generic log event, not an unhandled RecursionError."""
+    deep = '{"a":' * 3000 + '1' + '}' * 3000
+    ev = parse_line(deep, "auto")   # must return, never raise RecursionError
+    assert ev is not None and ev["event_type"] == "log"
+
+
+def test_flatten_depth_is_bounded():
+    """_flatten stops descending past its depth cap instead of recursing without
+    bound on a deeply-nested (but decodable) object."""
+    from dashboard_api.ingest import _flatten, _MAX_FLATTEN_DEPTH
+    obj = cur = {}
+    for _ in range(_MAX_FLATTEN_DEPTH + 50):
+        nxt = {}
+        cur["child"] = nxt
+        cur = nxt
+    cur["leaf"] = "x"
+    flat = _flatten(obj)   # must return without RecursionError
+    assert isinstance(flat, dict)
+
+
+def test_one_bad_line_does_not_drop_the_whole_batch(client, auth):
+    """A batch containing a crafted line that would crash the parser still ingests
+    every other line — the bad one is skipped and counted, the POST stays 200."""
+    tag = uuid.uuid4().hex[:8]
+    good1 = json.dumps({"event_type": "failed_login", "src_ip": "203.0.113.5",
+                        "user": f"g1-{tag}", "host": "H1"})
+    bad = '{"a":' * 3000 + '1' + '}' * 3000        # deeply-nested → would crash parse
+    good2 = json.dumps({"event_type": "login_success", "src_ip": "203.0.113.6",
+                        "user": f"g2-{tag}", "host": "H2"})
+    r = client.post("/siem/ingest", json={"lines": [good1, bad, good2], "format": "auto"},
+                    headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Both good lines parsed; the crafted one didn't take the batch down. (It may
+    # be skipped, or degrade to a generic event — either way both goods survive.)
+    with get_conn() as conn:
+        g1 = conn.execute("SELECT 1 FROM events WHERE username=?", (f"g1-{tag}",)).fetchone()
+        g2 = conn.execute("SELECT 1 FROM events WHERE username=?", (f"g2-{tag}",)).fetchone()
+    assert g1 is not None and g2 is not None, "a single crafted line dropped the whole batch"
+    assert body["parsed"] >= 2

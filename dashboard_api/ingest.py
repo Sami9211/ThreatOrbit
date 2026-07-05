@@ -29,11 +29,14 @@ Every parser returns the same normalised event shape the rule engine reads:
  process_name, action, bytes_out, severity_hint, mitre_tech_id, raw}.
 """
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
 
 from dashboard_api.db import get_conn
+
+logger = logging.getLogger("dashboard_api.ingest")
 
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _USER = re.compile(r"(?:user(?:name)?|account|for)\s*[=:]?\s*([A-Za-z0-9._\\-]+)", re.I)
@@ -147,15 +150,22 @@ def _base_event(raw: str) -> dict:
     }
 
 
-def _flatten(obj: dict, prefix: str = "") -> dict:
+# Depth guard for _flatten: ECS/real documents nest a handful of levels; a
+# pathologically deep object (crafted, or a buggy producer) must not exhaust the
+# Python recursion stack. Beyond this depth we stop descending (the deep subtree
+# is ignored for ECS mapping; the whole raw line is still stored via `raw`).
+_MAX_FLATTEN_DEPTH = 64
+
+
+def _flatten(obj: dict, prefix: str = "", _depth: int = 0) -> dict:
     """Flatten nested JSON to dotted keys: {"source": {"ip": x}} → {"source.ip": x}.
     This is how ECS documents arrive (Beats/Logstash emit nested objects)."""
     out: dict = {}
     for k, v in obj.items():
         key = f"{prefix}{k}"
-        if isinstance(v, dict):
-            out.update(_flatten(v, f"{key}."))
-        else:
+        if isinstance(v, dict) and _depth < _MAX_FLATTEN_DEPTH:
+            out.update(_flatten(v, f"{key}.", _depth + 1))
+        elif not isinstance(v, dict):
             out[key] = v
     return out
 
@@ -711,7 +721,10 @@ def _apply_firewall(ev: dict, obj: dict) -> bool:
 def _parse_json(line: str) -> dict | None:
     try:
         obj = json.loads(line)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):
+        # RecursionError: a deeply-nested JSON line exceeds the decoder's stack.
+        # Treat it as unparseable JSON (falls through to a generic log event)
+        # rather than letting it escape and abort the whole ingest batch.
         return None
     if not isinstance(obj, dict):
         return None
@@ -1006,9 +1019,18 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
     seed_builtin_rules()
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     parsed = 0
+    skipped = 0
     with get_conn() as conn:
         for line in lines:
-            ev = parse_line(line, fmt)
+            try:
+                ev = parse_line(line, fmt)
+            except Exception:
+                # A single malformed/crafted line must never abort the whole
+                # batch — that would drop every other forwarded line in the POST
+                # and 500 the ingest endpoint. Skip it; the rest still ingest.
+                logger.warning("skipping unparseable ingest line", exc_info=True)
+                skipped += 1
+                continue
             if ev is None:
                 continue
             # Opt-in PII/secret redaction of the raw text before it persists
@@ -1035,7 +1057,7 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
         observability.inc("ingest_alerts", det["alerts"] + ti)
     except Exception:
         pass
-    return {"ingested": len(lines), "parsed": parsed,
+    return {"ingested": len(lines), "parsed": parsed, "skipped": skipped,
             "alerts": det["alerts"] + ti, "tiMatches": ti, "source": source}
 
 

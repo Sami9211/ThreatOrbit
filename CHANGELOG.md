@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-04 — ingest: one crafted line can't drop the whole batch
+- **Fixed a batch-abort DoS on the log-ingest path** (the most attacker-adjacent
+  surface — every forwarded line is untrusted). `ingest_lines` looped over the
+  POSTed lines with no per-line isolation, and `_parse_json` caught only
+  `ValueError`/`TypeError`. A single deeply-nested JSON line
+  (`{"a":{"a":{…}}}`, small enough to pass the body cap) raised an unhandled
+  `RecursionError` from the JSON decoder, which propagated out of the loop and
+  **dropped every other line in the same POST while 500-ing the endpoint**. Now:
+  (1) each line's parse is wrapped so any failure skips just that line (counted
+  in a new `skipped` field), the rest ingest; (2) `_parse_json` also catches
+  `RecursionError` (a deep line degrades to a generic log event); (3) `_flatten`
+  has a depth cap (`_MAX_FLATTEN_DEPTH=64`) so ECS flattening can't recurse
+  without bound; (4) the `/ingest/raw` whole-body JSON path returns 400 instead
+  of 500 on a deep document. 3 tests: deep-line-doesn't-crash, bounded flatten,
+  and one-bad-line-doesn't-drop-the-batch end-to-end.
+
 ### 2026-07-04 — detection engine: a broken rule can't blind the SIEM
 - **Fixed a whole-SIEM denial-of-detection from one malformed rule.**
   `rule_engine.evaluate` did `int(agg["threshold"])` / `int(agg["windowMinutes"])`
@@ -79,6 +95,16 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   …) are now derived from the real saved-hunt store (saved count, summed
   findings, distinct ATT&CK techniques, last-run hits). Removed the dead
   fabricated beacon-result constant.
+
+### 2026-07-05 — correlation follow-up: collision-proof case ids
+- **Hardened auto-escalation case-id generation.** Now that a single
+  `_maybe_escalate_case` call can open several cases (it scans the whole
+  correlation window, not a capped row set), the old `CASE-<4-digit-random>`
+  id with a single retry could collide under load and throw an unhandled
+  `IntegrityError` mid-loop, aborting the escalation. Ids are now allocated by
+  retrying until free, with a wide `uuid`-suffixed fallback — so a busy tick
+  that opens many cases never crashes on an id clash. Regression test forces
+  every 4-digit draw to collide and asserts distinct cases still open.
 - **Config → API keys/webhooks:** start empty instead of flashing fabricated
   key/webhook metadata before the API responds (a credentials page should
   never show fake keys, even for a moment); the demo set is an offline-only

@@ -782,7 +782,7 @@ def _lines_from_raw(raw: bytes, content_type: str) -> list[str]:
         import json as _json
         try:
             doc = _json.loads(text)
-        except ValueError:
+        except (ValueError, RecursionError):
             raise HTTPException(status_code=400, detail="Invalid JSON body")
         items = doc if isinstance(doc, list) else [doc]
         out = []
