@@ -48,9 +48,8 @@ def _fetch_feed(feed_url: str, source_prefix: str):
     iocs: List[IOC] = []
     errs: List[str] = []
     try:
-        resp = requests.get(feed_url, timeout=30)
-        resp.raise_for_status()
-        root = ET.fromstring(resp.text)
+        text = _get_capped(feed_url)
+        root = ET.fromstring(text)
     except Exception as e:
         return [], [f"{source_prefix} fetch failed {feed_url}: {str(e)}"]
 
@@ -74,6 +73,28 @@ def _fetch_feed(feed_url: str, source_prefix: str):
                 confidence=55 if source_prefix == "RSS" else 50,
             ))
     return iocs, errs
+
+
+# Cap the RSS/Atom body we buffer + parse. A hostile or compromised feed could
+# otherwise return a multi-GB body that `resp.text` / `ET.fromstring` load fully
+# into memory (OOM). 32 MB is far beyond any legitimate feed.
+_MAX_FEED_BYTES = 32 * 1024 * 1024
+
+
+def _get_capped(feed_url: str) -> str:
+    """GET a feed with a streamed, size-bounded read; raises if it exceeds the cap."""
+    with requests.get(feed_url, timeout=30, stream=True) as resp:
+        resp.raise_for_status()
+        total = 0
+        chunks = []
+        for chunk in resp.iter_content(65536):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > _MAX_FEED_BYTES:
+                raise ValueError(f"feed body exceeds {_MAX_FEED_BYTES} bytes")
+            chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8", "replace")
 
 
 def _read_sources(path: str) -> List[str]:
@@ -104,11 +125,24 @@ def _item_link(item):
     return ""
 
 
+# Bound the text a single item's IOC extraction runs over. RSS/Atom bodies are
+# third-party and attacker-influenceable (a compromised or hostile feed), and the
+# regexes below have no match timeout. Without a cap, a crafted blob (e.g. a long
+# "a.a.a.a…" run) makes the domain regex backtrack for many seconds — a ReDoS that
+# stalls the OSINT refresh thread. A real item's title+link+description is tiny;
+# this cap is generous for legitimate content and hard-bounds the pathological case.
+_MAX_EXTRACT_CHARS = 20000
+
+
 def _extract_iocs(text: str) -> List[Tuple[str, str]]:
+    text = (text or "")[:_MAX_EXTRACT_CHARS]
     out = []
     ip_pattern = r"\b(?:\d{1,3}\.){3}\d{1,3}\b"
     url_pattern = r"https?://[^\s\"'<>]+"
-    domain_pattern = r"\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b"
+    # Possessive outer quantifier (Python 3.11+): once a domain's label run is
+    # consumed it isn't given back, which removes the catastrophic-backtracking
+    # path while matching real domains identically.
+    domain_pattern = r"\b(?:[a-zA-Z0-9-]+\.)++[a-zA-Z]{2,}\b"
     sha256_pattern = r"\b[a-fA-F0-9]{64}\b"
 
     out += [("url", x.strip(".,);]}>\"'")) for x in re.findall(url_pattern, text)]

@@ -9,6 +9,21 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — RSS fetcher: ReDoS + OOM guards on hostile feed bodies
+- **Fixed a ReDoS in the RSS/Atom IOC extractor.** The domain-matching regex
+  `\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b` backtracks catastrophically on a crafted
+  text blob (a long `a.a.a.…` run): `re.findall` took **8.5 s at 20k chars and
+  >20 s at 40k** to conclude *no match*. RSS/Atom bodies are third-party and
+  attacker-influenceable, so a compromised or hostile feed could stall the OSINT
+  refresh thread. Fixed with a bounded extraction input (`_MAX_EXTRACT_CHARS`,
+  20k — generous for a real item, hard-bounds the pathological case) plus a
+  **possessive** outer quantifier (`(?:…)++`, Python 3.11+) that removes the
+  backtracking path while matching real domains identically (<0.2 s worst case).
+- **Capped the RSS feed body we buffer/parse** (`_get_capped`, 32 MB streamed):
+  a multi-GB feed body can no longer be loaded whole into memory by
+  `resp.text` / `ET.fromstring` (OOM). Mirrors the dashboard connector feed cap.
+  3 tests: real-indicator extraction, sub-2 s on adversarial input, input cap.
+
 ### 2026-07-05 — OSINT refresh: a malformed feed value can't abort the batch
 - **Fixed a whole-refresh abort in the CTI normalization stage.** `normalize_iocs`
   had no per-IOC isolation, and `_normalize_url`/`_normalize_domain` call
