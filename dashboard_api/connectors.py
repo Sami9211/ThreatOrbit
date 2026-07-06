@@ -190,9 +190,12 @@ def _to_confidence(raw, default: int = 50) -> int:
     if raw is None or raw == "":
         return default
     try:
-        return max(0, min(100, int(float(str(raw).strip().rstrip("%").strip()))))
+        num = float(str(raw).strip().rstrip("%").strip())
     except (ValueError, TypeError):
         return default
+    if num != num or num in (float("inf"), float("-inf")):   # NaN / ±inf ("inf", "1e999")
+        return default
+    return max(0, min(100, int(num)))
 
 
 # Cap on how many SIEM alerts a single connector run may raise from critical

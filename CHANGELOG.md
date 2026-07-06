@@ -9,6 +9,15 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — self-review follow-up: `_to_confidence` overflow guard
+- **Fixed a gap in the connector confidence-coercion hardening** found reviewing
+  the session's own diff. `_to_confidence` caught `ValueError`/`TypeError` but
+  not `OverflowError`, so a feed sending `confidence: "inf"` / `"Infinity"` /
+  `"1e999"` still raised `int(float("inf"))` → `OverflowError` and aborted the
+  whole import — the exact failure the coercion was meant to prevent. Now
+  rejects non-finite values (NaN / ±inf / overflow) and falls back to the
+  default. Extended the coercion test matrix with the non-finite cases.
+
 ### 2026-07-05 — NVD sync: one malformed CVE can't abort the catalogue
 - **Fixed a whole-sync abort in the NVD → CVE-catalogue parser.**
   `nvd_to_catalogue` looped over the feed's CVE records with `float(baseScore

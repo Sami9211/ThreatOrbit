@@ -93,6 +93,9 @@ def test_connector_oversized_feed_degrades_gracefully(client, auth, monkeypatch)
     (75, 75), ("75", 75), ("75.0", 75), ("75%", 75), (75.9, 75),
     (None, 50), ("", 50), ("high", 50), ("n/a", 50), ({}, 50),
     (-5, 0), (250, 100), ("120", 100),
+    # Non-finite / overflow inputs must fall back, not raise OverflowError —
+    # int(float("inf")) throws, which would otherwise abort the whole import.
+    ("inf", 50), ("Infinity", 50), ("-inf", 50), ("nan", 50), ("1e999", 50),
 ])
 def test_to_confidence_coerces_messy_feed_values(raw, expected):
     assert conn_mod._to_confidence(raw) == expected
