@@ -9,6 +9,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — vuln scan: zero-pad version compare (fix boundary miss)
+- **Fixed a false-negative (and false-positive) in CVE version matching.** The
+  version comparator built dotted-numeric tuples and compared them directly, so
+  `2.0` and `2.0.0` compared as *unequal* (`(2,0) < (2,0,0)`). At a patch
+  boundary that meant an asset on `2.0.0` was **missed** when an affected range
+  topped out at `2.0` (a real vulnerable-host miss), and an asset on `2.0` was
+  **falsely flagged** when the fix was `2.0.0`. Comparisons now zero-pad to
+  equal length (`_ver_cmp`), so `2.0 == 2.0.0`; numeric (non-lexical) ordering
+  (`1.10 > 1.9`) and inclusive/exclusive bounds are preserved. Test covers the
+  boundary FP/FN and the padded equality across differing component counts.
+
 ### 2026-07-05 — dark-web: public email domains no longer poison leak matching
 - **Fixed a false-positive flood in workforce credential-leak matching.**
   `watched_identities` derived the org's "owned" domains from *every* email in

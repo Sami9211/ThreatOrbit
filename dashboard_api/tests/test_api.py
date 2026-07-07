@@ -2736,6 +2736,23 @@ def test_vuln_scanner_units():
     assert log4shell["severity"] == "critical" and log4shell["fixed_in"] == "2.15.0"
 
 
+def test_vuln_version_compare_zero_pads():
+    """Version compare must treat 2.0 and 2.0.0 as EQUAL (zero-padded), or a
+    vulnerable asset is missed / a patched one falsely flagged at patch boundaries."""
+    from dashboard_api.vuln_scanner import _matches, _ver_cmp, _lt, _in_range
+    assert _ver_cmp("2.0", "2.0.0") == 0 and _ver_cmp("2.0.0", "2.0") == 0
+    # false-positive guard: "2.0" is not < "2.0.0" (equal → patched, not affected)
+    assert _matches({"lt": "2.0.0"}, "2.0") is False
+    # false-negative guard: "2.0.0" IS within an affected range topping out at "2.0"
+    assert _matches({"bounds": (None, True, "2.0", True)}, "2.0.0") is True
+    # inclusive/exclusive boundary respected across differing component counts
+    assert _matches({"bounds": (None, True, "2.0.0", False)}, "2.0") is False   # == end, excluded
+    assert _matches({"bounds": ("1.0", True, None, None)}, "1.0.0") is True      # == start, included
+    # numeric (not lexical) ordering still holds
+    assert _lt("1.9", "1.10") and not _lt("1.10", "1.9")
+    assert _in_range("3.2.1", "3.0.0", "3.4.2") and not _in_range("3.5", "3.0.0", "3.4.2")
+
+
 def test_asset_vulnerability_scanning(client, auth):
     """Scanning an asset's software produces genuine CVE findings + risk."""
     # create an asset with known-vulnerable software

@@ -62,12 +62,23 @@ def _ver_tuple(v: str):
     return tuple(int(x) for x in re.findall(r"\d+", str(v))) or (0,)
 
 
+def _ver_cmp(a: str, b: str) -> int:
+    """Compare two dotted-numeric versions, ZERO-PADDED to equal length so
+    "2.0" == "2.0.0" (a raw tuple compare treats them as unequal — a real
+    vuln-scan miss at patch boundaries). Returns -1 / 0 / 1."""
+    ta, tb = _ver_tuple(a), _ver_tuple(b)
+    n = max(len(ta), len(tb))
+    ta = ta + (0,) * (n - len(ta))
+    tb = tb + (0,) * (n - len(tb))
+    return -1 if ta < tb else (1 if ta > tb else 0)
+
+
 def _lt(a: str, b: str) -> bool:
-    return _ver_tuple(a) < _ver_tuple(b)
+    return _ver_cmp(a, b) < 0
 
 
 def _in_range(v: str, lo: str, hi: str) -> bool:
-    return _ver_tuple(lo) <= _ver_tuple(v) <= _ver_tuple(hi)
+    return _ver_cmp(v, lo) >= 0 and _ver_cmp(v, hi) <= 0
 
 
 def _matches(entry: dict, version: str) -> bool:
@@ -79,11 +90,14 @@ def _matches(entry: dict, version: str) -> bool:
         lo, lo_inc, hi, hi_inc = entry["bounds"]
         if lo is None and hi is None:
             return False  # unbounded "every version" rows are too noisy to honour
-        vt = _ver_tuple(version)
-        if lo is not None and (vt < _ver_tuple(lo) or (not lo_inc and vt == _ver_tuple(lo))):
-            return False
-        if hi is not None and (vt > _ver_tuple(hi) or (not hi_inc and vt == _ver_tuple(hi))):
-            return False
+        if lo is not None:
+            c = _ver_cmp(version, lo)
+            if c < 0 or (not lo_inc and c == 0):
+                return False
+        if hi is not None:
+            c = _ver_cmp(version, hi)
+            if c > 0 or (not hi_inc and c == 0):
+                return False
         return True
     return False
 
