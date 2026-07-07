@@ -9,6 +9,19 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — dark-web: public email domains no longer poison leak matching
+- **Fixed a false-positive flood in workforce credential-leak matching.**
+  `watched_identities` derived the org's "owned" domains from *every* email in
+  the user directory, so a single personal/SSO account on a public provider
+  (e.g. `someone@gmail.com`) turned `gmail.com` into an owned domain — and
+  `match_credential_leaks` then flagged **every unrelated leaked gmail/outlook/
+  yahoo address** in a feed as a *"workforce credential leaked — force a reset"*
+  **critical** notification. Public/free providers are now excluded from the
+  domain-wide match (list extensible via `DASHBOARD_PUBLIC_EMAIL_DOMAINS`);
+  corporate-domain matches and exact-email matches for those users still work.
+  Regression test covers the unrelated-public / corporate-domain / exact-email
+  cases. (First test coverage for `darkweb_logic`.)
+
 ### 2026-07-05 — self-review follow-up: `_to_confidence` overflow guard
 - **Fixed a gap in the connector confidence-coercion hardening** found reviewing
   the session's own diff. `_to_confidence` caught `ValueError`/`TypeError` but

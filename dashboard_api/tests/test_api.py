@@ -1435,6 +1435,49 @@ def test_darkweb_triage(client, auth):
         assert client.patch(f"/darkweb/findings/{fid}", json={"status": "bogus"}, headers=auth).status_code == 400
 
 
+def test_credential_leak_matching_excludes_public_domains(client, auth):
+    """A directory that includes a personal/SSO account on a public provider
+    (e.g. gmail.com) must NOT turn that provider into an 'org domain' — otherwise
+    every unrelated leaked gmail address is flagged as a workforce credential leak
+    (false-positive critical). Corporate-domain and exact-email matches still work.
+    """
+    import uuid as _uuid
+    from dashboard_api.db import get_conn
+    from dashboard_api.darkweb_logic import match_credential_leaks
+
+    tag = _uuid.uuid4().hex[:8]
+    corp = f"corp{tag}.example"                 # a corporate domain the org "owns"
+    contractor = f"contractor-{tag}@gmail.com"  # a personal/SSO account in the directory
+    def _add_user(conn, email, role):
+        conn.execute(
+            "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,created_at) "
+            "VALUES (?,?,?,?,'active','x','x',?)",
+            (str(_uuid.uuid4()), email, email.split("@")[0], role, "2026-07-05T00:00:00+00:00"))
+    with get_conn() as conn:
+        _add_user(conn, f"admin-{tag}@{corp}", "admin")
+        _add_user(conn, contractor, "analyst")
+        # three credential-leak findings
+        def _finding(entity):
+            fid = str(_uuid.uuid4())
+            conn.execute(
+                "INSERT INTO dark_web_findings (id,ts,category,severity,source,title,entity,status) "
+                "VALUES (?,?,'credential-leak','high','test',?,?, 'new')",
+                (fid, "2026-07-05T00:00:00+00:00", f"leak {entity}", entity))
+            return fid
+        unrelated = _finding(f"randomvictim-{tag}@gmail.com")   # must NOT match
+        corp_hit = _finding(f"newhire-{tag}@{corp}")            # must match (org domain)
+        exact_hit = _finding(contractor)                        # must match (exact email)
+        conn.commit()
+        match_credential_leaks(conn)
+        conn.commit()
+        rows = {r["id"]: r["matched_user"] for r in conn.execute(
+            "SELECT id, matched_user FROM dark_web_findings WHERE id IN (?,?,?)",
+            (unrelated, corp_hit, exact_hit)).fetchall()}
+    assert not rows[unrelated], "unrelated public-provider leak was falsely flagged as workforce"
+    assert rows[corp_hit], "corporate-domain leak should match"
+    assert rows[exact_hit], "exact-email leak on a public provider should still match"
+
+
 def test_engine_pause_resume(client, auth):
     assert client.post("/config/engine", json={"enabled": False}, headers=auth).json()["enabled"] is False
     st = client.get("/config/engine", headers=auth).json()

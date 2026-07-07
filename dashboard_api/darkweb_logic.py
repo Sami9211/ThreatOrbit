@@ -22,15 +22,43 @@ _EMAIL = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _CATEGORIES = {"credential-leak", "data-for-sale", "brand-mention",
                "actor-chatter", "infrastructure"}
 
+# Public/free email providers must NOT become "org domains": directories often
+# hold personal or SSO accounts (gmail, outlook, …), and treating e.g. gmail.com
+# as owned would flag EVERY leaked gmail address in a feed as a workforce
+# credential leak (a flood of false-positive critical "force a reset" alerts).
+# An exact email still matches these users; only the domain-wide match is
+# restricted to corporate domains. Extend via DASHBOARD_PUBLIC_EMAIL_DOMAINS.
+_PUBLIC_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+    "msn.com", "yahoo.com", "ymail.com", "aol.com", "icloud.com", "me.com",
+    "mac.com", "proton.me", "protonmail.com", "pm.me", "gmx.com", "gmx.net",
+    "mail.com", "zoho.com", "yandex.com", "yandex.ru", "tutanota.com",
+    "fastmail.com", "hey.com", "qq.com", "163.com", "126.com",
+}
+
+
+def _public_email_domains() -> set:
+    import os
+    extra = {d.strip().lower() for d in
+             os.environ.get("DASHBOARD_PUBLIC_EMAIL_DOMAINS", "").split(",") if d.strip()}
+    return _PUBLIC_EMAIL_DOMAINS | extra
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def watched_identities(conn) -> tuple[set, set]:
-    """(emails, domains) the org actually operates - from the user directory."""
+    """(emails, domains) the org actually operates - from the user directory.
+
+    `domains` excludes public/free email providers, so a directory containing a
+    personal or SSO account (e.g. someone@gmail.com) does not turn that provider
+    into an owned domain and cause every unrelated leak on it to be flagged as a
+    workforce credential leak. Those users still match by exact email."""
     emails = {str(r["email"]).lower() for r in conn.execute("SELECT email FROM users").fetchall()}
-    domains = {e.split("@", 1)[1] for e in emails if "@" in e}
+    public = _public_email_domains()
+    domains = {d for e in emails if "@" in e
+               for d in [e.split("@", 1)[1]] if d and d not in public}
     return emails, domains
 
 
