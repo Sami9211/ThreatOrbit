@@ -9,6 +9,19 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — CI (Supply chain): fix `three` peer-dep conflict breaking SBOM
+- **Fixed the `Supply chain` CI job (SBOM generation).** A frontend
+  dependency-group bump had set `three: ^0.185.1` in package.json, but
+  `postprocessing` (via `@react-three/postprocessing`) pins a peer
+  `three: >=0.168.0 <0.185.0`, so the resolver kept `three@0.184.0` and the
+  declared `^0.185.1` became unsatisfiable. `npm ci` and the build tolerate the
+  peer conflict, but the SBOM step's `npm ls --json --long --all` fails hard on
+  it (`ELSPROBLEMS … three@0.184.0 … invalid`). Pinned `three`/`@types/three`
+  back to `^0.184.0` (the version already installed and shipped, so no runtime
+  change) and regenerated the lock (also clearing an extraneous `@emnapi/runtime`).
+  Verified: `npm ls --all` clean (exit 0), `tsc --noEmit`, `check:routes`, and
+  `npm run build` all green.
+
 ### 2026-07-05 — CI (Postgres backend): fix ON CONFLICT translation + test isolation
 - **Fixed the `backend-postgres` CI job (7 failures).** Two independent causes,
   both invisible to the local SQLite runs:
