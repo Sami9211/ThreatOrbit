@@ -43,6 +43,14 @@ print(json.dumps({{"counts": counts, "engineOff": engine_off,
                    "engineEnabled": (row[0] if row else None)}}))
 """
     env = {**dict(__import__("os").environ), **env_extra}
+    # Genuine isolation: this boots a THROWAWAY SQLite DB, so it must not inherit
+    # a Postgres backend from the parent env (the CI Postgres job sets
+    # DASHBOARD_DB_BACKEND/DATABASE_URL). Otherwise the subprocess ignores the
+    # temp DB path and connects to the shared, already-populated Postgres, and the
+    # "empty on a live boot" assertions see other tests' data. The live-boot
+    # seeding under test is backend-agnostic, so exercising it on SQLite is valid.
+    env["DASHBOARD_DB_BACKEND"] = "sqlite"
+    env.pop("DATABASE_URL", None)
     out = subprocess.run([sys.executable, "-c", script], capture_output=True,
                          text=True, env=env, cwd=str(Path(__file__).resolve().parents[2]))
     assert out.returncode == 0, f"boot failed:\n{out.stderr}"

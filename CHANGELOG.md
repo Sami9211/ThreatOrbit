@@ -9,6 +9,27 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-05 — CI (Postgres backend): fix ON CONFLICT translation + test isolation
+- **Fixed the `backend-postgres` CI job (7 failures).** Two independent causes,
+  both invisible to the local SQLite runs:
+  - **sqlglot `ON CONFLICT` regression.** sqlglot 30.x (allowed by the wide
+    `sqlglot>=25,<31` pin) parses SQLite `ON CONFLICT(col)` conflict targets as
+    *ordered* expressions and the Postgres generator renders them as
+    `col NULLS FIRST`, which Postgres rejects ("NULLS FIRST/LAST is not allowed
+    in ON CONFLICT clause"). This broke every upsert on Postgres
+    (`cve_catalogue`, `audit_sink_cursor`, `user_org_roles`). The translator
+    (`db_backend._pg_transform`) now strips the ordering wrapper from conflict
+    keys at the AST level, so the target renders as a bare column list —
+    robust to further sqlglot rendering changes.
+  - **`test_live_honesty` subprocess isolation.** The live-boot honesty tests
+    spawn a subprocess against a throwaway SQLite DB but inherited
+    `DASHBOARD_DB_BACKEND=postgres`/`DATABASE_URL` from the CI env, so they
+    connected to the shared, already-populated Postgres and saw other tests'
+    rows (19 users / 5470 alerts instead of a clean boot). The subprocess now
+    forces the SQLite backend for genuine isolation.
+  - Verified by running the full dashboard suite against a real local Postgres
+    16 (mirroring the CI service): **459 passed, 2 skipped** (was 7 failed).
+
 ### 2026-07-05 — vuln scan: zero-pad version compare (fix boundary miss)
 - **Fixed a false-negative (and false-positive) in CVE version matching.** The
   version comparator built dotted-numeric tuples and compared them directly, so

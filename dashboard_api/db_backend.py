@@ -71,6 +71,16 @@ def _pg_transform(tree, exp):
             a = fn.expressions
             if len(a) == 1 and isinstance(a[0], exp.Literal) and a[0].this == "now":
                 fn.replace(exp.func("now"))
+    # sqlglot (30.x) parses SQLite `ON CONFLICT(col)` targets as `Ordered`
+    # expressions and the Postgres generator renders them as `col NULLS FIRST`,
+    # which Postgres REJECTS inside an ON CONFLICT clause ("NULLS FIRST/LAST is
+    # not allowed in ON CONFLICT clause"). Strip the ordering wrapper from every
+    # conflict key so the target renders as a bare column list.
+    for oc in tree.find_all(exp.OnConflict):
+        keys = oc.args.get("conflict_keys")
+        if keys:
+            oc.set("conflict_keys",
+                   [k.this if isinstance(k, exp.Ordered) else k for k in keys])
     # INSERT OR REPLACE → INSERT … ON CONFLICT (first/PK column) DO UPDATE/NOTHING,
     # matching how the app uses it (single-PK upserts: settings(key), leases, …).
     import sqlglot
