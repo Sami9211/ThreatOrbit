@@ -305,6 +305,35 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-08 · Simple vs Power organization mode (nav curation, not RBAC).**
+  A small org drowning in a full SOC platform churns; a mature team hobbled by
+  a stripped-down UI churns too — so the org itself now picks its posture
+  instead of shipping two products. `dashboard_api/modes.py` defines a
+  24-feature-area catalogue (mirroring the Sidebar's nav sections) and a
+  10-area `simple` subset (Overview, SOC console, SIEM alerts/sources, Cases,
+  core CTI, Feeds, Assets, Reports, Config); `GET`/`PUT /config/mode`
+  (`config.manage`-gated for writes, open read for any authenticated user so
+  the frontend can draw its own nav) persist the choice per org via the same
+  `settings` table `key:{org}` convention as per-tenant quotas. Explicitly a
+  **UI-surfacing preference, not a security boundary**: every endpoint keeps
+  enforcing its real RBAC regardless of mode. The Sidebar now filters its nav
+  by the org's feature list (`useOrgFeatures`), and the pre-existing
+  client-side Normal/Power "Experience Mode" toggle (Config → General) is now
+  the same control — flipping it persists to the backend and re-curates the
+  nav, not just card density. Caught and fixed in the same pass: (1) a
+  volume-dependent miss in `auto_trigger_playbooks` (same `LIMIT`-on-`ORDER BY
+  ts DESC` bug class as the correlation engine, fixed by bounding the scan on
+  the time window instead of a row cap); (2) one bad S3 object aborting an
+  entire `s3_pull.poll()` batch and stalling the checkpoint, now isolated
+  per-object with the checkpoint advancing up to the last good key; (3) an E2E
+  regression where treating every `GET /config/mode` response as authoritative
+  would have silently flipped every existing install's working Normal-mode
+  default to the backend's Power fallback — fixed via a `has_explicit_mode`
+  flag so the backend only overrides the frontend's pre-existing local default
+  once an org has actually chosen. Full test coverage: `test_modes.py`,
+  extended `test_playbook_engine.py` (auto-trigger volume + idempotency),
+  extended `test_s3_pull.py` (failing-object isolation). See `CHANGELOG.md`
+  for the dated per-fix detail.
 - **2026-06-22 · Real Postgres query layer + connection pooling (audit A3/A4).**
   Replaced the brittle regex SQL-dialect rewriter with a real parser: `to_postgres`
   parses each statement with **sqlglot** and applies AST transforms for the SQLite

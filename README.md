@@ -378,8 +378,21 @@ Two ways to find your path: **by who you are** (role walkthroughs) and **by
 what you need to do right now** (task recipes). The dashboard also has two
 **experience modes** - *Normal* (analyst-first, pre-triaged) and *Power User*
 (dense data, raw controls) - switchable in **Config → General → Experience
-Mode**. And there is an in-dashboard **AI assistant** (bottom-right) that can
-answer, recommend, and redirect across these workflows for you.
+Mode**. This is one toggle with two effects: it's a per-browser display-density
+preference (card density, inline triage actions) **and**, since it persists to
+the org's account (`GET`/`PUT /config/mode`), it curates *which sidebar
+sections even appear* — Normal ("simple mode") shows the 10-area small-org
+essentials (Overview, SOC console, SIEM alerts + sources, Cases, core CTI,
+Feeds, Assets, Reports, Config); Power reveals the full 24-area analyst-grade
+surface (rules authoring, ATT&CK navigator, UEBA, hunting, playbook building,
+threat-actor attribution, compliance, and more). It is a **UI-surfacing
+preference, not a permission boundary** — every endpoint still enforces the
+same RBAC regardless of mode, so a Normal-mode user hitting a "hidden" API
+directly is not blocked by it, only steered away from it in the nav. A brand
+new org sees Power (nothing hidden) until it explicitly picks a mode, so no
+existing deployment's nav changes underneath it. And there is an in-dashboard
+**AI assistant** (bottom-right) that can answer, recommend, and redirect
+across these workflows for you.
 
 ### By role
 
@@ -924,6 +937,18 @@ Tests set their own API keys and use an isolated temp database via
 ## 13. Intended users
 
 ThreatOrbit suits individual analysts and small-to-mid security teams who want a deployable CTI plus anomaly-detection workflow that integrates with OpenCTI — topped with a full SOC dashboard (SIEM triage, SOAR cases/playbooks, asset risk, dark-web monitoring, an AI assistant, and a complete audit trail) — without standing up a heavy SIEM. The three services can run independently or together, locally or in containers.
+
+**One platform, two postures.** The same install serves a two-person team and
+an analyst-grade SOC without a different SKU: flip **Simple mode** (Config →
+General → Experience Mode → Normal) for a small org that wants the 10-area
+essentials — triage the alert queue, work cases, get basic intel, know your
+assets, report up the chain — without a rules engine, playbook builder,
+ATT&CK matrix, or UEBA console in the way. Flip **Power mode** for the full
+24-area surface once the team is ready for it. Nothing is deleted or degraded
+underneath — it's a curated nav over the identical backend and RBAC, so an org
+can move from Simple to Power the moment it outgrows the essentials view,
+with zero migration. See [§2b](#2b-using-the-dashboard--by-role-and-by-task)
+for the full feature split.
 
 **Scaling honestly:** the default single-node SQLite stack comfortably serves a
 small team and is the right starting point. Larger teams should run the staged
