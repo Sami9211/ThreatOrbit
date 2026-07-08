@@ -30,6 +30,16 @@ realistic event mix (failed logins, large egress, process starts, beacons):
 | detect drain — 1 worker | 10,000 | 10,000 | 1.36 | **~7,400** |
 | detect drain — 4 workers | 10,000 | 10,000 | 1.87 | **~5,400** |
 
+**Environment:** same host · Postgres 16 (local, loopback TCP) ·
+`DASHBOARD_DB_BACKEND=postgres` — the previously "remaining" Tier-2 baseline
+(`plan.md`), now measured rather than assumed:
+
+| Stage | Events | Alerts | Seconds | Events/sec |
+|---|---:|---:|---:|---:|
+| ingest + detect (inline) | 5,000 | 242 | 7.42 | **~670** |
+| detect drain — 1 worker | 10,000 | 10,000 | 22.41 | **~450** |
+| detect drain — 4 workers | 10,000 | 10,000 | 23.25 | **~430** |
+
 ## What this means (read before scaling)
 
 1. **A single SQLite node sustains roughly 8–11k EPS** of ingest+detect and
@@ -47,11 +57,27 @@ realistic event mix (failed logins, large egress, process starts, beacons):
    `DASHBOARD_DETECTION_WORKERS > 1` on the SQLite backend, so this misconfig is
    hard to hit silently.
 
-3. **To go materially higher**: switch the dashboard to the **Postgres backend**
-   (`DASHBOARD_DB_BACKEND=postgres`) and raise `DASHBOARD_DETECTION_WORKERS`; for
-   very high sustained EPS, externalise the event store to a columnar/search
-   engine (ClickHouse/OpenSearch) behind the same hunt API — tracked as the
-   remaining P0 pipeline item in `plan.md`.
+3. **Measured today, Postgres is markedly slower than SQLite for this same
+   pipeline, and 4 workers don't beat 1 — correcting an earlier assumption in
+   this doc that simply switching to Postgres would go "materially higher."**
+   The reason isn't Postgres itself: `ingest_lines` and the detection worker
+   both issue **one round-trip statement per row** (a Python loop of
+   `conn.execute(...)`, no `executemany`/batch/`COPY`). Over SQLite that's an
+   in-process file write with no network hop; over Postgres — even loopback —
+   every row pays a real client↔server round trip, which dominates at this row
+   count and swamps whatever row-level-locking parallelism 4 workers could
+   otherwise exploit. This is an honest, reproducible measurement
+   (`DASHBOARD_DB_BACKEND=postgres DATABASE_URL=... python -m dashboard_api.bench`
+   against a disposable database), not a Postgres capacity ceiling — a real
+   deployment adds further network latency on top of this, so treat these
+   numbers as a floor, not a target.
+4. **To go materially higher on Postgres**: batch the per-row ingest/detection
+   writes (`executemany` or a multi-row `INSERT` / `COPY`) instead of one
+   statement per event — untouched by this measurement pass, tracked as a new,
+   concretely-scoped item in `plan.md`'s open roadmap. For very high sustained
+   EPS beyond that, externalise the event store to a columnar/search engine
+   (ClickHouse/OpenSearch) behind the same hunt API — the remaining P0 pipeline
+   item already tracked there.
 
 ## Caveats
 

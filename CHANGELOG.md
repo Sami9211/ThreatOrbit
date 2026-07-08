@@ -9,6 +9,32 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Measured the Postgres load baseline; corrected an unverified scaling claim
+- **`bench.py`** forced a fresh SQLite temp database unconditionally before
+  importing the app, so there was no actual way to run it against Postgres —
+  the Tier-2 roadmap item "a documented Postgres EPS baseline" stayed
+  unmeasured indefinitely. It now respects `DASHBOARD_DB_BACKEND=postgres` +
+  `DATABASE_URL` when already set (the SQLite-default behavior for everyone
+  else is unchanged), so `DASHBOARD_DB_BACKEND=postgres DATABASE_URL=... python
+  -m dashboard_api.bench` measures the real thing.
+- **Measured result, and a correction**: on the same host, Postgres came back
+  markedly *slower* than SQLite for the current pipeline (~670 EPS
+  ingest+detect vs. ~10,800; ~450 vs. ~7,400 single-worker drain), and the
+  4-worker detection pool didn't beat 1 worker on Postgres either — the
+  opposite of `docs/LOAD_LIMITS.md`'s prior (never-measured) claim that
+  switching to Postgres alone would go "materially higher." Root cause,
+  confirmed by reading the ingest/detection code rather than guessed:
+  `ingest_lines` and the detection worker each issue one
+  `conn.execute(...)` per event row with no `executemany`/`COPY` batching —
+  free on SQLite's in-process file access, but every row pays a real
+  client↔server round trip on Postgres, even over loopback, which dominates
+  and erases whatever row-level-locking parallelism the worker pool could
+  otherwise exploit. `docs/LOAD_LIMITS.md` now carries the measured Postgres
+  table and this explanation instead of the old assumption; batching those hot
+  writes is scoped as a new, concrete Tier-2 roadmap item in `plan.md` rather
+  than attempted inside this measurement pass. `test_bench.py` (which strips
+  the backend env vars so it always benches SQLite) is unaffected.
+
 ### 2026-07-08 — Connectors: a feed URL could 302 the dashboard into an SSRF (cloud metadata / internal targets)
 - **Fixed a real SSRF gap**: `connectors._read_capped` fetched custom feed URLs
   (`json`/`csv`/`stix`/`darkweb-json` connector kinds, `connectors.manage`-gated

@@ -231,10 +231,21 @@ plus external compliance attestations.
 
 ### Tier 2 — mid-size deployments
 
-- [~] **Published load limits** — backpressure, a measured SQLite EPS baseline
-      (`bench.py` + `docs/LOAD_LIMITS.md`), and per-endpoint UI dataset ceilings
-      shipped. Remaining: a documented **Postgres** EPS baseline (needs a live
-      PG host to measure).
+- [x] **Published load limits.** DONE (2026-07-08): backpressure, a measured
+      SQLite EPS baseline, a now-measured **Postgres** EPS baseline (`bench.py`
+      + `docs/LOAD_LIMITS.md`), and per-endpoint UI dataset ceilings all
+      shipped. The Postgres measurement corrected a previously-unverified
+      assumption in `LOAD_LIMITS.md` that switching to Postgres alone would go
+      "materially higher" — measured, it's markedly *slower* than SQLite for
+      the current pipeline (one round-trip statement per event row, no
+      batching), which is now the concretely-scoped remaining item below.
+- [ ] **Batch the per-row ingest/detection writes on Postgres.** `ingest_lines`
+      and the detection worker both issue one `conn.execute(...)` per event row
+      — fine for SQLite's in-process file access, but every row pays a real
+      client↔server round trip on Postgres, which dominates and erases any
+      row-level-locking parallelism the worker pool could otherwise exploit
+      (measured: 4 workers ≈ 1 worker on Postgres). Move to `executemany` / a
+      multi-row `INSERT` / `COPY` for the hot ingest and detection-claim paths.
 
 ### Tier 3 — large enterprise / MSSP
 
@@ -305,6 +316,27 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-08 · Measured (not assumed) Postgres EPS baseline; corrected an
+  unverified claim in `LOAD_LIMITS.md`.** `bench.py` forced a fresh SQLite temp
+  DB unconditionally, so there was never actually a way to run it against
+  Postgres — the "documented Postgres EPS baseline" Tier-2 item stayed
+  unmeasured. Fixed by having it respect `DASHBOARD_DB_BACKEND=postgres` +
+  `DATABASE_URL` when already set (unchanged default: SQLite temp file), then
+  measured against a disposable local Postgres 16 database. Result: Postgres
+  is markedly **slower** than SQLite for the current pipeline (~670 EPS
+  ingest+detect vs. ~10,800; ~450 vs. ~7,400 single-worker drain), and 4
+  workers don't beat 1 on Postgres either — directly contradicting
+  `LOAD_LIMITS.md`'s prior (unverified) claim that switching to Postgres alone
+  would go "materially higher." Root cause, confirmed by reading the code, not
+  guessed: `ingest_lines` and the detection worker each issue one
+  `conn.execute(...)` round-trip per event row, no `executemany`/`COPY`
+  batching — free on SQLite's in-process file access, but dominant over any
+  network connection, even loopback. `docs/LOAD_LIMITS.md` now carries the
+  measured Postgres table and the corrected explanation; the real fix (batch
+  the hot ingest/detection-claim writes) is scoped as a new Tier-2 roadmap item
+  above rather than attempted inside this measurement pass. `test_bench.py`
+  (which strips backend env vars so it always benches SQLite) still passes
+  unchanged.
 - **2026-07-08 · Connectors: closed an SSRF-via-redirect gap.**
   `connectors._read_capped` fetched custom feed URLs with
   `httpx.stream(..., follow_redirects=True)`, which chases a `Location` header

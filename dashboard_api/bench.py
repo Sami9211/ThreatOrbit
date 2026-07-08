@@ -9,12 +9,19 @@ detection rules, and times two stages:
   * drain   — a pre-seeded backlog processed by the detection worker pool,
               at 1 and N workers.
 
-Run:  python -m dashboard_api.bench           # full
+Run:  python -m dashboard_api.bench           # full, SQLite (default)
       python -m dashboard_api.bench --quick   # small, for a smoke check
 
-Numbers are point-in-time for this hardware + SQLite WAL on a single node;
-publish them with the environment line this prints, and re-run on your own
-reference hardware. See docs/LOAD_LIMITS.md for a captured baseline.
+To measure the Postgres backend instead, set DASHBOARD_DB_BACKEND=postgres and
+DATABASE_URL to a *disposable/test* database before running (same env vars the
+app itself uses) - this script never overrides them when already set, so it
+never silently redirects an intentional Postgres run back to a SQLite temp
+file. Point it at a throwaway database: bench_drain's rows are uuid-tagged but
+never cleaned up, and this script does not create or drop a database for you.
+
+Numbers are point-in-time for this hardware and backend; publish them with the
+environment line this prints, and re-run on your own reference hardware. See
+docs/LOAD_LIMITS.md for a captured baseline.
 """
 import os
 import platform
@@ -23,9 +30,13 @@ import tempfile
 import time
 import uuid
 
-# Isolate from any real database BEFORE importing the app config/db.
-os.environ.setdefault("DASHBOARD_DB_PATH",
-                      tempfile.NamedTemporaryFile(suffix="-bench.db", delete=False).name)
+# Isolate from any real database BEFORE importing the app config/db - unless
+# DASHBOARD_DB_BACKEND=postgres is already set, in which case the caller has
+# deliberately pointed this at a Postgres DATABASE_URL and it must be left
+# alone (the DASHBOARD_DB_PATH default is a SQLite-only setting).
+if os.environ.get("DASHBOARD_DB_BACKEND", "sqlite").lower() != "postgres":
+    os.environ.setdefault("DASHBOARD_DB_PATH",
+                          tempfile.NamedTemporaryFile(suffix="-bench.db", delete=False).name)
 os.environ.setdefault("DASHBOARD_JWT_SECRET", "bench-secret")
 os.environ.setdefault("DASHBOARD_ADMIN_PASSWORD", "BenchPassw0rd!")
 
@@ -114,8 +125,10 @@ def run(quick: bool = False) -> dict:
 
 
 def _env() -> str:
+    from dashboard_api import db_backend
+    backend = "Postgres" if db_backend.is_postgres() else "SQLite WAL (single node)"
     return (f"{platform.system()} {platform.machine()} · "
-            f"{os.cpu_count()} vCPU · Python {platform.python_version()} · SQLite WAL (single node)")
+            f"{os.cpu_count()} vCPU · Python {platform.python_version()} · {backend}")
 
 
 def main():
