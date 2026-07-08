@@ -38,6 +38,7 @@ _TIMEOUT = 20.0
 # and reject past this bound. 64 MB is generous for an OSINT indicator feed.
 _MAX_FEED_BYTES = int(os.environ.get("DASHBOARD_MAX_FEED_BYTES", str(64 * 1024 * 1024)))
 _IOC_TYPES = {"ip", "domain", "url", "hash", "email", "cve"}
+_MAX_REDIRECTS = 5
 
 
 class _CappedResponse:
@@ -56,19 +57,44 @@ class _CappedResponse:
 
 
 def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
-    """Fetch with a streamed, size-bounded body read. Raises for HTTP status and
-    for a body exceeding `_MAX_FEED_BYTES` (so it never buffers unboundedly)."""
-    with httpx.stream(method, url, timeout=_TIMEOUT, follow_redirects=True, **kwargs) as r:
-        r.raise_for_status()                       # status is known before the body
-        chunks: list[bytes] = []
-        total = 0
-        for chunk in r.iter_bytes():
-            total += len(chunk)
-            if total > _MAX_FEED_BYTES:
-                raise ValueError(
-                    f"feed response exceeds {_MAX_FEED_BYTES} bytes — refusing to buffer")
-            chunks.append(chunk)
-    return _CappedResponse(b"".join(chunks))
+    """Fetch with a streamed, size-bounded body read, re-validating the SSRF
+    guard on every redirect hop.
+
+    `httpx.stream(..., follow_redirects=True)` used to chase a `Location`
+    header entirely inside httpx, with zero visibility to our SSRF guard: a
+    custom feed URL that passes `validate_external_url` at registration/send
+    time (it resolves to a public address right now) can still 302 to
+    `169.254.169.254` (cloud metadata) or `127.0.0.1` (an internal service)
+    the moment it - or a compromised upstream - decides to, and the dashboard
+    would fetch that instead, completely unguarded. So redirects are followed
+    here one hop at a time, re-running `validate_external_url` against every
+    `Location` before it's followed. Raises for HTTP status, too many
+    redirects, and a body exceeding `_MAX_FEED_BYTES` (so it never buffers
+    unboundedly)."""
+    from dashboard_api.net_guard import validate_external_url
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        with httpx.stream(method, current, timeout=_TIMEOUT, follow_redirects=False,
+                          **kwargs) as r:
+            if r.is_redirect:
+                location = r.headers.get("location")
+                if not location:
+                    r.raise_for_status()
+                    raise ValueError("redirect response is missing its Location header")
+                current = str(httpx.URL(current).join(location))
+                validate_external_url(current)
+                continue
+            r.raise_for_status()                    # status is known before the body
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in r.iter_bytes():
+                total += len(chunk)
+                if total > _MAX_FEED_BYTES:
+                    raise ValueError(
+                        f"feed response exceeds {_MAX_FEED_BYTES} bytes — refusing to buffer")
+                chunks.append(chunk)
+            return _CappedResponse(b"".join(chunks))
+    raise ValueError(f"too many redirects (> {_MAX_REDIRECTS})")
 
 # Connector presets surfaced to the UI's "Add connector" form.
 KIND_PRESETS = {

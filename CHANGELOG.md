@@ -9,6 +9,29 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Connectors: a feed URL could 302 the dashboard into an SSRF (cloud metadata / internal targets)
+- **Fixed a real SSRF gap**: `connectors._read_capped` fetched custom feed URLs
+  (`json`/`csv`/`stix`/`darkweb-json` connector kinds, `connectors.manage`-gated
+  but otherwise arbitrary) via `httpx.stream(..., follow_redirects=True)`.
+  httpx's own redirect-following happens entirely inside the client, with zero
+  visibility to `net_guard.validate_external_url` — so a feed URL that passes
+  SSRF validation right now (it currently resolves to a public address) could
+  still 302 the dashboard straight at `169.254.169.254` (cloud instance
+  metadata / IAM credentials) or `127.0.0.1`/an RFC1918 address (an internal
+  service), and the response would be fetched and parsed as if it were the
+  feed — a full server-side-request-forgery primitive gated only on
+  connector-management access, not on ever controlling a publicly-routable
+  server. `webhooks.py`'s `net_guard.safe_post`/`safe_get` already close this
+  exact gap for webhook/Slack targets (pin + block redirects entirely); feed
+  URLs legitimately need to follow redirects (http→https, CDN), so blocking
+  them outright wasn't the right fix here. Fixed by following redirects
+  manually, one hop at a time, re-running `validate_external_url` against
+  every `Location` before it's followed, capped at 5 hops. Regression tests in
+  `test_connector_resilience.py` lock in: a safe same-host/CDN-style redirect
+  is still followed; a redirect to cloud metadata, loopback, or an RFC1918
+  address is rejected before the internal target is ever contacted; and a
+  long/looping redirect chain raises rather than hanging.
+
 ### 2026-07-08 — Simple/Power mode: don't silently override the pre-existing UI default
 - **Fixed a real regression E2E caught before it shipped**: `useExperienceMode`
   (an existing Normal/Power toggle that already drives real page UI - e.g. the

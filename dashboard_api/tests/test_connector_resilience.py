@@ -16,9 +16,11 @@ import dashboard_api.connectors as conn_mod
 class _FakeStream:
     """Stand-in for the context manager `httpx.stream(...)` returns."""
 
-    def __init__(self, chunks: list[bytes], ok: bool = True):
+    def __init__(self, chunks: list[bytes], ok: bool = True, redirect_to: str | None = None):
         self._chunks = chunks
         self._ok = ok
+        self.is_redirect = redirect_to is not None
+        self.headers = {"location": redirect_to} if redirect_to else {}
 
     def __enter__(self):
         return self
@@ -67,6 +69,64 @@ def test_read_capped_boundary_exact(monkeypatch):
                         lambda *a, **k: _FakeStream([b"0123456789X"]))
     with pytest.raises(ValueError):
         conn_mod._read_capped("GET", "https://feed.invalid/over")
+
+
+def test_read_capped_follows_a_safe_redirect(monkeypatch):
+    """A redirect to another public host is followed (one hop), and the final
+    body is what's returned - the common CDN / http->https feed-hosting case."""
+    payload = b'{"data": []}'
+    calls = []
+
+    def fake_stream(method, url, **kwargs):
+        calls.append(url)
+        if url == "https://feed.invalid/old":
+            return _FakeStream([], redirect_to="https://feed.invalid/new")
+        return _FakeStream([payload])
+
+    monkeypatch.setattr(conn_mod.httpx, "stream", fake_stream)
+    resp = conn_mod._read_capped("GET", "https://feed.invalid/old")
+    assert resp.text == payload.decode()
+    assert calls == ["https://feed.invalid/old", "https://feed.invalid/new"]
+
+
+@pytest.mark.parametrize("target", [
+    "http://169.254.169.254/latest/meta-data/iam/security-credentials/",  # cloud metadata
+    "http://127.0.0.1:8002/config/api-keys",                              # loopback
+    "http://10.0.0.5/internal-admin",                                     # RFC1918 private
+])
+def test_read_capped_blocks_redirect_to_internal_target(monkeypatch, target):
+    """The core regression: a feed URL that validates fine right now (a public
+    host) must not be able to 302 the dashboard into fetching an internal or
+    cloud-metadata target instead. `httpx`'s own `follow_redirects=True` would
+    chase this Location header with zero visibility to the SSRF guard - this
+    locks in that every hop is re-validated, not just the first one.
+
+    conftest sets DASHBOARD_ALLOW_PRIVATE_URLS=true so webhook-delivery tests
+    can target a local sink; override it back to strict here, same as
+    test_net_guard.py's allow_private=False, so this test asserts real
+    production blocking behaviour rather than the test env's escape hatch."""
+    monkeypatch.setenv("DASHBOARD_ALLOW_PRIVATE_URLS", "false")
+
+    def fake_stream(method, url, **kwargs):
+        if url == "https://feed.invalid/bait":
+            return _FakeStream([], redirect_to=target)
+        raise AssertionError(f"must never actually connect to the redirect target: {url}")
+
+    monkeypatch.setattr(conn_mod.httpx, "stream", fake_stream)
+    from dashboard_api.net_guard import UnsafeUrlError
+    with pytest.raises(UnsafeUrlError):
+        conn_mod._read_capped("GET", "https://feed.invalid/bait")
+
+
+def test_read_capped_caps_redirect_chain_length(monkeypatch):
+    """A redirect loop / excessively long chain must not hang forever."""
+    def fake_stream(method, url, **kwargs):
+        n = int(url.rsplit("/", 1)[-1])
+        return _FakeStream([], redirect_to=f"https://feed.invalid/hop/{n + 1}")
+
+    monkeypatch.setattr(conn_mod.httpx, "stream", fake_stream)
+    with pytest.raises(ValueError, match="too many redirects"):
+        conn_mod._read_capped("GET", "https://feed.invalid/hop/0")
 
 
 def test_connector_oversized_feed_degrades_gracefully(client, auth, monkeypatch):

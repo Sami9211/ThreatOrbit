@@ -305,6 +305,21 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-08 · Connectors: closed an SSRF-via-redirect gap.**
+  `connectors._read_capped` fetched custom feed URLs with
+  `httpx.stream(..., follow_redirects=True)`, which chases a `Location` header
+  entirely inside httpx — invisible to `net_guard.validate_external_url`. A
+  feed URL that validates fine right now (a public host) could 302 the
+  dashboard straight at cloud instance metadata (`169.254.169.254`) or an
+  internal/RFC1918 address, and the server would fetch that instead,
+  completely unguarded — a real SSRF primitive gated only on
+  `connectors.manage`. `webhooks.py` already closed the analogous gap for
+  webhook/Slack targets via `net_guard.safe_post` (pin + block redirects); feed
+  URLs legitimately need redirects (http→https, CDN), so the fix here follows
+  each hop manually and re-validates the `Location` before following it,
+  capped at 5 redirects. New regression tests in `test_connector_resilience.py`
+  cover the safe-redirect, blocked-internal-target, and too-many-redirects
+  cases. Full SQLite suite: 511 passed.
 - **2026-07-08 · Simple vs Power organization mode (nav curation, not RBAC).**
   A small org drowning in a full SOC platform churns; a mature team hobbled by
   a stripped-down UI churns too — so the org itself now picks its posture
