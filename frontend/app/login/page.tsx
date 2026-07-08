@@ -93,7 +93,7 @@ export default function LoginPage() {
         </p>
       </header>
 
-      <div className="relative z-10 flex-1 flex items-center justify-center px-5 py-10">
+      <main id="main-content" tabIndex={-1} className="relative z-10 flex-1 flex items-center justify-center px-5 py-10 focus:outline-none">
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
           className="w-full max-w-md">
@@ -202,7 +202,7 @@ export default function LoginPage() {
             Protected by end-to-end encryption
           </div>
         </motion.div>
-      </div>
+      </main>
     </div>
   )
 }

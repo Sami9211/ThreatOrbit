@@ -293,11 +293,24 @@ plus external compliance attestations.
 - [ ] **Platform SRE / self-observability** — distributed tracing, SLOs +
       error budgets, alerting on the platform's *own* health, and synthetic
       checks (`/metrics` exists today but the rest is missing).
-- [ ] **Product, UX & quality** — a WCAG / keyboard-nav / screen-reader pass +
-      i18n; notification reliability (delivery retries/backoff, templating,
-      digests, escalation policies); test depth (load/perf, chaos /
-      failure-injection, connector contract tests, and standing
-      SSRF/authz/XSS regressions); GTM plumbing (trial / free-tier flow, usage
+- [~] **Product, UX & quality.** Started (2026-07-08): automated a11y
+      regression testing (`@axe-core/playwright`, `e2e/a11y.spec.ts`) now runs
+      in CI against login/overview/SIEM/SOAR/Config, and its first run caught
+      + fixed 4 real bugs (a sitewide skip-link with no target, 6 unlabeled
+      Config form fields, 2 indistinguishable nav landmarks, a missing `<main>`
+      on login) — see `CHANGELOG.md`. Also present already: connector SSRF
+      regressions (`test_net_guard.py`, `test_connector_resilience.py`) and
+      retry/backoff webhook delivery (`webhooks.py`) count toward "standing
+      SSRF/authz/XSS regressions" and "notification reliability" respectively.
+      Remaining: a **per-theme color-contrast pass** (`--ink-500` and
+      `--threat` measure ~3:1 against their default backgrounds across all 11
+      themes, short of the 4.5:1 AA text threshold — deliberately excluded from
+      the new a11y spec rather than landed sight-unseen; needs visual
+      verification per theme, not just a token edit); the rest of a full
+      keyboard-nav/screen-reader pass beyond what axe-core catches mechanically
+      (axe covers roughly a third of WCAG's criteria); i18n; notification
+      templating/digests/escalation policies; chaos/failure-injection and
+      connector contract tests; GTM plumbing (trial/free-tier flow, usage
       metering, in-product upgrade prompts, status page, support surface).
 
 ### Frontend polish backlog
@@ -316,6 +329,24 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-08 · Automated accessibility regression testing, and 4 real a11y
+  bugs it caught on its first run.** Added `@axe-core/playwright` +
+  `e2e/a11y.spec.ts`, scanning login/overview/SIEM/SOAR/Config with axe-core's
+  WCAG 2.0/2.1 A+AA ruleset as a permanent CI gate rather than a one-off manual
+  pass. It immediately found, and this fixed: a sitewide "Skip to content" link
+  whose `#main-content` target didn't exist on the login page or anywhere in
+  the dashboard layout (only marketing pages had it) — keyboard/screen-reader
+  users invoking it landed nowhere; 6 Config-page form inputs with a visible
+  `<label>` never programmatically associated with its `<input>` (fixed once at
+  the shared `Field` component via `useId()` + `htmlFor`/`id`, covering every
+  instance); two unlabeled `<nav>` landmarks on the Config page indistinguishable
+  from each other (now `aria-label`ed). `color-contrast` is disabled in the new
+  spec deliberately (not silently) — `--ink-500`/`--threat` measure ~3:1 against
+  their default-theme backgrounds vs. the 4.5:1 AA threshold, but both are
+  per-theme tokens (11 themes), so the real fix needs a visually-verified
+  lightness pass, not a token edit landed from a headless run; tracked above as
+  a concrete remaining item. Full existing Playwright suite (23 tests) still
+  green; `tsc --noEmit` clean.
 - **2026-07-08 · Measured (not assumed) Postgres EPS baseline; corrected an
   unverified claim in `LOAD_LIMITS.md`.** `bench.py` forced a fresh SQLite temp
   DB unconditionally, so there was never actually a way to run it against

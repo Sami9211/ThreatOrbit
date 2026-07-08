@@ -9,6 +9,41 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Automated accessibility regression testing (axe-core), and 4 real a11y bugs it caught immediately
+- Added `@axe-core/playwright` and a new `e2e/a11y.spec.ts` that scans the
+  login page, overview, SIEM alert queue, SOAR cases, and Config against
+  axe-core's ruleset (WCAG 2.0/2.1 A+AA - the mechanically-detectable third of
+  it) as a permanent CI gate, not a one-off manual pass that never repeats.
+- The first run immediately found real, concrete bugs, all now fixed:
+  - **The "Skip to content" link went nowhere on every dashboard/login page.**
+    `app/layout.tsx` renders a sitewide skip-link targeting `#main-content`,
+    but neither `app/dashboard/layout.tsx`'s `<main>` nor the login page's
+    content region had that id (only the marketing pages did) - so keyboard
+    and screen-reader users invoking it landed nowhere. Both now carry
+    `id="main-content"` and `tabIndex={-1}` so focus actually moves there.
+  - **6 Config-page form inputs had a visible label with no programmatic
+    association** (`<label>` and `<input>` were unlinked siblings, not
+    `htmlFor`/`id`-paired or wrapped) - a screen-reader user tabbing through
+    General settings heard "edit text, blank" instead of "Platform Name, edit
+    text". Fixed once at the shared `Field` component (`useId()` +
+    `htmlFor`/`id`), covering every field built from it.
+  - **Two unlabeled `<nav>` landmarks on the Config page** (the app's main
+    Sidebar nav and the page's own settings-section rail/mobile-strip nav)
+    were indistinguishable to landmark-based navigation. Each now has a
+    distinguishing `aria-label`.
+  - **No `<main>` landmark at all** on the login page, flagged separately
+    from the skip-link gap.
+  - `color-contrast` is deliberately disabled in the new spec, not silently
+    dropped: a first run measured the `ink-500` (secondary/muted text) and
+    `--threat` (alert-count badge) design tokens at ~3:1 against their
+    default-theme backgrounds, short of the 4.5:1 AA text threshold - but
+    both are defined per-theme (11 themes total), so a real fix needs a
+    lightness pass verified visually across all of them, not a token edit
+    landed sight-unseen from a headless test run. Tracked as a concrete
+    follow-up in `plan.md` instead of left unstated.
+- Verified: the new spec passes clean; the full existing Playwright suite (23
+  tests) still passes unchanged; `tsc --noEmit` clean.
+
 ### 2026-07-08 — Measured the Postgres load baseline; corrected an unverified scaling claim
 - **`bench.py`** forced a fresh SQLite temp database unconditionally before
   importing the app, so there was no actual way to run it against Postgres —

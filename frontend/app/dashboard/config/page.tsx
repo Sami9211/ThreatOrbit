@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings, Key, Bell, Shield, Globe, Plug, Database,
@@ -243,10 +243,12 @@ function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
   label: string; value: string; type?: string; hint?: string
   onChange?: (v: string) => void; placeholder?: string
 }) {
+  const id = useId()
   return (
     <div>
-      <label className="block text-xs font-medium text-ink-300 mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-xs font-medium text-ink-300 mb-1.5">{label}</label>
       <input
+        id={id}
         type={type}
         placeholder={placeholder}
         {...(onChange ? { value, onChange: (e) => onChange(e.target.value) } : { defaultValue: value })}
@@ -912,7 +914,7 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
   return (
     <>
       {/* ── Mobile horizontal strip ── */}
-      <nav className="sm:hidden overflow-x-auto flex gap-1 pb-2 -mx-4 px-4 scrollbar-none">
+      <nav aria-label="Settings sections" className="sm:hidden overflow-x-auto flex gap-1 pb-2 -mx-4 px-4 scrollbar-none">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -932,6 +934,7 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
 
       {/* ── Desktop vertical rail ── */}
       <nav
+        aria-label="Settings sections"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={cn(

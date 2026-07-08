@@ -23,7 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Sidebar />
         <div className="flex-1 min-w-0 ml-0 md:ml-14 flex flex-col min-h-screen">
           <TopBar />
-          <main className="flex-1 overflow-x-hidden">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-x-hidden focus:outline-none">
             <PageScale>{children}</PageScale>
           </main>
         </div>
