@@ -23,7 +23,9 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   keeps enforcing its real capability via `permissions.py`; the mode only tells
   the frontend what to show. Unset/garbled values fail open to `power`.
 - Added test coverage for `webhooks.py` (HMAC sign/verify, subscriber filtering,
-  retry/SSRF-block behaviour).
+  retry/SSRF-block behaviour) and the SOAR `playbook_engine.py` (dry-run vs live
+  persistence, case creation, approval pause→resume/reject, and idempotent
+  auto-trigger on a matching alert).
 
 ### 2026-07-05 — CI (Supply chain): fix `three` peer-dep conflict breaking SBOM
 - **Fixed the `Supply chain` CI job (SBOM generation).** A frontend
