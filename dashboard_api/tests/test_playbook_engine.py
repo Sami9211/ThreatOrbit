@@ -7,6 +7,7 @@ fresh alert exactly once.
 """
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from dashboard_api.db import get_conn
 from dashboard_api.detections import _insert_alert
@@ -84,13 +85,21 @@ def test_approval_reject_skips_remaining():
 
 
 def test_auto_trigger_fires_once_on_matching_alert():
+    """Uses a real DB shared across the whole suite, which can hold other
+    unresolved T1071/critical alerts (e.g. correlation-engine tests elsewhere)
+    at the same one-second timestamp resolution - `ORDER BY ts DESC` doesn't
+    guarantee which same-second row a per-playbook scan picks first. Bump this
+    alert a few seconds into the future so it's unambiguously the most recent
+    match regardless of what else exists in the shared alerts table."""
     seed_builtin_playbooks()
     tag = uuid.uuid4().hex[:8]
     host = f"PB-C2-{tag}"
+    future = (datetime.now(timezone.utc) + timedelta(seconds=5)).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         # "C2 Beacon Isolation" matches severities=critical, techniques=T1071.
         aid = _insert_alert(conn, title=f"beacon {tag}", severity="critical", risk=95,
                             rule_name="R-PB", hostname=host, mitre_tech_id="T1071.001")
+        conn.execute("UPDATE alerts SET ts=? WHERE id=?", (future, aid))
         conn.commit()
         started, _dispatches = auto_trigger_playbooks(conn, max_runs=5)
         conn.commit()
@@ -102,3 +111,36 @@ def test_auto_trigger_fires_once_on_matching_alert():
         conn.commit()
         n2 = conn.execute("SELECT COUNT(*) AS n FROM playbook_runs WHERE alert_id=?", (aid,)).fetchone()["n"]
     assert n1 >= 1 and n2 == n1   # idempotent: no duplicate run for the same alert
+
+
+def test_auto_trigger_survives_high_open_alert_volume():
+    """auto_trigger_playbooks scans by the 15-minute recency WINDOW, not a fixed
+    row count. Regression guard for a real bug: a `LIMIT 100` on the candidate
+    scan meant that once >100 unresolved critical/high alerts existed in the
+    window (a busy SOC - or exactly an active incident), a genuinely-matching
+    fresh alert could be excluded by `ORDER BY ts DESC` (same-second ties don't
+    guarantee inclusion) and its automated response silently never fired."""
+    seed_builtin_playbooks()
+    tag = uuid.uuid4().hex[:8]
+    host = f"PB-VOL-{tag}"
+    with get_conn() as conn:
+        # 150 unrelated open critical alerts, each on its own host, so none of
+        # THEM match any trigger — pure volume noise past the old 100-row cap.
+        for i in range(150):
+            _insert_alert(conn, title=f"noise {i}", severity="critical", risk=90,
+                         rule_name="R-NOISE", hostname=f"NOISE-{uuid.uuid4().hex[:8]}",
+                         mitre_tech_id="T1059")
+        # The real alert that should auto-trigger a response. Bumped a few
+        # seconds into the future so it's unambiguously the most recent T1071
+        # match regardless of any other T1071/critical alert elsewhere in the
+        # shared suite DB landing at the same one-second timestamp.
+        aid = _insert_alert(conn, title=f"beacon {tag}", severity="critical", risk=95,
+                            rule_name="R-PB", hostname=host, mitre_tech_id="T1071.001")
+        future = (datetime.now(timezone.utc) + timedelta(seconds=5)).replace(microsecond=0).isoformat()
+        conn.execute("UPDATE alerts SET ts=? WHERE id=?", (future, aid))
+        conn.commit()
+        started, _dispatches = auto_trigger_playbooks(conn, max_runs=5)
+        conn.commit()
+        run = conn.execute("SELECT 1 FROM playbook_runs WHERE alert_id=?", (aid,)).fetchone()
+    assert started >= 1, "the real alert was buried behind noise and never auto-triggered"
+    assert run is not None

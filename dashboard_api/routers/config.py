@@ -62,12 +62,18 @@ class ModeUpdate(BaseModel):
 @router.get("/mode")
 def get_mode(user: dict = Depends(current_user)):
     """The caller's org mode (simple|power) + the feature areas it surfaces.
-    A UI-preference layer only - endpoint RBAC is unchanged by the mode."""
+    A UI-preference layer only - endpoint RBAC is unchanged by the mode.
+    `explicit` tells the client whether this org has actually CHOSEN a mode, vs
+    `mode` just being the un-set `power` fallback - a client with its own
+    pre-existing local preference should only let this response override it
+    when `explicit` is true (see `modes.has_explicit_mode`)."""
     from dashboard_api import tenancy
-    from dashboard_api.modes import effective_mode, enabled_features
+    from dashboard_api.modes import effective_mode, enabled_features, has_explicit_mode
     with get_conn() as conn:
-        mode = effective_mode(conn, tenancy.org_of(user))
-    return {"mode": mode, "features": enabled_features(mode)}
+        org = tenancy.org_of(user)
+        mode = effective_mode(conn, org)
+        explicit = has_explicit_mode(conn, org)
+    return {"mode": mode, "features": enabled_features(mode), "explicit": explicit}
 
 
 @router.put("/mode")
@@ -86,7 +92,7 @@ def set_mode(body: ModeUpdate, user: dict = Depends(require_perm("config.manage"
                      (setting_key(org), mode))
         audit(conn, user["email"], "config.mode", org, f"mode={mode}")
         conn.commit()
-    return {"mode": mode, "features": enabled_features(mode)}
+    return {"mode": mode, "features": enabled_features(mode), "explicit": True}
 
 
 @router.get("/api-keys")

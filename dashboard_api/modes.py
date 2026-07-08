@@ -129,6 +129,25 @@ def effective_mode(conn, org: str) -> str:
     return mode if mode in MODES else DEFAULT_MODE
 
 
+def has_explicit_mode(conn, org: str) -> bool:
+    """Whether `org` has actually chosen a mode (vs. never having set one, so
+    `effective_mode` is only reporting the `power` fallback).
+
+    This distinction matters to callers beyond nav curation: some UI (e.g. the
+    SIEM alert queue's card density / inline triage actions) already used this
+    same normal/power toggle as a plain client-side preference, defaulting to
+    'normal', *before* this org-level backend setting existed. If a client
+    treated every GET response as authoritative, an org that has never
+    explicitly chosen a mode would get silently flipped from that pre-existing
+    'normal' default to the backend's 'power' fallback the moment it synced -
+    a real behaviour change for every existing/fresh install. Callers should
+    only let the backend override a pre-existing local preference when this
+    is True."""
+    row = conn.execute("SELECT value FROM settings WHERE key=?",
+                       (setting_key(org),)).fetchone()
+    return bool(row) and row["value"] in MODES
+
+
 def enabled_features(mode: str) -> list[str]:
     """The sorted feature ids exposed in `mode` (default mode's set when the
     value is unknown - same fail-open-to-full-UI stance as effective_mode)."""

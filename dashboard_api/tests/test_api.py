@@ -2080,6 +2080,11 @@ def test_playbook_auto_trigger(client, auth):
     runs = client.get(f"/soar/playbooks/{pb['id']}/runs?limit=100", headers=auth).json()
     pairs = [(r["playbook_id"], r["alert_id"]) for r in runs]
     assert len(pairs) == len(set(pairs))
+    # Disable this custom auto-trigger playbook once the test is done with it -
+    # left enabled, it's a standing "any T1110/high alert" candidate that would
+    # silently compete with every other test's auto_trigger_playbooks() call
+    # for the rest of the suite.
+    client.patch(f"/soar/playbooks/{pb['id']}", json={"enabled": False}, headers=auth)
 
 
 def test_playbook_crud_validation(client, auth):
@@ -2104,6 +2109,12 @@ def test_playbook_crud_validation(client, auth):
     assert client.patch(f"/soar/playbooks/{pb['id']}", json={
         "steps": [{"kind": "bogus", "name": "x"}]}, headers=auth).status_code == 400
     assert client.patch("/soar/playbooks/missing", json={"enabled": False}, headers=auth).status_code == 404
+    # This test PATCHed the playbook to trigger_type=auto with a broad
+    # severities=critical match (any critical alert, no technique filter) just
+    # to exercise the update path - left enabled, it would silently consume
+    # auto_trigger_playbooks() matches meant for every other test's alerts for
+    # the rest of the suite. Disable it now that the update assertions are done.
+    client.patch(f"/soar/playbooks/{pb['id']}", json={"enabled": False}, headers=auth)
 
 
 SIGMA_SAMPLE = """

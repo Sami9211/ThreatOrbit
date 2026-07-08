@@ -578,7 +578,15 @@ def _alert_matches(match: dict, alert: dict) -> bool:
 
 def auto_trigger_playbooks(conn, max_runs: int = 2) -> tuple[int, list]:
     """Run enabled auto playbooks whose trigger_match fits a fresh open alert
-    that has no run yet. Returns (runs_started, webhook_dispatches)."""
+    that has no run yet. Returns (runs_started, webhook_dispatches).
+
+    The candidate alert scan is bounded by the 15-minute recency WINDOW, not a
+    fixed row count: a `LIMIT 100` here previously meant that once >100
+    unresolved critical/high alerts existed in the window (exactly what a busy
+    SOC - or an active incident - produces), a genuinely-matching fresh alert
+    could be excluded by `ORDER BY ts DESC` (ties at one-second resolution
+    don't guarantee inclusion) and silently never get its automated response.
+    Same class of miss the correlation engine's window-based grouping fixed."""
     pbs = conn.execute(
         "SELECT * FROM playbooks WHERE enabled=1 AND trigger_type='auto'").fetchall()
     candidates = []
@@ -594,7 +602,7 @@ def auto_trigger_playbooks(conn, max_runs: int = 2) -> tuple[int, list]:
     since = (datetime.now(timezone.utc) - timedelta(minutes=15)).replace(microsecond=0).isoformat()
     alerts = conn.execute(
         "SELECT * FROM alerts WHERE ts >= ? AND status NOT IN ('resolved','closed') "
-        "ORDER BY ts DESC LIMIT 100", (since,)).fetchall()
+        "ORDER BY ts DESC", (since,)).fetchall()
     started = 0
     dispatches: list = []
     for pb, match in candidates:

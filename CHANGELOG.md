@@ -9,6 +9,80 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Simple/Power mode: don't silently override the pre-existing UI default
+- **Fixed a real regression E2E caught before it shipped**: `useExperienceMode`
+  (an existing Normal/Power toggle that already drives real page UI - e.g. the
+  SIEM alert queue's card density / inline triage actions - defaulting to
+  'normal') was made to sync with the new backend org mode, treating every
+  `GET /config/mode` response as authoritative. The backend's un-set fallback
+  is `power`, so an org that had never explicitly chosen a mode (every
+  existing install, every fresh demo/E2E boot) got silently flipped from its
+  working 'normal' default to 'power' the moment the page synced - breaking
+  the SIEM page's default triage UI. Root cause: two genuinely different
+  "modes" (a client-side page-density preference vs. a new org-level
+  feature-visibility setting) got conflated under one shared value with
+  incompatible defaults. Fix: `GET`/`PUT /config/mode` now return an
+  `explicit` flag (`modes.has_explicit_mode`) - true only when the org has
+  actually persisted a choice - and the frontend only lets the backend
+  override its local default when `explicit` is true; the feature list (nav
+  curation) still always syncs, since its own fail-open default is equivalent.
+  Caught by the `E2E (Playwright)` job before merge, not a live incident.
+
+### 2026-07-08 — Test hygiene: two tests left standing auto-trigger playbooks enabled
+- **Fixed real test pollution CI caught**: `test_playbook_auto_trigger` and
+  `test_playbook_crud_validation` (`test_api.py`) each create a custom
+  `trigger_type=auto` playbook (one matching any T1110/high alert, the other
+  any critical alert at all) to exercise the create/update paths, but never
+  disabled them afterward - leaving two standing, broad-match auto-trigger
+  candidates enabled for the rest of the suite. Combined with the correlation
+  fix below (which made `auto_trigger_playbooks` scan every alert in the
+  window instead of stopping at 100), this let their broad matches compete
+  with other tests' alerts for the same-second tie-break in `ORDER BY ts DESC`,
+  making the correlation fix's own new tests fail intermittently deep in the
+  full suite. Both tests now `PATCH … {"enabled": false}` once done. Also
+  hardened the two `test_playbook_engine.py` auto-trigger tests to bump their
+  alert's `ts` a few seconds into the future (the same idiom already used for
+  the correlation-engine volume test) so they're unambiguously the most recent
+  match regardless of any other same-second alert elsewhere in the shared
+  suite DB - not just a fix for this one pollution source, but for the whole
+  class of same-second tie-break flakiness.
+
+### 2026-07-08 — CI catch: auto-trigger playbooks had the same volume-dependent miss as the correlation engine
+- **Fixed a real production bug CI caught**: `auto_trigger_playbooks` scanned
+  candidate alerts with `ORDER BY ts DESC LIMIT 100`. Once more than 100
+  unresolved critical/high alerts existed within the 15-minute window — a busy
+  SOC, or precisely an active incident, which is exactly when automated
+  response matters most — a genuinely-matching fresh alert could be excluded
+  by the row cap (same-second timestamp ties don't guarantee inclusion in the
+  top 100) and its playbook would silently never auto-fire. This is the exact
+  same class of bug already fixed once this session in the correlation engine
+  (`_maybe_escalate_case`'s window-based grouping) — missed here because
+  `playbook_engine.py` wasn't in scope of that earlier pass. Fixed the same
+  way: the scan is now bounded purely by the 15-minute recency window, not an
+  arbitrary row count. Added `test_auto_trigger_survives_high_open_alert_volume`
+  (buries a real matching alert behind 150 noise alerts, asserts it still
+  auto-triggers) — confirmed it reproduces the miss against the pre-fix code.
+
+### 2026-07-08 — S3 log pull: one bad object can't corrupt the checkpoint
+- **Fixed a real duplicate-ingestion / stuck-poller bug in the agentless S3
+  log-pull path** (`dashboard_api/s3_pull.py`). `poll()` looped over the
+  listed objects with no per-object isolation: if ANY object's `GET` failed
+  (a network blip, transient S3 throttling/5xx, a malformed body), the
+  exception propagated out of the whole batch **before the checkpoint had
+  advanced**, so every object already ingested earlier in that same poll got
+  **re-ingested (duplicate alerts) on every subsequent retry** — and if the
+  failing object kept failing, the poller could get **permanently stuck**,
+  never progressing past it. Each object's fetch+ingest is now isolated: a
+  failure stops the batch (so ordering is preserved) but the checkpoint
+  advances up to the last **successfully processed** key first, so retries
+  never reprocess already-ingested objects and a transient failure clears on
+  its own once the underlying condition does. Regression test: object 2 of 3
+  fails, the checkpoint stops at object 1 (not re-listed/re-ingested on
+  retry), and once the failure clears the poll resumes and finishes cleanly
+  with no duplicate events. The other four files audited in this sweep
+  (`routers/darkweb.py`, `leader.py`, `routers/stream.py`,
+  `threat_api/retention.py`) were already correctly hardened — no changes.
+
 ### 2026-07-08 — Simple vs Power mode now curates the sidebar (frontend)
 - **Wired the existing Normal/Power toggle (`TopBar`) to the backend org mode**
   (`GET`/`PUT /config/mode`, added in the entry below). The toggle previously

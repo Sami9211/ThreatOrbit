@@ -526,6 +526,10 @@ export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 export interface OrgMode {
   mode: 'simple' | 'power'
   features: string[]
+  /** Whether the org has actually CHOSEN a mode, vs `mode` just being the
+   * un-set 'power' fallback. Callers with their own pre-existing local
+   * default should only let this response override it when true. */
+  explicit: boolean
 }
 export const fetchOrgMode = () => api<OrgMode>('/config/mode')
 export const setOrgMode   = (mode: 'simple' | 'power') =>

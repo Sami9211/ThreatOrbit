@@ -128,12 +128,23 @@ def poll(s3: dict, *, max_objects: int = 50) -> dict:
     objects = ingested = alerts = 0
     last = start_after
     for key in keys:
-        body = get_object(s3, key)
-        lines = [ln for ln in body.splitlines() if ln.strip()]
-        if lines:
-            res = ingest_lines(lines, "auto", f"s3:{key}", org_id)
-            ingested += res["parsed"]
-            alerts += res["alerts"]
+        try:
+            body = get_object(s3, key)
+            lines = [ln for ln in body.splitlines() if ln.strip()]
+            if lines:
+                res = ingest_lines(lines, "auto", f"s3:{key}", org_id)
+                ingested += res["parsed"]
+                alerts += res["alerts"]
+        except Exception:
+            # One bad object (network blip, transient throttling/5xx, a
+            # malformed body) must not discard the whole batch. Stop here, but
+            # advance the checkpoint up to (not including) this key first, so
+            # the objects already ingested this poll are never re-ingested on
+            # retry - and a permanently-broken object blocks only itself, not
+            # progress through everything before it.
+            logger.warning("S3 pull: failed on %s; stopping this poll, will retry", key,
+                           exc_info=True)
+            break
         objects += 1
         last = key
     if last != start_after:

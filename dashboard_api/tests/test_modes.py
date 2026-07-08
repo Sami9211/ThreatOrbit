@@ -53,24 +53,31 @@ def test_default_mode_is_power(client, auth, _reset_mode):
     assert body["mode"] == "power"
     assert body["features"] == sorted(modes.FEATURES)
     assert len(body["features"]) > 0
+    # nothing has been explicitly chosen yet - `mode` is just the fallback.
+    # Frontend clients with their own pre-existing local default (the SIEM
+    # page's card density, already 'normal' before this org-level setting
+    # existed) rely on this to know NOT to override it.
+    assert body["explicit"] is False
 
 
 def test_put_simple_persists_and_get_reflects_it(client, auth, _reset_mode):
     r = client.put("/config/mode", headers=auth, json={"mode": "simple"})
     assert r.status_code == 200, r.text
-    assert r.json()["mode"] == "simple"
+    assert r.json()["mode"] == "simple" and r.json()["explicit"] is True
     # persisted via the settings table (survives across requests)
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key=?",
                            (modes.SETTING_KEY,)).fetchone()
     assert row is not None and row["value"] == "simple"
     body = client.get("/config/mode", headers=auth).json()
-    assert body["mode"] == "simple"
+    assert body["mode"] == "simple" and body["explicit"] is True
     assert body["features"] == sorted(modes.MODES["simple"])
-    # and flipping back to power restores the full surface
+    # and flipping back to power restores the full surface (still explicit -
+    # a deliberate choice of 'power' is not the same as never having chosen)
     r = client.put("/config/mode", headers=auth, json={"mode": "power"})
     assert r.status_code == 200
-    assert client.get("/config/mode", headers=auth).json()["mode"] == "power"
+    got = client.get("/config/mode", headers=auth).json()
+    assert got["mode"] == "power" and got["explicit"] is True
 
 
 def test_invalid_mode_rejected(client, auth, _reset_mode):
@@ -110,6 +117,20 @@ def test_simple_is_nonempty_strict_subset_of_power():
     assert power == set(modes.FEATURES)         # power is the full catalogue
     # every advertised feature id is documented in the catalogue
     assert simple <= set(modes.FEATURES)
+
+
+def test_has_explicit_mode(_reset_mode):
+    with get_conn() as conn:
+        assert modes.has_explicit_mode(conn, "org-default") is False
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                     (modes.SETTING_KEY, "simple"))
+        conn.commit()
+        assert modes.has_explicit_mode(conn, "org-default") is True
+        # a garbled value is treated the same as "never set" - not explicit
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                     (modes.SETTING_KEY, "banana"))
+        conn.commit()
+        assert modes.has_explicit_mode(conn, "org-default") is False
 
 
 def test_helpers_fail_open_to_power():

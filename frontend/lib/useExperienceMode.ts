@@ -75,15 +75,26 @@ export function useExperienceMode(): [ExperienceMode, (m: ExperienceMode) => voi
     window.addEventListener(EVT, onCustom)
     window.addEventListener('storage', onStorage)
 
-    // One-time backend sync per page load: the org's persisted mode wins over
-    // whatever's in localStorage (it follows the org across devices).
+    // One-time backend sync per page load. Only an EXPLICITLY-chosen org mode
+    // overrides the local value: `useExperienceMode` predates this backend
+    // setting as a plain client-side preference (already defaulting to
+    // 'normal' and already driving real page UI - e.g. the SIEM alert queue's
+    // card density / inline triage actions). The backend's un-set fallback is
+    // 'power', so treating every response as authoritative would silently
+    // flip that pre-existing 'normal' default to 'power' for every org that
+    // has never explicitly touched this setting - a real behaviour change,
+    // not just a nav-curation preference. `features` is safe to always adopt
+    // (the un-set default already resolves to "every feature", matching the
+    // fail-open unrestricted state Sidebar uses when nothing is known yet).
     if (!_backendSynced) {
       _backendSynced = true
       fetchOrgMode()
-        .then(({ mode: wireMode, features }) => {
-          const resolved = fromWire(wireMode)
-          try { window.localStorage.setItem(KEY, resolved) } catch { /* ignore */ }
-          window.dispatchEvent(new CustomEvent<ExperienceMode>(EVT, { detail: resolved }))
+        .then(({ mode: wireMode, features, explicit }) => {
+          if (explicit) {
+            const resolved = fromWire(wireMode)
+            try { window.localStorage.setItem(KEY, resolved) } catch { /* ignore */ }
+            window.dispatchEvent(new CustomEvent<ExperienceMode>(EVT, { detail: resolved }))
+          }
           broadcastFeatures(features)
         })
         .catch(() => { /* offline / not yet authenticated - keep the local value, features stay unrestricted */ })
