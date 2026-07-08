@@ -23,3 +23,6 @@ anomaly_report.html
 # Auto-generated per-install secrets (never commit)
 .jwt_secret
 *.jwt_secret
+
+# Claude Code agent worktrees (ephemeral, isolated per-agent checkouts)
+.claude/worktrees/
