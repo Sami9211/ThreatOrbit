@@ -520,6 +520,17 @@ export const authRegister = (body: { name: string; email: string; password: stri
 export const authMe = () => api<User>('/auth/me')
 export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 
+// Organization mode (simple|power): which feature areas the UI surfaces. A
+// UI-curation preference, not a security boundary — the backend keeps
+// enforcing real RBAC regardless of what this hides.
+export interface OrgMode {
+  mode: 'simple' | 'power'
+  features: string[]
+}
+export const fetchOrgMode = () => api<OrgMode>('/config/mode')
+export const setOrgMode   = (mode: 'simple' | 'power') =>
+  api<OrgMode>('/config/mode', { method: 'PUT', body: JSON.stringify({ mode }) })
+
 // SSO (OIDC) - degrades to { configured: false }. The login link is a full
 // browser navigation to the backend, which redirects to the identity provider.
 export const fetchSsoStatus = () => api<{ configured: boolean; loginPath: string }>('/auth/sso/status')

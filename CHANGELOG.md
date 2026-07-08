@@ -9,6 +9,28 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Simple vs Power mode now curates the sidebar (frontend)
+- **Wired the existing Normal/Power toggle (`TopBar`) to the backend org mode**
+  (`GET`/`PUT /config/mode`, added in the entry below). The toggle previously
+  only changed a localStorage flag with no effect on navigation; it now
+  persists to the org (synced across devices/sessions) and the **Sidebar
+  actually hides Power-only sections in Normal mode** — rule authoring,
+  ATT&CK/UEBA, hunts, playbook building, dark-web, vuln/network scanning,
+  custom connectors — while keeping the essentials (overview, SOC console,
+  alert queue, log sources, cases, core CTI, feeds, asset inventory, config)
+  visible in both. Fails open: until the backend responds (or if it's
+  unreachable), the full nav shows — a UI preference never hides
+  functionality it isn't certain about. New `useOrgFeatures()` hook shares one
+  fetch across `TopBar`/`Sidebar` (mirrors the existing `usePermissions`
+  cache pattern).
+- **Fixed a fabricated data point found along the way**: the sidebar's
+  "Active Alerts" badge was a hardcoded `7`, regardless of the real alert
+  count. It now shows the real open (new + investigating) alert total, and
+  the badge doesn't render at all until that's loaded (no placeholder number,
+  no "0" flash).
+- Verified: `tsc --noEmit`, `check:routes` (46 routes / 227 links, no dead
+  links), and `npm run build` all clean.
+
 ### 2026-07-08 — Simple vs Power organization mode (backend)
 - **Added an organization "mode" (`simple` | `power`)** so one deployment fits
   both a two-person shop and a mature SOC. `power` (default — zero behaviour
