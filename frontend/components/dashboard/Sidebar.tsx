@@ -299,6 +299,7 @@ export default function Sidebar() {
                         : <PanelLeftOpen  className="w-3.5 h-3.5" />}
                     </button>
                     <button
+                      aria-label="Close navigation"
                       className="md:hidden p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/8 transition-colors"
                       onClick={() => setMobileOpen(false)}
                     >
@@ -400,6 +401,8 @@ export default function Sidebar() {
                         {hasSub && expanded && (
                           <button
                             onClick={() => toggleManual(href)}
+                            aria-label={`${subOpen ? 'Collapse' : 'Expand'} ${label} section`}
+                            aria-expanded={subOpen}
                             className={cn(
                               'relative p-1.5 rounded-md transition-colors mr-0.5',
                               active ? 'text-magenta/60 hover:text-magenta' : 'text-ink-600 hover:text-ink-300',

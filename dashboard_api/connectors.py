@@ -73,9 +73,10 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
     unboundedly)."""
     from dashboard_api.net_guard import validate_external_url
     current = url
+    hop_kwargs = kwargs
     for _ in range(_MAX_REDIRECTS + 1):
         with httpx.stream(method, current, timeout=_TIMEOUT, follow_redirects=False,
-                          **kwargs) as r:
+                          **hop_kwargs) as r:
             if r.is_redirect:
                 location = r.headers.get("location")
                 if not location:
@@ -83,6 +84,12 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
                     raise ValueError("redirect response is missing its Location header")
                 current = str(httpx.URL(current).join(location))
                 validate_external_url(current)
+                # The Location URL is the full, resolved target - resending the
+                # original request's `params`/`json` on top of it would let
+                # httpx append a stale query string onto whatever the redirect
+                # target already carries. Only `headers` (e.g. auth) still
+                # apply to every hop.
+                hop_kwargs = {k: v for k, v in kwargs.items() if k == "headers"}
                 continue
             r.raise_for_status()                    # status is known before the body
             chunks: list[bytes] = []

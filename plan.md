@@ -329,6 +329,21 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-08 · CI caught 2 more unlabeled icon buttons (mobile-only render
+  paths), plus a connector redirect hardening.** The new a11y spec passed
+  locally against desktop-chromium, but the `mobile-safari` CI job (webkit
+  isn't installable in the local dev sandbox) caught 2 more real violations
+  only reachable via the sidebar's mobile/expanded state: the collapsible
+  sub-menu chevron toggle and the mobile "close navigation" `X` button, both
+  icon-only with no accessible name. Fixed with descriptive `aria-label`s
+  (the chevron also gets `aria-expanded`); verified locally by emulating the
+  iPhone 13 device profile in a headless Chromium context (reaches the same
+  code path without needing the actual webkit binary). Also hardened
+  `connectors._read_capped`: the original request's `params`/`json` are no
+  longer resent on a redirect hop (the `Location` is already the resolved
+  target - replaying stale query params on top of it, e.g. NVD's
+  `resultsPerPage`, could produce a malformed request to the redirect
+  target). New regression test; full SQLite suite: 512 passed.
 - **2026-07-08 · Automated accessibility regression testing, and 4 real a11y
   bugs it caught on its first run.** Added `@axe-core/playwright` +
   `e2e/a11y.spec.ts`, scanning login/overview/SIEM/SOAR/Config with axe-core's

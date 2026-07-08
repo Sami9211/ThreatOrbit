@@ -89,6 +89,28 @@ def test_read_capped_follows_a_safe_redirect(monkeypatch):
     assert calls == ["https://feed.invalid/old", "https://feed.invalid/new"]
 
 
+def test_read_capped_drops_params_after_a_redirect(monkeypatch):
+    """The original request's `params`/`json` must not be resent on a redirect
+    hop - the Location URL is already the fully-resolved target, so replaying
+    the first request's query params on top of it (e.g. NVD's `resultsPerPage`)
+    would let httpx append a stale/duplicate query string onto whatever the
+    redirect target expects. `headers` (auth) still carry over."""
+    seen_kwargs = []
+
+    def fake_stream(method, url, **kwargs):
+        seen_kwargs.append(kwargs)
+        if url == "https://feed.invalid/old":
+            return _FakeStream([], redirect_to="https://feed.invalid/new")
+        return _FakeStream([b'{}'])
+
+    monkeypatch.setattr(conn_mod.httpx, "stream", fake_stream)
+    conn_mod._read_capped("GET", "https://feed.invalid/old",
+                          headers={"Authorization": "Bearer x"}, params={"resultsPerPage": 100})
+    assert seen_kwargs[0]["params"] == {"resultsPerPage": 100}
+    assert "params" not in seen_kwargs[1]                       # not resent on the redirect hop
+    assert seen_kwargs[1]["headers"] == {"Authorization": "Bearer x"}  # auth still carries over
+
+
 @pytest.mark.parametrize("target", [
     "http://169.254.169.254/latest/meta-data/iam/security-credentials/",  # cloud metadata
     "http://127.0.0.1:8002/config/api-keys",                              # loopback

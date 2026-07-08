@@ -9,6 +9,29 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — CI catch: 2 more icon-only buttons with no accessible name (mobile-only render paths)
+- The new `e2e/a11y.spec.ts` (added earlier the same day) passed locally
+  against `desktop-chromium`, but the `mobile-safari` CI job caught 2 more
+  real violations that only render in the sidebar's mobile/expanded state -
+  invisible to a desktop-only local check: the collapsible sub-menu chevron
+  toggle (`Sidebar.tsx`, one per nav section with sub-items - SIEM/SOAR/CTI/
+  Assets) and the mobile "close navigation" `X` button both had an icon and
+  no text, `aria-label`, or `title` - a screen-reader user heard "button"
+  with no indication of what it did. Both now carry a descriptive
+  `aria-label` (the chevron's also reflects open/closed state via
+  `aria-expanded`). Verified by emulating the mobile viewport locally (no
+  webkit binary available in this environment, so re-checked via a headless
+  Chromium context using the iPhone 13 device profile, which reaches the
+  same code path) - 0 violations after the fix, confirmed again by CI.
+- Also hardened `connectors._read_capped` (the SSRF-redirect fix earlier the
+  same day): the original request's `params`/`json` are no longer resent on
+  a redirect hop. The `Location` URL is already the fully-resolved target, so
+  replaying the first request's query on top of it (e.g. NVD's
+  `resultsPerPage`) could let httpx append a stale/duplicate query string
+  onto whatever the redirect target expects; `headers` (auth) still carry
+  over. New regression test in `test_connector_resilience.py`; full SQLite
+  suite: 512 passed.
+
 ### 2026-07-08 — Automated accessibility regression testing (axe-core), and 4 real a11y bugs it caught immediately
 - Added `@axe-core/playwright` and a new `e2e/a11y.spec.ts` that scans the
   login page, overview, SIEM alert queue, SOAR cases, and Config against
