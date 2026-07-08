@@ -42,6 +42,12 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
     forces the SQLite backend for genuine isolation.
   - Verified by running the full dashboard suite against a real local Postgres
     16 (mirroring the CI service): **459 passed, 2 skipped** (was 7 failed).
+  - **Added a unit-level regression fence** (`test_pg_translation.py`): asserts
+    `to_postgres` never emits `NULLS FIRST/LAST` in `ON CONFLICT` and preserves
+    the conflict keys, for the app's real upsert shapes. It runs on both the
+    sqlglot path (Postgres CI) and the regex fallback (SQLite CI), so a future
+    transpiler bump that reintroduces the ordering wrapper fails fast at the unit
+    level instead of only in the live-Postgres job.
 
 ### 2026-07-05 — vuln scan: zero-pad version compare (fix boundary miss)
 - **Fixed a false-negative (and false-positive) in CVE version matching.** The
