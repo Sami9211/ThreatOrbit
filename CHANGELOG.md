@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Simple vs Power organization mode (backend)
+- **Added an organization "mode" (`simple` | `power`)** so one deployment fits
+  both a two-person shop and a mature SOC. `power` (default — zero behaviour
+  change) surfaces the full feature set; `simple` curates an essentials-only
+  subset (overview, SOC console, SIEM alert queue + sources, cases, core CTI +
+  feeds, asset inventory, reports, config) and hides analyst-grade depth (rule
+  authoring, ATT&CK/UEBA, hunts, playbook building, dark-web, vuln scanning,
+  custom connectors, compliance). New `dashboard_api/modes.py` + `GET/PUT
+  /config/mode` (GET any user, PUT gated by `config.manage`), persisted via the
+  standard `settings` upsert (per-workspace under multi-tenancy, else global).
+  **This is a UI-surfacing layer, not a security boundary** — every endpoint
+  keeps enforcing its real capability via `permissions.py`; the mode only tells
+  the frontend what to show. Unset/garbled values fail open to `power`.
+- Added test coverage for `webhooks.py` (HMAC sign/verify, subscriber filtering,
+  retry/SSRF-block behaviour).
+
 ### 2026-07-05 — CI (Supply chain): fix `three` peer-dep conflict breaking SBOM
 - **Fixed the `Supply chain` CI job (SBOM generation).** A frontend
   dependency-group bump had set `three: ^0.185.1` in package.json, but

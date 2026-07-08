@@ -55,6 +55,40 @@ def update_settings(body: SettingsUpdate, actor: dict = Depends(require_perm("co
     return {r["key"]: r["value"] for r in rows}
 
 
+class ModeUpdate(BaseModel):
+    mode: str
+
+
+@router.get("/mode")
+def get_mode(user: dict = Depends(current_user)):
+    """The caller's org mode (simple|power) + the feature areas it surfaces.
+    A UI-preference layer only - endpoint RBAC is unchanged by the mode."""
+    from dashboard_api import tenancy
+    from dashboard_api.modes import effective_mode, enabled_features
+    with get_conn() as conn:
+        mode = effective_mode(conn, tenancy.org_of(user))
+    return {"mode": mode, "features": enabled_features(mode)}
+
+
+@router.put("/mode")
+def set_mode(body: ModeUpdate, user: dict = Depends(require_perm("config.manage"))):
+    """Persist the org mode: per-workspace when multi-tenancy is on, else
+    global. Curates what the UI shows; grants/removes no access."""
+    from dashboard_api import tenancy
+    from dashboard_api.modes import MODES, enabled_features, setting_key
+    mode = (body.mode or "").strip().lower()
+    if mode not in MODES:
+        raise HTTPException(status_code=400,
+                            detail=f"mode must be one of {sorted(MODES)}")
+    org = tenancy.org_of(user)
+    with get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                     (setting_key(org), mode))
+        audit(conn, user["email"], "config.mode", org, f"mode={mode}")
+        conn.commit()
+    return {"mode": mode, "features": enabled_features(mode)}
+
+
 @router.get("/api-keys")
 def list_api_keys(user: dict = Depends(require_perm("config.manage"))):
     with get_conn() as conn:
