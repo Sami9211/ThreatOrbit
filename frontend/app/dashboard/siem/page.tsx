@@ -9,14 +9,14 @@ import {
   BarChart2, Settings, Database, Wifi, CheckCircle, XCircle,
   ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown,
   Network, FileText, BookOpen, Hash, Copy, MoreHorizontal,
-  RefreshCw, Lock, Unlock, MessageSquare, Flag,
+  RefreshCw, Lock, Unlock, MessageSquare, Flag, Gauge, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -509,6 +509,12 @@ const STATUS_LABEL: Record<AlertStatus, { label: string; color: string }> = {
   'closed':      { label: 'Closed',      color: 'text-ink-600' },
 }
 
+const FP_BAND_STYLE: Record<string, { color: string; label: string }> = {
+  'likely-fp':   { color: tk('safe'),    label: 'Likely false positive' },
+  'uncertain':   { color: tk('amber'),   label: 'Uncertain' },
+  'likely-real': { color: tk('magenta'), label: 'Likely real' },
+}
+
 function timeAgo(ts: string): string {
   const diff = (Date.now() - new Date(ts).getTime()) / 1000
   if (diff < 60) return `${Math.floor(diff)}s ago`
@@ -531,10 +537,24 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
 }) {
   const [tab, setTab] = useState<'overview' | 'network' | 'identity' | 'host' | 'raw'>('overview')
   const [toast, setToast] = useState<string | null>(null)
+  const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
+  const [fpChecking, setFpChecking] = useState(false)
   const s = SEV[alert.severity]
   const st = STATUS_LABEL[alert.status]
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2200) }
+
+  // Reset the (advisory, never auto-acted-on) FP assessment when the
+  // selected alert changes so a stale score from a different alert can't
+  // linger on screen.
+  useEffect(() => { setFpAssessment(null) }, [alert.id])
+
+  function checkFp() {
+    if (fpChecking) return
+    setFpChecking(true)
+    fetchAlertFpAssessment(alert.id).then(setFpAssessment).catch(() => flash('Could not fetch FP assessment'))
+      .finally(() => setFpChecking(false))
+  }
 
   const TABS = simplified
     ? (['overview'] as const)
@@ -646,6 +666,11 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               {label}
             </button>
           ))}
+          <button onClick={checkFp} disabled={fpChecking}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border border-white/8 hover:border-white/15 bg-surface-2 hover:bg-surface-3 transition-colors active:scale-95 text-violet">
+            {fpChecking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Gauge className="w-3 h-3" />}
+            FP Likelihood
+          </button>
         </div>
 
         {/* Triage controls - status + disposition */}
@@ -708,6 +733,35 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <Section title="Description">
               <p className="text-xs text-ink-300 leading-relaxed">{alert.description}</p>
             </Section>
+            {fpAssessment && (
+              <Section title="False-Positive Likelihood">
+                <div className="p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-ink-500">Advisory only - never auto-closes an alert</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold"
+                      style={{ color: FP_BAND_STYLE[fpAssessment.band].color, background: `${FP_BAND_STYLE[fpAssessment.band].color}18` }}>
+                      {FP_BAND_STYLE[fpAssessment.band].label} · {fpAssessment.score}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/8 overflow-hidden relative">
+                    <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${fpAssessment.score}%`, background: FP_BAND_STYLE[fpAssessment.band].color }} />
+                  </div>
+                  {fpAssessment.evidence.length === 0 && (
+                    <p className="text-[10px] text-ink-600">No corroborating or contradicting evidence found - treat as unassessed, not benign.</p>
+                  )}
+                  {fpAssessment.evidence.map((e) => (
+                    <div key={e.signal} className="flex items-start gap-2.5">
+                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                        style={{ background: e.weight >= 0 ? tk('safe') : tk('magenta') }} />
+                      <p className="text-[10px] text-ink-300 flex-1">{e.detail}</p>
+                      <span className="text-[10px] font-mono shrink-0" style={{ color: e.weight >= 0 ? tk('safe') : tk('magenta') }}>
+                        {e.weight >= 0 ? '+' : ''}{e.weight}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
             <Section title="Detection Details">
               <Row label="Rule" value={`${alert.ruleId} - ${alert.ruleName}`} />
               <Row label="MITRE Tactic" value={`${alert.mitreTacticId} ${alert.mitreTactic}`} />

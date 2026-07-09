@@ -337,9 +337,10 @@ plus external compliance attestations.
 
 ### Evidence-based false-positive identification (SIEM alerts + CTI IOCs)
 
-- [ ] **Not started.** Requested by the project owner (2026-07-09): identify
-      false positives from *strong evidence and findings*, for both SIEM
-      alerts and CTI IOCs — not the manual-only mechanisms that exist today.
+- [x] **Phase 1+2 (scoring engine, API, and UI panel) shipped.** Requested
+      by the project owner (2026-07-09): identify false positives from
+      *strong evidence and findings*, for both SIEM alerts and CTI IOCs —
+      not the manual-only mechanisms that exist today.
 
 **The gap, precisely.** FP handling today is manual and retroactive, and
 never looks at the specific alert/indicator's own evidence:
@@ -390,8 +391,10 @@ black-box classifier making claims the platform can't back up.
 
 **Evidence signals — IOCs** (draws on `threat_api/trust_scoring.py`,
 `dashboard_api/ioc_lifecycle.py`, `enrichment.py`):
-- VirusTotal enrichment already stored (`vt_malicious_count`) — low/zero
-  against a "malicious" label is a strong FP signal;
+- enrichment provider verdicts already cached in `ioc_enrichments`
+  (`enrichment.py`) — zero providers flagging "malicious" against a claimed
+  high-severity label is a strong FP signal, multiple independent
+  "malicious" verdicts the opposite;
 - source trust score (`trust_scoring.py`) — a single low-trust feed
   reporting something no other independent source corroborates;
 - multi-source consensus — the same indicator independently reported by 2+
@@ -409,19 +412,32 @@ black-box classifier making claims the platform can't back up.
 
 **Implementation plan (phased, each phase independently shippable):**
 
-1. **Scoring engine** — new `dashboard_api/fp_scoring.py`: pure functions
-   `score_alert(conn, alert) -> FPAssessment` / `score_ioc(conn, ioc) ->
-   FPAssessment`, each returning `{score: 0-100, band: likely-fp |
-   uncertain | likely-real, evidence: [{signal, weight, detail}]}`. The
-   evidence list is the whole point — every score is explainable, so an
-   analyst can see exactly why. Compute-on-read for both (alert evidence is
-   mostly static once the alert exists; the IOC store is small enough that
-   a background job isn't needed for v1).
-2. **API + UI surfacing** — embed the assessment in the existing alert/IOC
-   detail responses (`GET /siem/alerts/{id}`, `GET /cti/iocs/{id}`), plus a
-   small "FP likelihood" panel in the Alert detail drawer and IOC detail
-   view (evidence bullets, not just a bare number) — triage gets faster
-   without hiding the reasoning behind it.
+1. **Scoring engine — shipped.** `dashboard_api/fp_scoring.py`: pure
+   functions `score_alert(conn, alert, org_id) -> {score, band, evidence}` /
+   `score_ioc(conn, ioc, org_id) -> {score, band, evidence}`. The evidence
+   list is the whole point — every score is explainable, so an analyst can
+   see exactly why. Compute-on-read for both (alert evidence is mostly
+   static once the alert exists; the IOC store is small enough that a
+   background job isn't needed for v1). Six alert signals (rule fp-rate,
+   live-joined asset criticality, suppression proximity, time-windowed
+   correlation against other unresolved high/critical alerts, direct IOC
+   cross-reference, per-entity FP history) and three IOC signals (enrichment
+   provider consensus, cloud/CDN CIDR match, sighting/impact mismatch).
+   Regression-tested in `dashboard_api/tests/test_fp_scoring.py`, including
+   the testing-discipline case: a correlated multi-alert attack + a
+   known-bad IOC match stays in the `likely-real` band even with a weak
+   FP-leaning signal (low-criticality asset) also present.
+2. **API + UI surfacing — shipped.** Rather than embedding the assessment
+   in every alert/IOC list or detail read (N+1 query cost on list views),
+   it's a dedicated compute-on-demand sub-endpoint — the same pattern as the
+   existing `GET /cti/iocs/{id}/enrichment`: `GET /siem/alerts/{id}/fp-assessment`
+   and `GET /cti/iocs/{id}/fp-assessment`. Advisory only, never mutates the
+   alert/IOC. A "FP Likelihood" button in the Power-mode Alert detail drawer
+   and the IOC lifecycle panel fetches on demand and renders the band, score,
+   and evidence bullets (signed weight + plain-English detail per signal).
+   Verified live in a browser against the real pipeline: a critical-asset
+   match plus an isolated (uncorrelated) alert nets `uncertain · 43` exactly
+   as the signed weights predict (50 − 15 + 8).
 3. **Bulk triage view** — a SIEM queue filter/sort by FP-likelihood band, so
    an analyst can process the "likely-fp, low-criticality asset, isolated
    single event" cluster in bulk instead of one at a time. This is the

@@ -198,6 +198,19 @@ def get_alert(alert_id: str, user: dict = Depends(current_user)):
     return row_to_dict(row)
 
 
+@router.get("/alerts/{alert_id}/fp-assessment")
+def alert_fp_assessment(alert_id: str, user: dict = Depends(current_user)):
+    """Evidence-based false-positive likelihood for one alert (see
+    dashboard_api/fp_scoring.py). Advisory only -- never changes the alert."""
+    from dashboard_api.fp_scoring import score_alert
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="Alert not found")
+        result = score_alert(conn, row_to_dict(row), tenancy.org_of(user))
+    return result
+
+
 @router.patch("/alerts/{alert_id}")
 def update_alert(alert_id: str, body: AlertUpdate, user: dict = Depends(require_perm("siem.write"))):
     fields, values = [], []

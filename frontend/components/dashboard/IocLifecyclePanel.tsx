@@ -5,13 +5,20 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
-  TrendingDown, RefreshCw, Loader2, Share2, Sparkles,
+  TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
-  fetchStixBundle, enrichIoc, type Ioc, type IocDetail, type EnrichmentResult,
+  fetchStixBundle, enrichIoc, fetchIocFpAssessment, type Ioc, type IocDetail, type EnrichmentResult,
+  type FpAssessment,
 } from '@/lib/api'
+
+const FP_BAND_STYLE: Record<string, { color: string; label: string }> = {
+  'likely-fp': { color: tk('safe'), label: 'Likely false positive' },
+  uncertain: { color: tk('amber'), label: 'Uncertain' },
+  'likely-real': { color: tk('magenta'), label: 'Likely real' },
+}
 
 const VERDICT_COLOR: Record<string, string> = {
   malicious: tk('magenta'), suspicious: tk('amber'), benign: tk('safe'), clean: tk('safe'), unknown: '#665B7D',
@@ -50,6 +57,8 @@ export default function IocLifecyclePanel() {
   const [decaying, setDecaying] = useState(false)
   const [enrichment, setEnrichment] = useState<EnrichmentResult | null>(null)
   const [enriching, setEnriching] = useState(false)
+  const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
+  const [fpChecking, setFpChecking] = useState(false)
 
   const load = useCallback(() => {
     const params: Record<string, string> = { limit: '60', sort: 'last_seen', order: 'desc' }
@@ -60,12 +69,18 @@ export default function IocLifecyclePanel() {
 
   function open(id: string) {
     setEnrichment(null)
+    setFpAssessment(null)
     fetchIoc(id).then(setDetail).catch(() => {})
   }
   function enrich() {
     if (!detail || enriching) return
     setEnriching(true)
     enrichIoc(detail.id).then(setEnrichment).catch(() => {}).finally(() => setEnriching(false))
+  }
+  function checkFp() {
+    if (!detail || fpChecking) return
+    setFpChecking(true)
+    fetchIocFpAssessment(detail.id).then(setFpAssessment).catch(() => {}).finally(() => setFpChecking(false))
   }
   function refreshDetail(id: string) {
     fetchIoc(id).then(setDetail).catch(() => {})
@@ -239,7 +254,42 @@ export default function IocLifecyclePanel() {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-amber/12 border border-amber/30 text-amber hover:bg-amber/20 transition-colors">
                   {enriching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Enrich
                 </button>
+                <button onClick={checkFp} disabled={fpChecking}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-violet/12 border border-violet/30 text-violet hover:bg-violet/20 transition-colors">
+                  {fpChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gauge className="w-3.5 h-3.5" />} FP likelihood
+                </button>
               </div>
+
+              {/* FP-likelihood assessment - advisory only, never auto-acts */}
+              {fpAssessment && (
+                <div className="rounded-xl border border-white/8 bg-surface-2/50 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-ink-500 uppercase tracking-wider">False-positive likelihood</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold"
+                      style={{ color: FP_BAND_STYLE[fpAssessment.band].color, background: `${FP_BAND_STYLE[fpAssessment.band].color}18` }}>
+                      {FP_BAND_STYLE[fpAssessment.band].label} · {fpAssessment.score}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/8 overflow-hidden relative">
+                    <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${fpAssessment.score}%`, background: FP_BAND_STYLE[fpAssessment.band].color }} />
+                  </div>
+                  {fpAssessment.evidence.length === 0 && (
+                    <p className="text-[10px] text-ink-600">No corroborating or contradicting evidence found - treat as unassessed, not benign.</p>
+                  )}
+                  {fpAssessment.evidence.map((e) => (
+                    <div key={e.signal} className="flex items-start gap-2.5">
+                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                        style={{ background: e.weight >= 0 ? tk('safe') : tk('magenta') }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] text-ink-500">{e.detail}</p>
+                      </div>
+                      <span className="text-[10px] font-mono shrink-0" style={{ color: e.weight >= 0 ? tk('safe') : tk('magenta') }}>
+                        {e.weight >= 0 ? '+' : ''}{e.weight}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Enrichment results */}
               {enrichment && (

@@ -599,6 +599,11 @@ export const fetchRecentIncidents = (limit = 6)  => api<Incident[]>(`/overview/r
 export const fetchTopActors  = (limit = 5)  => api<TopActor[]>(`/overview/top-actors?limit=${limit}`)
 export const fetchLiveFeed   = (limit = 20) => api<LiveFeedItem[]>(`/overview/live-feed?limit=${limit}`)
 
+// Evidence-based false-positive likelihood - advisory only, never mutates
+// the alert/IOC it scores. Same shape for both alerts and IOCs.
+export interface FpEvidence { signal: string; weight: number; detail: string }
+export interface FpAssessment { score: number; band: 'likely-fp' | 'uncertain' | 'likely-real'; evidence: FpEvidence[] }
+
 // ── SIEM ─────────────────────────────────────────────────────────────
 export const fetchSiemAlerts = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
@@ -606,6 +611,7 @@ export const fetchSiemAlerts = (params?: Record<string, string>) => {
 }
 export const patchAlert   = (id: string, body: Partial<Pick<SiemAlert, 'status' | 'disposition' | 'owner'>>) =>
   api<SiemAlert>(`/siem/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const fetchAlertFpAssessment = (id: string) => api<FpAssessment>(`/siem/alerts/${id}/fp-assessment`)
 export const createAlert = (body: {
   title: string; severity?: string; description?: string
   srcIp?: string; srcCountry?: string; mitreTechId?: string; mitreTactic?: string
@@ -1071,6 +1077,7 @@ export interface EnrichmentResult {
 }
 export const enrichIoc = (id: string, refresh = false) =>
   api<EnrichmentResult>(`/cti/iocs/${id}/enrich${refresh ? '?refresh=true' : ''}`, { method: 'POST' })
+export const fetchIocFpAssessment = (id: string) => api<FpAssessment>(`/cti/iocs/${id}/fp-assessment`)
 
 // Analyst intel reports + MISP interop (campaign & report management).
 export interface IntelReport {

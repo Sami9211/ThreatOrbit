@@ -289,6 +289,19 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
     return {**ioc, "lifecycle": lifecycle_of(ioc), "sightingsHistory": sightings}
 
 
+@router.get("/iocs/{ioc_id}/fp-assessment")
+def ioc_fp_assessment(ioc_id: str, user: dict = Depends(current_user)):
+    """Evidence-based false-positive likelihood for one indicator (see
+    dashboard_api/fp_scoring.py). Advisory only -- never changes the IOC."""
+    from dashboard_api.fp_scoring import score_ioc
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        result = score_ioc(conn, row_to_dict(row), tenancy.org_of(user))
+    return result
+
+
 @router.post("/iocs/{ioc_id}/sighting")
 def add_sighting(ioc_id: str, body: SightingBody, user: dict = Depends(require_perm("cti.write"))):
     """Record a manual sighting - refreshes the indicator and reactivates it."""
