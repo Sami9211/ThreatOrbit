@@ -664,6 +664,31 @@ class SigmaImport(BaseModel):
     yaml: str
 
 
+class SigmaPackImport(BaseModel):
+    yaml: str
+
+
+_MAX_SIGMA_PACK_RULES = 500
+
+
+def _insert_sigma_rule(conn, mapped: dict, source_yaml: str, actor: str, org: str) -> str:
+    """Shared by the single and bulk Sigma import endpoints."""
+    from dashboard_api.db import dumps
+    rid = f"R-{uuid.uuid4().hex[:6].upper()}"
+    conn.execute(
+        "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tactic_id,"
+        "mitre_tech_id,mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,"
+        "created,updated_by,description,kql,suppression_window,severity_override,tags,definition,"
+        "org_id) "
+        "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','sigma',NULL,?,?,?,?,0,NULL,?,?,?)",
+        (rid, mapped["name"], mapped["category"], mapped["severity"], mapped["mitre_tactic"],
+         mapped["mitre_tactic_id"], mapped["mitre_tech_id"], _now_iso(), actor,
+         mapped["description"], source_yaml, dumps(mapped["tags"]), dumps(mapped["definition"]),
+         org),
+    )
+    return rid
+
+
 @router.post("/rules/import-sigma", status_code=201)
 def import_sigma_rule(body: SigmaImport, user: dict = Depends(require_perm("siem.write"))):
     """Import a Sigma YAML rule as a live, evaluable detection rule."""
@@ -674,25 +699,51 @@ def import_sigma_rule(body: SigmaImport, user: dict = Depends(require_perm("siem
         mapped = sigma_to_rule(body.yaml)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    rid = f"R-{uuid.uuid4().hex[:6].upper()}"
-    now = _now_iso()
-    from dashboard_api.db import dumps
     with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO detection_rules (id,name,category,severity,mitre_tactic,mitre_tactic_id,"
-            "mitre_tech_id,mitre_tech,hits_24h,fired_last_7d,fp_rate,status,source,last_fired,"
-            "created,updated_by,description,kql,suppression_window,severity_override,tags,definition,"
-            "org_id) "
-            "VALUES (?,?,?,?,?,?,?,NULL,0,0,0,'enabled','sigma',NULL,?,?,?,?,0,NULL,?,?,?)",
-            (rid, mapped["name"], mapped["category"], mapped["severity"], mapped["mitre_tactic"],
-             mapped["mitre_tactic_id"], mapped["mitre_tech_id"], now, user["email"],
-             mapped["description"], body.yaml, dumps(mapped["tags"]), dumps(mapped["definition"]),
-             tenancy.org_of(user)),
-        )
+        rid = _insert_sigma_rule(conn, mapped, body.yaml, user["email"], tenancy.org_of(user))
         audit(conn, user["email"], "rule.import_sigma", rid, f"name={mapped['name']}")
         conn.commit()
         row = conn.execute("SELECT * FROM detection_rules WHERE id=?", (rid,)).fetchone()
     return {**row_to_dict(row), "importNotes": mapped["notes"]}
+
+
+@router.post("/rules/import-sigma-pack", status_code=201)
+def import_sigma_pack(body: SigmaPackImport, user: dict = Depends(require_perm("siem.write"))):
+    """Bulk-import a pasted collection of Sigma rules (e.g. a cloned SigmaHQ
+    directory concatenated into one paste) as live detection rules.
+
+    The rules are a standard multi-document YAML stream (`---`-separated).
+    One malformed rule must not abort the whole import - each document is
+    parsed and inserted independently, and the response reports exactly
+    which rules landed and which didn't (and why), so a partial import is
+    visible rather than silently incomplete."""
+    from dashboard_api.sigma import sigma_to_rule, split_sigma_documents
+    docs = split_sigma_documents(body.yaml)
+    if not docs:
+        raise HTTPException(status_code=400, detail="No Sigma rule documents found")
+    if len(docs) > _MAX_SIGMA_PACK_RULES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot import more than {_MAX_SIGMA_PACK_RULES} rules in one pack "
+                   f"(got {len(docs)})")
+    created: list[dict] = []
+    failed: list[dict] = []
+    org = tenancy.org_of(user)
+    with get_conn() as conn:
+        for i, doc in enumerate(docs):
+            try:
+                mapped = sigma_to_rule(doc)
+            except ValueError as e:
+                failed.append({"index": i, "error": str(e)})
+                continue
+            rid = _insert_sigma_rule(conn, mapped, doc, user["email"], org)
+            created.append({"id": rid, "name": mapped["name"], "importNotes": mapped["notes"]})
+        if created:
+            audit(conn, user["email"], "rule.import_sigma_pack", None,
+                  f"created={len(created)} failed={len(failed)}")
+            conn.commit()
+    return {"created": created, "failed": failed,
+            "createdCount": len(created), "failedCount": len(failed)}
 
 
 @router.post("/rules/load-pack", status_code=201)

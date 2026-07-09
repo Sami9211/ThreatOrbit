@@ -2178,6 +2178,68 @@ def test_sigma_import_export(client, auth):
     assert client.get("/siem/rules/NOPE/sigma", headers=auth).status_code == 404
 
 
+SIGMA_SAMPLE_2 = """
+title: Anomalous egress volume
+status: experimental
+description: Large outbound transfer
+logsource:
+  category: network
+detection:
+  selection:
+    bytes_out|gte: 50000000
+  condition: selection
+level: medium
+"""
+
+
+def test_sigma_pack_import_multiple_valid_rules(client, auth):
+    """A pasted multi-document YAML stream (the format a downloaded Sigma rule
+    collection concatenates as) imports every rule in one request."""
+    pack = SIGMA_SAMPLE + "\n---\n" + SIGMA_SAMPLE_2
+    r = client.post("/siem/rules/import-sigma-pack", json={"yaml": pack}, headers=auth)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["createdCount"] == 2 and body["failedCount"] == 0
+    names = {c["name"] for c in body["created"]}
+    assert names == {"Suspicious brute force from scanner range", "Anomalous egress volume"}
+    # both are real, live rules
+    for c in body["created"]:
+        assert client.get(f"/siem/rules/{c['id']}/sigma", headers=auth).status_code == 200
+
+
+def test_sigma_pack_import_isolates_bad_rule(client, auth):
+    """One malformed rule in the pack must not abort the rest of the import -
+    the good rules land, the bad one is reported with its index and reason."""
+    bad = SIGMA_SAMPLE.replace("condition: selection", "condition: selection and not filter")
+    pack = SIGMA_SAMPLE + "\n---\n" + bad + "\n---\n" + SIGMA_SAMPLE_2
+    r = client.post("/siem/rules/import-sigma-pack", json={"yaml": pack}, headers=auth)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["createdCount"] == 2 and body["failedCount"] == 1
+    assert body["failed"][0]["index"] == 1 and "unsupported" in body["failed"][0]["error"]
+    assert {c["name"] for c in body["created"]} == \
+        {"Suspicious brute force from scanner range", "Anomalous egress volume"}
+
+
+def test_sigma_pack_import_rejects_empty(client, auth):
+    assert client.post("/siem/rules/import-sigma-pack", json={"yaml": ""},
+                       headers=auth).status_code == 400
+    assert client.post("/siem/rules/import-sigma-pack", json={"yaml": "   \n---\n  "},
+                       headers=auth).status_code == 400
+
+
+def test_sigma_pack_import_caps_batch_size(client, auth):
+    """A pack over the size cap is rejected outright - nothing is imported,
+    not even a truncated prefix (an all-or-nothing size guard, not a silent
+    partial import that could surprise an operator expecting the whole pack)."""
+    from dashboard_api.routers.siem import _MAX_SIGMA_PACK_RULES
+    one = SIGMA_SAMPLE_2.replace("Anomalous egress volume", "Anomalous egress volume X")
+    pack = "\n---\n".join([one] * (_MAX_SIGMA_PACK_RULES + 1))
+    r = client.post("/siem/rules/import-sigma-pack", json={"yaml": pack}, headers=auth)
+    assert r.status_code == 400
+    assert str(_MAX_SIGMA_PACK_RULES) in r.text
+
+
 def test_case_sla_and_related_evidence(client, auth):
     """Cases carry computed SLA tracking; /related links alerts, IOCs, playbook
     runs and a MITRE-mapped timeline through the case's entities."""

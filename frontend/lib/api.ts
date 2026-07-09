@@ -659,6 +659,16 @@ export const importSigmaRule = (yamlText: string) =>
   api<Rule & { importNotes: string[] }>('/siem/rules/import-sigma', {
     method: 'POST', body: JSON.stringify({ yaml: yamlText }),
   })
+export interface SigmaPackImportResult {
+  created: { id: string; name: string; importNotes: string[] }[]
+  failed: { index: number; error: string }[]
+  createdCount: number
+  failedCount: number
+}
+export const importSigmaPack = (yamlText: string) =>
+  api<SigmaPackImportResult>('/siem/rules/import-sigma-pack', {
+    method: 'POST', body: JSON.stringify({ yaml: yamlText }),
+  })
 export const exportSigmaRule = (id: string) =>
   api<{ yaml: string; source: 'original' | 'generated' }>(`/siem/rules/${id}/sigma`)
 // Load the curated starter detection pack (idempotent; returns created/skipped names).

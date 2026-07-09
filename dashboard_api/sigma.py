@@ -107,6 +107,20 @@ def _conditions_from_selection(sel: dict, notes: list[str]) -> list[dict]:
 _AGG_RE = re.compile(r"\|\s*count\(\s*\)\s*(?:by\s+([\w.]+))?\s*([><]=?)\s*(\d+)")
 
 
+def split_sigma_documents(text: str) -> list[str]:
+    """Split a pasted multi-rule YAML stream into individual rule documents.
+
+    Downloaded Sigma rule collections (e.g. a cloned SigmaHQ directory
+    concatenated into one paste) are standard YAML multi-document streams:
+    each rule separated by a line that's just `---`. Splitting on the raw
+    text (not re-parsing/re-serializing through a YAML loader) means a
+    malformed document can't affect its neighbours - each chunk is handed to
+    `sigma_to_rule` independently, which does its own parsing and error
+    reporting per-document."""
+    parts = re.split(r"(?m)^---\s*$", text)
+    return [p.strip() for p in parts if p.strip()]
+
+
 def sigma_to_rule(text: str) -> dict:
     """Parse Sigma YAML → ThreatOrbit rule fields. Raises ValueError."""
     import yaml

@@ -9,6 +9,32 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-09 — Sigma community-pack bulk import
+- **New**: `POST /siem/rules/import-sigma-pack` bulk-imports a pasted
+  collection of Sigma rules (e.g. a cloned SigmaHQ directory, or any
+  downloaded rule set) in one request, instead of one rule at a time. The
+  input is a standard multi-document YAML stream (`---`-separated, the
+  format Sigma rule collections ship as); each document is parsed and
+  inserted independently, so one malformed rule doesn't abort the rest of
+  the pack — the response reports exactly which rules landed (id, name,
+  mapping notes) and which failed (index + reason), a partial import is
+  visible rather than silently incomplete. Capped at 500 rules per request
+  (a DoS guard, matching the pattern already used for oversized feed bodies
+  elsewhere). Extracted `_insert_sigma_rule` so the existing single-rule
+  `/rules/import-sigma` endpoint and the new bulk one share one insert path.
+- **Frontend**: `SigmaImportButton` now detects a multi-document paste
+  (splits and counts non-empty `---`-separated chunks - not just checking
+  for the presence of `---`, since a single rule commonly starts with a
+  leading `---` document marker too) and routes to the pack endpoint
+  automatically, showing a created/failed summary with per-rule failure
+  reasons instead of the single-rule success message.
+- Closes the "Sigma community-pack import" item under Detection content in
+  `plan.md`'s open roadmap. Verified: 4 new backend tests (multiple valid
+  rules, one bad rule isolated among good ones, empty input rejected, batch
+  size cap enforced), a live browser smoke test of the actual UI flow
+  (screenshot confirms the created/failed summary renders correctly), full
+  SQLite suite (516 passed), `tsc --noEmit` clean.
+
 ### 2026-07-08 — Per-theme color-contrast fix: `--ink-500` and the alert-count badge now pass WCAG AA, everywhere
 - `e2e/a11y.spec.ts` had `color-contrast` disabled pending a proper fix. Did
   the fix: computed exact WCAG contrast ratios (not estimates) for `--ink-500`

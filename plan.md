@@ -280,8 +280,16 @@ plus external compliance attestations.
 - [ ] **Supply chain** — finish the trailing frontend majors (tailwindcss 3→4,
       `@types/node` 20→25); add an in-product "platform updates" upgrade notice;
       sign published **container images** once a registry push pipeline exists.
-- [ ] **Detection content** — grow the rule packs toward a **Sigma
-      community-pack import**, fed through the existing content-update channel.
+- [x] **Detection content.** DONE (2026-07-09): `POST
+      /siem/rules/import-sigma-pack` bulk-imports a pasted Sigma rule
+      collection (`---`-separated multi-document YAML, the format downloaded
+      rule sets ship as) in one request — each document parsed and inserted
+      independently so one bad rule doesn't block the rest, capped at 500
+      rules, a structured created/failed report. `SigmaImportButton` routes
+      to it automatically on a multi-document paste. See `CHANGELOG.md`.
+      Imports land as individual `source='sigma'` rules (not the code-shipped
+      `content-pack` versioning system, which is for vetted, code-reviewed
+      content — user-imported rules stay in their own trust tier).
 - [~] **Compliance & data lifecycle** — DONE (2026-07-02): the **PII handling /
       redaction policy** (`docs/PII_HANDLING.md` + opt-in `DASHBOARD_LOG_REDACT`
       redaction at the single ingest seam — email/secret/cc/ssn masked in raw
@@ -336,6 +344,20 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-09 · Sigma community-pack bulk import.** `POST
+  /siem/rules/import-sigma-pack` imports a whole pasted Sigma rule collection
+  (standard `---`-separated multi-document YAML - the format a downloaded
+  ruleset like SigmaHQ concatenates as) in one request instead of one rule at
+  a time. Each document is parsed and inserted independently - one malformed
+  rule doesn't abort the rest of the pack - and the response reports exactly
+  which rules landed (id, name, mapping notes) and which failed (index +
+  reason). Capped at 500 rules/request. `SigmaImportButton` detects a
+  multi-document paste (by splitting and counting non-empty chunks, not just
+  checking for `---`, since a single rule commonly starts with a leading
+  `---` marker too) and routes to the new endpoint automatically, rendering a
+  created/failed summary. Verified: 4 new backend tests, a live browser
+  smoke test of the UI flow, full SQLite suite (516 passed), `tsc --noEmit`
+  clean.
 - **2026-07-08 · Per-theme color-contrast fix: `--ink-500` and the alert-count
   badge now pass WCAG AA everywhere.** Computed exact contrast ratios (not
   estimates) for `--ink-500` against all 4 surface levels each theme actually

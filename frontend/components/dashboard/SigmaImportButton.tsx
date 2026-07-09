@@ -2,9 +2,19 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileUp, X, Loader2, CheckCircle2 } from 'lucide-react'
+import { FileUp, X, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { importSigmaRule } from '@/lib/api'
+import { importSigmaRule, importSigmaPack, SigmaPackImportResult } from '@/lib/api'
+
+// Sigma rule collections (e.g. a cloned SigmaHQ directory concatenated into
+// one paste) are a standard multi-document YAML stream: rules separated by a
+// standalone `---` line. A single rule commonly starts with a leading `---`
+// too (a plain YAML document-start marker) without being a collection, so
+// splitting and counting non-empty chunks - not just checking for the
+// presence of `---` - is what actually distinguishes "one rule" from "many".
+function isMultiDocument(text: string): boolean {
+  return text.split(/^---\s*$/m).map((s) => s.trim()).filter(Boolean).length > 1
+}
 
 const SAMPLE = `title: Suspicious brute force from scanner range
 description: Multiple failed logins from a known scanner subnet
@@ -31,12 +41,24 @@ export default function SigmaImportButton({ onImported }: { onImported?: () => v
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ name: string; notes: string[] } | null>(null)
+  const [packResult, setPackResult] = useState<SigmaPackImportResult | null>(null)
 
   function doImport() {
     if (!text.trim() || busy) return
     setBusy(true)
     setError(null)
     setResult(null)
+    setPackResult(null)
+    if (isMultiDocument(text)) {
+      importSigmaPack(text)
+        .then((r) => {
+          setPackResult(r)
+          if (r.createdCount > 0) { setText(''); onImported?.() }
+        })
+        .catch((e) => setError(e?.message || 'Import failed'))
+        .finally(() => setBusy(false))
+      return
+    }
     importSigmaRule(text)
       .then((r) => {
         setResult({ name: r.name, notes: r.importNotes ?? [] })
@@ -64,20 +86,20 @@ export default function SigmaImportButton({ onImported }: { onImported?: () => v
               className="w-full max-w-xl rounded-2xl border border-white/10 bg-surface overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/8">
                 <FileUp className="w-4 h-4 text-violet" />
-                <h2 className="text-sm font-semibold text-white">Import Sigma rule</h2>
-                <p className="text-[10px] text-ink-500 ml-2 hidden sm:block">YAML → live detection rule (ECS/Sigma field names resolve automatically)</p>
+                <h2 className="text-sm font-semibold text-white">Import Sigma</h2>
+                <p className="text-[10px] text-ink-500 ml-2 hidden sm:block">One rule, or a whole pasted collection (--- separated) → live detection rules</p>
                 <button onClick={() => setOpen(false)} className="ml-auto p-1.5 rounded-lg text-ink-500 hover:text-white"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-4 space-y-3">
                 <textarea value={text} onChange={(e) => setText(e.target.value)} rows={12}
-                  placeholder="Paste a Sigma rule (YAML)…"
+                  placeholder="Paste a Sigma rule, or a whole collection of them (--- separated)…"
                   className="w-full px-3 py-2.5 rounded-xl bg-[#080614] border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-violet/40 placeholder-ink-700 resize-none" />
                 <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={doImport} disabled={busy || !text.trim()}
                     className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all',
                       text.trim() && !busy ? 'bg-violet/20 border border-violet/35 text-violet hover:bg-violet/30' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
                     {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
-                    Import as live rule
+                    {isMultiDocument(text) ? 'Import pack as live rules' : 'Import as live rule'}
                   </button>
                   <button onClick={() => setText(SAMPLE)} className="text-[11px] text-ink-500 hover:text-ink-200">load sample</button>
                   {error && <span className="text-[11px] text-threat ml-auto">{error}</span>}
@@ -89,6 +111,27 @@ export default function SigmaImportButton({ onImported }: { onImported?: () => v
                       <p>Imported “{result.name}” - enabled and evaluating the event stream now.</p>
                       {result.notes.length > 0 && (
                         <p className="text-[10px] text-ink-400 mt-1">Mapping notes: {result.notes.join('; ')}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {packResult && (
+                  <div className={cn('flex items-start gap-2 text-xs rounded-lg px-3 py-2 border',
+                    packResult.createdCount > 0 ? 'text-safe bg-safe/10 border-safe/20' : 'text-threat bg-threat/10 border-threat/20')}>
+                    {packResult.createdCount > 0
+                      ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      : <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                    <div className="min-w-0">
+                      <p>
+                        Imported {packResult.createdCount} rule{packResult.createdCount === 1 ? '' : 's'}
+                        {packResult.failedCount > 0 && `, ${packResult.failedCount} failed`} from the pack.
+                      </p>
+                      {packResult.failedCount > 0 && (
+                        <ul className="text-[10px] text-ink-400 mt-1 space-y-0.5">
+                          {packResult.failed.map((f) => (
+                            <li key={f.index}>Document {f.index + 1}: {f.error}</li>
+                          ))}
+                        </ul>
                       )}
                     </div>
                   </div>
