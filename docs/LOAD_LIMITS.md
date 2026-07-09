@@ -32,13 +32,16 @@ realistic event mix (failed logins, large egress, process starts, beacons):
 
 **Environment:** same host · Postgres 16 (local, loopback TCP) ·
 `DASHBOARD_DB_BACKEND=postgres` — the previously "remaining" Tier-2 baseline
-(`plan.md`), now measured rather than assumed:
+(`plan.md`), now measured rather than assumed. `ingest+detect` reflects the
+batched-write fix below (§4); the `drain` stages are unchanged from the first
+measurement (the detection worker's claim/complete path was already
+batched — see §4):
 
 | Stage | Events | Alerts | Seconds | Events/sec |
 |---|---:|---:|---:|---:|
-| ingest + detect (inline) | 5,000 | 242 | 7.42 | **~670** |
-| detect drain — 1 worker | 10,000 | 10,000 | 22.41 | **~450** |
-| detect drain — 4 workers | 10,000 | 10,000 | 23.25 | **~430** |
+| ingest + detect (inline) | 5,000 | 242 | 1.32 | **~3,800** |
+| detect drain — 1 worker | 10,000 | 10,000 | 24.82 | **~400** |
+| detect drain — 4 workers | 10,000 | 10,000 | 26.04 | **~380** |
 
 ## What this means (read before scaling)
 
@@ -57,27 +60,35 @@ realistic event mix (failed logins, large egress, process starts, beacons):
    `DASHBOARD_DETECTION_WORKERS > 1` on the SQLite backend, so this misconfig is
    hard to hit silently.
 
-3. **Measured today, Postgres is markedly slower than SQLite for this same
-   pipeline, and 4 workers don't beat 1 — correcting an earlier assumption in
-   this doc that simply switching to Postgres would go "materially higher."**
-   The reason isn't Postgres itself: `ingest_lines` and the detection worker
-   both issue **one round-trip statement per row** (a Python loop of
-   `conn.execute(...)`, no `executemany`/batch/`COPY`). Over SQLite that's an
-   in-process file write with no network hop; over Postgres — even loopback —
-   every row pays a real client↔server round trip, which dominates at this row
-   count and swamps whatever row-level-locking parallelism 4 workers could
-   otherwise exploit. This is an honest, reproducible measurement
-   (`DASHBOARD_DB_BACKEND=postgres DATABASE_URL=... python -m dashboard_api.bench`
-   against a disposable database), not a Postgres capacity ceiling — a real
-   deployment adds further network latency on top of this, so treat these
-   numbers as a floor, not a target.
-4. **To go materially higher on Postgres**: batch the per-row ingest/detection
-   writes (`executemany` or a multi-row `INSERT` / `COPY`) instead of one
-   statement per event — untouched by this measurement pass, tracked as a new,
-   concretely-scoped item in `plan.md`'s open roadmap. For very high sustained
-   EPS beyond that, externalise the event store to a columnar/search engine
-   (ClickHouse/OpenSearch) behind the same hunt API — the remaining P0 pipeline
-   item already tracked there.
+3. **Postgres is still slower than SQLite for this pipeline, but ingest+detect
+   is now ~5.7x faster than the first measurement** (~670 → ~3,800 EPS) after
+   batching the ingest write path — correcting an earlier assumption in this
+   doc that simply switching to Postgres would go "materially higher" *and*
+   the follow-up measurement that first quantified the gap. Root cause of the
+   original number, confirmed by reading the code: `ingest_lines` issued **one
+   round-trip statement per row** (a Python loop of `conn.execute(...)`). Fixed
+   by collecting the batch's rows and issuing one `conn.executemany(...)` call
+   instead — verified empirically first (a standalone benchmark against this
+   same local Postgres instance measured `executemany` at ~6x a row-by-row
+   loop, matching a hand-built multi-row `VALUES` INSERT's throughput with far
+   less code), then confirmed on the real pipeline via this bench. No
+   correctness change: parse-time error isolation (one bad line can't drop the
+   batch) happens before rows are collected, unaffected by how the INSERT is
+   issued.
+4. **The `drain` stages didn't move, and didn't need to**: `event_queue.claim`
+   (one `UPDATE … WHERE id IN (…)`) and `.complete` (already `executemany`)
+   were already batched — the "detection-claim path" named in the original
+   roadmap item turned out not to be the bottleneck once actually read; only
+   the ingest INSERT loop was. `detect drain` stays network-round-trip-bound
+   on the *processing* side (rule evaluation + `_insert_alert` per match, and
+   here every event matches), not the claim/complete plumbing.
+5. **What's still not batched**: `_insert_alert` (one write per firing match)
+   and the built-in engine's own inline path — lower priority, since matches
+   are a small fraction of raw events in a typical mix (244 alerts for 5,000
+   events above) unlike `drain`'s pathological all-match test data. For very
+   high sustained EPS beyond what batching buys, externalise the event store
+   to a columnar/search engine (ClickHouse/OpenSearch) behind the same hunt
+   API — the remaining P0 pipeline item already tracked in `plan.md`.
 
 ## Caveats
 

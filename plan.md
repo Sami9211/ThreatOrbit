@@ -239,13 +239,20 @@ plus external compliance attestations.
       "materially higher" — measured, it's markedly *slower* than SQLite for
       the current pipeline (one round-trip statement per event row, no
       batching), which is now the concretely-scoped remaining item below.
-- [ ] **Batch the per-row ingest/detection writes on Postgres.** `ingest_lines`
-      and the detection worker both issue one `conn.execute(...)` per event row
-      — fine for SQLite's in-process file access, but every row pays a real
-      client↔server round trip on Postgres, which dominates and erases any
-      row-level-locking parallelism the worker pool could otherwise exploit
-      (measured: 4 workers ≈ 1 worker on Postgres). Move to `executemany` / a
-      multi-row `INSERT` / `COPY` for the hot ingest and detection-claim paths.
+- [x] **Batch the per-row ingest writes on Postgres.** DONE (2026-07-09):
+      `ingest_lines` now collects a batch's rows and issues one
+      `conn.executemany(...)` instead of one `conn.execute(...)` per event —
+      measured ~5.7x faster on Postgres (~670 → ~3,800 EPS, `bench.py` +
+      `docs/LOAD_LIMITS.md`). The "detection-claim path" named in the original
+      version of this item turned out to already be batched once actually
+      read (`event_queue.claim` is one `UPDATE … WHERE id IN (…)`, `.complete`
+      was already `executemany`) — not a real gap, corrected here rather than
+      left inaccurate. Remaining, lower priority: `_insert_alert` (one write
+      per firing match) isn't batched — matches are a small fraction of raw
+      events in a realistic mix, so this matters far less than the ingest path
+      did. 4 workers still ≈ 1 worker on the `drain` benchmark (unaffected by
+      this fix, since drain was never bottlenecked on claim/complete) — that's
+      about the detection-processing side, not ingest.
 
 ### Tier 3 — large enterprise / MSSP
 
@@ -344,6 +351,26 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-09 · Batched ingest writes: ~5.7x Postgres EPS, verified empirically
+  before committing to the approach.** `ingest_lines` issued one
+  `conn.execute(INSERT …)` per parsed event - fine on SQLite's in-process file
+  access, but every row paid a real client↔server round trip on Postgres (the
+  root cause the prior baseline-measurement pass identified). Before writing
+  any fix, benchmarked the actual options against a local Postgres instance:
+  `executemany` measured ~6x a row-by-row loop (72k vs 11k rows/sec), matching
+  a hand-built multi-row `VALUES` INSERT's throughput with far less code - and
+  `PgConnection.executemany` already existed in `db_backend.py`, so no new
+  plumbing was needed. Collected the batch's rows and switched to one
+  `executemany` call; confirmed on the real pipeline via `bench.py`:
+  ingest+detect went from ~670 to ~3,800 EPS. Also investigated the
+  "detection-claim path" the original roadmap wording named and found it was
+  already batched (`event_queue.claim`/`complete`) - corrected that inaccuracy
+  rather than leaving it. No correctness change: parse-time per-line error
+  isolation happens before rows are ever collected for the insert. Verified:
+  full SQLite suite (516 passed); full Postgres suite with a baseline (git
+  stash) comparison confirming the only failures are pre-existing full-suite
+  connection-pool flakiness already documented earlier this session, not a
+  regression. `docs/LOAD_LIMITS.md` updated with the new measured numbers.
 - **2026-07-09 · Sigma community-pack bulk import.** `POST
   /siem/rules/import-sigma-pack` imports a whole pasted Sigma rule collection
   (standard `---`-separated multi-document YAML - the format a downloaded

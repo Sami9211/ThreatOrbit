@@ -9,6 +9,41 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-09 — Batched ingest writes: ~5.7x Postgres EPS (670 → 3,800), no correctness change
+- `ingest_lines` issued one `conn.execute(INSERT …)` per parsed event — a
+  Python loop, fine for SQLite's in-process file access, but on Postgres every
+  row paid a real client↔server round trip (the root cause `docs/LOAD_LIMITS.md`
+  identified in the earlier baseline-measurement pass). Fixed by collecting
+  the batch's rows and issuing a single `conn.executemany(...)` call instead.
+- **Verified empirically before committing to the approach**, not assumed: a
+  standalone benchmark against a local Postgres instance measured
+  `executemany` at ~6x a naive row-by-row loop (72k vs 11k rows/sec),
+  matching a hand-built multi-row `VALUES` INSERT's throughput with far less
+  code — and the abstraction layer already had `executemany` support
+  (`PgConnection.executemany` in `db_backend.py`), so no new plumbing was
+  needed. Confirmed on the real pipeline via `dashboard_api/bench.py`:
+  ingest+detect went from ~670 to **~3,800 EPS** against the same local
+  Postgres instance.
+- **Investigated the detection-worker "claim" path too** (also named in the
+  original roadmap item) and found it was already batched —
+  `event_queue.claim` is one `UPDATE … WHERE id IN (…)`, `.complete` was
+  already `executemany`. The `drain` benchmark stages are correctly unchanged
+  by this fix; they're bound by per-match `_insert_alert` writes during
+  detection processing, not the claim/complete plumbing, and are called out as
+  a separate, lower-priority remaining item (matches are a small fraction of
+  raw events in a realistic mix, unlike the benchmark's pathological
+  all-match drain data).
+- No correctness change: parse-time error isolation (one malformed/crafted
+  line can't drop the rest of the batch) happens before rows are ever
+  collected for the insert, unaffected by how the INSERT is issued.
+- Verified: full SQLite suite (516 passed); full Postgres backend suite
+  against a local instance, with a baseline comparison (git stash) confirming
+  the only failures are pre-existing full-suite-only flakiness (a
+  connection-pool timing issue already documented earlier this session,
+  `test_darkweb_feed_connector` deterministically and 1-2 others that vary
+  run-to-run) — not a regression from this change; `docs/LOAD_LIMITS.md`
+  updated with the new measured numbers.
+
 ### 2026-07-09 — Sigma community-pack bulk import
 - **New**: `POST /siem/rules/import-sigma-pack` bulk-imports a pasted
   collection of Sigma rules (e.g. a cloned SigmaHQ directory, or any
