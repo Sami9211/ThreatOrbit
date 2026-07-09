@@ -1,5 +1,10 @@
 # ThreatOrbit
 
+# Project Name
+
+**Important**: This project is public for viewing purposes only. All rights are reserved. See [LICENSE](LICENSE) for full terms. No use, modification, or distribution without explicit permission.
+
+
 **A unified Super-SOC: SIEM + SOAR + CTI + Asset/Vuln + Dark-Web monitoring, with STIX / OpenCTI integration.**
 
 ThreatOrbit takes the four disciplines a security team normally runs in four
