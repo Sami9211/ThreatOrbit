@@ -9,6 +9,36 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-09 — Evidence-based false-positive likelihood for alerts and IOCs
+- New `dashboard_api/fp_scoring.py`: transparent, explainable false-positive
+  likelihood scoring for SIEM alerts and CTI indicators, built entirely from
+  data already collected elsewhere in the platform — never a black-box
+  classifier, and never a silent auto-action. Score starts at a neutral
+  midpoint (50) and each applicable signal shifts it by a signed, capped
+  weight; banded into `likely-fp` / `uncertain` / `likely-real`.
+- Alert signals: the firing rule's historical FP rate, live-joined asset
+  criticality (the `alerts.host_criticality` column is never populated at
+  insert time, so this joins `assets` by hostname/IP instead), standing
+  suppression-rule proximity, time-windowed correlation against other
+  unresolved high/critical alerts, direct IOC cross-reference (known-good or
+  active malicious), and per-entity false-positive history.
+- IOC signals: cached enrichment-provider consensus (`ioc_enrichments`),
+  cloud/CDN CIDR range match, and a sighting-vs-alert-impact mismatch check.
+- Surfaced via dedicated compute-on-demand sub-endpoints — the same pattern
+  as the existing `GET /cti/iocs/{id}/enrichment` — rather than embedding in
+  every list/detail response (avoids N+1 query cost on list views):
+  `GET /siem/alerts/{id}/fp-assessment` and `GET /cti/iocs/{id}/fp-assessment`.
+  A "FP Likelihood" button in the Power-mode alert detail drawer and the IOC
+  lifecycle panel renders the band, score, and full evidence trail.
+- Regression-tested per the testing discipline this feature was designed
+  under: a correlated multi-alert attack plus a known-bad IOC match must
+  stay `likely-real` even with one weak FP-leaning signal also present, so
+  no single weak signal can mask a real incident.
+- Verified: 13 new tests passing on SQLite and against a live Postgres
+  instance; full backend suite green (529 tests); live-browser verification
+  against the real pipeline (a critical-asset match plus an isolated alert
+  nets `uncertain · 43`, exactly matching the signed-weight arithmetic).
+
 ### 2026-07-09 — Batched ingest writes: ~5.7x Postgres EPS (670 → 3,800), no correctness change
 - `ingest_lines` issued one `conn.execute(INSERT …)` per parsed event — a
   Python loop, fine for SQLite's in-process file access, but on Postgres every
