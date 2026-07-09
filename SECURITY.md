@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **security@threatorbit.space** (or open a GitHub *private* security
+Email **ghummansami9@gmail.com** (or open a GitHub *private* security
 advisory on this repository). Include reproduction steps, affected
 version/commit, and impact as you understand it. Please do **not** open a
 public issue for an unpatched vulnerability.
