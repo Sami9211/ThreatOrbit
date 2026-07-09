@@ -480,7 +480,7 @@ export default function Sidebar() {
               >
                 <div className="relative shrink-0">
                   <AlertTriangle className="w-4 h-4" />
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-threat text-[8px] font-bold text-white flex items-center justify-center ring-2 ring-surface">
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-threat text-[8px] font-bold text-[#0a0a0b] flex items-center justify-center ring-2 ring-surface">
                     {activeAlerts > 99 ? '99+' : activeAlerts}
                   </span>
                 </div>

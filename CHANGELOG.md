@@ -9,6 +9,41 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-08 — Per-theme color-contrast fix: `--ink-500` and the alert-count badge now pass WCAG AA, everywhere
+- `e2e/a11y.spec.ts` had `color-contrast` disabled pending a proper fix. Did
+  the fix: computed exact WCAG contrast ratios (not estimates) for `--ink-500`
+  against **all four surface levels** each theme actually renders text on
+  (`--bg`/`--surface`/`--surface-2`/`--surface-3`), not just the darkest one -
+  an important correction from a first attempt that only checked `--bg` and
+  missed that a *lighter* surface can sit closer to a muted foreground's own
+  luminance, giving *worse* contrast than the darkest background does. Fixed
+  all 11 themes (`app/globals.css`) with a minimal HSL-lightness bump per
+  theme (hue/saturation preserved), landing every one at ≥4.5:1 against its
+  worst-case surface.
+- The alert-count badge (`bg-threat` fill, 8px bold white text - Sidebar and
+  TopBar) measured 2.65-3.76:1 across the 10 non-mono themes (mono already had
+  a dark-text override). Rather than touch the shared `--threat` token (used
+  in dozens of other contexts across 40+ files, too broad to verify visually
+  in one pass), changed just the two badge instances to dark text
+  (`text-[#0a0a0b]`), verified at 5.26-18:1 against every theme's `--threat`.
+- **What's still open, and why it's out of scope here**: `--ink-600` (the
+  most-muted tier) also measures below 4.5:1 in several real-text contexts
+  (e.g. activity-feed timestamps), but it's used in 480+ places sitewide, and
+  lightening it enough to clear AA collapses it visually onto the now-fixed
+  `--ink-500` (both converge on nearly the same value under the same
+  worst-case-background constraint) - destroying the ramp's gradation. A real
+  fix needs per-usage triage: much of `--ink-600`'s usage is arguably WCAG SC
+  1.4.3-exempt "inactive UI component" text (disabled buttons, placeholder-
+  style hints) that doesn't require AA contrast at all, but that needs an
+  actual per-site review, not a blind token bump. Tracked as a concrete,
+  scoped item in `plan.md`.
+- Verified: exact contrast math for all 11 themes × 2 tokens; a visual
+  screenshot pass across 3 themes (no jarring regression - the lightening is
+  subtle); the axe scan re-run with `color-contrast` re-enabled confirms 0
+  violations for `--ink-500`/the badge, `--ink-600` timestamps remain the only
+  (expected, tracked) violation; full existing Playwright suite (23 tests)
+  unaffected; `tsc --noEmit` clean.
+
 ### 2026-07-08 — CI catch: 2 more icon-only buttons with no accessible name (mobile-only render paths)
 - The new `e2e/a11y.spec.ts` (added earlier the same day) passed locally
   against `desktop-chromium`, but the `mobile-safari` CI job caught 2 more

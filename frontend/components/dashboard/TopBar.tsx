@@ -170,7 +170,7 @@ export default function TopBar() {
           >
             <Bell className="w-4 h-4" aria-hidden="true" />
             {unread > 0 && (
-              <span className="absolute top-1 right-1 min-w-[14px] h-[14px] rounded-full bg-threat text-[8px] font-bold text-white flex items-center justify-center px-0.5" aria-hidden="true">
+              <span className="absolute top-1 right-1 min-w-[14px] h-[14px] rounded-full bg-threat text-[8px] font-bold text-[#0a0a0b] flex items-center justify-center px-0.5" aria-hidden="true">
                 {unread > 9 ? '9+' : unread}
               </span>
             )}

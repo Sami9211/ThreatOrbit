@@ -10,13 +10,18 @@ import { test, expect } from './fixtures'
 // criteria), but it locks in what IS mechanically detectable and stops it from
 // regressing silently.
 //
-// `color-contrast` is disabled here deliberately, not silently: a first run
-// found the `ink-500` (muted/secondary text) and `--threat` (alert-count badge)
-// design tokens measure ~3:1 against their default-theme backgrounds, short of
-// the 4.5:1 AA text threshold - but both are defined per-theme (11 themes,
-// app/globals.css), so fixing them means a lightness pass verified visually
-// across all 11, not a one-line token edit landed sight-unseen in an E2E pass.
-// Tracked as a concrete follow-up in plan.md rather than left unstated.
+// `color-contrast` is disabled here deliberately, not silently. `--ink-500`
+// (secondary/muted text) and the alert-count badge (white-on-`--threat`) were
+// fixed and verified across all 11 themes (app/globals.css) - checked against
+// all 4 surface levels each theme actually renders text on, not just the
+// darkest one, plus a visual screenshot pass. What's still open: `--ink-600`
+// (the most-muted tier - timestamps, disabled-state text, table headers) is
+// used in 480+ places sitewide; naively lightening it to clear 4.5:1 collapses
+// it visually onto `--ink-500` (both would converge on the same floor value),
+// destroying the ramp's gradation, and a real fix needs per-usage triage since
+// much of it is arguably WCAG-exempt "inactive UI component" text that SC
+// 1.4.3 doesn't require to meet AA at all - that triage is a bigger, separate
+// pass, tracked in plan.md rather than a token edit landed sight-unseen here.
 const axe = (page: Parameters<typeof AxeBuilder>[0]['page']) =>
   new AxeBuilder({ page }).disableRules(['color-contrast'])
 

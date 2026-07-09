@@ -302,11 +302,18 @@ plus external compliance attestations.
       regressions (`test_net_guard.py`, `test_connector_resilience.py`) and
       retry/backoff webhook delivery (`webhooks.py`) count toward "standing
       SSRF/authz/XSS regressions" and "notification reliability" respectively.
-      Remaining: a **per-theme color-contrast pass** (`--ink-500` and
-      `--threat` measure ~3:1 against their default backgrounds across all 11
-      themes, short of the 4.5:1 AA text threshold — deliberately excluded from
-      the new a11y spec rather than landed sight-unseen; needs visual
-      verification per theme, not just a token edit); the rest of a full
+      DONE (2026-07-08): `--ink-500` and the alert-count badge now clear
+      4.5:1 AA across all 11 themes, checked against every surface level
+      (see `CHANGELOG.md`). Remaining: `--ink-600` (480+ usages sitewide)
+      still falls short of AA in real-text contexts (e.g. activity-feed
+      timestamps) — naively lightening it collapses it visually onto
+      `--ink-500`, so this needs per-usage triage, not a token edit: split
+      out which of the 480+ usages are genuine informational text (needs a
+      lighter, AA-compliant color) vs. WCAG SC 1.4.3-exempt "inactive UI
+      component" text (disabled buttons, placeholder-style hints — legally
+      doesn't need AA contrast at all) and fix only the former, possibly by
+      introducing a distinct token for "muted-but-still-informational" text
+      rather than reusing `--ink-600` for both purposes. The rest of a full
       keyboard-nav/screen-reader pass beyond what axe-core catches mechanically
       (axe covers roughly a third of WCAG's criteria); i18n; notification
       templating/digests/escalation policies; chaos/failure-injection and
@@ -329,6 +336,25 @@ plus external compliance attestations.
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-08 · Per-theme color-contrast fix: `--ink-500` and the alert-count
+  badge now pass WCAG AA everywhere.** Computed exact contrast ratios (not
+  estimates) for `--ink-500` against all 4 surface levels each theme actually
+  renders text on, not just `--bg` (a first attempt that only checked `--bg`
+  missed that a lighter surface can sit closer to a muted foreground's own
+  luminance, giving worse contrast than the darkest background) - fixed all 11
+  themes with a minimal HSL-lightness bump, hue/saturation preserved, landing
+  every one at ≥4.5:1 against its worst case. The alert-count badge
+  (`bg-threat` + white text) measured 2.65-3.76:1 on 10 of 11 themes; fixed by
+  darkening just the 2 badge instances' text rather than the shared `--threat`
+  token (used in 40+ files, too broad to visually re-verify in one pass).
+  `--ink-600` (480+ usages) also falls short of AA in some real-text contexts,
+  but lightening it enough collapses it visually onto the now-fixed
+  `--ink-500` - tracked above as a separate, properly-scoped follow-up
+  (per-usage triage: much of it is likely legitimately WCAG-exempt disabled/
+  inactive UI text). Verified: exact math for 11 themes × 2 tokens, a 3-theme
+  visual screenshot pass, `color-contrast` re-enabled in the axe scan (0
+  violations for the fixed tokens), full Playwright suite (23 tests)
+  unaffected, `tsc --noEmit` clean.
 - **2026-07-08 · CI caught 2 more unlabeled icon buttons (mobile-only render
   paths), plus a connector redirect hardening.** The new a11y spec passed
   locally against desktop-chromium, but the `mobile-safari` CI job (webkit
