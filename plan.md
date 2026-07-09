@@ -335,6 +335,121 @@ plus external compliance attestations.
       connector contract tests; GTM plumbing (trial/free-tier flow, usage
       metering, in-product upgrade prompts, status page, support surface).
 
+### Evidence-based false-positive identification (SIEM alerts + CTI IOCs)
+
+- [ ] **Not started.** Requested by the project owner (2026-07-09): identify
+      false positives from *strong evidence and findings*, for both SIEM
+      alerts and CTI IOCs — not the manual-only mechanisms that exist today.
+
+**The gap, precisely.** FP handling today is manual and retroactive, and
+never looks at the specific alert/indicator's own evidence:
+
+- Marking an alert `disposition=false-positive`
+  (`dashboard_api/routers/siem.py::update_alert`) bumps its **rule's**
+  `fp_rate` by a flat `+2` (capped at 100) — a blunt per-rule counter, not a
+  per-alert judgement, and it carries no reasoning.
+- `dashboard_api/ioc_lifecycle.py::set_known_good` is the IOC-side
+  equivalent — a manual whitelist override (`dashboard_api/routers/cti.py`,
+  `ioc.known_good` audit action), also with no evidence attached.
+
+Neither uses the corroborating context the platform already collects (asset
+criticality, correlation history, VirusTotal enrichment, source trust,
+sighting counts) to help an analyst decide *faster* which alerts/IOCs are
+worth a first look versus probably noise. At real alert volume this is
+exactly where analyst time is wasted — triaging obvious noise with the same
+rigor as a real hit.
+
+**What to build.** A transparent, evidence-based false-positive *likelihood*
+score for both alerts and IOCs, built from signals already present in the
+platform (no new external integrations needed for v1) — surfaced to speed up
+triage, and **never** silently auto-closing anything without a human
+decision and an audit-trail entry. Same "honest, inspectable" posture as the
+existing transparent asset-risk model and the README's explicit framing of
+the ML layer as "unsupervised outlier ranking for triage, not trained
+ground-truth detection" — this is a scoring/explanation aid, not a
+black-box classifier making claims the platform can't back up.
+
+**Evidence signals — alerts** (draws on `dashboard_api/detections.py`,
+`engine.py`, the `assets` table, `suppressions`):
+- the firing rule's existing `fp_rate` — today the *only* signal used
+  anywhere; becomes one input among several instead of the whole picture;
+- the source asset's criticality/expected role — e.g. a known dev/test box
+  vs. a crown-jewel server firing the same rule;
+- a *close-but-not-exact* match against `suppressions`/allow-lists (an
+  analyst already told the platform "ignore this pattern" for something
+  adjacent, e.g. same rule + same subnet but a different exact IP);
+- correlation context from the engine's own escalation logic
+  (`engine.py::_maybe_escalate_case`) — an isolated, non-correlated single
+  event scores differently than one that's part of a multi-alert pivot;
+- IOC cross-reference: does the alert's src/dest IP or hash match a CTI
+  indicator already marked `known_good`, or is it an RFC1918/internal range
+  a rule mis-fired on as "external";
+- per-entity FP history (**new** — today only the *rule* remembers, not the
+  entity): this exact user/host/rule combination has been marked FP
+  repeatedly before.
+
+**Evidence signals — IOCs** (draws on `threat_api/trust_scoring.py`,
+`dashboard_api/ioc_lifecycle.py`, `enrichment.py`):
+- VirusTotal enrichment already stored (`vt_malicious_count`) — low/zero
+  against a "malicious" label is a strong FP signal;
+- source trust score (`trust_scoring.py`) — a single low-trust feed
+  reporting something no other independent source corroborates;
+- multi-source consensus — the same indicator independently reported by 2+
+  feeds is materially stronger evidence than one;
+- a small static reference list of major cloud/CDN ASN/CIDR ranges
+  (AWS/Azure/GCP/Cloudflare) — the classic false-positive pattern for
+  IP-reputation feeds flagging shared, high-churn infrastructure;
+- sighting history (`ioc_lifecycle.record_sighting`) with **no** correlated
+  alert/case ever created from those sightings in this org's own
+  environment, despite a high claimed severity — a mismatch between claimed
+  and observed impact;
+- existing `known_good` overrides used as a reference set: a new IOC
+  sharing an ASN/domain/first-seen pattern with a previously-confirmed
+  known-good inherits some of that signal.
+
+**Implementation plan (phased, each phase independently shippable):**
+
+1. **Scoring engine** — new `dashboard_api/fp_scoring.py`: pure functions
+   `score_alert(conn, alert) -> FPAssessment` / `score_ioc(conn, ioc) ->
+   FPAssessment`, each returning `{score: 0-100, band: likely-fp |
+   uncertain | likely-real, evidence: [{signal, weight, detail}]}`. The
+   evidence list is the whole point — every score is explainable, so an
+   analyst can see exactly why. Compute-on-read for both (alert evidence is
+   mostly static once the alert exists; the IOC store is small enough that
+   a background job isn't needed for v1).
+2. **API + UI surfacing** — embed the assessment in the existing alert/IOC
+   detail responses (`GET /siem/alerts/{id}`, `GET /cti/iocs/{id}`), plus a
+   small "FP likelihood" panel in the Alert detail drawer and IOC detail
+   view (evidence bullets, not just a bare number) — triage gets faster
+   without hiding the reasoning behind it.
+3. **Bulk triage view** — a SIEM queue filter/sort by FP-likelihood band, so
+   an analyst can process the "likely-fp, low-criticality asset, isolated
+   single event" cluster in bulk instead of one at a time. This is the
+   actual time-saving payoff, not just a per-alert badge.
+4. **Opt-in guarded automation** (off by default, an explicit config flag) —
+   only above a high threshold (e.g. ≥90) *and* multiple independent
+   corroborating signals (never one weak signal alone), auto-**suggest** —
+   not auto-execute — bulk dismissal for review, or at most auto-lower
+   priority. Every such action is audit-logged and reversible, the same
+   human-in-the-loop posture as the SOAR playbook `approval`-step gating
+   already in `playbook_engine.py`. This system must never silently close a
+   real incident.
+5. **Feedback loop** — when an analyst confirms or overrides a suggestion,
+   record it as labelled feedback and let it nudge the per-signal weights
+   over time (simple, transparent rule-based weight adjustment — not a
+   black-box model, keeping the same "explainable, not mysterious" position
+   as the rest of the scoring/ML surface in this codebase).
+
+**Testing discipline (non-negotiable before any UI ships).** A wrong
+"likely-fp" call that leads an analyst to skip a real incident is the worst
+possible failure mode here — worse than the feature not existing at all.
+Before shipping: known real-attack fixtures (e.g. a genuine multi-stage
+brute-force → lateral-movement chain) must score `likely-real` even when
+some superficially-benign-looking signals are also present (e.g. a partial
+suppression match) — one weak signal must never outvote several strong
+ones. Match the rigor already established for `fp_rate`/suppression logic in
+`test_api.py` and the correlation-engine tests.
+
 ### Frontend polish backlog
 
 - [~] **Asset network map** — the pan-shake and scroll-zoom bugs are fixed;
