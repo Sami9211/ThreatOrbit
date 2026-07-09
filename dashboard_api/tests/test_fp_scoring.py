@@ -323,3 +323,84 @@ def test_ioc_fp_assessment_endpoint(client, auth):
     finally:
         _cleanup(tag)
     assert client.get("/cti/iocs/does-not-exist/fp-assessment", headers=auth).status_code == 404
+
+
+def test_alerts_fp_triage_scores_and_filters_by_band(client, auth):
+    """Phase 3: the bulk-triage view scores a working set and can filter to
+    just one band -- a strong known-good match should land in likely-fp, a
+    strong malicious match in likely-real, and each other band excludes it.
+
+    fp-triage only scores the most recent N open alerts (see
+    _FP_TRIAGE_WORKING_SET_CAP), so this test's alerts are timestamped far in
+    the future - guaranteeing they sort at the very top of that window
+    regardless of how much other data the full suite has accumulated in the
+    shared test database."""
+    tag = uuid.uuid4().hex[:8]
+    good_ip = f"10.21.{int(tag[:2], 16) % 250}.1"
+    bad_ip = f"10.22.{int(tag[:2], 16) % 250}.2"
+    future_ts = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=3650)).replace(microsecond=0).isoformat()
+    try:
+        with get_conn() as conn:
+            _insert_ioc(conn, tag, value=good_ip, status="known-good", severity="low")
+            fp_alert = _insert_alert(conn, tag, severity="medium", src_ip=good_ip, ts=future_ts)
+            _insert_ioc(conn, tag, value=bad_ip, status="active", severity="critical")
+            # correlated siblings push this firmly into likely-real - a lone
+            # malicious-IOC match is offset by the isolated-alert mild bonus
+            # (see test_real_multistage_attack_... for the full calibration).
+            _insert_alert(conn, tag, severity="critical", src_ip=bad_ip, ts=future_ts)
+            _insert_alert(conn, tag, severity="high", src_ip=bad_ip, ts=future_ts)
+            real_alert = _insert_alert(conn, tag, severity="medium", src_ip=bad_ip, ts=future_ts)
+            conn.commit()
+
+        # The unfiltered view sorts the *whole* (up to 300-alert) working set
+        # by score descending and pages it - a rock-bottom scorer like
+        # real_alert is expected to rank near the very end of that, not on
+        # an early page, so band filtering (which filters *before* paging)
+        # is the only way to reliably find either alert regardless of how
+        # much other data is loaded in the shared working set. limit=200 is
+        # the endpoint's max, for the widest safety margin.
+        only_fp = client.get("/siem/alerts/fp-triage?band=likely-fp&limit=200", headers=auth).json()
+        assert "total" in only_fp and "workingSetSize" in only_fp and "items" in only_fp
+        fp_ids = {i["id"]: i for i in only_fp["items"]}
+        assert fp_alert in fp_ids, "fp_alert not found on the likely-fp page (unexpectedly outranked)"
+        assert fp_ids[fp_alert]["fpBand"] == "likely-fp"
+        assert fp_ids[fp_alert]["fpScore"] >= 70
+        assert real_alert not in fp_ids
+
+        only_real = client.get("/siem/alerts/fp-triage?band=likely-real&limit=200", headers=auth).json()
+        real_ids = {i["id"]: i for i in only_real["items"]}
+        assert real_alert in real_ids, "real_alert not found on the likely-real page (unexpectedly outranked)"
+        assert real_ids[real_alert]["fpBand"] == "likely-real"
+        assert real_ids[real_alert]["fpScore"] <= 30
+        assert fp_alert not in real_ids
+    finally:
+        _cleanup(tag)
+
+
+def test_bulk_dismiss_alerts(client, auth):
+    tag = uuid.uuid4().hex[:8]
+    try:
+        with get_conn() as conn:
+            rid = _insert_rule(conn, tag, fp_rate=0.0)
+            a1 = _insert_alert(conn, tag, severity="high", status="new", rule_id=rid, rule_name=rid)
+            a2 = _insert_alert(conn, tag, severity="medium", status="new", rule_id=rid, rule_name=rid)
+            conn.commit()
+
+        r = client.post("/siem/alerts/bulk-dismiss",
+                         json={"ids": [a1, a2, "does-not-exist"]}, headers=auth)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["dismissed"] == 2
+        assert body["notFound"] == ["does-not-exist"]
+
+        with get_conn() as conn:
+            rows = {row["id"]: row for row in conn.execute(
+                "SELECT id, status, disposition FROM alerts WHERE id IN (?,?)", (a1, a2)).fetchall()}
+            rule_row = conn.execute("SELECT fp_rate FROM detection_rules WHERE id=?", (rid,)).fetchone()
+        assert rows[a1]["status"] == "closed" and rows[a1]["disposition"] == "false-positive"
+        assert rows[a2]["status"] == "closed" and rows[a2]["disposition"] == "false-positive"
+        assert rule_row["fp_rate"] == 2.0  # bumped once, not once per dismissed alert
+    finally:
+        _cleanup(tag)
+
+    assert client.post("/siem/alerts/bulk-dismiss", json={"ids": []}, headers=auth).status_code == 400

@@ -9,6 +9,27 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-09 — Bulk FP-triage view: score, filter, and dismiss a cluster at once
+- New `GET /siem/alerts/fp-triage`: scores a bounded working set (the most
+  recent 300 open alerts) with `fp_scoring.score_alert`, filters by
+  likelihood band, and sorts by score — the "process a whole likely-noise
+  cluster at once instead of one alert at a time" phase from the FP-scoring
+  design in `plan.md`. The working set is capped lower than a plain list
+  endpoint because each row costs several scoring queries, not one; an
+  honest bound documented in `docs/LOAD_LIMITS.md`, not a silent truncation.
+- New `POST /siem/alerts/bulk-dismiss`: marks a selection of alerts
+  false-positive/closed in one call — the same effect as the existing
+  per-alert `PATCH`, batched, with every alert still individually
+  audit-logged and each rule's `fp_rate` bumped once per rule (not once per
+  dismissed alert).
+- New Power-mode-only "FP Triage" tab in the SIEM dashboard: a band filter,
+  a checkbox-selectable scored list, "select all", and "dismiss selected".
+- Regression-tested (band filtering, score thresholds, bulk-dismiss state
+  changes and audit trail, the rule fp_rate single-bump behaviour) on
+  SQLite and a live Postgres instance; full backend suite green. Verified
+  live in a browser: filtering to `likely-fp` isolated one seeded low-risk
+  alert out of 74 scored, and dismissing it removed it from the view.
+
 ### 2026-07-09 — Evidence-based false-positive likelihood for alerts and IOCs
 - New `dashboard_api/fp_scoring.py`: transparent, explainable false-positive
   likelihood scoring for SIEM alerts and CTI indicators, built entirely from

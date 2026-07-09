@@ -113,9 +113,18 @@ over-cap value is rejected with HTTP 422; the cap is the hard ceiling:
 | Overview rollups (recent/top/geo/feed) | 100–500 |
 | SOAR run history / action trails | 500 |
 | Notifications | 100 · global search | 25 |
+| SIEM FP-triage (`/siem/alerts/fp-triage`) | 200 per page, 300-alert working set |
 
 On the client side, the SIEM queue **windows** rows above 150 (a dependency-free
 `useWindowedRows` hook) so even a full 500-row page renders only the visible
 slice. For datasets larger than a single page, use the server-side
 pagination (`offset`/`limit`) and filters the list endpoints expose rather than
 raising the cap.
+
+The FP-triage working set is capped lower than a plain list, because each row
+costs several `fp_scoring` queries (not one) - it scores the most recent 300
+open alerts, filters/sorts by likelihood band, then paginates the *scored*
+result. On a deployment with more than 300 concurrently open alerts, older
+ones fall outside this pass; this is an honest bound on a bulk-triage
+convenience view, not the authoritative alert queue (`/siem/alerts` has no
+such ceiling on what's queryable, only on page size).

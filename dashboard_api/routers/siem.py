@@ -188,6 +188,83 @@ def create_alert(body: AlertCreate, user: dict = Depends(require_perm("siem.writ
     return row_to_dict(row)
 
 
+# Bounded working set for bulk FP-triage - an honest cap, not an exhaustive
+# scan of unbounded alert history (each row costs several fp_scoring queries,
+# so this can't be as large as a plain list's cap without real cost).
+_FP_TRIAGE_WORKING_SET_CAP = 300
+
+
+@router.get("/alerts/fp-triage")
+def alerts_fp_triage(
+    band: str | None = Query(None, pattern="^(likely-fp|uncertain|likely-real)$"),
+    severity: str | None = None,
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    user: dict = Depends(current_user),
+):
+    """Bulk false-positive triage: score a bounded working set of open alerts
+    (see dashboard_api/fp_scoring.py) and filter/sort by likelihood band, so
+    an analyst can process a whole 'likely noise' cluster at once instead of
+    one alert at a time. Advisory only - use POST /alerts/bulk-dismiss to
+    actually act on a selection."""
+    from dashboard_api.fp_scoring import score_alert
+    org_id = tenancy.org_of(user)
+    clauses, params = ["status NOT IN ('resolved','closed')"], []
+    if tenancy.enforced():
+        clauses.append("org_id=?"); params.append(org_id)
+    if severity:
+        clauses.append("severity=?"); params.append(severity)
+    where = "WHERE " + " AND ".join(clauses)
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM alerts {where} ORDER BY ts DESC LIMIT ?",
+            params + [_FP_TRIAGE_WORKING_SET_CAP]).fetchall()
+        scored = []
+        for row in rows:
+            alert = row_to_dict(row)
+            assessment = score_alert(conn, alert, org_id)
+            if band and assessment["band"] != band:
+                continue
+            scored.append({**alert, "fpScore": assessment["score"], "fpBand": assessment["band"]})
+    scored.sort(key=lambda a: a["fpScore"], reverse=True)  # likely-fp first
+    return {"total": len(scored), "workingSetSize": len(rows),
+            "items": scored[offset:offset + limit]}
+
+
+class BulkDismiss(BaseModel):
+    ids: list[str]
+
+
+@router.post("/alerts/bulk-dismiss")
+def bulk_dismiss_alerts(body: BulkDismiss, user: dict = Depends(require_perm("siem.write"))):
+    """Mark multiple alerts false-positive/closed in one call - the bulk
+    action the FP-triage view exists to enable. Same effect as PATCHing each
+    alert individually (routers/siem.py::update_alert), just batched; every
+    alert is still individually audit-logged."""
+    ids = body.ids[:200]
+    if not ids:
+        raise HTTPException(status_code=400, detail="No alert ids given")
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    dismissed, rule_ids = [], set()
+    with get_conn() as conn:
+        for aid in ids:
+            row = conn.execute(f"SELECT rule_id, rule_name FROM alerts WHERE id=? {sc}",
+                                [aid] + sp).fetchone()
+            if not row:
+                continue
+            conn.execute(f"UPDATE alerts SET status='closed', disposition='false-positive' WHERE id=? {sc}",
+                         [aid] + sp)
+            audit(conn, user["email"], "alert.update", aid, "fields=status,disposition (bulk-dismiss)")
+            dismissed.append(aid)
+            if row["rule_id"]:
+                rule_ids.add((row["rule_id"], row["rule_name"]))
+        for rid, rname in rule_ids:
+            conn.execute("UPDATE detection_rules SET fp_rate=MIN(100, fp_rate+2) WHERE (id=? OR name=?)",
+                         (rid, rname))
+        conn.commit()
+    return {"dismissed": len(dismissed), "notFound": [i for i in ids if i not in dismissed]}
+
+
 @router.get("/alerts/{alert_id}")
 def get_alert(alert_id: str, user: dict = Depends(current_user)):
     with get_conn() as conn:

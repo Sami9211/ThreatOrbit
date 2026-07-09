@@ -16,7 +16,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -1152,7 +1152,7 @@ function NormalSIEM({
 export default function SIEMPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
-  const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources' | 'hunt'>('queue')
+  const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources' | 'hunt' | 'fp-triage'>('queue')
   // Empty until the API answers — the alert queue is the API's to fill. An empty
   // queue on a real deployment is honest ("nothing detected yet"), not a cue to
   // show demo alerts. ALERTS is a first-load-offline fallback only (see loadSiem).
@@ -1164,6 +1164,44 @@ export default function SIEMPage() {
   const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
   const [correlations, setCorrelations] = useState<Correlation[]>([])
   const [mitreDist, setMitreDist] = useState<typeof MITRE_DIST>([])
+
+  // Bulk FP-triage (Phase 3) - loaded on demand when the tab is opened, not
+  // on every page load, since it's a heavier scored-working-set query.
+  const [fpTriageItems, setFpTriageItems] = useState<FpTriageAlert[]>([])
+  const [fpTriageLoading, setFpTriageLoading] = useState(false)
+  const [fpTriageBand, setFpTriageBand] = useState<'all' | FpAssessment['band']>('all')
+  const [fpSelected, setFpSelected] = useState<Set<string>>(new Set())
+  const [fpDismissing, setFpDismissing] = useState(false)
+
+  const loadFpTriage = useCallback((band: 'all' | FpAssessment['band']) => {
+    setFpTriageLoading(true)
+    fetchFpTriage({ band: band === 'all' ? undefined : band, limit: 200 })
+      .then(({ items }) => { setFpTriageItems(items); setFpSelected(new Set()) })
+      .catch(() => setFpTriageItems([]))
+      .finally(() => setFpTriageLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'fp-triage') loadFpTriage(fpTriageBand)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
+  function toggleFpSelected(id: string) {
+    setFpSelected((s) => {
+      const next = new Set(s)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function dismissSelectedFp() {
+    if (fpSelected.size === 0 || fpDismissing) return
+    setFpDismissing(true)
+    bulkDismissAlerts(Array.from(fpSelected))
+      .then(() => { loadFpTriage(fpTriageBand); loadSiem() })
+      .catch(() => {})
+      .finally(() => setFpDismissing(false))
+  }
 
   // Load alerts from API
   // Live refresh: the engine produces new alerts continuously, so poll the
@@ -1345,11 +1383,12 @@ export default function SIEMPage() {
         {/* Tab bar */}
         <div className="flex gap-6 px-6 border-b border-white/5 shrink-0 items-center">
           {([
-            ['queue',     'Alert Queue',     Activity],
-            ['hunt',      'Threat Hunting',  Terminal],
-            ['analytics', 'Analytics',       BarChart2],
-            ['rules',     'Detection Rules', Shield],
-            ['sources',   'Data Sources',    Database],
+            ['queue',      'Alert Queue',     Activity],
+            ['fp-triage',  'FP Triage',       Gauge],
+            ['hunt',       'Threat Hunting',  Terminal],
+            ['analytics',  'Analytics',       BarChart2],
+            ['rules',      'Detection Rules', Shield],
+            ['sources',    'Data Sources',    Database],
           ] as const)
             .filter(([id]) => !isNormal || id === 'queue')
             .map(([id, label, Icon]) => (
@@ -1442,6 +1481,63 @@ export default function SIEMPage() {
                     {alertWindow.bottomPad > 0 && <div style={{ height: alertWindow.bottomPad }} />}
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── FP TRIAGE (bulk, Phase 3) ──────────────────────────── */}
+          {tab === 'fp-triage' && (
+            <div className="flex flex-col h-full">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
+                <MiniFilter label="Band" value={fpTriageBand}
+                  options={['all', 'likely-fp', 'uncertain', 'likely-real']}
+                  onChange={(v) => { const b = v as typeof fpTriageBand; setFpTriageBand(b); loadFpTriage(b) }} />
+                <span className="text-[10px] text-ink-600">
+                  {fpTriageLoading ? 'Scoring…' : `${fpTriageItems.length} scored, advisory only`}
+                </span>
+                <button onClick={() => loadFpTriage(fpTriageBand)}
+                  className="p-1.5 rounded-lg text-ink-500 hover:text-magenta hover:bg-magenta/10 transition-colors">
+                  <RefreshCw className={cn('w-3.5 h-3.5', fpTriageLoading && 'animate-spin')} />
+                </button>
+                <button
+                  onClick={() => setFpSelected(new Set(
+                    fpSelected.size === fpTriageItems.length ? [] : fpTriageItems.map((a) => a.id)))}
+                  className="text-[10px] text-ink-500 hover:text-ink-200 ml-2">
+                  {fpSelected.size === fpTriageItems.length && fpTriageItems.length > 0 ? 'Deselect all' : 'Select all'}
+                </button>
+                <button onClick={dismissSelectedFp} disabled={fpSelected.size === 0 || fpDismissing}
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold
+                    bg-safe/15 border border-safe/30 text-safe hover:bg-safe/25 transition-colors
+                    disabled:opacity-40 disabled:cursor-not-allowed">
+                  {fpDismissing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Dismiss selected ({fpSelected.size})
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-white/4">
+                {!fpTriageLoading && fpTriageItems.length === 0 && (
+                  <p className="text-xs text-ink-600 text-center py-10">
+                    No open alerts matched this band in the scored working set.
+                  </p>
+                )}
+                {fpTriageItems.map((a) => (
+                  <label key={a.id}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/3 transition-colors cursor-pointer">
+                    <input type="checkbox" checked={fpSelected.has(a.id)}
+                      onChange={() => toggleFpSelected(a.id)}
+                      className="w-3.5 h-3.5 rounded accent-magenta shrink-0" />
+                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0', SEV[a.severity].bg, SEV[a.severity].text)}>
+                      {a.severity}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-ink-200 truncate">{a.title}</p>
+                      <p className="text-[10px] text-ink-600 truncate">{a.ruleName} · {timeAgo(a.ts)}</p>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold shrink-0"
+                      style={{ color: FP_BAND_STYLE[a.fpBand].color, background: `${FP_BAND_STYLE[a.fpBand].color}18` }}>
+                      {FP_BAND_STYLE[a.fpBand].label} · {a.fpScore}
+                    </span>
+                  </label>
+                ))}
               </div>
             </div>
           )}

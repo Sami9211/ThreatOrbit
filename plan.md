@@ -438,10 +438,18 @@ black-box classifier making claims the platform can't back up.
    Verified live in a browser against the real pipeline: a critical-asset
    match plus an isolated (uncorrelated) alert nets `uncertain · 43` exactly
    as the signed weights predict (50 − 15 + 8).
-3. **Bulk triage view** — a SIEM queue filter/sort by FP-likelihood band, so
-   an analyst can process the "likely-fp, low-criticality asset, isolated
-   single event" cluster in bulk instead of one at a time. This is the
-   actual time-saving payoff, not just a per-alert badge.
+3. **Bulk triage view — shipped.** A new Power-mode-only "FP Triage" SIEM
+   tab: `GET /siem/alerts/fp-triage` scores a bounded working set (the most
+   recent 300 open alerts — an honest cap, since each row costs several
+   `fp_scoring` queries, not one) and returns them filtered by band and
+   sorted by score. `POST /siem/alerts/bulk-dismiss` marks a selection
+   false-positive/closed in one call (audit-logged per alert, rule fp_rate
+   bumped once per rule, not once per alert). The tab renders a
+   checkbox-selectable list with a band filter, "select all", and "dismiss
+   selected" — the actual time-saving payoff this phase targeted, not just
+   a per-alert badge. Verified live in a browser: filtering to `likely-fp`
+   isolated the one seeded low-risk alert out of 74 scored, and dismissing
+   it removed it from the view.
 4. **Opt-in guarded automation** (off by default, an explicit config flag) —
    only above a high threshold (e.g. ≥90) *and* multiple independent
    corroborating signals (never one weak signal alone), auto-**suggest** —

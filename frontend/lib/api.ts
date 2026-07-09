@@ -612,6 +612,19 @@ export const fetchSiemAlerts = (params?: Record<string, string>) => {
 export const patchAlert   = (id: string, body: Partial<Pick<SiemAlert, 'status' | 'disposition' | 'owner'>>) =>
   api<SiemAlert>(`/siem/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const fetchAlertFpAssessment = (id: string) => api<FpAssessment>(`/siem/alerts/${id}/fp-assessment`)
+
+// Bulk FP-triage (Phase 3): score a bounded working set of open alerts and
+// filter by band, then act on a selection in one call.
+export interface FpTriageAlert extends SiemAlert { fpScore: number; fpBand: FpAssessment['band'] }
+export const fetchFpTriage = (params?: { band?: string; severity?: string; limit?: number; offset?: number }) => {
+  const q = params ? '?' + new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
+  ).toString() : ''
+  return api<{ total: number; workingSetSize: number; items: FpTriageAlert[] }>(`/siem/alerts/fp-triage${q}`)
+}
+export const bulkDismissAlerts = (ids: string[]) =>
+  api<{ dismissed: number; notFound: string[] }>('/siem/alerts/bulk-dismiss',
+    { method: 'POST', body: JSON.stringify({ ids }) })
 export const createAlert = (body: {
   title: string; severity?: string; description?: string
   srcIp?: string; srcCountry?: string; mitreTechId?: string; mitreTactic?: string
