@@ -3978,7 +3978,18 @@ def test_fp_feedback_bumps_rule_fp_rate(client, auth):
     ip = "203.0.113.214"
     bf = f"Jan 10 05:00:00 web01 sshd[222]: Failed password for root from {ip} port 33000"
     client.post("/siem/ingest", json={"lines": [bf], "format": "auto"}, headers=auth)
-    alert = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"][0]
+    # The q search can return several alerts for this ip: other suite tests draw
+    # random 203.0.113.x addresses and one plants a critical IOC on its draw, so
+    # on a collision this same ingest ALSO fires an R-TIMATCH alert in the same
+    # second. ts-DESC ties are broken arbitrarily on Postgres (SQLite happens to
+    # preserve insertion order), so items[0] can be the TI-match alert and the
+    # +2 then lands on the wrong rule — a real CI failure. Select the
+    # brute-force alert by rule name (engine alerts carry rule_id='R-ENGINE',
+    # so the name is the discriminator) instead of trusting result order.
+    items = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"]
+    alert = next((a for a in items if a["rule_name"] == "Brute-force authentication"), None)
+    assert alert is not None, \
+        f"no brute-force alert for {ip}; got {[(a['rule_name'], a['id']) for a in items]}"
     before = next(r for r in client.get("/siem/rules", headers=auth).json() if r["id"] == "R-BRUTEFORCE")["fp_rate"]
     client.patch(f"/siem/alerts/{alert['id']}", json={"disposition": "false-positive"}, headers=auth)
     after = next(r for r in client.get("/siem/rules", headers=auth).json() if r["id"] == "R-BRUTEFORCE")["fp_rate"]

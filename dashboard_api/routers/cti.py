@@ -111,7 +111,10 @@ def list_iocs(type: str | None = None, severity: str | None = None,
     if q:
         clauses.append("value LIKE ?"); params.append(f"%{q}%")
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    order_sql = f"{_IOC_SORTS[sort]} {order.upper()}"
+    # id tie-breaker for a total order — same rationale as the alerts list:
+    # tied sort keys (bulk imports share a last_seen second) otherwise come
+    # back in arbitrary backend-dependent order, breaking offset pagination.
+    order_sql = f"{_IOC_SORTS[sort]} {order.upper()}, id {order.upper()}"
     with get_conn() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM iocs {where}", params).fetchone()[0]
         rows = conn.execute(

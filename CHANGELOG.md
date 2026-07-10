@@ -9,6 +9,32 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — Deterministic list ordering (id tie-breaker) + third tie-order test flake fixed
+- **Product fix:** `GET /siem/alerts`, `GET /cti/iocs`, and the FP-triage
+  working-set window now append an `id` tie-breaker to every ORDER BY.
+  Alert/IOC timestamps have second precision, so a burst of rows ties on any
+  sort key; without a total order, tied rows come back in arbitrary,
+  backend/plan-dependent order — which makes **offset/limit pagination able
+  to skip or duplicate rows across pages** for every API consumer, the UI
+  included. Verified the Postgres translation of the two-key ORDER BY is
+  clean, and that no existing test depended on the old tie order (full suite
+  green on both backends).
+- **The CI flake that surfaced it** (third instance of the tie-order class,
+  and the last — the class audit is now exhaustive):
+  `test_fp_feedback_bumps_rule_fp_rate` hardcodes `203.0.113.214`, the one
+  suite IP range in which three other tests draw **random** `203.0.113.x`
+  addresses; one of those plants a critical IOC on its draw. On a 1-in-250
+  collision this test's single ingest fires TWO alerts in the same second
+  (brute-force + TI-match — mechanics **reproduced deterministically**, not
+  assumed: planted the IOC, observed `alerts: 2, tiMatches: 1` with identical
+  timestamps), `items[0]` picks arbitrarily on Postgres, and the FP bump
+  lands on the wrong rule. Fixed by selecting the brute-force alert by
+  `rule_name` (engine alerts all carry `rule_id='R-ENGINE'`, so the name is
+  the discriminator), with a loud assert message listing what was found.
+  Audited every other `["items"][0]`-after-search site in the suite: all
+  others use draw-free IP ranges with suite-unique values, or don't depend
+  on which row they get — this was the only exposed one.
+
 ### 2026-07-10 — Animation foundation: shared motion tokens + global reduced-motion + page transition
 - New standing sub-end goal (owner): smooth animations everywhere. Laid the
   foundation the rest builds on:

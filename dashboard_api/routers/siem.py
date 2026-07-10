@@ -142,7 +142,11 @@ def list_alerts(
         clauses.append("(title LIKE ? OR rule_name LIKE ? OR src_ip LIKE ? OR hostname LIKE ?)")
         params += [f"%{q}%"] * 4
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    order_sql = f"{_ALERT_SORTS[sort]} {order.upper()}"
+    # `id` tie-breaker: ts has second precision, so a burst of alerts ties on
+    # every sort key. Without a total order, tied rows come back in arbitrary
+    # (backend/plan-dependent) order and offset/limit pagination can skip or
+    # duplicate rows across pages — surfaced as a real Postgres-only CI flake.
+    order_sql = f"{_ALERT_SORTS[sort]} {order.upper()}, id {order.upper()}"
     with get_conn() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM alerts {where}", params).fetchone()[0]
         rows = conn.execute(
@@ -216,8 +220,10 @@ def alerts_fp_triage(
         clauses.append("severity=?"); params.append(severity)
     where = "WHERE " + " AND ".join(clauses)
     with get_conn() as conn:
+        # id tie-breaker keeps the working-set window deterministic when many
+        # alerts share one second (same rationale as list_alerts).
         rows = conn.execute(
-            f"SELECT * FROM alerts {where} ORDER BY ts DESC LIMIT ?",
+            f"SELECT * FROM alerts {where} ORDER BY ts DESC, id DESC LIMIT ?",
             params + [_FP_TRIAGE_WORKING_SET_CAP]).fetchall()
         scored = []
         for row in rows:
