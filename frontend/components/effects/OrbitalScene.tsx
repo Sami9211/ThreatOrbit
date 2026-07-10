@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
+import { AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
@@ -55,13 +55,15 @@ function DotOrbit({ radius, count, tilt, color, speed, dot, moon, animate }: Orb
         <meshBasicMaterial color={color} transparent opacity={0.22} toneMapped={false} />
       </mesh>
 
-      {/* the orbiting dots */}
+      {/* the orbiting dots — PointMaterial masks each point to a circle;
+         raw pointsMaterial renders gl.POINTS as squares, which read as
+         little boxes riding the orbit ring */}
       <group ref={spinRef}>
         <points>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[positions, 3]} />
           </bufferGeometry>
-          <pointsMaterial size={dot} color={color} sizeAttenuation toneMapped={false} />
+          <PointMaterial transparent size={dot} color={color} sizeAttenuation depthWrite={false} toneMapped={false} />
         </points>
 
         {/* a brighter "moon" riding the orbit */}
@@ -94,13 +96,16 @@ function Planet({ animate, bright }: { animate: boolean; bright: boolean }) {
 
   return (
     <group>
-      {/* glowing core */}
+      {/* glowing core — without bloom, a hot emissive saturates every pixel
+         and the sphere flattens into a featureless disc; keep the emissive
+         moderate and let the directional light (added when bloom is off)
+         shade the limb so it still reads as a sphere */}
       <mesh ref={coreRef}>
         <sphereGeometry args={[0.62, 48, 48]} />
         <meshStandardMaterial
           color="#2A1244"
           emissive="#FF2E97"
-          emissiveIntensity={bright ? 1.1 : 0.6}
+          emissiveIntensity={bright ? 0.55 : 0.6}
           metalness={0.7}
           roughness={0.25}
           toneMapped={false}
@@ -194,6 +199,9 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
           <pointLight position={[4,  4, 4]}  intensity={2.2} color="#FF2E97" />
           <pointLight position={[-4, -2, 2]} intensity={1.5} color="#7A3CFF" />
           <pointLight position={[0, 0, -4]}  intensity={0.9} color="#FFB23E" />
+          {/* bloom-off fallback: point lights decay to almost nothing at this
+             distance, so add a directional key light to shade the planet */}
+          {bright && <directionalLight position={[3, 4, 5]} intensity={2.2} color="#FF9ACF" />}
           <PlanetSystem
             scrollY={scrollY} mouseX={mouseX} mouseY={mouseY}
             animate={animate} orbits={orbits} bright={bright}

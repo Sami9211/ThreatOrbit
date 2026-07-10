@@ -64,8 +64,12 @@ export default function ScrollStory() {
     stiffness: 100, damping: 28, restDelta: 0.001,
   })
 
-  /* 0 → 360° mapped from scroll - drives the orbital group Y rotation */
-  const scrollDeg = useTransform(scrollYProgress, [0, 1], [0, 360])
+  /* 0 → 360° mapped from scroll - drives the orbital group Y rotation.
+     Derived from the SPRING-smoothed progress, not raw scrollYProgress:
+     wheel scrolling lands in ~100px steps, and mapping those steps straight
+     to rotation made the planet snap through discrete angles instead of
+     easing between them. */
+  const scrollDeg = useTransform(smoothProgress, [0, 1], [0, 360])
 
   const handleMove = (e: React.MouseEvent) => {
     const el = stickyRef.current

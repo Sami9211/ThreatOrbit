@@ -529,6 +529,20 @@ not one-off tasks:
       also migrated onto the shared `fadeInUp`). Verified live on all three
       pages by watching inline opacity during a switch (each keyed wrapper
       observed animating), zero console errors.
+      Increment 5 (2026-07-10, user-reported): **landing 3D scene fixes** —
+      (a) square WebGL point sprites read as "box shapes" riding the orbit
+      rings (OrbitalScene dots + hero starfield) → drei `PointMaterial`
+      (circular mask); (b) on the no-bloom path the hero's flat unlit
+      hex prisms rendered edge-on as solid rectangles → shaded material in
+      both modes + directional key light + face-on initial tilt (Float's
+      wobble is bounded so they stay face-on); (c) the orbital planet
+      saturated into a flat pink disc without bloom → emissive 0.55 + the
+      key light restores limb shading; (d) ScrollStory planet rotation
+      mapped RAW scroll progress → now derived from the spring-smoothed
+      progress (wheel steps no longer snap the rotation); (e) threat-globe
+      arcs teleported to their next random curve at opacity 0.12 →
+      `0.44·sin(π·t)` envelope fades them fully out before the swap.
+      Verified with before/after zoomed screenshots of the rebuilt export.
       Ongoing/iterative: loading skeletons, chart draw-ins, count-ups on
       the remaining stat surfaces, and migrating the remaining per-component
       timings onto the shared tokens.

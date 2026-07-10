@@ -80,8 +80,11 @@ function Arc({ delay, color }: { delay: number; color: string }) {
       ;(headRef.current.material as THREE.MeshBasicMaterial).opacity = Math.sin(tt * Math.PI)
     }
     if (lineRef.current) {
+      // Envelope must reach 0 at both ends of the cycle: the arc teleports to
+      // a new random curve on reset, and a nonzero floor (was 0.12) made that
+      // swap a visible pop — a dim line snapping across the globe.
       ;(lineRef.current.material as THREE.LineBasicMaterial).opacity =
-        0.12 + 0.32 * Math.sin(tt * Math.PI)
+        0.44 * Math.sin(tt * Math.PI)
     }
   })
 
@@ -89,7 +92,7 @@ function Arc({ delay, color }: { delay: number; color: string }) {
     <group>
       {/* @ts-expect-error R3F line intrinsic */}
       <line ref={lineRef} geometry={geom}>
-        <lineBasicMaterial color={color} transparent opacity={0.25} toneMapped={false} />
+        <lineBasicMaterial color={color} transparent opacity={0} toneMapped={false} />
       </line>
       <mesh ref={headRef}>
         <sphereGeometry args={[0.04, 12, 12]} />

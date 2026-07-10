@@ -9,6 +9,37 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — Landing 3D scenes: box-shaped artifacts + jerky orbital motion (user-reported)
+- **Square "box" dots**: WebGL point sprites render as squares unless the
+  shader masks them round — the orbit dots in `OrbitalScene` and the hero
+  starfield used the raw `pointsMaterial`, so every dot riding the orbit
+  rings read as a tiny box. Swapped both onto drei's `PointMaterial`
+  (circular mask), verified round in zoomed screenshots.
+- **Hero hex prisms read as solid boxes**: on the no-bloom path (mobile /
+  degraded GPUs — also the path headless Chromium takes) the floating
+  shapes used a flat unlit `meshBasicMaterial`, so a hex prism sitting
+  edge-on rendered as a featureless filled rectangle. The shaded material
+  is now used in both modes with a directional key light standing in for
+  bloom (point lights decay to ~nothing at scene distance), and the prisms
+  get an initial face-on tilt (Float's wobble is bounded, so they can no
+  longer drift edge-on). The big pink "box" beside the hero terminal now
+  renders as a faceted hexagonal gem.
+- **Orbital planet flattened into a disc**: same no-bloom path — emissive
+  1.1 with `toneMapped=false` saturated every pixel of the planet into a
+  flat pink circle. Emissive lowered to 0.55 there + the directional key
+  light, so the limb shades and it reads as a sphere again.
+- **"Repeating but not smooth" orbital motion**: the ScrollStory planet's
+  rotation mapped RAW `scrollYProgress` to degrees, so each ~100px wheel
+  step snapped the rotation through discrete angles. It now derives from
+  the same spring-smoothed progress the narrative beats already use.
+- **Globe arc pop**: threat-globe arcs teleport to a new random curve at
+  the end of each cycle, but the line opacity floor was 0.12 — the swap
+  was visible as a dim line snapping across the globe every ~3s. The
+  opacity envelope is now `0.44·sin(π·t)` (fades fully out before the
+  curve swap, brighter at mid-flight).
+- All verified against the rebuilt static export in a real browser with
+  before/after zoomed crops; zero console errors; route/anchor guard green.
+
 ### 2026-07-10 — SOAR metrics: "Cases by Type" wired to live data (fabrication-sweep miss)
 - The SOAR metrics tab rendered a hardcoded "Cases by Type (Last 30 days)"
   list (Phishing 284, Endpoint/Malware 127, …) as if it were live data — the

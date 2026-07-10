@@ -2,47 +2,52 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Float, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
+import { Float, AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
-/* ── Floating solid objects ── */
-const OBJECTS = [
-  { p: [ 2.7,  0.5,  0.0], s: 0.62, g: 'hex',  c: '#FF2E97', fs: 1.4, wire: false },
-  { p: [-2.7,  1.2, -1.0], s: 0.34, g: 'hex',  c: '#7A3CFF', fs: 1.0, wire: true  },
+/* ── Floating solid objects ──
+   Hex prisms are tilted to present their hexagonal face to the camera:
+   Float's rotation wobble is bounded, so without an initial tilt a prism
+   can sit edge-on and read as a solid rectangle ("a box"). */
+const HEX_ROT: [number, number, number] = [Math.PI / 2.3, 0.15, Math.PI / 6]
+const OBJECTS: Array<{
+  p: number[]; s: number; g: string; c: string; fs: number; wire: boolean
+  r?: [number, number, number]
+}> = [
+  { p: [ 2.7,  0.5,  0.0], s: 0.62, g: 'hex',  c: '#FF2E97', fs: 1.4, wire: false, r: HEX_ROT },
+  { p: [-2.7,  1.2, -1.0], s: 0.34, g: 'hex',  c: '#7A3CFF', fs: 1.0, wire: true,  r: [Math.PI / 2.6, -0.2, 0.4] },
   { p: [ 2.1, -1.9, -0.4], s: 0.26, g: 'oct',  c: '#FFB23E', fs: 1.6, wire: false },
   { p: [-1.7, -1.1,  0.3], s: 0.20, g: 'ico',  c: '#2DD4BF', fs: 1.2, wire: false },
   { p: [ 3.4, -0.5, -1.2], s: 0.15, g: 'oct',  c: '#FF2E97', fs: 1.8, wire: true  },
   { p: [-0.7,  2.3, -0.6], s: 0.14, g: 'ico',  c: '#7A3CFF', fs: 0.9, wire: false },
-  { p: [ 0.9, -2.5, -0.8], s: 0.12, g: 'hex',  c: '#FFB23E', fs: 1.5, wire: false },
+  { p: [ 0.9, -2.5, -0.8], s: 0.12, g: 'hex',  c: '#FFB23E', fs: 1.5, wire: false, r: [Math.PI / 2.1, 0.3, -0.3] },
   { p: [-3.4, -0.8, -0.5], s: 0.17, g: 'oct',  c: '#FF2E97', fs: 1.1, wire: true  },
   { p: [ 1.4,  2.0, -1.4], s: 0.13, g: 'ico',  c: '#2DD4BF', fs: 1.3, wire: false },
-  { p: [-2.0,  0.1, -1.6], s: 0.11, g: 'hex',  c: '#7A3CFF', fs: 1.7, wire: true  },
+  { p: [-2.0,  0.1, -1.6], s: 0.11, g: 'hex',  c: '#7A3CFF', fs: 1.7, wire: true,  r: [Math.PI / 2.4, -0.35, 0.2] },
 ]
 
-function SceneObject({ p, s, g, c, fs, wire, animate, bright }: typeof OBJECTS[0] & { animate: boolean; bright: boolean }) {
-  // On mobile / degraded (bright=true): use meshBasicMaterial so shapes are always
-  // visible regardless of lighting. When bloom is on, use meshStandardMaterial for
-  // metallic sheen + emissive glow that bloom amplifies.
-  const emissiveIntensity = wire ? 0.9 : 0.45
+function SceneObject({ p, s, g, c, fs, wire, r, animate, bright }: typeof OBJECTS[0] & { animate: boolean; bright: boolean }) {
+  // bright=true means bloom is off (mobile/degraded). A flat unlit material
+  // there rendered every solid as a featureless filled silhouette — hex prisms
+  // literally read as boxes. Keep the shaded material in both modes and lean
+  // on a directional key light (added by the parent when bloom is off) so the
+  // facets stay visible; bump the emissive so nothing goes murky.
+  const emissiveIntensity = bright ? (wire ? 1.2 : 0.6) : (wire ? 0.9 : 0.45)
   return (
     <Float speed={animate ? fs : 0} floatIntensity={animate ? 0.7 : 0} rotationIntensity={animate ? 0.6 : 0}>
-      <mesh position={p as [number, number, number]} scale={s}>
+      <mesh position={p as [number, number, number]} scale={s} rotation={r ?? [0, 0, 0]}>
         {g === 'hex' && <cylinderGeometry args={[1, 1, 0.5, 6, 1]} />}
         {g === 'oct' && <octahedronGeometry args={[1, 0]} />}
         {g === 'ico' && <icosahedronGeometry args={[1, 0]} />}
-        {bright ? (
-          <meshBasicMaterial color={c} wireframe={wire} toneMapped={false} />
-        ) : (
-          <meshStandardMaterial
-            color={c} metalness={0.78} roughness={0.14}
-            emissive={c} emissiveIntensity={emissiveIntensity}
-            wireframe={wire} flatShading toneMapped={false}
-          />
-        )}
+        <meshStandardMaterial
+          color={c} metalness={0.78} roughness={0.14}
+          emissive={c} emissiveIntensity={emissiveIntensity}
+          wireframe={wire} flatShading toneMapped={false}
+        />
       </mesh>
     </Float>
   )
@@ -84,7 +89,8 @@ function Stars({ count }: { count: number }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.03} color="#B4A8C8" transparent opacity={0.5} sizeAttenuation />
+      {/* PointMaterial = round points; raw pointsMaterial renders squares */}
+      <PointMaterial size={0.03} color="#B4A8C8" transparent opacity={0.5} sizeAttenuation depthWrite={false} />
     </points>
   )
 }
@@ -149,6 +155,9 @@ export default function HeroScene({ mouseX, mouseY }: {
           <pointLight position={[ 5,  5,  5]} intensity={2.6} color="#FF2E97" />
           <pointLight position={[-5, -3,  3]} intensity={2.0} color="#7A3CFF" />
           <pointLight position={[ 0,  0, -5]} intensity={1.0} color="#FFB23E" />
+          {/* bloom-off fallback: distance decay leaves the point lights weak,
+             so a directional key light keeps the facet shading readable */}
+          {bright && <directionalLight position={[4, 5, 6]} intensity={1.6} color="#FFFFFF" />}
           <Stars count={starCount} />
           <BackdropKnot animate={animate} />
           <SceneMesh mouseX={mouseX} mouseY={mouseY} animate={animate} objects={objects} bright={bright} />
