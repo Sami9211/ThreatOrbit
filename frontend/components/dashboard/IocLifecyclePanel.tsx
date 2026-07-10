@@ -8,6 +8,7 @@ import {
   TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fadeInUp } from '@/lib/motion'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
   fetchStixBundle, enrichIoc, fetchIocFpAssessment, type Ioc, type IocDetail, type EnrichmentResult,
@@ -116,7 +117,7 @@ export default function IocLifecyclePanel() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+    <motion.div variants={fadeInUp} initial="hidden" animate="show"
       className="glass border border-white/8 rounded-xl overflow-hidden">
       <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/5 flex-wrap">
         <div className="p-1.5 rounded-lg bg-violet/15 border border-violet/25 shrink-0">

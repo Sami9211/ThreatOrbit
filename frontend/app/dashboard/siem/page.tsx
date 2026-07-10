@@ -17,6 +17,7 @@ import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert } from '@/lib/api'
+import { fadeInUp, listContainer, listItem } from '@/lib/motion'
 import { tk } from '@/lib/colors'
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -1411,8 +1412,10 @@ export default function SIEMPage() {
           </span>
         </div>
 
-        {/* Tab content */}
+        {/* Tab content — keyed on the tab so switching replays a smooth
+            fade-up enter (shared tokens from lib/motion). */}
         <div className="flex-1 overflow-hidden">
+          <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show" className="h-full">
           {/* ── ALERT QUEUE ─────────────────────────────────────────── */}
           {tab === 'queue' && (
             <div className="flex flex-col h-full">
@@ -1513,14 +1516,19 @@ export default function SIEMPage() {
                   Dismiss selected ({fpSelected.size})
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-white/4">
+              {/* keyed on band + count: the items arrive async, and children
+                  mounting into an already-"show" parent don't animate — the
+                  remount on data arrival is what makes the stagger play. */}
+              <motion.div key={`${fpTriageBand}-${fpTriageItems.length}`}
+                variants={listContainer()} initial="hidden" animate="show"
+                className="flex-1 overflow-y-auto divide-y divide-white/4">
                 {!fpTriageLoading && fpTriageItems.length === 0 && (
                   <p className="text-xs text-ink-600 text-center py-10">
                     No open alerts matched this band in the scored working set.
                   </p>
                 )}
                 {fpTriageItems.map((a) => (
-                  <label key={a.id}
+                  <motion.label key={a.id} variants={listItem}
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/3 transition-colors cursor-pointer">
                     <input type="checkbox" checked={fpSelected.has(a.id)}
                       onChange={() => toggleFpSelected(a.id)}
@@ -1536,9 +1544,9 @@ export default function SIEMPage() {
                       style={{ color: FP_BAND_STYLE[a.fpBand].color, background: `${FP_BAND_STYLE[a.fpBand].color}18` }}>
                       {FP_BAND_STYLE[a.fpBand].label} · {a.fpScore}
                     </span>
-                  </label>
+                  </motion.label>
                 ))}
-              </div>
+              </motion.div>
             </div>
           )}
 
@@ -1776,6 +1784,7 @@ export default function SIEMPage() {
               </div>
             </div>
           )}
+          </motion.div>
         </div>
       </div>
 

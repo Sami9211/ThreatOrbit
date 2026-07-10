@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — Animations increment 2: SIEM tab transitions + FP-triage list stagger
+- SIEM dashboard tab switches now replay a smooth `fadeInUp` enter (the tab
+  content is a keyed motion wrapper on the shared tokens), and the FP-triage
+  list staggers its rows in via `listContainer`/`listItem`.
+- A subtlety caught live rather than assumed: children mounting into a
+  motion parent that has already settled at its "show" state don't animate —
+  the FP-triage items arrive async, so the list container is keyed on
+  band + item count and the remount on data arrival is what makes the
+  stagger actually play. Verified by sampling inline opacity during the
+  transitions (both the tab wrapper and the row labels observed animating
+  0.000 → 1), zero console errors.
+- `IocLifecyclePanel` migrated from hand-rolled inline motion props onto the
+  shared `fadeInUp` variant (same visual, one source of truth).
+
 ### 2026-07-10 — Deterministic list ordering (id tie-breaker) + third tie-order test flake fixed
 - **Product fix:** `GET /siem/alerts`, `GET /cti/iocs`, and the FP-triage
   working-set window now append an `id` tie-breaker to every ORDER BY.

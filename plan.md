@@ -500,9 +500,19 @@ not one-off tasks:
       rule only covered CSS animations, not framer's JS-driven ones); and a
       smooth per-route **dashboard page transition** (a keyed fade-up in
       `PageScale`, verified live in both normal and emulated reduce-motion).
-      Ongoing/iterative: migrate the existing per-component animations onto
-      the shared tokens, and add motion where it's still missing — list
-      enter/exit, tab switches, hover/press micro-interactions, loading
+      Increment 2 (2026-07-10): SIEM **tab-switch transitions** (the tab
+      content is a keyed `fadeInUp` wrapper, so every tab change replays a
+      smooth enter), **staggered list enter** on the FP-triage list
+      (`listContainer`/`listItem`, keyed on band + item count — children
+      mounting into an already-settled parent don't animate, so the remount
+      on data arrival is what makes the stagger actually play; caught live,
+      not assumed), and `IocLifecyclePanel` migrated onto the shared
+      `fadeInUp` variant. All verified in a browser by sampling inline
+      opacity during the transitions (wrapper and rows both observed at
+      0.000 → 1), zero console errors.
+      Ongoing/iterative: migrate the remaining per-component animations onto
+      the shared tokens, and add motion where it's still missing — other
+      pages' tab switches, hover/press micro-interactions, loading
       skeletons, number count-ups, chart draw-ins.
 
 ### Frontend polish backlog
