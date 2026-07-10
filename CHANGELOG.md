@@ -9,6 +9,28 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — Animation foundation: shared motion tokens + global reduced-motion + page transition
+- New standing sub-end goal (owner): smooth animations everywhere. Laid the
+  foundation the rest builds on:
+  - `frontend/lib/motion.ts` — one shared easing curve (`[0.22,1,0.36,1]`), a
+    3-step duration scale (fast/base/slow), and reusable variants (`fadeInUp`,
+    `fadeIn`, `scaleIn`, `drawerRight`, `listContainer`/`listItem`,
+    `pageEnter`). Before this, 84 framer-motion files each hand-rolled their
+    own durations/easings, so timings had drifted; now they can share one
+    system.
+  - `<MotionConfig reducedMotion="user">` at the app root
+    (`app/providers.tsx`) — every framer-motion animation in the app now
+    honours the OS "reduce motion" setting automatically (framer drops the
+    movement/transform, keeps harmless opacity fades). The existing CSS
+    `@media (prefers-reduced-motion)` rule only covered CSS animations, not
+    framer's JS-driven ones, so this closes a real accessibility gap.
+  - A smooth per-route **dashboard page transition**: `PageScale` keys a
+    `motion.div` on the pathname so the `pageEnter` fade-up replays on every
+    navigation (keyed remount — the robust App-Router pattern, no exit flash).
+- Verified live in a browser: the transition fades smoothly in normal mode
+  (opacity 0→1 over ~150ms) and renders correctly under emulated reduce-motion
+  with zero console/page errors; tsc + production build green.
+
 ### 2026-07-10 — No-dead-links guard + canonical repo URL
 - New standing sub-end goal (owner): the app must have **no dead links**.
   Extended `frontend/scripts/check-routes.mjs` (already CI-gated in

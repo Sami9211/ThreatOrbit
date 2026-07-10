@@ -490,12 +490,20 @@ not one-off tasks:
       `github.com/Sami9211/ThreatOrbit-V2` URL (worked only via GitHub's
       rename redirect) → canonical `.../ThreatOrbit` in the footer, CTA,
       quick-start clone command. Ongoing: re-run the guard on every UI change.
-- [ ] **Smooth animations everywhere.** Polished, smooth motion across the
-      whole UI — page/route transitions, list enter/exit, drawer/modal
-      open-close, tab switches, hover/press micro-interactions, loading
-      skeletons, number count-ups, chart draw-ins — via the existing
-      framer-motion setup, honouring `prefers-reduced-motion`, with consistent
-      easing/duration tokens. Iterative across intervals.
+- [~] **Smooth animations everywhere.** Foundation shipped (2026-07-10):
+      `lib/motion.ts` — one shared easing curve + a 3-step duration scale +
+      reusable variants (`fadeInUp`, `fadeIn`, `scaleIn`, `drawerRight`,
+      `listContainer`/`listItem`, `pageEnter`), replacing the ad-hoc per-file
+      timings that had drifted across 84 framer-motion files; a single
+      app-root `<MotionConfig reducedMotion="user">` so **every** framer
+      animation now honours the OS reduce-motion setting (the CSS `@media`
+      rule only covered CSS animations, not framer's JS-driven ones); and a
+      smooth per-route **dashboard page transition** (a keyed fade-up in
+      `PageScale`, verified live in both normal and emulated reduce-motion).
+      Ongoing/iterative: migrate the existing per-component animations onto
+      the shared tokens, and add motion where it's still missing — list
+      enter/exit, tab switches, hover/press micro-interactions, loading
+      skeletons, number count-ups, chart draw-ins.
 
 ### Frontend polish backlog
 
