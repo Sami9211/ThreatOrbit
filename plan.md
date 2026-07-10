@@ -474,6 +474,29 @@ suppression match) — one weak signal must never outvote several strong
 ones. Match the rigor already established for `fp_rate`/suppression logic in
 `test_api.py` and the correlation-engine tests.
 
+### Standing sub-end goals (owner, 2026-07-10)
+
+Two additions to the overall vision, to be upheld on **every** future UI change,
+not one-off tasks:
+
+- [~] **No dead links.** Every link / nav target / button must resolve to a
+      real destination — no `href="#"`, no route that 404s, no anchor to a
+      missing id, no handler-less button, no "coming soon" stub. Enforced in
+      CI: `frontend/scripts/check-routes.mjs` (runs in `tests.yml`) now gates
+      **both** route links (227 checked) **and** in-page anchors (bare
+      `href="#"` and anchors to a non-existent `id` both fail the build) — so
+      a dead link can't land silently. First pass (2026-07-10): audited the
+      whole app clean; the only real fix was the stale
+      `github.com/Sami9211/ThreatOrbit-V2` URL (worked only via GitHub's
+      rename redirect) → canonical `.../ThreatOrbit` in the footer, CTA,
+      quick-start clone command. Ongoing: re-run the guard on every UI change.
+- [ ] **Smooth animations everywhere.** Polished, smooth motion across the
+      whole UI — page/route transitions, list enter/exit, drawer/modal
+      open-close, tab switches, hover/press micro-interactions, loading
+      skeletons, number count-ups, chart draw-ins — via the existing
+      framer-motion setup, honouring `prefers-reduced-motion`, with consistent
+      easing/duration tokens. Iterative across intervals.
+
 ### Frontend polish backlog
 
 - [~] **Asset network map** — the pan-shake and scroll-zoom bugs are fixed;

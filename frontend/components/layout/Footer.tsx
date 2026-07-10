@@ -54,7 +54,7 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-3 mt-5">
               <a
-                href="https://github.com/Sami9211/ThreatOrbit-V2"
+                href="https://github.com/Sami9211/ThreatOrbit"
                 target="_blank"
                 rel="noreferrer"
                 className="p-2 rounded-lg border border-white/8 text-ink-500 hover:text-white hover:border-magenta/30 transition-all duration-200"

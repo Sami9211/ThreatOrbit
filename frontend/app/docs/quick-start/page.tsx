@@ -21,8 +21,8 @@ export default function QuickStartPage() {
       </ul>
 
       <h2>1. Clone the repository</h2>
-      <CodeBlock>{`git clone https://github.com/Sami9211/ThreatOrbit-V2.git
-cd ThreatOrbit-V2`}</CodeBlock>
+      <CodeBlock>{`git clone https://github.com/Sami9211/ThreatOrbit.git
+cd ThreatOrbit`}</CodeBlock>
 
       <h2>2. Configure environment variables</h2>
       <p>Copy the example file - the defaults work for a local evaluation:</p>

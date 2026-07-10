@@ -77,12 +77,32 @@ function toRoute(raw) {
   return p === '' ? '/' : p
 }
 
+// In-page anchor targets. `href="#foo"` scrolls to an element with id="foo";
+// a bare `href="#"` (or empty) is a dead-end that goes nowhere, and an anchor
+// whose id no target renders is a silently-broken link a static export can't
+// catch. We collect every literal `id="…"` and every `href="#…"` in one pass,
+// then cross-check. Dynamic ids (`id={foo}`) can't be resolved statically, so
+// this only flags anchors with NO matching literal id anywhere — the real bug,
+// with no false positive on the shared-layout ids used today.
+const ANCHOR_PATTERNS = [
+  /\bhref\s*=\s*"(#[^"]*)"/g,
+  /\bhref\s*=\s*'(#[^']*)'/g,
+  /\bhref\s*=\s*\{\s*"(#[^"]*)"\s*\}/g,
+  /\bhref\s*=\s*\{\s*'(#[^']*)'\s*\}/g,
+  /\bhref\s*=\s*\{\s*`(#[^`$]*)`\s*\}/g,
+]
+const ID_PATTERNS = [
+  /\bid\s*=\s*"([^"{]+)"/g,
+  /\bid\s*=\s*'([^'{]+)'/g,
+]
+
 const failures = []
+const anchors = []      // {file, line, raw}
+const ids = new Set()
 let checked = 0
 for (const file of sources(ROOT === APP ? APP : ROOT)) {
   if (!file.startsWith(join(ROOT, 'app')) && !file.startsWith(join(ROOT, 'components')) && !file.startsWith(join(ROOT, 'lib'))) continue
   const text = readFileSync(file, 'utf8')
-  const lines = text.split('\n')
   for (const re of PATTERNS) {
     re.lastIndex = 0
     let m
@@ -96,14 +116,45 @@ for (const file of sources(ROOT === APP ? APP : ROOT)) {
       }
     }
   }
+  for (const re of ID_PATTERNS) {
+    re.lastIndex = 0
+    let m
+    while ((m = re.exec(text)) !== null) ids.add(m[1])
+  }
+  for (const re of ANCHOR_PATTERNS) {
+    re.lastIndex = 0
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const line = text.slice(0, m.index).split('\n').length
+      anchors.push({ file: relative(ROOT, file), line, raw: m[1] })
+    }
+  }
+}
+
+const anchorFailures = []
+for (const a of anchors) {
+  const target = a.raw.slice(1)                       // strip the leading '#'
+  if (target === '') {                                 // bare href="#" — dead end
+    anchorFailures.push(`${a.file}:${a.line}  →  href="#"  (bare anchor, goes nowhere)`)
+  } else if (!ids.has(target)) {
+    anchorFailures.push(`${a.file}:${a.line}  →  href="${a.raw}"  (no element with id="${target}")`)
+  }
 }
 
 console.log(`Route integrity: ${ROUTES.size} routes discovered, ${checked} internal links checked.`)
-if (failures.length) {
-  console.error(`\nDead internal links (${failures.length}):`)
-  for (const f of failures) console.error(`  ✗ ${f}`)
-  console.error('\nFix the link or add the route. Known routes:')
-  for (const r of [...ROUTES].sort()) console.error(`    ${r}`)
+console.log(`Anchor integrity: ${anchors.length} in-page anchors checked against ${ids.size} ids.`)
+if (failures.length || anchorFailures.length) {
+  if (failures.length) {
+    console.error(`\nDead internal links (${failures.length}):`)
+    for (const f of failures) console.error(`  ✗ ${f}`)
+    console.error('\nFix the link or add the route. Known routes:')
+    for (const r of [...ROUTES].sort()) console.error(`    ${r}`)
+  }
+  if (anchorFailures.length) {
+    console.error(`\nDead in-page anchors (${anchorFailures.length}):`)
+    for (const f of anchorFailures) console.error(`  ✗ ${f}`)
+    console.error('\nGive the target an id, point the anchor at a real id, or make it a button.')
+  }
   process.exit(1)
 }
-console.log('No dead internal links.')
+console.log('No dead internal links or anchors.')

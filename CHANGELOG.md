@@ -9,6 +9,24 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — No-dead-links guard + canonical repo URL
+- New standing sub-end goal (owner): the app must have **no dead links**.
+  Extended `frontend/scripts/check-routes.mjs` (already CI-gated in
+  `tests.yml`) from route-only to **route + in-page-anchor** integrity: a
+  bare `href="#"` (goes nowhere) and an anchor to a non-existent `id` now
+  both fail the build, alongside the existing "link to a route no page
+  serves" check. Verified the guard both ways (injected a dead anchor and a
+  bare `#` → build fails; removed → green). Current tree: 227 route links +
+  2 in-page anchors, all valid.
+- Audited the whole frontend for dead links: no `href="#"`, no empty/stub
+  `onClick`, no "coming soon" placeholders, both anchor targets
+  (`#main-content`, `#tiers`) resolve. The only real fix was the GitHub
+  repository URL, which still pointed at the pre-rename
+  `github.com/Sami9211/ThreatOrbit-V2` and worked only via GitHub's rename
+  redirect (a soft dead link) — updated to the canonical
+  `github.com/Sami9211/ThreatOrbit` in the footer, the landing CTA (link +
+  clone/`cd` command), and the quick-start docs clone command.
+
 ### 2026-07-09 — Bulk FP-triage view: score, filter, and dismiss a cluster at once
 - New `GET /siem/alerts/fp-triage`: scores a bounded working set (the most
   recent 300 open alerts) with `fp_scoring.score_alert`, filters by

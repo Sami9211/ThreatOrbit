@@ -85,8 +85,8 @@ function ParticleBurst({ run }: { run: boolean }) {
 }
 
 const COMMAND_STEPS = [
-  { cmd: 'git clone github.com/Sami9211/ThreatOrbit-V2', delay: 0   },
-  { cmd: 'cd ThreatOrbit-V2 && cp .env.example .env',     delay: 0.8 },
+  { cmd: 'git clone github.com/Sami9211/ThreatOrbit', delay: 0   },
+  { cmd: 'cd ThreatOrbit && cp .env.example .env',     delay: 0.8 },
   { cmd: 'docker compose up -d',                           delay: 1.6 },
   { cmd: '✓ Threat API ready on :8000',                    delay: 2.8, isResult: true },
   { cmd: '✓ Log API ready on :8001',                       delay: 3.2, isResult: true },
@@ -212,7 +212,7 @@ export default function CTA() {
                   <ArrowRight className="w-4 h-4" />
                 </MagneticButton>
                 <MagneticButton
-                  href="https://github.com/Sami9211/ThreatOrbit-V2"
+                  href="https://github.com/Sami9211/ThreatOrbit"
                   className="px-7 py-3.5 rounded-xl glass border border-white/10 text-ink-200 font-medium text-sm hover:border-white/25 hover:text-white transition-colors duration-300"
                 >
                   <GithubIcon className="w-4 h-4" />
