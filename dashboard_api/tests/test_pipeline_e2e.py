@@ -31,6 +31,11 @@ def test_forwarded_logs_become_alerts_with_mitre(client, auth):
     # later timestamp (SQLite happens to preserve insertion order for ties;
     # Postgres does not, so this was intermittently returning someone else's
     # alert there). username is unique per test run, so scope on both.
+    # And one event can fire MULTIPLE rules: another test may leave an enabled
+    # custom rule matching event_type=failed_login in the shared DB, producing a
+    # second, MITRE-less alert for this same src+username with a tied timestamp.
+    # The assertion under test is that the BUILT-IN rule fires with the right
+    # MITRE mapping, so select that rule's alert explicitly.
     username = f"victim-{tag}"
     src = f"203.0.113.{(uuid.uuid4().int % 250) + 1}"
     line = json.dumps({"event_type": "failed_login", "src_ip": src,
@@ -40,7 +45,8 @@ def test_forwarded_logs_become_alerts_with_mitre(client, auth):
     with get_conn() as conn:
         alert = conn.execute(
             "SELECT rule_name, mitre_tech_id, mitre_tactic, severity FROM alerts "
-            "WHERE src_ip=? AND username=? ORDER BY ts DESC LIMIT 1", (src, username)).fetchone()
+            "WHERE src_ip=? AND username=? AND rule_name=? ORDER BY ts DESC LIMIT 1",
+            (src, username, "Brute-force authentication")).fetchone()
     assert alert is not None, "ingested brute-force log did not produce an alert"
     assert alert["mitre_tech_id"] == "T1110"
     assert alert["mitre_tactic"] == "Credential Access"
