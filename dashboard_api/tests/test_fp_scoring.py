@@ -330,11 +330,19 @@ def test_alerts_fp_triage_scores_and_filters_by_band(client, auth):
     just one band -- a strong known-good match should land in likely-fp, a
     strong malicious match in likely-real, and each other band excludes it.
 
-    fp-triage only scores the most recent N open alerts (see
-    _FP_TRIAGE_WORKING_SET_CAP), so this test's alerts are timestamped far in
-    the future - guaranteeing they sort at the very top of that window
-    regardless of how much other data the full suite has accumulated in the
-    shared test database."""
+    The full suite shares one database across ~500+ tests, so this can't
+    assert "my alert is on page N of a shared, arbitrarily large band" --
+    a rock-bottom (or ceiling) scorer can tie with many other alerts, and
+    SQLite/Postgres don't agree on tie order for a plain ORDER BY, so a
+    same-page assumption is flaky by construction, not just under load
+    (caught via a real CI failure on the Postgres backend after this exact
+    approach passed locally under SQLite). Instead: verify each seeded
+    alert's own band/score via the single-alert endpoint (unaffected by any
+    working-set/pagination mechanics), and verify the bulk endpoint's
+    filter+sort *mechanism* structurally -- every item on a band-filtered
+    page must actually match that band, and the page must be sorted by
+    score descending -- which exercises the new code without depending on
+    where any specific alert lands in a shared, unbounded working set."""
     tag = uuid.uuid4().hex[:8]
     good_ip = f"10.21.{int(tag[:2], 16) % 250}.1"
     bad_ip = f"10.22.{int(tag[:2], 16) % 250}.2"
@@ -352,27 +360,21 @@ def test_alerts_fp_triage_scores_and_filters_by_band(client, auth):
             real_alert = _insert_alert(conn, tag, severity="medium", src_ip=bad_ip, ts=future_ts)
             conn.commit()
 
-        # The unfiltered view sorts the *whole* (up to 300-alert) working set
-        # by score descending and pages it - a rock-bottom scorer like
-        # real_alert is expected to rank near the very end of that, not on
-        # an early page, so band filtering (which filters *before* paging)
-        # is the only way to reliably find either alert regardless of how
-        # much other data is loaded in the shared working set. limit=200 is
-        # the endpoint's max, for the widest safety margin.
+        fp_result = client.get(f"/siem/alerts/{fp_alert}/fp-assessment", headers=auth).json()
+        assert fp_result["band"] == "likely-fp" and fp_result["score"] >= 70
+        real_result = client.get(f"/siem/alerts/{real_alert}/fp-assessment", headers=auth).json()
+        assert real_result["band"] == "likely-real" and real_result["score"] <= 30
+
         only_fp = client.get("/siem/alerts/fp-triage?band=likely-fp&limit=200", headers=auth).json()
         assert "total" in only_fp and "workingSetSize" in only_fp and "items" in only_fp
-        fp_ids = {i["id"]: i for i in only_fp["items"]}
-        assert fp_alert in fp_ids, "fp_alert not found on the likely-fp page (unexpectedly outranked)"
-        assert fp_ids[fp_alert]["fpBand"] == "likely-fp"
-        assert fp_ids[fp_alert]["fpScore"] >= 70
-        assert real_alert not in fp_ids
+        assert all(i["fpBand"] == "likely-fp" for i in only_fp["items"])
+        scores = [i["fpScore"] for i in only_fp["items"]]
+        assert scores == sorted(scores, reverse=True)
 
         only_real = client.get("/siem/alerts/fp-triage?band=likely-real&limit=200", headers=auth).json()
-        real_ids = {i["id"]: i for i in only_real["items"]}
-        assert real_alert in real_ids, "real_alert not found on the likely-real page (unexpectedly outranked)"
-        assert real_ids[real_alert]["fpBand"] == "likely-real"
-        assert real_ids[real_alert]["fpScore"] <= 30
-        assert fp_alert not in real_ids
+        assert all(i["fpBand"] == "likely-real" for i in only_real["items"])
+        scores = [i["fpScore"] for i in only_real["items"]]
+        assert scores == sorted(scores, reverse=True)
     finally:
         _cleanup(tag)
 

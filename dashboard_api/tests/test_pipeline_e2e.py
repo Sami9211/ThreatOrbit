@@ -25,15 +25,22 @@ def test_forwarded_logs_become_alerts_with_mitre(client, auth):
     detection rule and produces an alert mapped to T1110 / Credential Access."""
     seed_builtin_rules()   # guarantee the built-in rules exist + enabled
     tag = uuid.uuid4().hex[:8]
+    # src_ip alone has only 250 possible values (TEST-NET-3) - across the full
+    # suite's shared database that collides often enough for "ORDER BY ts DESC
+    # LIMIT 1" to occasionally return a stale, unrelated alert with a tied or
+    # later timestamp (SQLite happens to preserve insertion order for ties;
+    # Postgres does not, so this was intermittently returning someone else's
+    # alert there). username is unique per test run, so scope on both.
+    username = f"victim-{tag}"
     src = f"203.0.113.{(uuid.uuid4().int % 250) + 1}"
     line = json.dumps({"event_type": "failed_login", "src_ip": src,
-                       "user": f"victim-{tag}", "host": f"DC-{tag}"})
+                       "user": username, "host": f"DC-{tag}"})
     out = _ingest(client, auth, [line])
     assert out["parsed"] == 1
     with get_conn() as conn:
         alert = conn.execute(
             "SELECT rule_name, mitre_tech_id, mitre_tactic, severity FROM alerts "
-            "WHERE src_ip=? ORDER BY ts DESC LIMIT 1", (src,)).fetchone()
+            "WHERE src_ip=? AND username=? ORDER BY ts DESC LIMIT 1", (src, username)).fetchone()
     assert alert is not None, "ingested brute-force log did not produce an alert"
     assert alert["mitre_tech_id"] == "T1110"
     assert alert["mitre_tactic"] == "Credential Access"
