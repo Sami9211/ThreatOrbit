@@ -9,6 +9,26 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — Animations increment 3: KPI count-ups + hover-lift micro-interactions
+- New reusable `AnimatedNumber` component: stat values count up from the
+  previously shown value whenever the data changes (0 → value on first load,
+  so numbers arriving reads as a tick-up rather than a jump cut). Reduced
+  motion is honoured explicitly via `useReducedMotion` — imperative
+  `animate()` calls bypass `MotionConfig`, so the component sets the final
+  value instantly for those users. Wired into the Overview KPI cards in both
+  Power and Normal mode.
+- Two defects caught by live verification rather than assumed: the target
+  value flashed for one frame before the count began (useEffect runs after
+  paint — fixed by rendering the previously-committed value), and the shared
+  `hoverLift` token originally carried a top-level `transition` prop that
+  collided with elements setting their own enter transition (fixed by
+  embedding the gesture transitions inside the hover/tap targets).
+- Shared `hoverLift` micro-interaction (subtle rise on hover, settle on
+  press) applied to the Overview KPI/status cards.
+- Verified live: monotonic count-up 0→31 over ~0.8s on data arrival,
+  reduced-motion jumps instantly to the final value, zero console errors;
+  tsc + production build green.
+
 ### 2026-07-10 — Animations increment 2: SIEM tab transitions + FP-triage list stagger
 - SIEM dashboard tab switches now replay a smooth `fadeInUp` enter (the tab
   content is a keyed motion wrapper on the shared tokens), and the FP-triage

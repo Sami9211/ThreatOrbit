@@ -10,6 +10,8 @@ import {
   Bug, CheckCircle2, XCircle, Flame, BookOpen, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fadeInUp, hoverLift } from '@/lib/motion'
+import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { openDetail } from '@/components/dashboard/DetailDrawer'
 import ReportButton from '@/components/dashboard/ReportButton'
 import WorldMap from '@/components/dashboard/WorldMap'
@@ -34,10 +36,13 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 /* ── KPI Card ────────────────────────────────────────────────────── */
 function KPICard({
-  label, value, sub, icon: Icon, color, trend, trendVal,
+  label, value, format, sub, icon: Icon, color, trend, trendVal,
 }: {
   label: string
-  value: string
+  /** A number counts up on change (AnimatedNumber); a string renders as-is. */
+  value: string | number
+  /** Optional frame formatter for numeric values (e.g. one-decimal scores). */
+  format?: (v: number) => string
   sub?: string
   icon: React.ComponentType<any>
   color: string
@@ -46,8 +51,7 @@ function KPICard({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
+      variants={fadeInUp} initial="hidden" animate="show" {...hoverLift}
       className="glass border border-white/5 rounded-xl p-5 relative overflow-hidden"
     >
       <div className="absolute inset-0 opacity-30"
@@ -56,7 +60,9 @@ function KPICard({
       <div className="relative flex items-start justify-between">
         <div>
           <p className="text-xs text-ink-500 mb-1.5">{label}</p>
-          <p className="font-display text-2xl font-bold text-white">{value}</p>
+          <p className="font-display text-2xl font-bold text-white">
+            {typeof value === 'number' ? <AnimatedNumber value={value} format={format} /> : value}
+          </p>
           {sub && <p className="text-xs text-ink-400 mt-0.5">{sub}</p>}
         </div>
         <div className="p-2.5 rounded-xl" style={{ background: `${color}18` }}>
@@ -784,17 +790,18 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
       {/* Key status cards (right column of the top row) */}
       <div className="lg:col-span-7 xl:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4 content-start">
         {[
-          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats.toLocaleString(), sub: `${count.iocs.toLocaleString()} indicators tracked`, iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-ink-500' },
-          { icon: CheckCircle2,  label: 'Sources Online',       value: count.sources.toLocaleString(), sub: 'feeds & connectors active',   iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-ink-500'  },
-          { icon: Clock,         label: 'Alerts Pending Review', value: String(topAlerts.length || alerts.length), sub: `${topAlerts.filter(a => ['critical','high'].includes(a.severity)).length} high priority`, iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat' },
+          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats, sub: `${count.iocs.toLocaleString()} indicators tracked`, iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-ink-500' },
+          { icon: CheckCircle2,  label: 'Sources Online',       value: count.sources, sub: 'feeds & connectors active',   iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-ink-500'  },
+          { icon: Clock,         label: 'Alerts Pending Review', value: topAlerts.length || alerts.length, sub: `${topAlerts.filter(a => ['critical','high'].includes(a.severity)).length} high priority`, iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat' },
         ].map((c, i) => (
           <motion.div key={c.label}
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
+            {...hoverLift}
             className={cn('glass border rounded-xl p-6 text-center', c.borderCls)}>
             <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4', c.bgCls)}>
               <c.icon className={cn('w-7 h-7', c.iconCls)} />
             </div>
-            <p className="font-display text-4xl font-bold text-white mb-1.5">{c.value}</p>
+            <p className="font-display text-4xl font-bold text-white mb-1.5"><AnimatedNumber value={c.value} /></p>
             <p className="text-sm text-ink-400">{c.label}</p>
             <p className={cn('text-xs font-medium mt-2', c.subCls)}>{c.sub}</p>
           </motion.div>
@@ -924,7 +931,6 @@ export default function DashboardOverview() {
 
   if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} siem={siemKpis} soar={soarMetrics} />
 
-  const fmtScore = Number(kpis.score ?? 0).toFixed(1)
   // Real security-posture HEALTH (higher = better) = inverse of the org RISK
   // score the API returns — same derivation the Normal dashboard uses, so the
   // gauge is never a hardcoded number.
@@ -955,10 +961,11 @@ export default function DashboardOverview() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Active Threats" value={kpis.threats.toLocaleString()} sub="across all sources" icon={AlertTriangle} color={tk('magenta')} />
-        <KPICard label="IOCs Tracked"   value={kpis.iocs.toLocaleString()}    sub="in threat database" icon={Eye}           color={tk('violet')} />
-        <KPICard label="Sources Online" value={`${kpis.sources}`}             sub="active feeds"       icon={Globe}         color={tk('teal')} />
-        <KPICard label="Avg Risk Score" value={fmtScore}                      sub="weighted mean"      icon={Shield}        color={tk('amber')} />
+        <KPICard label="Active Threats" value={kpis.threats}          sub="across all sources" icon={AlertTriangle} color={tk('magenta')} />
+        <KPICard label="IOCs Tracked"   value={kpis.iocs}             sub="in threat database" icon={Eye}           color={tk('violet')} />
+        <KPICard label="Sources Online" value={kpis.sources}          sub="active feeds"       icon={Globe}         color={tk('teal')} />
+        <KPICard label="Avg Risk Score" value={Number(kpis.score ?? 0)} format={(v) => v.toFixed(1)}
+          sub="weighted mean" icon={Shield} color={tk('amber')} />
       </div>
 
       {/* SOC operations metrics (Power User only) */}

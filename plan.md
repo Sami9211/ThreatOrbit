@@ -510,10 +510,22 @@ not one-off tasks:
       `fadeInUp` variant. All verified in a browser by sampling inline
       opacity during the transitions (wrapper and rows both observed at
       0.000 → 1), zero console errors.
+      Increment 3 (2026-07-10): **number count-ups** — a reusable
+      `AnimatedNumber` (counts from the previously shown value; honours
+      reduced motion explicitly via `useReducedMotion`, since imperative
+      `animate()` bypasses MotionConfig) wired into the Overview KPI cards
+      (both Power and Normal mode). A one-frame flash of the final value
+      before the count started was observed live and fixed (render from the
+      previously-committed value, not the target). **Hover/press
+      micro-interactions** — a shared `hoverLift` token (gesture transitions
+      embedded in the targets so it composes with elements that set their own
+      enter transition), applied to the KPI/status cards. Verified live:
+      monotonic count-up 0→31 over ~0.8s, reduced-motion jumps instantly,
+      zero console errors.
       Ongoing/iterative: migrate the remaining per-component animations onto
       the shared tokens, and add motion where it's still missing — other
-      pages' tab switches, hover/press micro-interactions, loading
-      skeletons, number count-ups, chart draw-ins.
+      pages' tab switches, loading skeletons, chart draw-ins, count-ups on
+      the remaining stat surfaces.
 
 ### Frontend polish backlog
 

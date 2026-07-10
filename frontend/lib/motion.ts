@@ -74,3 +74,13 @@ export const pageEnter: Variants = {
   hidden: { opacity: 0, y: 6 },
   show: { opacity: 1, y: 0, transition: { duration: DUR.base, ease: EASE } },
 }
+
+/** Hover/press micro-interaction for cards and tiles: a subtle lift on hover,
+ *  a slight settle on press. Spread onto a motion element:
+ *  `<motion.div {...hoverLift}>`. The gesture transitions live inside the
+ *  targets (not a top-level `transition` prop) so this composes with elements
+ *  that set their own enter transition. */
+export const hoverLift = {
+  whileHover: { y: -2, transition: transition(DUR.fast) },
+  whileTap: { scale: 0.98, transition: transition(DUR.fast) },
+} as const
