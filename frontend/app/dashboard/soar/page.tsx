@@ -1205,29 +1205,43 @@ export default function SOARPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
                   <p className="text-xs font-semibold text-white mb-4">Cases by Type (Last 30 days)</p>
-                  {[
-                    { type: 'Phishing',            count: 284, color: tk('threat') },
-                    { type: 'Endpoint / Malware',  count: 127, color: tk('magenta') },
-                    { type: 'Account Compromise',  count: 94,  color: tk('amber') },
-                    { type: 'Cloud Security',      count: 41,  color: tk('violet') },
-                    { type: 'Network / C2',        count: 38,  color: tk('safe') },
-                    { type: 'Data Exfiltration',   count: 22,  color: tk('teal') },
-                    { type: 'Vulnerability',       count: 18,  color: '#A78BFA' },
-                  ].map((t, i) => (
-                    <div key={t.type} className="flex items-center gap-3 mb-2">
-                      <span className="text-[11px] text-ink-400 w-40 shrink-0">{t.type}</span>
-                      <div className="flex-1 h-2.5 bg-white/5 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(t.count / 284) * 100}%` }}
-                          transition={{ duration: 0.5, delay: i * 0.06 }}
-                          className="h-full rounded-full"
-                          style={{ background: t.color }}
-                        />
+                  {(() => {
+                    // Live derivation from the same case list the KPI table
+                    // below uses (this block used to be a hardcoded sample —
+                    // the last fabrication-sweep miss on this page).
+                    const cutoff = Date.now() - 30 * 24 * 3600 * 1000
+                    const counts = new Map<string, number>()
+                    for (const c of cases) {
+                      if (new Date(c.created).getTime() < cutoff) continue
+                      const t = c.type?.trim() || 'Uncategorised'
+                      counts.set(t, (counts.get(t) ?? 0) + 1)
+                    }
+                    const palette = [tk('threat'), tk('magenta'), tk('amber'),
+                                     tk('violet'), tk('safe'), tk('teal'), '#A78BFA']
+                    const rows = [...counts.entries()]
+                      .sort((a, b) => b[1] - a[1]).slice(0, 7)
+                    const maxN = rows[0]?.[1] ?? 1
+                    if (rows.length === 0) return (
+                      <p className="text-[11px] text-ink-600 py-6 text-center">
+                        No cases opened in the last 30 days.
+                      </p>
+                    )
+                    return rows.map(([type, count], i) => (
+                      <div key={type} className="flex items-center gap-3 mb-2">
+                        <span className="text-[11px] text-ink-400 w-40 shrink-0 truncate" title={type}>{type}</span>
+                        <div className="flex-1 h-2.5 bg-white/5 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(count / maxN) * 100}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.06 }}
+                            className="h-full rounded-full"
+                            style={{ background: palette[i % palette.length] }}
+                          />
+                        </div>
+                        <span className="text-[11px] font-mono text-ink-500 w-8 text-right">{count}</span>
                       </div>
-                      <span className="text-[11px] font-mono text-ink-500 w-8 text-right">{t.count}</span>
-                    </div>
-                  ))}
+                    ))
+                  })()}
                 </div>
 
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">

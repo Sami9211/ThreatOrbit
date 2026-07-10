@@ -9,6 +9,18 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — SOAR metrics: "Cases by Type" wired to live data (fabrication-sweep miss)
+- The SOAR metrics tab rendered a hardcoded "Cases by Type (Last 30 days)"
+  list (Phishing 284, Endpoint/Malware 127, …) as if it were live data — the
+  one remaining fabrication on that tab (the Automation Metrics block and
+  the KPI table beside it were already computed from the live API). Spotted
+  while adding the tab-switch animation, tracked, and fixed: the chart is
+  now derived from the same live case list the KPI table uses — genuine
+  30-day window, top 7 types, and an honest empty state when no cases exist.
+- Verified live against a fresh seeded install: the block renders the real
+  case types (Account Compromise 2, Privilege Escalation 1, …) and the
+  fabricated numbers are gone; zero console errors, tsc + build green.
+
 ### 2026-07-10 — Animations increment 4: tab transitions on every remaining tabbed surface
 - The keyed tab-switch transition proven on the SIEM page now covers all
   remaining tabbed surfaces: SOAR main tabs (cases/playbooks/metrics), the

@@ -532,10 +532,14 @@ not one-off tasks:
       Ongoing/iterative: loading skeletons, chart draw-ins, count-ups on
       the remaining stat surfaces, and migrating the remaining per-component
       timings onto the shared tokens.
-      **Side-find during increment 4 (open, tracked):** the SOAR metrics tab
-      renders a hardcoded "Cases by Type (Last 30 days)" list (Phishing 284,
-      …) as if live — the fabrication sweeps missed this tab. Wire it to
-      real case data (derivable from `/soar/cases`) or label it sample.
+      **Side-find during increment 4 — FIXED (2026-07-10):** the SOAR
+      metrics tab rendered a hardcoded "Cases by Type (Last 30 days)" list
+      (Phishing 284, …) as if live — the one fabrication-sweep miss on that
+      tab (the neighbouring Automation Metrics and KPI table were already
+      live). Now derived from the same live case list the KPI table uses
+      (30-day window honoured, top 7 types, honest empty state when no cases
+      exist). Verified live: renders the real seeded types (Account
+      Compromise 2, …); the fabricated numbers are gone.
 
 ### Frontend polish backlog
 
