@@ -16,6 +16,7 @@ import {
   Clock, Activity, KeyRound, Ban, ChevronDown, Trash2, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fadeInUp } from '@/lib/motion'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type RoleName = 'Admin' | 'SOC Manager' | 'Senior Analyst' | 'Analyst' | 'Read-Only' | 'Auditor'
@@ -462,7 +463,7 @@ export default function UsersRolesPage() {
 
       <div className="flex-1 overflow-y-auto p-6">
         {tab === 'users' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border border-white/8 overflow-hidden">
+          <motion.div variants={fadeInUp} initial="hidden" animate="show" className="rounded-xl border border-white/8 overflow-hidden">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-white/8 text-[10px] uppercase tracking-wide text-ink-600">
@@ -515,7 +516,7 @@ export default function UsersRolesPage() {
         )}
 
         {tab === 'roles' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <motion.div variants={fadeInUp} initial="hidden" animate="show" className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {ROLES.map((role) => (
               <div key={role.name} className="rounded-xl border border-white/8 bg-surface p-4">
                 <div className="flex items-start justify-between mb-3">

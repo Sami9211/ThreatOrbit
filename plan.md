@@ -522,10 +522,20 @@ not one-off tasks:
       enter transition), applied to the KPI/status cards. Verified live:
       monotonic count-up 0→31 over ~0.8s, reduced-motion jumps instantly,
       zero console errors.
-      Ongoing/iterative: migrate the remaining per-component animations onto
-      the shared tokens, and add motion where it's still missing — other
-      pages' tab switches, loading skeletons, chart draw-ins, count-ups on
-      the remaining stat surfaces.
+      Increment 4 (2026-07-10): the keyed tab-switch transition extended to
+      every remaining tabbed surface — SOAR main tabs (cases/playbooks/
+      metrics), the SOAR case-detail tabs (overview/warroom/tasks/evidence),
+      Config settings tabs, and Config-Users (users/roles, whose plain fades
+      also migrated onto the shared `fadeInUp`). Verified live on all three
+      pages by watching inline opacity during a switch (each keyed wrapper
+      observed animating), zero console errors.
+      Ongoing/iterative: loading skeletons, chart draw-ins, count-ups on
+      the remaining stat surfaces, and migrating the remaining per-component
+      timings onto the shared tokens.
+      **Side-find during increment 4 (open, tracked):** the SOAR metrics tab
+      renders a hardcoded "Cases by Type (Last 30 days)" list (Phishing 284,
+      …) as if live — the fabrication sweeps missed this tab. Wire it to
+      real case data (derivable from `/soar/cases`) or label it sample.
 
 ### Frontend polish backlog
 

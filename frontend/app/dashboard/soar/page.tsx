@@ -10,6 +10,7 @@ import {
   ChevronRight, MoreHorizontal, Circle, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fadeInUp } from '@/lib/motion'
 import ReportButton from '@/components/dashboard/ReportButton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
@@ -515,7 +516,9 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* keyed on the tab: switching replays a smooth fade-up enter */}
+      <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show"
+        className="flex-1 overflow-y-auto p-4 space-y-4">
         {tab === 'overview' && (
           <>
             <div>
@@ -722,7 +725,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </motion.div>
   )
 }
@@ -1095,7 +1098,9 @@ export default function SOARPage() {
           </span>
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        {/* keyed on the tab: switching replays a smooth fade-up enter */}
+        <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show"
+          className="flex-1 overflow-hidden">
           {/* ── CASE QUEUE ─────────────────────────────────────────── */}
           {tab === 'cases' && (
             <div className="flex flex-col h-full">
@@ -1282,7 +1287,7 @@ export default function SOARPage() {
               </div>
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {/* Case detail overlay */}

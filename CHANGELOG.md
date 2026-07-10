@@ -9,6 +9,19 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-10 — Animations increment 4: tab transitions on every remaining tabbed surface
+- The keyed tab-switch transition proven on the SIEM page now covers all
+  remaining tabbed surfaces: SOAR main tabs (cases/playbooks/metrics), the
+  SOAR case-detail tabs (overview/warroom/tasks/evidence), the Config
+  settings tabs, and Config-Users (users/roles — whose existing plain fades
+  also migrated onto the shared `fadeInUp` token).
+- Verified live on all three pages by watching inline opacity during a
+  switch (each keyed wrapper observed animating to 1 from below 0.5), zero
+  console errors; tsc + production build green.
+- Side-find (tracked in plan.md, not yet fixed): the SOAR metrics tab
+  renders a hardcoded "Cases by Type (Last 30 days)" list as if live — a
+  fabrication-sweep miss to wire to real case data next.
+
 ### 2026-07-10 — Animations increment 3: KPI count-ups + hover-lift micro-interactions
 - New reusable `AnimatedNumber` component: stat values count up from the
   previously shown value whenever the data changes (0 → value on first load,

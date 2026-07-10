@@ -10,6 +10,7 @@ import {
   Monitor, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fadeInUp } from '@/lib/motion'
 import FloatingSave from '@/components/dashboard/FloatingSave'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
@@ -1593,8 +1594,9 @@ export default function ConfigPage() {
         {/* Nav: horizontal strip on mobile, vertical rail on sm+ */}
         <SettingsNav tab={tab} setTab={setTab} />
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 space-y-5">
+        {/* Content — keyed on the tab so switching replays a smooth enter */}
+        <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show"
+          className="flex-1 min-w-0 space-y-5">
           {tab === 'general' && (
             <>
               {/* ── Workspace (multi-tenancy) ───────────────────────── */}
@@ -1713,7 +1715,7 @@ export default function ConfigPage() {
               <LiveIntegrations />
             </Section>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   )
