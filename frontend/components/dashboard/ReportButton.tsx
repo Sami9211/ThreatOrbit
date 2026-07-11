@@ -316,6 +316,33 @@ function ReportBody({ report }: { report: ReportData }) {
   )
 }
 
+/* Static SVG severity donut for the printable report — computed from the
+   first severity-type breakdown; pure markup, so it prints and emails fine. */
+function severityDonutSvg(report: ReportData): string {
+  const sev = report.breakdowns.find((b) => b.type === 'severity')
+  if (!sev) return ''
+  const slices = sev.data.filter((d) => d.count > 0)
+  const total = slices.reduce((s, d) => s + d.count, 0)
+  if (total === 0) return ''
+  const R = 40, C = 2 * Math.PI * R
+  let offset = 0
+  const segs = slices.map((d) => {
+    const frac = d.count / total
+    const seg = `<circle r="${R}" cx="55" cy="55" fill="none"
+      stroke="${d.color ?? SEV_COLOR[d.severity ?? ''] ?? '#7A3CFF'}" stroke-width="16"
+      stroke-dasharray="${(frac * C).toFixed(2)} ${C.toFixed(2)}"
+      stroke-dashoffset="${(-offset * C).toFixed(2)}" transform="rotate(-90 55 55)"/>`
+    offset += frac
+    return seg
+  }).join('')
+  const legend = slices.map((d) =>
+    `<div class="dl"><i style="background:${d.color ?? SEV_COLOR[d.severity ?? ''] ?? '#7A3CFF'}"></i>${d.severity ?? d.label} · ${d.count}</div>`).join('')
+  return `<div class="donutwrap"><svg width="110" height="110" viewBox="0 0 110 110">${segs}
+    <text x="55" y="52" text-anchor="middle" font-size="18" font-weight="700" font-family="ui-monospace,monospace" fill="#1a1a1a">${total}</text>
+    <text x="55" y="66" text-anchor="middle" font-size="8" fill="#888">${(sev.heading.split(' by ')[0] || 'items').toLowerCase()}</text>
+  </svg><div class="dlegend">${legend}</div></div>`
+}
+
 /* Self-contained printable HTML (light theme for paper / PDF). */
 function renderReportHtml(report: ReportData): string {
   const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
@@ -340,13 +367,22 @@ function renderReportHtml(report: ReportData): string {
   .ft{font-size:13px;font-weight:600} .fm{font-size:11px;color:#888;margin-top:2px} .fd{font-size:11px;color:#555;margin-top:4px}
   .sevh{font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin:16px 0 6px} .sevh span{color:#aaa;font-weight:500}
   ul{padding-left:18px} li{font-size:13px;margin:4px 0}
-  @media print{body{padding:20px}}
+  .donutwrap{display:flex;align-items:center;gap:18px;margin:10px 0}
+  .dlegend{display:flex;flex-direction:column;gap:3px} .dl{font-size:11px;color:#555;display:flex;align-items:center;gap:6px;text-transform:capitalize}
+  .dl i{width:9px;height:9px;border-radius:3px;display:inline-block}
+  @page{margin:16mm}
+  @media print{
+    body{padding:0}
+    h2{break-after:avoid} .sevh{break-after:avoid}
+    .finding,.kpi,.row,.donutwrap{break-inside:avoid}
+  }
 </style></head><body>
   <div class="period">${esc(report.meta.period)}</div>
   <h1>${esc(report.meta.title)}</h1>
   <div class="meta">${report.meta.audience ? esc(report.meta.audience[0].toUpperCase() + report.meta.audience.slice(1)) + ' audience · ' : ''}Generated ${esc(new Date(report.meta.generatedAt).toLocaleString())} · ThreatOrbit</div>
   <h2>Executive Summary</h2>
   <div class="kpis">${report.summary.headline.map(head).join('')}</div>
+  ${severityDonutSvg(report)}
   <p class="narr">${esc(report.summary.narrative)}</p>
   ${report.breakdowns.map((b) => `<h2>${esc(b.heading)}</h2>${b.data.map(bar).join('')}`).join('')}
   ${report.compliance && report.compliance.length ? `<h2>Control Mapping</h2>${report.compliance.map((c) => `<div class="row"><span class="rl" style="width:auto;flex:1">${esc(c.control)}</span><span style="font-size:11px;color:#888">${esc(c.framework)}</span></div>`).join('')}` : ''}

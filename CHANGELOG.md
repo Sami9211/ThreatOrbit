@@ -9,6 +9,25 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — Reports: prior-window trends, severity donut, tighter print
+- Every windowed report narrative (SIEM, SOAR, CTI, dark web) now carries
+  an honest prior-window comparison — "Volume is up/down N% against the
+  preceding window (M alerts)" — computed over the preceding window of
+  equal length, with an explicit no-baseline note instead of an invented
+  movement when the prior window is empty. Table/column pairs the helper
+  may query are allow-listed; naive/aware datetime windows normalised
+  (custom ranges arrive tz-naive and previously crashed the subtraction —
+  caught by the existing all-kinds test).
+- The printable/downloadable HTML report gains a static SVG severity
+  donut (total in the centre, per-severity legend) beside the KPI tiles,
+  and print-quality rules: `@page` margins, headers that never strand at
+  a page break, findings/KPIs/donut kept whole (`break-inside: avoid`).
+- Tests: `test_report_trends.py` (trend sentence deterministic via a
+  planted prior-window alert; all six report kinds still build). Full
+  suites green on fresh SQLite (538) and fresh Postgres (536 + 2
+  skipped). Browser-verified: viewer narrative shows the trend, the print
+  popup contains the donut and break rules.
+
 ### 2026-07-11 — Network map: eased motion + reduced-motion-correct SMIL
 - The asset network map (the "clean, eased look" backlog item) now
   animates properly: nodes scale/fade in with a small stagger on mount

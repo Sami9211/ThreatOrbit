@@ -31,6 +31,43 @@ def _window(period: str, frm: str | None, to: str | None) -> tuple[str, str, str
     return since_dt.replace(microsecond=0).isoformat(), now.replace(microsecond=0).isoformat(), label
 
 
+_TREND_TABLES = {  # allow-list: table/column pairs the trend helper may query
+    ("alerts", "ts"), ("cases", "created"), ("iocs", "last_seen"),
+    ("dark_web_findings", "ts"), ("vuln_findings", "found_at"),
+}
+
+
+def _trend_sentence(conn, table: str, ts_col: str, since: str, until: str,
+                    current: int, noun: str) -> str:
+    """One comparable sentence per report domain: how this window's volume
+    moved against the preceding window of equal length. Honest when there is
+    no baseline — it never invents a movement."""
+    if (table, ts_col) not in _TREND_TABLES:
+        return ""
+    try:
+        # custom windows arrive tz-naive ("2026-07-01T00:00:00") while preset
+        # windows are tz-aware — normalise both to aware UTC before arithmetic
+        def _parse(ts: str) -> datetime:
+            d = datetime.fromisoformat(ts)
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        s = _parse(since)
+        u = _parse(until)
+    except ValueError:
+        return ""
+    prior_since = (s - (u - s)).isoformat()
+    row = conn.execute(
+        f"SELECT COUNT(*) AS n FROM {table} WHERE {ts_col} >= ? AND {ts_col} < ?",
+        (prior_since, since)).fetchone()
+    prior = int(row["n"]) if row else 0
+    if prior == 0:
+        return (f"There is no preceding-window baseline for {noun} yet. " if current else "")
+    pct = round((current - prior) / prior * 100)
+    if pct == 0:
+        return f"Volume is flat against the preceding window ({prior} {noun}). "
+    return (f"Volume is {'up' if pct > 0 else 'down'} {abs(pct)}% against the "
+            f"preceding window ({prior} {noun}). ")
+
+
 def _sev_breakdown(rows, key="severity") -> list[dict]:
     counts = {s: 0 for s in _SEV_ORDER}
     for r in rows:
@@ -87,6 +124,7 @@ def _siem_report(conn, since, until, label) -> dict:
             "narrative": (
                 f"During {label.lower()}, the platform raised {total} alerts "
                 f"({crit} critical, {high} high). {open_} remain open. "
+                + _trend_sentence(conn, "alerts", "ts", since, until, total, "alerts")
                 + (f"The most observed technique was {top_tech[0][0]} ({top_tech[0][1]} alerts). "
                    if top_tech else "")
                 + ("Immediate triage of the critical alerts below is recommended."
@@ -133,6 +171,7 @@ def _soar_report(conn, since, until, label) -> dict:
             "narrative": (
                 f"{total} incident cases were opened during {label.lower()} "
                 f"({crit} critical). {closed} have been resolved; {open_} remain in progress. "
+                + _trend_sentence(conn, "cases", "created", since, until, total, "cases")
                 + ("Auto-escalation from correlated alerts is functioning."
                    if any(c.get("owner") == "" for c in cases) else "")
             ),
@@ -181,6 +220,7 @@ def _cti_report(conn, since, until, label) -> dict:
                 f"{total} indicators were observed or updated during {label.lower()}, "
                 f"across {len(by_type)} indicator types and "
                 f"{len({i.get('source') for i in iocs})} sources. "
+                + _trend_sentence(conn, "iocs", "last_seen", since, until, total, "indicators")
                 + (f"The largest category was {max(by_type, key=by_type.get)} "
                    f"({max(by_type.values())} indicators)." if by_type else "")
             ),
@@ -336,6 +376,7 @@ def _darkweb_report(conn, since, until, label) -> dict:
             "narrative": (
                 f"{total} dark-web findings affected the organisation during {label.lower()}, "
                 f"including {creds} credential leaks. "
+                + _trend_sentence(conn, "dark_web_findings", "ts", since, until, total, "findings")
                 + ("Force password resets for leaked accounts immediately."
                    if creds else "No credential leaks in this window.")
             ),

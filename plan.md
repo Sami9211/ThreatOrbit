@@ -588,9 +588,12 @@ not one-off tasks:
       on reduced motion) rather than an R3F rewrite: the 2D map's working
       interactions (drag, pan, pinch, selection, attack-path trace) are the
       product value, and a 3D scene would have put them at risk for looks.
-- [~] **Exported reports** — findings are now grouped by severity in both the
-      preview and the printable HTML; remaining (visual): richer per-domain
-      narrative, charts beyond the bars, and a tighter print layout.
+- [x] **Exported reports** — findings grouped by severity (earlier); shipped
+      2026-07-11: per-domain narratives carry an honest prior-window trend
+      sentence (never invented when no baseline exists), the printable HTML
+      gains a static SVG severity donut beside the KPI tiles, and print
+      quality rules (@page margins, no stranded headers, findings/KPIs kept
+      whole across page breaks).
 
 ---
 
