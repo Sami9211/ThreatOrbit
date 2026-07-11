@@ -1292,7 +1292,7 @@ export default function SIEMPage() {
       .catch(() => {
         if (!trendsLoadedRef.current) {
           setTrends(SPARKLINE_DATA.alertVolume.map((v, i) => ({
-            day: '', alerts: v,
+            day: '', alerts: v, severe: 0,
             mttd: SPARKLINE_DATA.mttd[i], mttr: SPARKLINE_DATA.mttr[i],
             fpRate: SPARKLINE_DATA.fpRate[i],
           })))

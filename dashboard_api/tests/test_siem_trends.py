@@ -12,15 +12,15 @@ def _iso_day(days_back: int) -> str:
     return (dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=days_back)).isoformat()
 
 
-def _insert_alert(conn, ts: str, *, disposition="undetermined",
+def _insert_alert(conn, ts: str, *, severity="low", disposition="undetermined",
                   detect=None, respond=None, title="trend test"):
     aid = f"TRND-{uuid.uuid4().hex[:10]}"
     conn.execute(
         "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,"
         "rule_id,rule_name,description,raw_log,event_count,ti_hits,org_id,"
         "detect_latency_sec,respond_latency_sec) "
-        "VALUES (?,?,?, 'low','new',?, '',10,'R-TRND','trend-rule','','',1,0,'org-default',?,?)",
-        (aid, ts, title, disposition, detect, respond))
+        "VALUES (?,?,?,?, 'new',?, '',10,'R-TRND','trend-rule','','',1,0,'org-default',?,?)",
+        (aid, ts, title, severity, disposition, detect, respond))
     return aid
 
 
@@ -33,7 +33,7 @@ def test_trends_shape_zero_fill_and_range(client, auth):
     assert [d["day"] for d in days] == sorted(d["day"] for d in days)
     for d in days:
         # zero-filled buckets are complete records, not gaps
-        assert set(d) == {"day", "alerts", "mttd", "mttr", "fpRate"}
+        assert set(d) == {"day", "alerts", "severe", "mttd", "mttr", "fpRate"}
 
     # bounds are enforced
     assert client.get("/siem/analytics/trends?days=0", headers=auth).status_code == 422
@@ -54,7 +54,7 @@ def test_trends_bucket_math_matches_kpi_semantics(client, auth):
     day = _iso_day(4)
     with get_conn() as conn:
         pre = conn.execute(
-            "SELECT disposition, detect_latency_sec, respond_latency_sec "
+            "SELECT severity, disposition, detect_latency_sec, respond_latency_sec "
             "FROM alerts WHERE ts LIKE ?", (day + "%",)).fetchall()
     pre_d = [r["detect_latency_sec"] for r in pre if r["detect_latency_sec"] is not None]
     pre_r = [r["respond_latency_sec"] for r in pre if r["respond_latency_sec"] is not None]
@@ -62,7 +62,7 @@ def test_trends_bucket_math_matches_kpi_semantics(client, auth):
 
     ts = f"{day}T10:00:00+00:00"
     with get_conn() as conn:
-        _insert_alert(conn, ts, detect=120, respond=600)
+        _insert_alert(conn, ts, detect=120, respond=600, severity="critical")
         _insert_alert(conn, ts, detect=240, respond=1200)
         # NULL latencies: must be excluded from the averages, not counted as 0
         _insert_alert(conn, ts, disposition="false-positive")
@@ -73,7 +73,9 @@ def test_trends_bucket_math_matches_kpi_semantics(client, auth):
         all_d = pre_d + [120, 240]
         all_r = pre_r + [600, 1200]
         n = len(pre) + 3
+        pre_severe = sum(1 for r in pre if r["severity"] in ("critical", "high"))
         assert d4["alerts"] == n
+        assert d4["severe"] == pre_severe + 1   # exactly one planted critical
         assert d4["mttd"] == round(sum(all_d) / len(all_d) / 60, 1)
         assert d4["mttr"] == round(sum(all_r) / len(all_r) / 60, 1)
         assert d4["fpRate"] == round((pre_fp + 1) / n * 100, 1)

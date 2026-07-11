@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — Overview: honest movement note on Active Threats
+- The trends buckets gained a per-day `severe` count (critical+high
+  alerts raised that day, pinned in the bucket-math test), and the
+  Overview's Active Threats card now shows a real movement note: "±N new
+  critical/high vs yesterday". The KPI itself is a STOCK (open
+  critical/high right now), so the note is the clearly-labelled FLOW —
+  not a mislabelled volume delta — and hides when flat or without a
+  baseline rather than inventing a movement. The card's vague "across
+  all sources" sub also became precise ("open critical/high alerts",
+  which is what the API actually counts).
+- Browser-verified against the live DB: card renders "-12 new
+  critical/high vs yesterday", matching the API buckets exactly. Full
+  suites green on fresh SQLite (538) and fresh Postgres (536 + 2).
+
 ### 2026-07-11 — Reports: prior-window trends, severity donut, tighter print
 - Every windowed report narrative (SIEM, SOAR, CTI, dark web) now carries
   an honest prior-window comparison — "Volume is up/down N% against the

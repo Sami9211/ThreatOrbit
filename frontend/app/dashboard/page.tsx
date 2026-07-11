@@ -21,10 +21,11 @@ import {
   fetchKpis, fetchRecentAlerts, fetchRecentIncidents,
   fetchTopActors, fetchHourly, fetchVectors, fetchLiveFeed,
   fetchRiskDistribution, fetchHeatmap, fetchSiemKpis, fetchSoarMetrics,
-  fetchFleetVulnFindings, fetchServicesStatus,
+  fetchFleetVulnFindings, fetchServicesStatus, fetchSiemTrends,
   type OverviewKpis, type OverviewAlert, type Incident,
   type TopActor, type ThreatVector, type LiveFeedItem, type RiskDistribution,
   type SiemKpis, type SoarMetrics, type FleetVulnFinding, type ServicesStatus,
+  type SiemTrendDay,
 } from '@/lib/api'
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -911,6 +912,7 @@ export default function DashboardOverview() {
   const [siemKpis, setSiemKpis]             = useState<SiemKpis | null>(null)
   const [soarMetrics, setSoarMetrics]       = useState<SoarMetrics | null>(null)
   const [services, setServices]             = useState<ServicesStatus | null>(null)
+  const [trends, setTrends]                 = useState<SiemTrendDay[] | null>(null)
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
 
@@ -927,7 +929,19 @@ export default function DashboardOverview() {
     fetchRiskDistribution().then(setRiskDist).catch(() => {})
     fetchHeatmap().then(setHeatmap).catch(() => {})
     fetchServicesStatus().then(setServices).catch(() => {})
+    fetchSiemTrends().then(({ days }) => setTrends(days)).catch(() => {})
   }, [])
+
+  // Honest movement note for the Active Threats card. That KPI is a STOCK
+  // (open critical/high right now), so a volume delta would mislabel it —
+  // instead show the clearly-labelled FLOW: new critical/high raised today
+  // vs yesterday, from the same trends buckets the SIEM header uses.
+  const severeFlow = useMemo(() => {
+    if (!trends || trends.length < 2) return null
+    const today = trends[trends.length - 1].severe
+    const yday = trends[trends.length - 2].severe
+    return { today, delta: today - yday }
+  }, [trends])
 
   if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} siem={siemKpis} soar={soarMetrics} />
 
@@ -961,7 +975,11 @@ export default function DashboardOverview() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Active Threats" value={kpis.threats}          sub="across all sources" icon={AlertTriangle} color={tk('magenta')} />
+        <KPICard label="Active Threats" value={kpis.threats}          sub="open critical/high alerts" icon={AlertTriangle} color={tk('magenta')}
+          trend={severeFlow && severeFlow.delta !== 0 ? (severeFlow.delta > 0 ? 'up' : 'down') : undefined}
+          trendVal={severeFlow && severeFlow.delta !== 0
+            ? `${severeFlow.delta > 0 ? '+' : ''}${severeFlow.delta} new critical/high`
+            : undefined} />
         <KPICard label="IOCs Tracked"   value={kpis.iocs}             sub="in threat database" icon={Eye}           color={tk('violet')} />
         <KPICard label="Sources Online" value={kpis.sources}          sub="active feeds"       icon={Globe}         color={tk('teal')} />
         <KPICard label="Avg Risk Score" value={Number(kpis.score ?? 0)} format={(v) => v.toFixed(1)}

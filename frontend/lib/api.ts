@@ -915,6 +915,7 @@ export const fetchMitreDistribution = () =>
 export type SiemTrendDay = {
   day: string      // ISO date (UTC), oldest → newest, last entry is today
   alerts: number
+  severe: number   // critical+high alerts raised that day
   mttd: number     // minutes
   mttr: number     // minutes
   fpRate: number   // percent
