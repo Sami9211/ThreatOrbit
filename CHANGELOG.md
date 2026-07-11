@@ -9,6 +9,23 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — Network map: eased motion + reduced-motion-correct SMIL
+- The asset network map (the "clean, eased look" backlog item) now
+  animates properly: nodes scale/fade in with a small stagger on mount
+  (an inner group animates so the entrance can never fight the drag
+  translate), links draw in once, and the +/− zoom buttons ease the
+  viewBox through interpolated frames instead of jumping (wheel/pinch
+  stays instant — it must track the finger). All on the shared motion
+  tokens.
+- Accessibility fix: the map's SMIL animations (traffic particles along
+  links, critical-pulse rings, live-dot blink) ignore both the global
+  reduce-motion CSS rule and framer's MotionConfig — they now gate on
+  `useReducedMotion()` directly and disappear entirely for those users.
+- Browser-verified with sampled opacity during entrance (0 → 0.54 →
+  0.95 → 1), interpolated viewBox frames on button zoom landing on the
+  exact target, node click/detail panel and pan still working, and a
+  reduced-motion context rendering zero SMIL elements.
+
 ### 2026-07-11 — E2E data-honesty fences (regression lock-in)
 - New `e2e/honesty.spec.ts` (runs in the CI Playwright workflow) pins this
   session's fabrication fixes so hardcoded demo values can't silently

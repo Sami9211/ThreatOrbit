@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { fetchAssets, type Asset as ApiAsset } from '@/lib/api'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, animate, useReducedMotion } from 'framer-motion'
+import { EASE, DUR } from '@/lib/motion'
 import {
   Network, Server, Monitor, Shield, Cloud, Database, Globe,
   Cpu, X, MapPin, Lock, Activity, Layers, Search, Plus, Minus,
@@ -204,6 +205,9 @@ export default function NetworkMapPage() {
   const [vb, setVb] = useState({ x: 0, y: 0, w: VB_W, h: VB_H })
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<{ kind: 'node' | 'pan'; id?: string; startX: number; startY: number; startClientX: number; startClientY: number; vb?: typeof vb; moved: boolean } | null>(null)
+  // SMIL <animate>/<animateMotion> ignore both the reduce-motion CSS rule and
+  // MotionConfig, so the traffic particles / pulse rings gate on this directly.
+  const reduced = useReducedMotion()
 
   /* Merge live inventory: update seed-node risk from matching assets and
    * place unknown assets into their zone as live nodes. */
@@ -370,6 +374,28 @@ export default function NetworkMapPage() {
     })
   }, [])
 
+  // Button zoom takes one big step, so ease it (wheel/pinch stays instant —
+  // it's already incremental and must track the finger). Reduced motion jumps.
+  const vbRef = useRef(vb)
+  useEffect(() => { vbRef.current = vb }, [vb])
+  const smoothZoom = useCallback((factor: number) => {
+    const from = { ...vbRef.current }
+    const w = Math.max(280, Math.min(VB_W * 1.4, from.w * factor))
+    const h = w * (VB_H / VB_W)
+    const target = { x: from.x + 0.5 * (from.w - w), y: from.y + 0.5 * (from.h - h), w, h }
+    if (reduced) { setVb(target); return }
+    animate(0, 1, {
+      duration: DUR.base,
+      ease: [...EASE],
+      onUpdate: (t) => setVb({
+        x: from.x + (target.x - from.x) * t,
+        y: from.y + (target.y - from.y) * t,
+        w: from.w + (target.w - from.w) * t,
+        h: from.h + (target.h - from.h) * t,
+      }),
+    })
+  }, [reduced])
+
   // Wheel: zoom ONLY on a pinch gesture (ctrl+wheel - how trackpads report
   // pinch). A normal scroll passes straight through to the page. Native,
   // non-passive listener so preventDefault can stop the browser's own page
@@ -514,12 +540,15 @@ export default function NetworkMapPage() {
               const pid = `lk-${i}`
               return (
                 <g key={pid}>
-                  <path id={pid} d={d} fill="none"
+                  {/* draw in once on mount; MotionConfig covers reduced motion */}
+                  <motion.path id={pid} d={d} fill="none"
+                    initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+                    transition={{ duration: DUR.slow, delay: Math.min(i * 0.03, 0.5), ease: [...EASE] }}
                     stroke={onAttackPath ? tk('magenta') : active ? '#B98AFF' : 'url(#nm-link)'}
                     strokeWidth={onAttackPath ? 2.4 : active ? 1.8 : 1.1}
                     strokeOpacity={dim ? 0.07 : onAttackPath ? 0.95 : active ? 0.85 : 0.4} />
-                  {/* Traffic particle */}
-                  {!dim && (
+                  {/* Traffic particle — SMIL, so gate on reduced motion directly */}
+                  {!dim && !reduced && (
                     <circle r={onAttackPath ? 3 : 1.8}
                       fill={onAttackPath ? tk('magenta') : '#B98AFF'}
                       opacity={onAttackPath ? 1 : 0.75}
@@ -537,7 +566,7 @@ export default function NetworkMapPage() {
 
           {/* Nodes */}
           <g>
-            {visibleNodes.map((n) => {
+            {visibleNodes.map((n, nodeIdx) => {
               const Icon = TYPE_ICON[n.type]
               const riskColor = RISK_META[n.risk].color
               const zoneColor = n.id === 'inet' ? tk('magenta') : ZONE_META[n.zone].color
@@ -558,12 +587,20 @@ export default function NetworkMapPage() {
                   onPointerUp={onPointerUp(n.id)}
                   onMouseEnter={() => setHoverId(n.id)}
                   onMouseLeave={() => setHoverId(null)}>
+                  {/* inner group scales in on mount (staggered); the outer g
+                     owns the translate so the entrance can't fight the drag */}
+                  <motion.g
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: DUR.base, delay: Math.min(nodeIdx * 0.025, 0.45), ease: [...EASE] }}>
 
-                  {/* Critical pulse / selection ring */}
+                  {/* Critical pulse / selection ring — SMIL, gated on reduced motion */}
                   {(isSel || isMatch || (n.risk === 'critical' && !dim)) && (
                     <circle r={r + 11} fill="none" stroke={isMatch ? tk('safe') : riskColor} strokeWidth={1.2} opacity={0.5}>
-                      <animate attributeName="r" values={`${r + 7};${r + 15};${r + 7}`} dur="2.2s" repeatCount="indefinite" />
-                      <animate attributeName="opacity" values="0.5;0;0.5" dur="2.2s" repeatCount="indefinite" />
+                      {!reduced && <>
+                        <animate attributeName="r" values={`${r + 7};${r + 15};${r + 7}`} dur="2.2s" repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="0.5;0;0.5" dur="2.2s" repeatCount="indefinite" />
+                      </>}
                     </circle>
                   )}
 
@@ -581,7 +618,7 @@ export default function NetworkMapPage() {
                   <circle r={r} fill={riskColor} fillOpacity={0.1} />
                   {n.live && (
                     <circle cx={r - 3} cy={-r + 3} r={3.4} fill={tk('safe')} stroke="#0A0612" strokeWidth={1.4}>
-                      <animate attributeName="opacity" values="1;0.4;1" dur="1.8s" repeatCount="indefinite" />
+                      {!reduced && <animate attributeName="opacity" values="1;0.4;1" dur="1.8s" repeatCount="indefinite" />}
                     </circle>
                   )}
                   <foreignObject x={-10} y={-10} width={20} height={20} style={{ pointerEvents: 'none' }}>
@@ -605,6 +642,7 @@ export default function NetworkMapPage() {
                         fill={riskColor} fontFamily="ui-monospace,monospace">{n.riskScore}</text>
                     </g>
                   )}
+                  </motion.g>
                 </g>
               )
             })}
@@ -613,9 +651,9 @@ export default function NetworkMapPage() {
 
         {/* Zoom controls */}
         <div className="absolute top-4 left-4 flex flex-col gap-1 rounded-xl border border-white/10 bg-surface/90 backdrop-blur-sm p-1">
-          <button onClick={() => zoomBy(0.8)} title="Zoom in"
+          <button onClick={() => smoothZoom(0.8)} title="Zoom in"
             className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
-          <button onClick={() => zoomBy(1.25)} title="Zoom out"
+          <button onClick={() => smoothZoom(1.25)} title="Zoom out"
             className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Minus className="w-3.5 h-3.5" /></button>
           <button onClick={() => setVb({ x: 0, y: 0, w: VB_W, h: VB_H })} title="Reset view"
             className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Maximize2 className="w-3.5 h-3.5" /></button>

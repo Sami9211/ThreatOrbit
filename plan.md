@@ -582,10 +582,12 @@ not one-off tasks:
 
 ### Frontend polish backlog
 
-- [~] **Asset network map** — the pan-shake and scroll-zoom bugs are fixed;
-      remaining (visual, needs a browser): the clean, eased **R3F 3D look**
-      (`components/effects/OrbitalScene` / `IOCNetworkScene`) instead of the
-      current 2D SVG.
+- [x] **Asset network map** — pan-shake and scroll-zoom bugs fixed earlier;
+      the eased look shipped 2026-07-11 as motion polish on the existing SVG
+      (staggered node entrance, link draw-in, eased button zoom, SMIL gated
+      on reduced motion) rather than an R3F rewrite: the 2D map's working
+      interactions (drag, pan, pinch, selection, attack-path trace) are the
+      product value, and a 3D scene would have put them at risk for looks.
 - [~] **Exported reports** — findings are now grouped by severity in both the
       preview and the printable HTML; remaining (visual): richer per-domain
       narrative, charts beyond the bars, and a tighter print layout.
