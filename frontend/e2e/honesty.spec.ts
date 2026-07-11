@@ -63,12 +63,18 @@ test.describe('Data honesty fences', () => {
     await expect(body).not.toContainText('+1.3% from last month')
     // seeded playbooks have thousands of runs at ~90% success; the 100×
     // fraction/percent bug rendered this as "0.9%" — pin the sane range.
-    // Poll: the value counts up from 0, so read it after it settles.
-    await expect.poll(async () => {
-      const text = await body.innerText()
-      const m = text.match(/([\d.]+)%\s*\n*across [\d,]+ runs/)
-      return m ? parseFloat(m[1]) : -1
-    }, { timeout: 10_000 }).toBeGreaterThan(50)
+    // Poll: the value counts up from 0, so read it after it settles. The
+    // success cell is hidden below the md breakpoint, so only assert when
+    // it's rendered (the mobile project still runs the other fences).
+    const successVisible = await page.getByText(/avg success rate/i)
+      .isVisible().catch(() => false)
+    if (successVisible) {
+      await expect.poll(async () => {
+        const text = await body.innerText()
+        const m = text.match(/([\d.]+)%\s*\n*across [\d,]+ runs/)
+        return m ? parseFloat(m[1]) : -1
+      }, { timeout: 10_000 }).toBeGreaterThan(50)
+    }
   })
 
   test('Config → API shows real key telemetry, no invented rate limit', async ({ authedPage: page }) => {
