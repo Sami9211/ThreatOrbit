@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fetchPlaybooks, runPlaybook, updatePlaybook, type Playbook as ApiPlaybook } from '@/lib/api'
 import PlaybookRunsPanel from '@/components/dashboard/PlaybookRunsPanel'
 import PlaybookBuilder from '@/components/dashboard/PlaybookBuilder'
+import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
+import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import {
   Zap, CheckCircle, RefreshCw, AlertTriangle, X, Shield, User,
   GitBranch, MessageSquare, Activity, Play, Edit2, Clock,
@@ -291,13 +293,8 @@ const PLAYBOOKS: Playbook[] = [
   },
 ]
 
-/* ── KPI data ─────────────────────────────────────────────────────── */
-const KPI = [
-  { label: 'Total Playbooks', value: '18',   color: 'text-white',   sub: '8 shown, 10 additional' },
-  { label: 'Running Now',     value: '2',    color: 'text-violet',  sub: '1 critical, 1 medium' },
-  { label: 'Scheduled',       value: '4',    color: 'text-amber',   sub: 'Next: 17:00 UTC' },
-  { label: 'Avg Success Rate',value: '94.2%',color: 'text-safe',    sub: '+1.3% from last month' },
-]
+/* KPI strip values are computed live from the loaded playbooks (this was a
+   hardcoded array — "18 playbooks", "Next: 17:00 UTC" — shown as if live). */
 
 const FILTER_CATS: FilterCat[] = ['All', 'Network', 'Endpoint', 'Cloud', 'Identity', 'Compliance']
 
@@ -604,39 +601,56 @@ export default function PlaybooksPage() {
   const [filter, setFilter] = useState<FilterCat>('All')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [playbooks, setPlaybooks] = useState(PLAYBOOKS)
+  // Empty until the API answers (skeletons meanwhile); the API's list is
+  // authoritative EVEN WHEN EMPTY — the demo PLAYBOOKS are an offline-only
+  // fallback, never a stand-in for a real deployment's empty library.
+  const [playbooks, setPlaybooks] = useState<typeof PLAYBOOKS>([])
+  const [pbPending, setPbPending] = useState(true)
 
   useEffect(() => {
     fetchPlaybooks().then((data: ApiPlaybook[]) => {
-      if (data.length > 0) {
-        const mapped = data.map((p) => {
-          const seed = PLAYBOOKS.find((s) => s.id === p.id || s.name === p.name)
-          const apiSteps = (p.steps ?? []).map((s) => ({
-            name: s.name, type: (s.type ?? 'action') as StepType,
-            status: (s.status ?? 'idle') as StepStatus, duration: `${s.duration ?? 5}s`,
-          }))
-          return {
-            id: p.id,
-            name: p.name,
-            category: p.category || seed?.category || 'Network',
-            trigger: p.trigger,
-            triggerType: (p.triggerType === 'manual' ? 'manual' : 'auto') as 'auto' | 'manual',
-            stepsCount: p.steps?.length ?? seed?.stepsCount ?? 0,
-            estimatedRuntime: `${p.avgTime}s`,
-            successRate: p.successRate,
-            lastRun: p.lastRun ?? 'Never',
-            lastRunStatus: (p.lastRunStatus === 'failure' ? 'failure'
-              : p.lastRunStatus === 'running' ? 'running'
-              : p.lastRunStatus === 'success' ? 'success' : 'idle') as RunStatus,
-            runCount: p.runs,
-            enabled: p.enabled === 1,
-            steps: apiSteps.length > 0 ? apiSteps : (seed?.steps ?? []),
-          }
-        })
-        setPlaybooks(mapped)
-      }
-    }).catch(() => {})
+      const mapped = data.map((p) => {
+        const seed = PLAYBOOKS.find((s) => s.id === p.id || s.name === p.name)
+        const apiSteps = (p.steps ?? []).map((s) => ({
+          name: s.name, type: (s.type ?? 'action') as StepType,
+          status: (s.status ?? 'idle') as StepStatus, duration: `${s.duration ?? 5}s`,
+        }))
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category || seed?.category || 'Network',
+          trigger: p.trigger,
+          triggerType: (p.triggerType === 'manual' ? 'manual' : 'auto') as 'auto' | 'manual',
+          stepsCount: p.steps?.length ?? seed?.stepsCount ?? 0,
+          estimatedRuntime: `${p.avgTime}s`,
+          successRate: p.successRate,
+          lastRun: p.lastRun ?? 'Never',
+          lastRunStatus: (p.lastRunStatus === 'failure' ? 'failure'
+            : p.lastRunStatus === 'running' ? 'running'
+            : p.lastRunStatus === 'success' ? 'success' : 'idle') as RunStatus,
+          runCount: p.runs,
+          enabled: p.enabled === 1,
+          steps: apiSteps.length > 0 ? apiSteps : (seed?.steps ?? []),
+        }
+      })
+      setPlaybooks(mapped)
+    }).catch(() => setPlaybooks(PLAYBOOKS))
+      .finally(() => setPbPending(false))
   }, [])
+
+  // Live KPI strip (replaced a hardcoded demo array)
+  const kpis = useMemo(() => {
+    const enabled = playbooks.filter((p) => p.enabled).length
+    const running = playbooks.filter((p) => p.lastRunStatus === 'running').length
+    const auto = playbooks.filter((p) => p.triggerType === 'auto').length
+    const failed = playbooks.filter((p) => p.lastRunStatus === 'failure').length
+    const withRuns = playbooks.filter((p) => p.runCount > 0)
+    const totalRuns = withRuns.reduce((s, p) => s + p.runCount, 0)
+    const avgSuccess = totalRuns > 0
+      ? withRuns.reduce((s, p) => s + p.successRate * p.runCount, 0) / totalRuns
+      : null
+    return { enabled, running, auto, failed, totalRuns, avgSuccess }
+  }, [playbooks])
 
   const [runningId, setRunningId] = useState<string | null>(null)
   // null = closed; {} = new; {id,name,steps} = edit. Drives the visual builder.
@@ -705,9 +719,22 @@ export default function PlaybooksPage() {
           </button>
         </div>
 
-        {/* ── KPI strip ────────────────────────────────────────────── */}
+        {/* ── KPI strip — computed from the live playbook list ─────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-white/5 shrink-0">
-          {KPI.map((k, i) => (
+          {([
+            { label: 'Total Playbooks', color: 'text-white',
+              value: <AnimatedNumber value={playbooks.length} />, sub: `${kpis.enabled} enabled` },
+            { label: 'Running Now', color: 'text-violet',
+              value: <AnimatedNumber value={kpis.running} />,
+              sub: kpis.failed > 0 ? `${kpis.failed} failed last run` : 'no recent failures' },
+            { label: 'Auto-Triggered', color: 'text-amber',
+              value: <AnimatedNumber value={kpis.auto} />, sub: 'fire on detection events' },
+            { label: 'Avg Success Rate', color: 'text-safe',
+              value: kpis.avgSuccess !== null
+                ? <><AnimatedNumber value={kpis.avgSuccess} format={(v) => v.toFixed(1)} />%</>
+                : '—',
+              sub: kpis.totalRuns > 0 ? `across ${kpis.totalRuns.toLocaleString()} runs` : 'no runs yet' },
+          ] as Array<{ label: string; color: string; value: ReactNode; sub: string }>).map((k, i) => (
             <div key={k.label} className={cn('px-5 py-3 border-r border-white/5 last:border-r-0', i > 1 && 'hidden md:block')}>
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{k.label}</p>
               <p className={cn('text-xl font-bold mt-0.5', k.color)}>{k.value}</p>
@@ -757,10 +784,14 @@ export default function PlaybooksPage() {
         {/* ── Grid ─────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto p-6">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-ink-600 gap-2">
-              <Search className="w-8 h-8 opacity-30" />
-              <p className="text-sm">No playbooks match your filters</p>
-            </div>
+            pbPending ? (
+              <SkeletonRows rows={8} />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-ink-600 gap-2">
+                <Search className="w-8 h-8 opacity-30" />
+                <p className="text-sm">No playbooks match your filters</p>
+              </div>
+            )
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filtered.map((pb, i) => (

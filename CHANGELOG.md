@@ -9,6 +9,23 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — Playbooks: live KPI strip + 100× success-rate display bug
+- The playbooks page's KPI strip was a hardcoded demo array ("Total
+  Playbooks 18", "Scheduled 4 · Next: 17:00 UTC", "94.2% · +1.3% from
+  last month") rendered as if live. Now computed from the loaded list:
+  total + enabled count, running now + failed-last-run, auto-triggered
+  count (the invented "Scheduled" schedule is gone), and a run-weighted
+  average success rate "across N runs" — with count-ups and a first-load
+  skeleton. The page also now treats the API's answer as authoritative
+  even when empty (demo playbooks are offline-fallback only; previously
+  an empty live library silently kept showing demo playbooks).
+- **100× display bug (pre-existing, live deployments)**: the backend
+  stores `success_rate` as a 0–1 fraction; every UI treated it as a
+  percent, so live playbook cards and the SOAR-metrics success column
+  rendered "0.9%" where the truth was 93.6%. Normalized once at the API
+  boundary (`fetchPlaybooks`) so all four consumers agree; verified live
+  (weighted KPI now 90.2%, metrics column shows true percents).
+
 ### 2026-07-11 — Real per-API-key usage telemetry (Config → API honesty)
 - Config → API fabricated its request stats twice over: a "Rate Limit
   1M/mo" KPI for a quota that doesn't exist anywhere in the API, and a

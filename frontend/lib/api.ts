@@ -251,7 +251,7 @@ export interface Playbook {
   triggerMatch: Record<string, unknown>
   description: string
   runs: number
-  successRate: number
+  successRate: number   // percent 0–100 (converted from the API's 0–1 fraction)
   avgTime: number
   lastRun: string | null
   lastRunStatus: string
@@ -948,7 +948,12 @@ export const addCaseNote = (id: string, content: string, type = 'manual') =>
   api<Case>(`/soar/cases/${id}/notes`, { method: 'POST', body: JSON.stringify({ content, type }) })
 export const patchCaseTask = (caseId: string, taskId: string, body: { status?: string; assignee?: string; notes?: string }) =>
   api<Case>(`/soar/cases/${caseId}/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(body) })
-export const fetchPlaybooks = () => api<Playbook[]>('/soar/playbooks')
+// The backend stores success_rate as a 0–1 fraction (its running-average
+// math); every UI treats it as a percent, so normalize once at the boundary —
+// live cards used to render "0.9%" where the truth was 93.6%.
+export const fetchPlaybooks = () =>
+  api<Playbook[]>('/soar/playbooks').then((rows) =>
+    rows.map((p) => ({ ...p, successRate: Math.round((p.successRate ?? 0) * 1000) / 10 })))
 
 // ── Playbook execution engine ────────────────────────────────────────
 export interface PlaybookRunStep {
