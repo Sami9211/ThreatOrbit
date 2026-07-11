@@ -426,8 +426,13 @@ def siem_kpis(user: dict = Depends(current_user)):
     # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
-        rows = conn.execute(
-            f"SELECT severity, status, risk_score, disposition FROM alerts WHERE 1=1 {sc}", sp).fetchall()
+        # Aggregate in SQL: this endpoint is polled every 30s by the SIEM page,
+        # and the old version fetched EVERY alert row into Python to count them
+        # (a full-table transfer per poll — the hot spot at 100k+ alerts). The
+        # grouped result is at most |severities|×|statuses|×|dispositions| rows.
+        groups = conn.execute(
+            f"SELECT severity, status, disposition, COUNT(*) AS n "
+            f"FROM alerts WHERE 1=1 {sc} GROUP BY severity, status, disposition", sp).fetchall()
         sources = conn.execute(f"SELECT eps_avg, status FROM log_sources WHERE 1=1 {sc}", sp).fetchall()
         retention = conn.execute("SELECT value FROM settings WHERE key='data_retention_days'").fetchone()
         # SOC response metrics, in minutes, from per-alert latency telemetry.
@@ -435,15 +440,17 @@ def siem_kpis(user: dict = Depends(current_user)):
             "SELECT AVG(detect_latency_sec) AS d, AVG(ack_latency_sec) AS a, "
             f"AVG(respond_latency_sec) AS r FROM alerts WHERE 1=1 {sc}", sp
         ).fetchone()
-    total = len(rows)
+    total = 0
     by_sev = {s: 0 for s in ("critical", "high", "medium", "low", "info")}
     fp = closed = 0
-    for r in rows:
-        by_sev[r["severity"]] = by_sev.get(r["severity"], 0) + 1
-        if r["disposition"] == "false-positive":
-            fp += 1
-        if r["status"] in ("resolved", "closed"):
-            closed += 1
+    for g in groups:
+        n = int(g["n"])
+        total += n
+        by_sev[g["severity"]] = by_sev.get(g["severity"], 0) + n
+        if g["disposition"] == "false-positive":
+            fp += n
+        if g["status"] in ("resolved", "closed"):
+            closed += n
     total_eps = round(sum(s["eps_avg"] for s in sources), 1)
     mttd = round((lat["d"] or 0) / 60, 1)
     mtta = round((lat["a"] or 0) / 60, 1)

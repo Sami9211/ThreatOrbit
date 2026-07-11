@@ -128,3 +128,21 @@ result. On a deployment with more than 300 concurrently open alerts, older
 ones fall outside this pass; this is an honest bound on a bulk-triage
 convenience view, not the authoritative alert queue (`/siem/alerts` has no
 such ceiling on what's queryable, only on page size).
+
+## Polled rollups at high alert volume
+
+`GET /siem/kpis` is polled every 30 s by the SIEM page (plus on every live
+tick). It originally fetched **every alert row** into Python to count
+severities/dispositions - a full-table transfer per poll that dominated at
+scale. It now aggregates with a single `GROUP BY` (result ≤ |severities| ×
+|statuses| × |dispositions| rows). Measured on Postgres 16 with **210k
+alerts** (this container, median of 5):
+
+| Query shape | Median |
+| --- | --- |
+| old: fetch-all rows into Python | 1650 ms |
+| new: SQL `GROUP BY` aggregate | **27 ms** |
+
+The latency AVGs in the same endpoint were already SQL-side. The per-day
+trends endpoint (`/siem/analytics/trends`) cuts by `ts >= date` and rides
+`idx_alerts_ts`, so its cost scales with the window's rows, not the table.

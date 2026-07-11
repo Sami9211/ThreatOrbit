@@ -9,6 +9,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — /siem/kpis: 60× faster at scale (SQL aggregation)
+- The SIEM page polls `/siem/kpis` every 30 s, and the endpoint fetched
+  **every alert row** into Python to count severities/dispositions — a
+  full-table transfer per poll. It now aggregates with a single
+  `GROUP BY severity, status, disposition` (the fetched `risk_score` was
+  never even used). Identical output, verified by the existing tests.
+- Measured on Postgres 16 with 210k alerts (median of 5 runs): fetch-all
+  1650 ms → GROUP BY **27 ms**. Documented in LOAD_LIMITS ("Polled
+  rollups at high alert volume"). Full suites green on fresh SQLite
+  (538) and fresh Postgres (536 + 2 skipped).
+
 ### 2026-07-11 — E2E: the core analyst workflow, end to end
 - New `e2e/analyst-flow.spec.ts` exercises the product's value chain for
   real (not just page loads): open a seeded brute-force alert, assign it,
