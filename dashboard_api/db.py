@@ -495,6 +495,15 @@ CREATE TABLE IF NOT EXISTS api_keys (
     revoked    INTEGER NOT NULL DEFAULT 0
 );
 
+-- Per-key request telemetry, day-bucketed (drives the real "requests today"/
+-- totals in Config → API; incremented on every authenticated key request).
+CREATE TABLE IF NOT EXISTS api_key_usage (
+    key_id  TEXT NOT NULL,
+    day     TEXT NOT NULL,     -- ISO date (UTC)
+    count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (key_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL

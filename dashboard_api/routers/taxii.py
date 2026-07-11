@@ -53,7 +53,11 @@ def taxii_principal(creds: HTTPAuthorizationCredentials = Depends(_bearer)) -> d
             "SELECT id, name, scope FROM api_keys WHERE secret_hash=? AND revoked=0",
             (digest,)).fetchone()
         if row:
-            conn.execute("UPDATE api_keys SET last_used=datetime('now') WHERE id=?", (row["id"],))
+            from datetime import datetime, timezone
+            from dashboard_api.auth import record_api_key_use
+            now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+            conn.execute("UPDATE api_keys SET last_used=? WHERE id=?", (now, row["id"]))
+            record_api_key_use(conn, row["id"], now)
             conn.commit()
             return {"kind": "api_key", "id": row["id"], "scope": row["scope"]}
     raise HTTPException(status_code=401, detail="Invalid credentials",

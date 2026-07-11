@@ -97,15 +97,28 @@ def set_mode(body: ModeUpdate, user: dict = Depends(require_perm("config.manage"
 
 @router.get("/api-keys")
 def list_api_keys(user: dict = Depends(require_perm("config.manage"))):
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).date().isoformat()
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT id,name,prefix,scope,last_used,created_at,created_by,revoked "
             "FROM api_keys ORDER BY created_at DESC"
         ).fetchall()
+        # Real per-key request telemetry (see auth.record_api_key_use).
+        usage = conn.execute(
+            "SELECT key_id, SUM(count) AS total, "
+            "SUM(CASE WHEN day=? THEN count ELSE 0 END) AS today "
+            "FROM api_key_usage GROUP BY key_id", (today,)).fetchall()
         # who-saw-what: viewing secrets metadata is sensitive, so it's audited.
         audit(conn, user["email"], "access.api_keys", None, f"count={len(rows)}")
         conn.commit()
-    return rows_to_dicts(rows)
+    by_key = {u["key_id"]: u for u in usage}
+    out = rows_to_dicts(rows)
+    for k in out:
+        u = by_key.get(k["id"])
+        k["requests_total"] = int(u["total"]) if u else 0
+        k["requests_today"] = int(u["today"]) if u else 0
+    return out
 
 
 class LicenseActivate(BaseModel):

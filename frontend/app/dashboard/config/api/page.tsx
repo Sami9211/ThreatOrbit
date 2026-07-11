@@ -24,7 +24,8 @@ interface ApiKey {
   scopes: Scope[]
   created: string
   lastUsed: string
-  requests: number
+  requestsToday: number
+  requestsTotal: number
   status: KeyStatus
 }
 
@@ -40,12 +41,12 @@ interface WebhookEndpoint {
 
 /* ── Seed data ───────────────────────────────────────────────────── */
 const API_KEYS: ApiKey[] = [
-  { id: 'k1', label: 'Production Backend',  masked: 'to_sk_live_••••4f2a', scopes: ['read', 'write'],        created: 'Jan 12, 2026', lastUsed: '8s ago',  requests: 84213, status: 'active'  },
-  { id: 'k2', label: 'SIEM Integration',    masked: 'to_sk_live_••••9b71', scopes: ['read'],                 created: 'Nov 03, 2025', lastUsed: '2m ago',  requests: 41902, status: 'active'  },
-  { id: 'k3', label: 'CI/CD Pipeline',      masked: 'to_sk_live_••••1c08', scopes: ['read', 'write'],        created: 'Feb 28, 2026', lastUsed: '1h ago',  requests: 8841,  status: 'active'  },
-  { id: 'k4', label: 'Mobile App',          masked: 'to_sk_live_••••7e34', scopes: ['read'],                 created: 'Mar 15, 2026', lastUsed: '40m ago', requests: 6210,  status: 'active'  },
-  { id: 'k5', label: 'Partner: Acme Corp',  masked: 'to_sk_live_••••a55d', scopes: ['read', 'write', 'admin'], created: 'Dec 01, 2025', lastUsed: '5h ago', requests: 1024,  status: 'active'  },
-  { id: 'k6', label: 'Dev Sandbox',         masked: 'to_sk_test_••••0f9e', scopes: ['read', 'write'],        created: 'Apr 02, 2026', lastUsed: '3d ago',  requests: 312,   status: 'revoked' },
+  { id: 'k1', label: 'Production Backend',  masked: 'to_sk_live_••••4f2a', scopes: ['read', 'write'],        created: 'Jan 12, 2026', lastUsed: '8s ago',  requestsToday: 1204, requestsTotal: 84213, status: 'active'  },
+  { id: 'k2', label: 'SIEM Integration',    masked: 'to_sk_live_••••9b71', scopes: ['read'],                 created: 'Nov 03, 2025', lastUsed: '2m ago',  requestsToday: 655, requestsTotal: 41902, status: 'active'  },
+  { id: 'k3', label: 'CI/CD Pipeline',      masked: 'to_sk_live_••••1c08', scopes: ['read', 'write'],        created: 'Feb 28, 2026', lastUsed: '1h ago',  requestsToday: 132, requestsTotal: 8841,  status: 'active'  },
+  { id: 'k4', label: 'Mobile App',          masked: 'to_sk_live_••••7e34', scopes: ['read'],                 created: 'Mar 15, 2026', lastUsed: '40m ago', requestsToday: 89, requestsTotal: 6210,  status: 'active'  },
+  { id: 'k5', label: 'Partner: Acme Corp',  masked: 'to_sk_live_••••a55d', scopes: ['read', 'write', 'admin'], created: 'Dec 01, 2025', lastUsed: '5h ago', requestsToday: 12, requestsTotal: 1024,  status: 'active'  },
+  { id: 'k6', label: 'Dev Sandbox',         masked: 'to_sk_test_••••0f9e', scopes: ['read', 'write'],        created: 'Apr 02, 2026', lastUsed: '3d ago',  requestsToday: 0, requestsTotal: 312,   status: 'revoked' },
 ]
 
 const WEBHOOKS: WebhookEndpoint[] = [
@@ -218,7 +219,8 @@ const remoteToRow = (k: RemoteApiKey): ApiKey => ({
   scopes: [k.scope as Scope],
   created: new Date(k.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
   lastUsed: k.lastUsed ? new Date(k.lastUsed).toLocaleDateString() : 'Never',
-  requests: 0,
+  requestsToday: k.requestsToday ?? 0,
+  requestsTotal: k.requestsTotal ?? 0,
   status: k.revoked ? 'revoked' : 'active',
 })
 
@@ -343,8 +345,9 @@ export default function ApiKeysPage() {
       {/* KPIs */}
       <div className="grid grid-cols-3 divide-x divide-white/5 border-b border-white/5 shrink-0">
         <Kpi label="Active Keys"    value={String(keys.filter(k => k.status === 'active').length)}    color="text-safe"   />
-        <Kpi label="Requests Today" value={`${(keys.reduce((a, k) => a + k.requests, 0) / 1000).toFixed(0)}k`} color="text-violet" />
-        <Kpi label="Rate Limit"     value="1M/mo" color="text-amber"  />
+        <Kpi label="Requests Today" value={keys.reduce((a, k) => a + k.requestsToday, 0).toLocaleString()} color="text-violet" />
+        {/* was a hardcoded "Rate Limit 1M/mo" — no such quota exists in the API */}
+        <Kpi label="Revoked Keys"   value={String(keys.filter(k => k.status === 'revoked').length)} color="text-amber"  />
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8">
@@ -397,7 +400,7 @@ export default function ApiKeysPage() {
                     </td>
                     <td className="px-4 py-3 text-[11px] text-ink-500">{k.created}</td>
                     <td className="px-4 py-3 text-[11px] text-ink-500">{k.lastUsed}</td>
-                    <td className="px-4 py-3 text-[11px] text-ink-300 font-mono text-right">{k.requests.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-[11px] text-ink-300 font-mono text-right">{k.requestsTotal.toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border', KEY_STATUS_CFG[k.status].cls)}>
                         {KEY_STATUS_CFG[k.status].label}

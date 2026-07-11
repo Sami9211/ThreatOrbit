@@ -206,6 +206,16 @@ _API_KEY_PREFIXES = ("to_ak_live_", "to_sk_live_", "to_rk_live_")
 _API_KEY_SCOPE_ROLE = {"admin": "admin", "write": "analyst", "read": "viewer"}
 
 
+def record_api_key_use(conn, key_id: str, now_iso: str) -> None:
+    """Per-key request telemetry: bump today's usage bucket (drives the real
+    'requests today'/total counters in Config → API). Called wherever a key
+    authenticates a request. ON CONFLICT upsert works on SQLite and Postgres."""
+    conn.execute(
+        "INSERT INTO api_key_usage (key_id, day, count) VALUES (?,?,1) "
+        "ON CONFLICT(key_id, day) DO UPDATE SET count = api_key_usage.count + 1",
+        (key_id, now_iso[:10]))
+
+
 def _principal_from_api_key(token: str) -> dict | None:
     """If `token` is a ThreatOrbit API key, verify it and return a synthetic
     service principal; None if it isn't key-shaped (so the JWT path takes over).
@@ -226,6 +236,7 @@ def _principal_from_api_key(token: str) -> dict | None:
         if row["revoked"]:
             raise HTTPException(status_code=401, detail="API key revoked")
         conn.execute("UPDATE api_keys SET last_used=? WHERE id=?", (now, row["id"]))
+        record_api_key_use(conn, row["id"], now)
         conn.commit()
     from dashboard_api.tenancy import DEFAULT_ORG_ID
     role = _API_KEY_SCOPE_ROLE.get(str(row["scope"]), "viewer")

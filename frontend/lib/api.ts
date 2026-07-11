@@ -482,6 +482,8 @@ export interface ApiKey {
   createdBy: string
   revoked: boolean
   orgId?: string
+  requestsToday?: number   // real per-key telemetry (api_key_usage buckets)
+  requestsTotal?: number
 }
 
 export interface AuditEntry {

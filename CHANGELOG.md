@@ -9,6 +9,24 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — Real per-API-key usage telemetry (Config → API honesty)
+- Config → API fabricated its request stats twice over: a "Rate Limit
+  1M/mo" KPI for a quota that doesn't exist anywhere in the API, and a
+  per-key Requests column that always rendered 0 on live deployments
+  because the backend never tracked usage.
+- Backend: new `api_key_usage` table (key_id × UTC day, upsert-incremented
+  in the central key-auth path AND the TAXII key path on every
+  authenticated request — rejected/revoked requests are never counted);
+  `GET /config/api-keys` now returns `requestsToday`/`requestsTotal`.
+- Frontend: the KPI strip shows the real today-sum, the table shows real
+  per-key totals, and the fake rate-limit KPI became "Revoked Keys"
+  (real). Demo seed keys remain for the offline preview only.
+- Tests (`test_api_key_usage.py`, both backends): counted on use, honest
+  zeros when fresh, per-key isolation, last_used stamped, revoked-key
+  requests rejected AND uncounted. Full suites green on fresh SQLite
+  (536) and fresh Postgres (534 + 2 skipped). Live-verified end to end:
+  key created via API, used 5×, page renders today: 5 / total: 5.
+
 ### 2026-07-11 — SIEM header + alert-detail honesty; count-ups on stat strips
 - **SIEM header KPI strip**: the six sub-annotations were static demo
   strings shown unchanged next to live values ("-12% vs yesterday",
