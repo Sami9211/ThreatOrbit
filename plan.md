@@ -558,8 +558,12 @@ not one-off tasks:
       gained a real empty state where it used to render blank), assets
       (table + cards), fleet vulns, both feed columns, dark-web findings.
       Browser-verified on all five pages with request-delay interception.
-      Ongoing/iterative: count-ups on the remaining stat surfaces and
-      migrating the remaining per-component timings onto the shared tokens.
+      Increment 8 (2026-07-11): count-ups (AnimatedNumber) on the SIEM
+      header KPI strip, feeds KPI strip, and SOAR header stats — shipped
+      together with the header/alert-detail honesty fixes (see CHANGELOG:
+      computed KPI sub-annotations, real UEBA identity/host tabs).
+      Ongoing/iterative: migrating the remaining per-component timings
+      onto the shared tokens.
       **Side-find during increment 4 — FIXED (2026-07-10):** the SOAR
       metrics tab rendered a hardcoded "Cases by Type (Last 30 days)" list
       (Phishing 284, …) as if live — the one fabrication-sweep miss on that

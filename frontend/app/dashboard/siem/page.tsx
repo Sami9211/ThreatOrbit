@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -13,11 +13,12 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
+import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { Skeleton, SkeletonRows } from '@/components/dashboard/Skeleton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, fetchSiemTrends, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert, type SiemTrendDay } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, fetchSiemTrends, fetchEntityDetail, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert, type SiemTrendDay, type EntityDetail } from '@/lib/api'
 import { fadeInUp, listContainer, listItem } from '@/lib/motion'
 import { tk } from '@/lib/colors'
 
@@ -544,6 +545,10 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   const [toast, setToast] = useState<string | null>(null)
   const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
   const [fpChecking, setFpChecking] = useState(false)
+  // Real UEBA context for the identity/host tabs (fetched lazily when the tab
+  // opens; these replaced hardcoded demo rows — "Domain CORP", "UEBA 44/100").
+  const [userEntity, setUserEntity] = useState<EntityDetail | null>(null)
+  const [hostEntity, setHostEntity] = useState<EntityDetail | null>(null)
   const s = SEV[alert.severity]
   const st = STATUS_LABEL[alert.status]
 
@@ -552,7 +557,17 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   // Reset the (advisory, never auto-acted-on) FP assessment when the
   // selected alert changes so a stale score from a different alert can't
   // linger on screen.
-  useEffect(() => { setFpAssessment(null) }, [alert.id])
+  useEffect(() => { setFpAssessment(null); setUserEntity(null); setHostEntity(null) }, [alert.id])
+
+  useEffect(() => {
+    if (tab === 'identity' && alert.username && !userEntity) {
+      fetchEntityDetail('user', alert.username).then(setUserEntity).catch(() => {})
+    }
+    if (tab === 'host' && alert.hostname && !hostEntity) {
+      fetchEntityDetail('host', alert.hostname).then(setHostEntity).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, alert.id])
 
   function checkFp() {
     if (fpChecking) return
@@ -804,41 +819,76 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
 
         {tab === 'identity' && (
           <>
+            {/* Real UEBA context from /siem/entities/detail — deviation from
+                the user's OWN learned baseline, not invented directory data */}
             <Section title="User Context">
               {alert.username ? (
                 <>
                   <Row label="Username" value={alert.username} mono />
-                  <Row label="Domain" value="CORP" />
-                  <Row label="Department" value="Finance" />
-                  <Row label="UEBA Risk Score" value="44 / 100 (↑ from baseline 12)" highlight="amber" />
-                  <Row label="Last Login" value="11h ago (New York, US)" />
-                  <Row label="Active Sessions" value="2" />
+                  {userEntity ? (
+                    <>
+                      <Row label="UEBA Risk Score" value={`${userEntity.risk} / 100`}
+                        highlight={userEntity.risk >= 70 ? 'threat' : userEntity.risk >= 45 ? 'amber' : undefined} />
+                      <Row label="Related Alerts" value={`${userEntity.alertCount}`} />
+                      <Row label="Daily Volume"
+                        value={userEntity.baseline.confidence === 'insufficient-history'
+                          ? `${userEntity.baseline.current} today (baseline needs ≥3 days)`
+                          : `${userEntity.baseline.current} today · norm ${userEntity.baseline.mean} ± ${userEntity.baseline.stdDev}`} />
+                      {userEntity.baseline.confidence !== 'insufficient-history' && (
+                        <Row label="Baseline Deviation"
+                          value={`z = ${userEntity.baseline.zScore}${userEntity.baseline.deviating ? ' — DEVIATING' : ' (normal)'}`}
+                          highlight={userEntity.baseline.deviating ? 'threat' : undefined} />
+                      )}
+                      {userEntity.topTechniques.length > 0 && (
+                        <Row label="Top Techniques"
+                          value={userEntity.topTechniques.slice(0, 3).map((t) => `${t.technique} ×${t.count}`).join(' · ')} mono />
+                      )}
+                    </>
+                  ) : (
+                    <Row label="UEBA Risk Score" value="Loading…" />
+                  )}
                 </>
               ) : (
                 <p className="text-xs text-ink-600 italic">No user identity extracted from this alert</p>
               )}
             </Section>
-            <Section title="Authentication">
-              <Row label="Auth Type" value="Kerberos / NTLM" />
-              <Row label="Auth Result" value="SUCCESS" highlight="threat" />
-              <Row label="MFA" value="Not required for this service" highlight="amber" />
-              <Row label="Session Duration" value="1h 42m" />
-            </Section>
+            <p className="text-[10px] text-ink-600 italic px-1">
+              Directory / IdP attributes (department, sessions, MFA) require an
+              identity-provider integration — only activity-derived context is shown.
+            </p>
           </>
         )}
 
         {tab === 'host' && (
           <>
+            {/* Real host context: fields carried by the alert + this host's
+                UEBA record (replaced hardcoded demo rows — fake OS build,
+                vuln counts, patch age) */}
             <Section title="Asset Profile">
               {alert.hostname ? (
                 <>
                   <Row label="Hostname" value={alert.hostname} mono />
-                  <Row label="OS" value="Windows 10 22H2 (Build 19045)" />
                   <Row label="IP Address" value={alert.srcIp} mono />
                   <Row label="Asset Criticality" value={alert.hostCriticality.toUpperCase()} highlight={alert.hostCriticality === 'critical' ? 'threat' : alert.hostCriticality === 'high' ? 'amber' : undefined} />
-                  <Row label="Open Vulnerabilities" value="3 critical, 7 high, 12 medium" highlight="threat" />
-                  <Row label="Last Patch" value="14 days ago" highlight="amber" />
-                  <Row label="Owner" value="Finance Dept" />
+                  {hostEntity ? (
+                    <>
+                      <Row label="Host Risk Score" value={`${hostEntity.risk} / 100`}
+                        highlight={hostEntity.risk >= 70 ? 'threat' : hostEntity.risk >= 45 ? 'amber' : undefined} />
+                      <Row label="Related Alerts" value={`${hostEntity.alertCount}`} />
+                      {hostEntity.baseline.confidence !== 'insufficient-history' && (
+                        <Row label="Baseline Deviation"
+                          value={`z = ${hostEntity.baseline.zScore}${hostEntity.baseline.deviating ? ' — DEVIATING' : ' (normal)'}`}
+                          highlight={hostEntity.baseline.deviating ? 'threat' : undefined} />
+                      )}
+                    </>
+                  ) : (
+                    <Row label="Host Risk Score" value="Loading…" />
+                  )}
+                  <div className="pt-1">
+                    <Link href="/dashboard/assets/vulns" className="text-[11px] text-magenta hover:underline">
+                      View fleet vulnerabilities →
+                    </Link>
+                  </div>
                 </>
               ) : (
                 <p className="text-xs text-ink-600 italic">No host context available</p>
@@ -848,8 +898,6 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               <Section title="Process">
                 <Row label="Process" value={alert.processName} mono />
                 <Row label="Command Line" value={alert.cmdLine ?? '-'} mono />
-                <Row label="PID" value="9823" mono />
-                <Row label="Parent Process" value="explorer.exe (PID: 3401)" mono />
               </Section>
             )}
           </>
@@ -1286,6 +1334,37 @@ export default function SIEMPage() {
     }
   }, [apiKpis])
 
+  // Honest KPI-strip annotations, derived from real data (they were static
+  // demo strings — "-12% vs yesterday", "+4 in last hour" — shown unchanged
+  // next to live values). null on any piece means "not enough data": the
+  // cell then shows an em-dash instead of inventing a movement.
+  const kpiDerived = useMemo(() => {
+    const t = trends
+    const today = t && t.length >= 1 ? t[t.length - 1] : null
+    const yday = t && t.length >= 2 ? t[t.length - 2] : null
+    const alertsDeltaPct = today && yday && yday.alerts > 0
+      ? Math.round(((today.alerts - yday.alerts) / yday.alerts) * 100)
+      : null
+    // 7-day averages over days that actually have telemetry (a 0 bucket means
+    // "no data that day", not "instant response" — including it would fake an
+    // improvement).
+    const avgOf = (sel: (d: SiemTrendDay) => number) => {
+      const vals = (t ?? []).map(sel).filter((v) => v > 0)
+      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+    }
+    const mttdAvg = avgOf((d) => d.mttd)
+    const mttrAvg = avgOf((d) => d.mttr)
+    const volume = (t ?? []).reduce((s, d) => s + d.alerts, 0)
+    const fpAvg = volume > 0
+      ? (t ?? []).reduce((s, d) => s + d.fpRate * d.alerts, 0) / volume
+      : null
+    const hourAgo = Date.now() - 3600_000
+    const severeLastHour = alerts.filter((a) =>
+      (a.severity === 'critical' || a.severity === 'high')
+      && new Date(a.ts).getTime() >= hourAgo).length
+    return { today, alertsDeltaPct, mttdAvg, mttrAvg, fpAvg, severeLastHour }
+  }, [trends, alerts])
+
   // Mutate a single alert's triage fields (status/owner/disposition) in place
   async function updateAlert(id: string, patch: Partial<SiemAlert>) {
     setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)))
@@ -1394,16 +1473,45 @@ export default function SIEMPage() {
           </div>
         </div>
 
-        {/* KPI strip */}
+        {/* KPI strip — values count up; sub-annotations are computed from the
+            trends buckets / live queue (previously static demo strings) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 border-b border-white/5 shrink-0">
-          {[
-            { label: 'Total Alerts Today', value: metrics.totalAlerts.toLocaleString(), sub: '-12% vs yesterday', up: false, color: 'text-white' },
-            { label: 'Critical / High',     value: `${metrics.critical} / ${metrics.high}`,   sub: '+4 in last hour',  up: true,  color: 'text-magenta' },
-            { label: 'MTTD',                value: metrics.mttd,                              sub: '↓ from 6m 04s',    up: false, color: 'text-safe' },
-            { label: 'MTTR',                value: metrics.mttr,                              sub: '↑ from 19m 20s',   up: true,  color: 'text-amber' },
-            { label: 'MTTA',                value: metrics.mtta,                              sub: '< 15m target ✓',   up: false, color: 'text-safe' },
-            { label: 'False Positive Rate', value: `${metrics.fpRate}%`,                      sub: '↓ from 28% (7d)',  up: false, color: 'text-violet' },
-          ].map((k) => (
+          {([
+            {
+              label: 'Total Alerts Today', color: 'text-white',
+              value: <AnimatedNumber value={kpiDerived.today ? kpiDerived.today.alerts : metrics.totalAlerts} />,
+              sub: kpiDerived.alertsDeltaPct !== null
+                ? `${kpiDerived.alertsDeltaPct > 0 ? '+' : ''}${kpiDerived.alertsDeltaPct}% vs yesterday` : '—',
+              up: (kpiDerived.alertsDeltaPct ?? 0) > 0,
+            },
+            {
+              label: 'Critical / High', color: 'text-magenta',
+              value: <><AnimatedNumber value={metrics.critical} /> / <AnimatedNumber value={metrics.high} /></>,
+              sub: `+${kpiDerived.severeLastHour} in last hour`,
+              up: kpiDerived.severeLastHour > 0,
+            },
+            {
+              label: 'MTTD', color: 'text-safe', value: metrics.mttd,
+              sub: kpiDerived.mttdAvg !== null ? `7d avg ${fmtMins(kpiDerived.mttdAvg)}` : '—',
+              up: kpiDerived.mttdAvg !== null && !!apiKpis && apiKpis.mttd > kpiDerived.mttdAvg,
+            },
+            {
+              label: 'MTTR', color: 'text-amber', value: metrics.mttr,
+              sub: kpiDerived.mttrAvg !== null ? `7d avg ${fmtMins(kpiDerived.mttrAvg)}` : '—',
+              up: kpiDerived.mttrAvg !== null && !!apiKpis && apiKpis.mttr > kpiDerived.mttrAvg,
+            },
+            {
+              label: 'MTTA', color: 'text-safe', value: metrics.mtta,
+              sub: apiKpis ? `< 15m target ${apiKpis.mtta < 15 ? '✓' : '✗'}` : '< 15m target',
+              up: !!apiKpis && apiKpis.mtta >= 15,
+            },
+            {
+              label: 'False Positive Rate', color: 'text-violet',
+              value: <><AnimatedNumber value={metrics.fpRate} format={(v) => `${Math.round(v * 10) / 10}`} />%</>,
+              sub: kpiDerived.fpAvg !== null ? `7d avg ${kpiDerived.fpAvg.toFixed(1)}%` : '—',
+              up: kpiDerived.fpAvg !== null && !!apiKpis && apiKpis.fpRate > kpiDerived.fpAvg,
+            },
+          ] as Array<{ label: string; color: string; value: ReactNode; sub: string; up: boolean }>).map((k) => (
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{k.label}</p>
               <p className={cn('text-lg font-bold mt-0.5', k.color)}>{k.value}</p>

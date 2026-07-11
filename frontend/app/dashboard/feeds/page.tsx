@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
 import { tk } from '@/lib/colors'
@@ -723,7 +724,9 @@ export default function FeedsPage() {
           <div key={kpi.label} className="flex items-center gap-3 px-4 py-3">
             <kpi.icon className={cn('w-4 h-4 shrink-0', kpi.color)} />
             <div>
-              <div className={cn('text-base font-bold font-mono', kpi.color)}>{kpi.value}</div>
+              <div className={cn('text-base font-bold font-mono', kpi.color)}>
+                {typeof kpi.value === 'number' ? <AnimatedNumber value={kpi.value} /> : kpi.value}
+              </div>
               <div className="text-[10px] text-ink-600">{kpi.label}</div>
             </div>
           </div>

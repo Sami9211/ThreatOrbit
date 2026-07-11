@@ -9,6 +9,37 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — SIEM header + alert-detail honesty; count-ups on stat strips
+- **SIEM header KPI strip**: the six sub-annotations were static demo
+  strings shown unchanged next to live values ("-12% vs yesterday",
+  "+4 in last hour", "↓ from 28% (7d)"). All six are now computed: alerts
+  vs yesterday from the trends buckets (em-dash when there's no baseline),
+  critical/high in the last hour counted from the live queue, MTTD/MTTR/FP
+  against real 7-day averages (days without telemetry excluded rather than
+  dragging the average down), and the MTTA "< 15m target ✓/✗" tick decided
+  by the actual value. "Total Alerts Today" now shows *today's* count
+  (trends bucket) instead of the all-time total its label contradicted.
+- **Alert-detail Identity tab**: was fully fabricated ("Domain CORP",
+  "Department Finance", "UEBA 44/100 ↑ from baseline 12", "Last Login 11h
+  ago (New York)", a whole Kerberos/NTLM "Authentication" section). Now
+  renders the real per-user UEBA record from `/siem/entities/detail`:
+  risk score, related-alert count, daily volume vs the user's own learned
+  baseline (mean ± σ, z-score, DEVIATING flag), top MITRE techniques — and
+  an honest note that directory/IdP attributes need an IdP integration.
+- **Alert-detail Host tab**: fabricated OS build, vuln counts ("3 critical,
+  7 high, 12 medium"), patch age, owner dept, PID and parent process all
+  removed; now shows the alert's real host fields + the host's UEBA risk /
+  related alerts / baseline deviation, and links to the real fleet-vulns
+  page instead of inventing counts.
+- **Count-ups**: SIEM header values, threat-feed KPI strip, and SOAR
+  header stats now tick up via the shared `AnimatedNumber` (SOAR's strip
+  was already honest — real week-over-week trends — so only motion was
+  added there).
+- Browser-verified: demo strings absent, computed subs present, Identity
+  tab shows a real user record (risk 100/100 over 20 alerts, z = 0.11
+  normal vs own baseline, real techniques), zero console errors; tsc +
+  build + route guard green.
+
 ### 2026-07-11 — First-load skeletons across every major list surface
 - Extends the skeleton pattern shipped with the SIEM queue to the rest of
   the app: SOAR case board (Normal-mode kanban columns) and Power-mode

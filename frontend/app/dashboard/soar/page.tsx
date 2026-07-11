@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import ReportButton from '@/components/dashboard/ReportButton'
+import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
@@ -1053,16 +1054,16 @@ export default function SOARPage() {
         {/* KPI strip */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-0 border-b border-white/5 shrink-0">
           {[
-            { label: 'Open Cases',           value: `${metrics.openCases}`,          sub: `${metrics.criticalOpen} critical`,          color: 'text-magenta', trend: null },
+            { label: 'Open Cases',           value: <AnimatedNumber value={metrics.openCases} />, sub: `${metrics.criticalOpen} critical`, color: 'text-magenta', trend: null },
             // Real week-over-week movement; "no baseline" until a prior week exists.
             { label: 'MTTR',                  value: metrics.mttr,
               sub: metrics.mttrTrendPct != null ? `${metrics.mttrTrendPct > 0 ? '+' : ''}${metrics.mttrTrendPct}% vs prior week` : 'no prior-week baseline',
               color: 'text-safe',    trend: metrics.mttrTrendPct == null ? null : metrics.mttrTrendPct < 0 ? 'down' : 'up' },
-            { label: 'Automation Rate',       value: `${metrics.automationRate}%`,
+            { label: 'Automation Rate',       value: <><AnimatedNumber value={metrics.automationRate} />%</>,
               sub: metrics.automationTrendPp != null ? `${metrics.automationTrendPp > 0 ? '+' : ''}${metrics.automationTrendPp}pp vs prior week` : 'no prior-week baseline',
               color: 'text-violet', trend: metrics.automationTrendPp == null ? null : metrics.automationTrendPp > 0 ? 'up' : 'down' },
-            { label: 'Time Saved (month)',    value: `${metrics.timeSavedMonth}h`,    sub: `from ${metrics.totalRuns.toLocaleString()} playbook runs`, color: 'text-amber', trend: null },
-            { label: 'Playbooks Today',       value: metrics.playbooksToday.toLocaleString(), sub: `avg ${metrics.avgPlaybookTime}/run`, color: 'text-white',   trend: null },
+            { label: 'Time Saved (month)',    value: <><AnimatedNumber value={metrics.timeSavedMonth} />h</>, sub: `from ${metrics.totalRuns.toLocaleString()} playbook runs`, color: 'text-amber', trend: null },
+            { label: 'Playbooks Today',       value: <AnimatedNumber value={metrics.playbooksToday} />, sub: `avg ${metrics.avgPlaybookTime}/run`, color: 'text-white',   trend: null },
           ].map((k) => (
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
               <p className="text-[10px] text-ink-600 uppercase tracking-wide">{k.label}</p>
