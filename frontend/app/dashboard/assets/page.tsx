@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import AttackSurfacePanel from '@/components/dashboard/AttackSurfacePanel'
+import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { fetchAssets, fetchAsset, createAsset, deleteAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
 import { tk, withAlpha } from '@/lib/colors'
 
@@ -175,6 +176,8 @@ export default function AssetsPage() {
   // empty inventory is honest ("no assets yet"), never a cue to show demo hosts.
   // SEED is used only if the API is unreachable (offline/marketing preview).
   const [assets, setAssets] = useState<Asset[]>([])
+  // First answer pending → skeleton rows, not "No assets match your filters"
+  const [assetsPending, setAssetsPending] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<AssetType | 'all'>('all')
@@ -190,6 +193,7 @@ export default function AssetsPage() {
       .then(({ items }) => setAssets(items as unknown as Asset[]))
       // Unreachable → offline preview with the demo inventory.
       .catch(() => setAssets(SEED))
+      .finally(() => setAssetsPending(false))
   }
   useEffect(() => { loadAssets() }, [])
 
@@ -532,7 +536,8 @@ export default function AssetsPage() {
                   )
                 })}
               </AnimatePresence>
-              {filtered.length === 0 && (
+              {filtered.length === 0 && assetsPending && <SkeletonRows rows={8} />}
+              {filtered.length === 0 && !assetsPending && (
                 <div className="py-14 text-center">
                   <Server className="w-7 h-7 text-ink-700 mx-auto mb-2" />
                   <p className="text-sm text-ink-500">No assets match your filters</p>
@@ -546,6 +551,13 @@ export default function AssetsPage() {
           {/* ── CARD VIEW ────────────────────────────────────────── */}
           {view === 'cards' && (
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filtered.length === 0 && (assetsPending
+                ? <SkeletonRows rows={6} className="col-span-full" />
+                : (
+                  <p className="col-span-full py-14 text-center text-sm text-ink-500">
+                    No assets match your filters
+                  </p>
+                ))}
               {filtered.map((a, i) => {
                 const TM = TYPE_META[a.type]
                 const SM = STATUS_META[a.status]

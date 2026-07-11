@@ -13,6 +13,7 @@ import {
 } from '@/lib/api'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { tk } from '@/lib/colors'
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
@@ -136,7 +137,7 @@ export default function DarkWebPage() {
 
       {/* Findings */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {loading && <p className="text-xs text-ink-600 py-8 text-center animate-pulse">Loading dark-web findings…</p>}
+        {loading && <SkeletonRows rows={8} className="px-0" />}
         {!loading && filtered.length === 0 && (
           <p className="text-xs text-ink-600 py-8 text-center">No findings yet - the engine surfaces these as it monitors. Check back shortly.</p>
         )}

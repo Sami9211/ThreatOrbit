@@ -9,6 +9,23 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — First-load skeletons across every major list surface
+- Extends the skeleton pattern shipped with the SIEM queue to the rest of
+  the app: SOAR case board (Normal-mode kanban columns) and Power-mode
+  case list, the asset inventory (table AND cards views), the fleet
+  vulnerabilities table, both threat-feed columns, and the dark-web
+  findings list (whose text loader migrated to the shared component).
+  While the first API answer is pending these show pulsing placeholder
+  rows instead of flashing "No cases" / "No assets match your filters" /
+  "No unconfirmed threats - feed is quiet" — an honesty bug as much as a
+  polish one, since a busy SOC briefly reads as empty on every load.
+- Power-mode SOAR previously rendered a completely blank list when the
+  case store was empty — it now has a real empty state ("No cases yet —
+  correlated alerts escalate here automatically") after loading.
+- Browser-verified on all five pages with request-delay interception
+  (skeletons appear, empty-state text never flashes, page resolves);
+  tsc + build + route/anchor guard green.
+
 ### 2026-07-11 — SIEM analytics: live 7-day trends + loading skeletons (fabrication-sweep miss)
 - The analytics tab's four trend cards (Alert Volume, MTTD, MTTR, False
   Positive %) rendered a hardcoded `SPARKLINE_DATA` series (2,847

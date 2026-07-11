@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import ReportButton from '@/components/dashboard/ReportButton'
+import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
 import { tk } from '@/lib/colors'
@@ -731,7 +732,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 }
 
 /* ── Normal Mode: Case Kanban Board ──────────────────────────────── */
-function NormalSOAR({ cases: casesData }: { cases: CaseRecord[] }) {
+function NormalSOAR({ cases: casesData, casesPending = false }: { cases: CaseRecord[]; casesPending?: boolean }) {
   const CASES = casesData
   const SEV_COLOR: Record<string, string> = {
     critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'),
@@ -772,7 +773,9 @@ function NormalSOAR({ cases: casesData }: { cases: CaseRecord[] }) {
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[160px]">
                   {colCases.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-ink-600">No cases</div>
+                    casesPending
+                      ? <SkeletonRows rows={3} className="px-0" />
+                      : <div className="py-10 text-center text-xs text-ink-600">No cases</div>
                   ) : (
                     colCases.map((c) => (
                       <motion.div
@@ -932,6 +935,8 @@ export default function SOARPage() {
   // empty case board on a real deployment is honest; the demo constants are an
   // offline-only fallback (loadedRef gates them to a first-load failure).
   const [cases, setCases] = useState<CaseRecord[]>([])
+  // First answer pending → the board shows skeleton rows, not "No cases"
+  const [casesPending, setCasesPending] = useState(true)
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
   const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
@@ -950,6 +955,7 @@ export default function SOARPage() {
     fetchCases()
       .then((data) => { setCases(data as unknown as CaseRecord[]); loadedRef.current.cases = true })
       .catch(() => { if (!loadedRef.current.cases) setCases(CASES) })
+      .finally(() => setCasesPending(false))
     fetchPlaybooks()
       .then((data) => { setPlaybooks(data as unknown as Playbook[]); loadedRef.current.playbooks = true })
       .catch(() => { if (!loadedRef.current.playbooks) setPlaybooks(PLAYBOOKS) })
@@ -1015,7 +1021,7 @@ export default function SOARPage() {
       })
   }
 
-  if (isNormal) return <NormalSOAR cases={cases} />
+  if (isNormal) return <NormalSOAR cases={cases} casesPending={casesPending} />
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -1114,6 +1120,12 @@ export default function SOARPage() {
                 <span>Created</span>
               </div>
               <div className="flex-1 overflow-y-auto">
+                {cases.length === 0 && casesPending && <SkeletonRows rows={8} />}
+                {cases.length === 0 && !casesPending && (
+                  <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
+                    No cases yet — correlated alerts escalate here automatically
+                  </div>
+                )}
                 {cases.map((c, i) => (
                   <CaseRow key={c.id} c={c} idx={i} selected={selectedCase?.id === c.id}
                     onClick={() => setSelectedCase((prev) => prev?.id === c.id ? null : c)} />

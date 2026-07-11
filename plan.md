@@ -553,9 +553,13 @@ not one-off tasks:
       endpoint — see CHANGELOG 2026-07-11). Browser-verified with delayed-
       request interception: skeletons appear, resolve to live data, demo
       numbers never leak.
-      Ongoing/iterative: skeletons on remaining list surfaces, count-ups on
-      the remaining stat surfaces, and migrating the remaining per-component
-      timings onto the shared tokens.
+      Increment 7 (2026-07-11): first-load skeletons extended to every
+      major list surface — SOAR case board (both modes; Power mode also
+      gained a real empty state where it used to render blank), assets
+      (table + cards), fleet vulns, both feed columns, dark-web findings.
+      Browser-verified on all five pages with request-delay interception.
+      Ongoing/iterative: count-ups on the remaining stat surfaces and
+      migrating the remaining per-component timings onto the shared tokens.
       **Side-find during increment 4 — FIXED (2026-07-10):** the SOAR
       metrics tab rendered a hardcoded "Cases by Type (Last 30 days)" list
       (Phishing 284, …) as if live — the one fabrication-sweep miss on that

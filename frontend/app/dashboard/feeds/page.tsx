@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
@@ -779,10 +780,14 @@ export default function FeedsPage() {
                 />
               ))}
               {filteredConfirmed.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-32 text-ink-600">
-                  <CheckCircle2 className="w-8 h-8 mb-2 opacity-30" />
-                  <p className="text-xs">No confirmed threats match filter</p>
-                </div>
+                !liveMode && !demoMode
+                  ? <SkeletonRows rows={5} className="px-1" />
+                  : (
+                    <div className="flex flex-col items-center justify-center h-32 text-ink-600">
+                      <CheckCircle2 className="w-8 h-8 mb-2 opacity-30" />
+                      <p className="text-xs">No confirmed threats match filter</p>
+                    </div>
+                  )
               )}
             </AnimatePresence>
           </div>
@@ -824,10 +829,14 @@ export default function FeedsPage() {
                 />
               ))}
               {filteredUnconfirmed.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-32 text-ink-600">
-                  <HelpCircle className="w-8 h-8 mb-2 opacity-30" />
-                  <p className="text-xs">No unconfirmed threats - feed is quiet</p>
-                </div>
+                !liveMode && !demoMode
+                  ? <SkeletonRows rows={5} className="px-1" />
+                  : (
+                    <div className="flex flex-col items-center justify-center h-32 text-ink-600">
+                      <HelpCircle className="w-8 h-8 mb-2 opacity-30" />
+                      <p className="text-xs">No unconfirmed threats - feed is quiet</p>
+                    </div>
+                  )
               )}
             </AnimatePresence>
           </div>

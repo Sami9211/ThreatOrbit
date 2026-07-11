@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'
+import { SkeletonRows } from '@/components/dashboard/Skeleton'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -309,6 +310,8 @@ export default function VulnsPage() {
   // when the API is unreachable (offline preview) — never on a real deployment
   // with an empty vuln store (which is honestly "nothing found yet").
   const [vulns, setVulns] = useState<Vuln[]>([])
+  // First answer pending → skeleton rows, not "No vulnerabilities match"
+  const [vulnsPending, setVulnsPending] = useState(true)
   const [vsum, setVsum] = useState<VulnSummary | null>(null)
   useEffect(() => { fetchVulnSummary().then(setVsum).catch(() => {}) }, [])
 
@@ -342,6 +345,7 @@ export default function VulnsPage() {
         references: [r.reference],
       })))
     }).catch(() => setVulns(SEED))   // API unreachable → offline preview only
+      .finally(() => setVulnsPending(false))
   }, [])
   const [search, setSearch] = useState('')
   const [sevFilter, setSevFilter] = useState<Severity | 'all'>('all')
@@ -494,7 +498,8 @@ export default function VulnsPage() {
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && (
+        {filtered.length === 0 && vulnsPending && <SkeletonRows rows={8} />}
+        {filtered.length === 0 && !vulnsPending && (
           <div className="py-14 text-center">
             <ShieldCheck className="w-7 h-7 text-ink-700 mx-auto mb-2" />
             <p className="text-sm text-ink-500">No vulnerabilities match your filters</p>
