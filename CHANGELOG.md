@@ -9,6 +9,18 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — E2E: the core analyst workflow, end to end
+- New `e2e/analyst-flow.spec.ts` exercises the product's value chain for
+  real (not just page loads): open a seeded brute-force alert, assign it,
+  escalate it into a SOAR case via the drawer action, extract the real
+  case id from the toast, and assert the case is genuinely on the SOAR
+  board (served by the API, not local state). A second spec runs a
+  playbook from the library and asserts the card records the run
+  ("Just now").
+- Verified on desktop chromium (2 passed) and all selectors checked on an
+  iPhone-13 viewport (the probe created a real case and saw it appear on
+  the mobile board) before CI's webkit project runs it.
+
 ### 2026-07-11 — Overview: honest movement note on Active Threats
 - The trends buckets gained a per-day `severe` count (critical+high
   alerts raised that day, pinned in the bucket-math test), and the
