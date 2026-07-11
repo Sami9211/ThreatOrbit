@@ -26,6 +26,12 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // Sandboxes with a pre-provisioned Chromium (no `playwright install`)
+    // point the runner at it via PW_EXECUTABLE_PATH; CI installs browsers
+    // and leaves this unset.
+    ...(process.env.PW_EXECUTABLE_PATH
+      ? { launchOptions: { executablePath: process.env.PW_EXECUTABLE_PATH } }
+      : {}),
   },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },

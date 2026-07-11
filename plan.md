@@ -562,8 +562,15 @@ not one-off tasks:
       header KPI strip, feeds KPI strip, and SOAR header stats — shipped
       together with the header/alert-detail honesty fixes (see CHANGELOG:
       computed KPI sub-annotations, real UEBA identity/host tabs).
-      Ongoing/iterative: migrating the remaining per-component timings
-      onto the shared tokens.
+      Increment 9 (2026-07-11): playbooks KPI strip live + count-ups +
+      skeleton (with the 100× success-rate fix, see CHANGELOG).
+      Timing audit (2026-07-11): surveyed every remaining ad-hoc
+      `duration:` across dashboard pages/components — all cluster on the
+      token scale (0.12–0.25 fast/base, 0.5–0.9 for chart draw-ins); the
+      only >1s cases are the two health-gauge ring draws, which are
+      deliberate. Converged: tokens govern the shared surfaces, remaining
+      per-component values are intentional. The goal stays standing —
+      upheld on every future UI change, new motion uses lib/motion tokens.
       **Side-find during increment 4 — FIXED (2026-07-10):** the SOAR
       metrics tab rendered a hardcoded "Cases by Type (Last 30 days)" list
       (Phishing 284, …) as if live — the one fabrication-sweep miss on that

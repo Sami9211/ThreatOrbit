@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — E2E data-honesty fences (regression lock-in)
+- New `e2e/honesty.spec.ts` (runs in the CI Playwright workflow) pins this
+  session's fabrication fixes so hardcoded demo values can't silently
+  return: SIEM header annotations computed (old static strings asserted
+  absent), analytics cards free of the demo series, alert-detail
+  identity/host tabs showing real UEBA (no "Department"/"Kerberos"/fake OS
+  rows), playbooks KPI strip live with the success-rate asserted a sane
+  percent (poll-after-count-up), Config → API without the invented rate
+  limit, and the SOAR board showing skeletons — never an empty-state
+  flash — under a delayed response. Full desktop e2e suite: 28 passed.
+- `playwright.config.ts` gains an optional `PW_EXECUTABLE_PATH` override
+  so sandboxes with a pre-provisioned Chromium can run the suite without
+  `playwright install`; CI is unaffected.
+
 ### 2026-07-11 — Playbooks: live KPI strip + 100× success-rate display bug
 - The playbooks page's KPI strip was a hardcoded demo array ("Total
   Playbooks 18", "Scheduled 4 · Next: 17:00 UTC", "94.2% · +1.3% from
