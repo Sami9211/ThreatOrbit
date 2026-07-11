@@ -13,10 +13,11 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
+import { Skeleton, SkeletonRows } from '@/components/dashboard/Skeleton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert } from '@/lib/api'
+import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, fetchSiemTrends, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert, type SiemTrendDay } from '@/lib/api'
 import { fadeInUp, listContainer, listItem } from '@/lib/motion'
 import { tk } from '@/lib/colors'
 
@@ -386,7 +387,10 @@ const METRICS = {
   daysData: 7,
 }
 
-// 7-day sparkline data for metric charts (rough but plausible)
+// First-load-offline fallback ONLY (same policy as ALERTS): the analytics
+// trend cards render live per-day buckets from /siem/analytics/trends, show
+// skeletons until the first answer, and fall back to this demo shape solely
+// when that first fetch fails (genuinely offline).
 const SPARKLINE_DATA = {
   alertVolume: [2241, 3108, 1987, 2854, 3344, 2102, 2847],
   mttd: [7.2, 6.8, 5.1, 6.4, 4.8, 5.9, 4.2],
@@ -903,7 +907,13 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   }).join(' ')
   return (
     <svg width={W_PX} height={H_PX} viewBox={`0 0 ${W_PX} ${H_PX}`}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.8} />
+      {/* draw-in from the left on mount; MotionConfig handles reduced motion */}
+      <motion.polyline
+        points={pts} fill="none" stroke={color} strokeWidth={1.5}
+        strokeLinecap="round" strokeLinejoin="round" opacity={0.8}
+        initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+        transition={{ duration: 0.8, ease: 'easeOut' }}
+      />
     </svg>
   )
 }
@@ -1159,12 +1169,20 @@ export default function SIEMPage() {
   // show demo alerts. ALERTS is a first-load-offline fallback only (see loadSiem).
   const [alerts, setAlerts] = useState<SiemAlert[]>([])
   const loadedRef = useRef(false)
+  // Separate render state for "first answer pending": the queue shows
+  // skeleton rows instead of flashing "No alerts match" while loading.
+  const [alertsPending, setAlertsPending] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedAlert = alerts.find((a) => a.id === selectedId) ?? null
 
   const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
   const [correlations, setCorrelations] = useState<Correlation[]>([])
   const [mitreDist, setMitreDist] = useState<typeof MITRE_DIST>([])
+  // null = first answer still pending (analytics shows skeletons, never the
+  // demo numbers); real data replaces it; SPARKLINE_DATA only ever appears
+  // via the first-load-offline fallback below (same policy as ALERTS).
+  const [trends, setTrends] = useState<SiemTrendDay[] | null>(null)
+  const trendsLoadedRef = useRef(false)
 
   // Bulk FP-triage (Phase 3) - loaded on demand when the tab is opened, not
   // on every page load, since it's a heavier scored-working-set query.
@@ -1214,11 +1232,24 @@ export default function SIEMPage() {
       // Only a FIRST-load failure (genuinely offline) falls back to the demo
       // set; a transient poll failure after a good load must not fabricate.
       .catch(() => { if (!loadedRef.current) setAlerts(ALERTS) })
+      .finally(() => setAlertsPending(false))
     fetchSiemKpis().then(setApiKpis).catch(() => {})
     fetchCorrelations(2).then(setCorrelations).catch(() => {})
     fetchMitreDistribution()
       .then((rows) => setMitreDist(rows))
       .catch(() => { if (!loadedRef.current) setMitreDist(MITRE_DIST) })
+    fetchSiemTrends()
+      .then(({ days }) => { setTrends(days); trendsLoadedRef.current = true })
+      // First-load-offline only: keep real data through transient poll failures
+      .catch(() => {
+        if (!trendsLoadedRef.current) {
+          setTrends(SPARKLINE_DATA.alertVolume.map((v, i) => ({
+            day: '', alerts: v,
+            mttd: SPARKLINE_DATA.mttd[i], mttr: SPARKLINE_DATA.mttr[i],
+            fpRate: SPARKLINE_DATA.fpRate[i],
+          })))
+        }
+      })
   }, [])
 
   useEffect(() => {
@@ -1469,9 +1500,13 @@ export default function SIEMPage() {
                   (spacer padding preserves the scrollbar; no-op below that) */}
               <div className="flex-1 overflow-y-auto" {...alertWindow.containerProps}>
                 {filteredAlerts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
-                    No alerts match the current filters
-                  </div>
+                  alertsPending ? (
+                    <SkeletonRows rows={10} />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
+                      No alerts match the current filters
+                    </div>
+                  )
                 ) : (
                   <>
                     {alertWindow.topPad > 0 && <div style={{ height: alertWindow.topPad }} />}
@@ -1522,6 +1557,7 @@ export default function SIEMPage() {
               <motion.div key={`${fpTriageBand}-${fpTriageItems.length}`}
                 variants={listContainer()} initial="hidden" animate="show"
                 className="flex-1 overflow-y-auto divide-y divide-white/4">
+                {fpTriageLoading && fpTriageItems.length === 0 && <SkeletonRows rows={8} />}
                 {!fpTriageLoading && fpTriageItems.length === 0 && (
                   <p className="text-xs text-ink-600 text-center py-10">
                     No open alerts matched this band in the scored working set.
@@ -1556,23 +1592,37 @@ export default function SIEMPage() {
           {/* ── ANALYTICS ──────────────────────────────────────────── */}
           {tab === 'analytics' && (
             <div className="overflow-y-auto h-full p-6 space-y-6">
-              {/* Metric trend row */}
+              {/* Metric trend row — live per-day buckets from
+                  /siem/analytics/trends; skeletons until the first answer */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: 'Alert Volume (7d)', data: SPARKLINE_DATA.alertVolume, color: tk('threat'), unit: 'alerts/day' },
-                  { label: 'MTTD (min)',        data: SPARKLINE_DATA.mttd,        color: tk('safe'), unit: 'minutes' },
-                  { label: 'MTTR (min)',        data: SPARKLINE_DATA.mttr,        color: tk('amber'), unit: 'minutes' },
-                  { label: 'False Positive %',  data: SPARKLINE_DATA.fpRate,      color: tk('violet'), unit: 'percent' },
-                ].map((m) => (
-                  <div key={m.label} className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
-                    <p className="text-[11px] text-ink-500">{m.label}</p>
-                    <p className="text-xl font-bold text-white mt-1">{m.data[m.data.length - 1]}<span className="text-[11px] text-ink-600 ml-1">{m.unit}</span></p>
-                    <div className="mt-2"><MiniSparkline data={m.data} color={m.color} /></div>
-                    <div className="flex justify-between text-[9px] text-ink-700 mt-1">
-                      <span>7 days ago</span><span>Today</span>
+                {trends === null ? (
+                  ['Alert Volume (7d)', 'MTTD (min)', 'MTTR (min)', 'False Positive %'].map((label) => (
+                    <div key={label} className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
+                      <p className="text-[11px] text-ink-500">{label}</p>
+                      <Skeleton className="h-6 w-20 mt-1.5" />
+                      <Skeleton className="h-7 w-full mt-3" />
+                      <div className="flex justify-between text-[9px] text-ink-700 mt-1">
+                        <span>7 days ago</span><span>Today</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  [
+                    { label: 'Alert Volume (7d)', data: trends.map((d) => d.alerts), color: tk('threat'), unit: 'alerts/day' },
+                    { label: 'MTTD (min)',        data: trends.map((d) => d.mttd),   color: tk('safe'), unit: 'minutes' },
+                    { label: 'MTTR (min)',        data: trends.map((d) => d.mttr),   color: tk('amber'), unit: 'minutes' },
+                    { label: 'False Positive %',  data: trends.map((d) => d.fpRate), color: tk('violet'), unit: 'percent' },
+                  ].map((m) => (
+                    <div key={m.label} className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
+                      <p className="text-[11px] text-ink-500">{m.label}</p>
+                      <p className="text-xl font-bold text-white mt-1">{m.data[m.data.length - 1]}<span className="text-[11px] text-ink-600 ml-1">{m.unit}</span></p>
+                      <div className="mt-2"><MiniSparkline data={m.data} color={m.color} /></div>
+                      <div className="flex justify-between text-[9px] text-ink-700 mt-1">
+                        <span>7 days ago</span><span>Today</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* MITRE distribution */}

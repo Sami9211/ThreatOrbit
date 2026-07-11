@@ -1,6 +1,6 @@
 """SIEM routes: alerts (list/detail/update), rules, log sources, hunts, KPIs."""
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -457,6 +457,49 @@ def siem_kpis(user: dict = Depends(current_user)):
         "totalEps": total_eps,
         "daysData": int(retention["value"]) if retention else 90,
     }
+
+
+@router.get("/analytics/trends")
+def siem_trends(days: int = Query(7, ge=1, le=30), user: dict = Depends(current_user)):
+    """Per-day SOC trend buckets for the analytics sparklines: alert volume,
+    detection/response latency (same telemetry columns as /siem/kpis), and FP
+    rate. Buckets are zero-filled so a quiet day is an honest 0, not a gap,
+    and the range always ends on today (UTC)."""
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=days - 1)
+    with get_conn() as conn:
+        # ts is ISO-8601 TEXT on both backends, so a lexicographic >= against
+        # the range's first date is a correct (and index-friendly) cut.
+        rows = conn.execute(
+            f"SELECT ts, disposition, detect_latency_sec, respond_latency_sec "
+            f"FROM alerts WHERE ts >= ? {sc}",
+            [start.isoformat(), *sp]).fetchall()
+    buckets: dict[str, dict] = {
+        (start + timedelta(days=i)).isoformat(): {"alerts": 0, "fp": 0, "d": [], "r": []}
+        for i in range(days)
+    }
+    for r in rows:
+        b = buckets.get(str(r["ts"])[:10])
+        if b is None:   # e.g. a future-dated test alert past today
+            continue
+        b["alerts"] += 1
+        if r["disposition"] == "false-positive":
+            b["fp"] += 1
+        if r["detect_latency_sec"] is not None:
+            b["d"].append(r["detect_latency_sec"])
+        if r["respond_latency_sec"] is not None:
+            b["r"].append(r["respond_latency_sec"])
+    return {"days": [
+        {
+            "day": day,
+            "alerts": b["alerts"],
+            "mttd": round(sum(b["d"]) / len(b["d"]) / 60, 1) if b["d"] else 0.0,
+            "mttr": round(sum(b["r"]) / len(b["r"]) / 60, 1) if b["r"] else 0.0,
+            "fpRate": round(b["fp"] / b["alerts"] * 100, 1) if b["alerts"] else 0.0,
+        }
+        for day, b in sorted(buckets.items())
+    ]}
 
 
 # ── SOC triage queue + SLA ─────────────────────────────────────────────────────

@@ -910,6 +910,16 @@ export const fetchCorrelations = (minAlerts = 2) =>
 export const fetchMitreDistribution = () =>
   api<Array<{ tactic: string; count: number; color: string }>>('/siem/mitre-distribution')
 
+export type SiemTrendDay = {
+  day: string      // ISO date (UTC), oldest → newest, last entry is today
+  alerts: number
+  mttd: number     // minutes
+  mttr: number     // minutes
+  fpRate: number   // percent
+}
+export const fetchSiemTrends = (days = 7) =>
+  api<{ days: SiemTrendDay[] }>(`/siem/analytics/trends?days=${days}`)
+
 // ── SOAR ─────────────────────────────────────────────────────────────
 export const fetchCases = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''

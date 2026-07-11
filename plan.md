@@ -543,7 +543,17 @@ not one-off tasks:
       arcs teleported to their next random curve at opacity 0.12 →
       `0.44·sin(π·t)` envelope fades them fully out before the swap.
       Verified with before/after zoomed screenshots of the rebuilt export.
-      Ongoing/iterative: loading skeletons, chart draw-ins, count-ups on
+      Increment 6 (2026-07-11): **loading skeletons + chart draw-ins** —
+      shared `Skeleton`/`SkeletonRows` (CSS pulse, frozen by the global
+      reduce-motion rule); SIEM alert queue no longer flashes "No alerts
+      match" during its first fetch (skeleton rows instead), FP-triage list
+      ditto while scoring, analytics trend cards skeleton until first
+      answer; sparklines draw in via framer `pathLength`. Shipped together
+      with the analytics-tab fabrication fix (live `/siem/analytics/trends`
+      endpoint — see CHANGELOG 2026-07-11). Browser-verified with delayed-
+      request interception: skeletons appear, resolve to live data, demo
+      numbers never leak.
+      Ongoing/iterative: skeletons on remaining list surfaces, count-ups on
       the remaining stat surfaces, and migrating the remaining per-component
       timings onto the shared tokens.
       **Side-find during increment 4 — FIXED (2026-07-10):** the SOAR

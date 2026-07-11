@@ -9,6 +9,31 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — SIEM analytics: live 7-day trends + loading skeletons (fabrication-sweep miss)
+- The analytics tab's four trend cards (Alert Volume, MTTD, MTTR, False
+  Positive %) rendered a hardcoded `SPARKLINE_DATA` series (2,847
+  alerts/day, MTTD 4.2 min, …) as if it were live telemetry. New backend
+  endpoint `GET /siem/analytics/trends?days=N` (1–30, default 7) returns
+  per-day buckets — alert count, MTTD/MTTR from the same latency columns
+  `/siem/kpis` uses, FP rate — zero-filled so a quiet day is an honest 0,
+  always ending today (UTC). The cards now render it; `SPARKLINE_DATA`
+  survives only as the documented first-load-offline fallback (same policy
+  as the demo alert queue).
+- New shared `Skeleton`/`SkeletonRows` components (CSS pulse — frozen by
+  the existing global reduce-motion rule): the trend cards show skeletons
+  until the first answer (no demo-number flash), the alert queue shows
+  skeleton rows during its first fetch instead of flashing "No alerts
+  match the current filters", and the FP-triage list gets the same
+  treatment while scoring.
+- Sparklines now draw in left-to-right on mount (framer `pathLength`,
+  honours MotionConfig reduced-motion).
+- Tests: `test_siem_trends.py` (bucket math pinned against merged
+  pre-existing + planted telemetry, zero-fill/range/bounds, future-dated
+  rows ignored) — full suites green on fresh SQLite and fresh Postgres.
+  Browser-verified: live values render (honest 0 for the just-started
+  day), skeletons appear under a delayed request and resolve to live data,
+  demo values never leak, zero console errors.
+
 ### 2026-07-10 — Landing 3D scenes: box-shaped artifacts + jerky orbital motion (user-reported)
 - **Square "box" dots**: WebGL point sprites render as squares unless the
   shader masks them round — the orbit dots in `OrbitalScene` and the hero
