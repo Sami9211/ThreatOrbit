@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-11 — Overview rollups: windowed SQL cuts + a heatmap honesty fix
+- Three Overview endpoints (`hourly-volume`, `alert-analytics`,
+  `mitre-heatmap`) fetched **every alert row** into Python though each only
+  uses a bounded window (24h / 7d / 7d). They now cut with `ts >= cutoff`
+  in SQL (ISO-text `ts` rides `idx_alerts_ts`), and `alert-analytics`
+  aggregates its all-time disposition breakdown with `GROUP BY` instead of
+  a Python loop over the table.
+- **Heatmap honesty fix**: the MITRE tactic × time heatmap claimed six
+  ~28h buckets over the last week, but its `min(5, …)` clamp piled **every
+  alert older than a week into the oldest cell**, so that column inflated
+  forever and misrepresented the last-7-days claim. Now honestly excluded
+  at 168h. New `test_overview_windows.py` pins both: a 90-day-old alert is
+  excluded (not clamped) and a 5-day-old alert stays out of the 24h
+  volume. Full suites green on fresh SQLite (540) and fresh Postgres (538
+  + 2 skipped).
+
 ### 2026-07-11 — /siem/kpis: 60× faster at scale (SQL aggregation)
 - The SIEM page polls `/siem/kpis` every 30 s, and the endpoint fetched
   **every alert row** into Python to count severities/dispositions — a

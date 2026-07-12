@@ -59,8 +59,12 @@ def hourly_volume(user: dict = Depends(current_user)):
     now = datetime.now(timezone.utc)
     buckets = [0] * 24
     sc, sp = _scope(user)
+    # Only the last 24h contribute; cut in SQL (ts is ISO text, so the
+    # lexicographic >= rides idx_alerts_ts) instead of scanning the table.
+    cutoff = (now - timedelta(hours=24)).isoformat()
     with get_conn() as conn:
-        rows = conn.execute(f"SELECT ts FROM alerts WHERE 1=1 {sc}", sp).fetchall()
+        rows = conn.execute(
+            f"SELECT ts FROM alerts WHERE ts >= ? {sc}", [cutoff, *sp]).fetchall()
     for r in rows:
         try:
             ts = datetime.fromisoformat(r["ts"])
@@ -85,11 +89,17 @@ def alert_analytics(user: dict = Depends(current_user)):
     disp_counts: dict[str, int] = {}
     sc, sp = _scope(user)
     with get_conn() as conn:
+        # Disposition breakdown covers ALL alerts (a stock), so aggregate it in
+        # SQL; only the 7-day volume needs rows, and only that window's rows.
+        for g in conn.execute(
+                f"SELECT disposition, COUNT(*) AS n FROM alerts WHERE 1=1 {sc} "
+                f"GROUP BY disposition", sp).fetchall():
+            key = (g["disposition"] or "").strip().lower() or "untriaged"
+            disp_counts[key] = disp_counts.get(key, 0) + int(g["n"])
         rows = conn.execute(
-            f"SELECT ts, severity, disposition FROM alerts WHERE 1=1 {sc}", sp).fetchall()
+            f"SELECT ts, severity FROM alerts WHERE ts >= ? {sc}",
+            [days[0].isoformat(), *sp]).fetchall()
     for r in rows:
-        key = (r["disposition"] or "").strip().lower() or "untriaged"
-        disp_counts[key] = disp_counts.get(key, 0) + 1
         try:
             ts = datetime.fromisoformat(r["ts"])
         except (ValueError, TypeError):
@@ -115,14 +125,21 @@ def mitre_heatmap(user: dict = Depends(current_user)):
     now = datetime.now(timezone.utc)
     grid = defaultdict(lambda: [0] * 6)
     sc, sp = _scope(user)
+    # The heatmap claims six ~28h buckets over the last week, but the old
+    # min(5, …) clamp piled EVERY older alert into the oldest cell, inflating
+    # it forever. Cut honestly at 168h (also turns the scan into an index cut).
+    cutoff = (now - timedelta(hours=168)).isoformat()
     with get_conn() as conn:
         rows = conn.execute(
-            f"SELECT mitre_tactic, ts FROM alerts WHERE mitre_tactic IS NOT NULL {sc}", sp).fetchall()
+            f"SELECT mitre_tactic, ts FROM alerts "
+            f"WHERE mitre_tactic IS NOT NULL AND ts >= ? {sc}", [cutoff, *sp]).fetchall()
     for r in rows:
         try:
             ts = datetime.fromisoformat(r["ts"])
             hrs = (now - ts).total_seconds() / 3600
-            bucket = min(5, int(hrs / 28))  # ~168h / 6
+            if not 0 <= hrs < 168:
+                continue
+            bucket = int(hrs / 28)
             grid[r["mitre_tactic"]][5 - bucket] += 1
         except (ValueError, TypeError):
             continue
