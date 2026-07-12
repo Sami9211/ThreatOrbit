@@ -9,6 +9,23 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-12 — Pin `three` back to 0.184 (incompatible Dependabot bump)
+- A Dependabot "frontend-minor" bump pushed `three` to 0.185.1, but our
+  `postprocessing@6.39.1` (under `@react-three/postprocessing`, which
+  drives the bloom on every landing 3D scene) has a peer range
+  `>= 0.168.0 < 0.185.0` — 0.185.1 is one patch outside it. The scenes
+  still rendered, but the package tree carried an unsatisfied peer, and
+  the CI **supply-chain / SBOM** job (`npm ls --json --long --all`)
+  failed with `invalid: three@0.185.1` (plus an `@emnapi/runtime`
+  extraneous entry from the same regeneration).
+- Reverted `three`→`^0.184.0` and `@types/three`→`^0.184.1` (the last
+  peer-compatible pair, and the exact versions the scenes were verified
+  on earlier this session) via an incremental `npm install` — a minimal
+  16-line lockfile diff, no unrelated transitive churn. `npm ls --all`
+  and `scripts/sbom.sh` now exit 0; tsc + build green.
+- Also gitignored the `sbom/` output dir so SBOM runs don't leave stray
+  artifacts.
+
 ### 2026-07-11 — Overview rollups: windowed SQL cuts + a heatmap honesty fix
 - Three Overview endpoints (`hourly-volume`, `alert-analytics`,
   `mitre-heatmap`) fetched **every alert row** into Python though each only
