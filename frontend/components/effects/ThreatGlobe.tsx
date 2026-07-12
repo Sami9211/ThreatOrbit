@@ -146,9 +146,13 @@ function Hotspot({ lat, lon, color, animate }: { lat: number; lon: number; color
   useFrame((_, dt) => {
     if (!ringRef.current || !animate) return
     t.current += dt * 1.5
-    const s = 1 + 0.6 * Math.abs(Math.sin(t.current))
-    ringRef.current.scale.setScalar(s)
-    ;(ringRef.current.material as THREE.MeshBasicMaterial).opacity = 0.7 - 0.5 * Math.abs(Math.sin(t.current))
+    // sin², not |sin|: same 0→1→0 breathing range/period, but it touches both
+    // extremes tangentially (zero derivative) — no sharp cusp at the bottom of
+    // each pulse, which read as a repeating "snap". Smooth breathe.
+    const sn = Math.sin(t.current)
+    const pulse = sn * sn
+    ringRef.current.scale.setScalar(1 + 0.6 * pulse)
+    ;(ringRef.current.material as THREE.MeshBasicMaterial).opacity = 0.7 - 0.5 * pulse
   })
 
   const pos = latLonToVec(lat, lon, R * 1.01)

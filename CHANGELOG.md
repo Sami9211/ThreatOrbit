@@ -9,6 +9,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-12 — Globe hotspot pulse: smooth breathe, not a cusped snap (user-reported "not smooth")
+- The threat-globe's city hotspot rings pulsed with `Math.abs(Math.sin(t))`,
+  which has a sharp cusp (V-shape) at every zero crossing — the ring
+  expanded, shrank back, then *bounced* abruptly at its smallest point.
+  Across a dozen hotspots that read as a repeating "snap": the "repeating
+  but not smooth" the user described on the second planet. Swapped for
+  `sin²(t)` — identical 0→1→0 breathing range and period, but it touches
+  both extremes tangentially (zero derivative), so the pulse is C¹-smooth
+  with no cusp. The globe's rotation and the attack-arc fades were already
+  continuous. Build + render verified, zero console errors.
+
 ### 2026-07-12 — Box-shaped dots on the globe + IOC-network scenes (user-reported, round 2)
 - The earlier landing-scene fix covered the hero and the *first* orbital
   scene, but the user meant the visuals further down: the "second orbital
