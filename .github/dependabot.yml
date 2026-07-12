@@ -45,6 +45,17 @@ updates:
       frontend-minor:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # three ships frequent 0.x "minor" bumps (0.184 -> 0.185 -> ...), but the
+      # postprocessing bundled by @react-three/postprocessing peer-caps three at
+      # "< 0.185.0". Any minor jump breaks that peer AND the SBOM CI job
+      # (npm ls --all). Hold three + its types at patch-only until a human takes
+      # the @react-three/postprocessing upgrade that lifts the cap (like the
+      # other framework majors). See CHANGELOG 2026-07-12.
+      - dependency-name: "three"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@types/three"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     labels: ["dependencies", "frontend"]
     commit-message: { prefix: "deps(frontend)" }
 

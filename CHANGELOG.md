@@ -25,6 +25,11 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   and `scripts/sbom.sh` now exit 0; tsc + build green.
 - Also gitignored the `sbom/` output dir so SBOM runs don't leave stray
   artifacts.
+- **Prevention**: added a Dependabot `ignore` so `three`/`@types/three`
+  only receive patch bumps (not the minor jumps that clear
+  postprocessing's ceiling), until a human takes the
+  `@react-three/postprocessing` upgrade — so this exact incompatible
+  auto-merge can't recur every Dependabot cycle.
 
 ### 2026-07-11 — Overview rollups: windowed SQL cuts + a heatmap honesty fix
 - Three Overview endpoints (`hourly-volume`, `alert-analytics`,
