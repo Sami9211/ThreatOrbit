@@ -7,6 +7,7 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
+import RoundPoints from '@/components/effects/RoundPoints'
 
 const TYPE_COLORS: Record<string, string> = {
   ip:     '#FF2E97',
@@ -101,37 +102,26 @@ function EdgeLines({ nodes, edges }: { nodes: ReturnType<typeof buildGraph>['nod
 }
 
 function NodeMeshes({ nodes, animate }: { nodes: ReturnType<typeof buildGraph>['nodes']; animate: boolean }) {
-  const meshRefs = useRef<(THREE.Mesh | null)[]>([])
-  const t = useRef(0)
-
-  useFrame((_, dt) => {
-    if (!animate) return
-    t.current += dt
-    meshRefs.current.forEach((m, i) => {
-      if (!m) return
-      const node = nodes[i]
-      const pulse = 0.85 + 0.18 * Math.sin(t.current * 1.4 + node.pulse * Math.PI * 2)
-      m.scale.setScalar(pulse)
+  // Round point sprites, not sphere meshes: the small nodes (size ~0.04)
+  // aliased into squares through the bloom pass. The per-node breathing is
+  // preserved on the GPU (RoundPoints' phase-offset pulse). See RoundPoints.
+  const { positions, colors, sizes } = useMemo(() => {
+    const positions = new Float32Array(nodes.length * 3)
+    const colors = new Float32Array(nodes.length * 3)
+    const sizes = new Float32Array(nodes.length)
+    const col = new THREE.Color()
+    nodes.forEach((node, i) => {
+      positions[i * 3] = node.pos.x; positions[i * 3 + 1] = node.pos.y; positions[i * 3 + 2] = node.pos.z
+      col.set(node.color)
+      colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b
+      // sphere radius -> point world-size: ~2.4x keeps the actor/IOC hierarchy
+      sizes[i] = node.size * 2.4
     })
-  })
+    return { positions, colors, sizes }
+  }, [nodes])
 
-  return (
-    <>
-      {nodes.map((node, i) => (
-        <mesh
-          key={i}
-          ref={(el) => { meshRefs.current[i] = el }}
-          position={node.pos}
-        >
-          <sphereGeometry args={[node.size, 12, 12]} />
-          <meshBasicMaterial
-            color={node.color}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </>
-  )
+  return <RoundPoints positions={positions} colors={colors} sizes={sizes}
+    pulse={animate} pulseAmp={0.16} pulseSpeed={1.4} sizeScale={420} />
 }
 
 function SceneGroup({ nodeCount, animate }: { nodeCount: number; animate: boolean }) {

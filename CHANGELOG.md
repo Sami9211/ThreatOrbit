@@ -9,6 +9,27 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-12 — Box-shaped dots on the globe + IOC-network scenes (user-reported, round 2)
+- The earlier landing-scene fix covered the hero and the *first* orbital
+  scene, but the user meant the visuals further down: the "second orbital
+  planet" (the rotating **ThreatGlobe** in "Threats move worldwide") and
+  the **IOC network** below it. Their node dots were tiny `sphereGeometry`
+  meshes (globe radius 0.018, IOC 0.04) that aliased into visible **squares**
+  at sub-pixel size — and antialiasing couldn't help because both scenes
+  render through a bloom `EffectComposer` pass, which bypasses the canvas
+  MSAA.
+- New reusable `RoundPoints` component renders the dots as point sprites
+  with a fragment shader that discards fragments outside the circle —
+  crisp and round at any size or DPR, independent of bloom. It carries
+  per-point colour + size (so the IOC actor/IOC size hierarchy survives)
+  and an optional GPU-side pulse (per-point phase), so the IOC network
+  keeps its out-of-sync "breathing" with no per-frame JS over the node
+  list. Both `ThreatGlobe.Nodes` and `IOCNetworkScene.NodeMeshes` now use
+  it.
+- Browser-verified with zoomed crops: every dot on both scenes is now a
+  clean circle (was distinctly square), size hierarchy intact, zero
+  console/shader-compile errors.
+
 ### 2026-07-12 — Pin `three` back to 0.184 (incompatible Dependabot bump)
 - A Dependabot "frontend-minor" bump pushed `three` to 0.185.1, but our
   `postprocessing@6.39.1` (under `@react-three/postprocessing`, which

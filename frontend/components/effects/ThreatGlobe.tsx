@@ -7,6 +7,7 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
+import RoundPoints from '@/components/effects/RoundPoints'
 
 const R = 2
 const ARC_COLORS = ['#FF2E97', '#7A3CFF', '#FFB23E', '#2DD4BF']
@@ -170,15 +171,25 @@ function Hotspot({ lat, lon, color, animate }: { lat: number; lon: number; color
 }
 
 function Nodes({ count }: { count: number }) {
-  const pts = useMemo(() => Array.from({ length: count }, () => randSpherePoint(R * 1.005)), [count])
+  // Round point sprites, not tiny sphere meshes: at this size (was radius 0.018)
+  // meshes aliased into visible squares through the bloom pass. See RoundPoints.
+  const { positions, colors, sizes } = useMemo(() => {
+    const positions = new Float32Array(count * 3)
+    const colors = new Float32Array(count * 3)
+    const sizes = new Float32Array(count)
+    const col = new THREE.Color()
+    for (let i = 0; i < count; i++) {
+      const p = randSpherePoint(R * 1.005)
+      positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; positions[i * 3 + 2] = p.z
+      col.set(ARC_COLORS[i % ARC_COLORS.length])
+      colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b
+      sizes[i] = 0.09
+    }
+    return { positions, colors, sizes }
+  }, [count])
   return (
     <group>
-      {pts.map((p, i) => (
-        <mesh key={i} position={p}>
-          <sphereGeometry args={[0.018, 8, 8]} />
-          <meshBasicMaterial color={ARC_COLORS[i % ARC_COLORS.length]} toneMapped={false} />
-        </mesh>
-      ))}
+      <RoundPoints positions={positions} colors={colors} sizes={sizes} />
     </group>
   )
 }
