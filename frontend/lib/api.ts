@@ -471,6 +471,8 @@ export interface FeedsSummary {
   active: number
   errored: number
   totalIndicators: number
+  /** IOCs first seen since midnight UTC — the real "IOCs today" count. */
+  newToday: number
   byType: Record<string, number>
 }
 

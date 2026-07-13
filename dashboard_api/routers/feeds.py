@@ -1,5 +1,6 @@
 """Threat feed routes: list feeds/sources, create, toggle, and a summary."""
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -49,14 +50,22 @@ def list_feeds(type: str | None = None, status: str | None = None,
 def feeds_summary(user: dict = Depends(current_user)):
     # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0,
+                                                  microsecond=0).isoformat()
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT status, enabled, indicators, type FROM feeds WHERE 1=1 {sc}", sp).fetchall()
+        # Real "IOCs today" — indicators first seen since midnight UTC, not a sum
+        # of per-feed nominal daily rates.
+        new_today = conn.execute(
+            f"SELECT COUNT(*) AS n FROM iocs WHERE first_seen >= ? {sc}", [midnight] + sp
+        ).fetchone()["n"]
     return {
         "totalFeeds": len(rows),
         "active": sum(1 for r in rows if r["status"] == "active"),
         "errored": sum(1 for r in rows if r["status"] == "error"),
         "totalIndicators": sum(r["indicators"] for r in rows),
+        "newToday": new_today,
         "byType": {t: sum(1 for r in rows if r["type"] == t)
                    for t in ("commercial", "opensource", "community", "internal")},
     }

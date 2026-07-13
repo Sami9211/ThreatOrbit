@@ -134,7 +134,9 @@ export default function FeedSourcesPage() {
 
   const [summary, setSummary] = useState<FeedsSummary | null>(null)
   const activeFeeds = feeds.filter(f => f.enabled).length
-  const iocsToday = feeds.filter(f => f.enabled).reduce((acc, f) => acc + f.iocsPerDay, 0)
+  // Real "IOCs today" from the summary endpoint (indicators first seen since
+  // midnight UTC) — not a sum of per-feed nominal daily rates.
+  const iocsToday = summary?.newToday ?? null
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -159,7 +161,7 @@ export default function FeedSourcesPage() {
       <div className="grid grid-cols-4 divide-x divide-white/5 border-b border-white/5 shrink-0">
         {[
           { label: 'Active Feeds',     value: activeFeeds,                          color: 'text-safe'    },
-          { label: 'IOCs Today',       value: `${(iocsToday / 1000).toFixed(1)}k`,  color: 'text-magenta' },
+          { label: 'IOCs Today',       value: iocsToday === null ? '—' : iocsToday.toLocaleString(),  color: 'text-magenta' },
           { label: 'Total Indicators', value: summary ? summary.totalIndicators.toLocaleString() : '-', color: 'text-violet' },
           { label: 'Feeds Errored',    value: summary ? String(summary.errored) : '-', color: 'text-amber' },
         ].map(({ label, value, color }) => (
@@ -205,7 +207,7 @@ export default function FeedSourcesPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-[#0A0612] border-b border-white/8">
             <tr>
-              {['Source Name', 'Type', 'Format', 'IOCs/day', 'Last Pull', 'Reliability', 'Status'].map(h => (
+              {['Source Name', 'Type', 'Format', 'Indicators', 'Last Pull', 'Reliability', 'Status'].map(h => (
                 <th key={h} className="text-left px-4 py-2.5 text-[10px] text-ink-500 font-semibold uppercase tracking-wider whitespace-nowrap">
                   {h}
                 </th>

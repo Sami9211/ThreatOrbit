@@ -9,6 +9,19 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-13 — Feeds "IOCs Today" showed a fabricated/cumulative total
+- The feeds/sources KPI "IOCs Today" summed each feed's `iocsPerDay` — a
+  hardcoded per-feed rate in the static fallback, and (once live) each feed's
+  **cumulative** indicator total via `apiFeedToRow` (`iocsPerDay: f.indicators`)
+  — so it never showed indicators actually seen today, and duplicated the
+  adjacent "Total Indicators" tile. Now backed by a real
+  `feeds/summary.newToday` = `COUNT(*) FROM iocs WHERE first_seen >= midnight UTC`
+  (org-scoped), rendered as a plain count. The per-feed table column, which
+  showed the same cumulative total under an "IOCs/day" header, is relabelled
+  "Indicators" (there's no real per-feed daily rate in the store). Regression
+  fence `test_feeds_summary.py`: IOCs first-seen 30h ago don't count, today's do
+  — green on SQLite + Postgres.
+
 ### 2026-07-13 — SOAR "week"/"month" tiles showed all-time totals
 - **"Cases Closed (week)"** — the metrics `cases` query has no time filter, so
   `casesClosedWeek` reported `len(closed)`, every case ever closed. On a
