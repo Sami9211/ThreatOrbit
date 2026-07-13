@@ -728,9 +728,31 @@ def list_rules(category: str | None = None, status: str | None = None,
     if status:
         clauses.append("status=?"); params.append(status)
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    now = datetime.now(timezone.utc)
+    cut24 = (now - timedelta(hours=24)).isoformat()
+    cut7d = (now - timedelta(days=7)).isoformat()
+    ascope, aparams = "", []
+    if tenancy.enforced():
+        ascope, aparams = " AND org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
-        rows = conn.execute(f"SELECT * FROM detection_rules {where} ORDER BY hits_24h DESC", params).fetchall()
-    return rows_to_dicts(rows)
+        rows = conn.execute(f"SELECT * FROM detection_rules {where}", params).fetchall()
+        # hits_24h / fired_last_7d are stored on the rule but only ever set at
+        # seed/import time — never updated as the engine fires — so they'd show a
+        # frozen number. Compute them live from the alerts the rule produced
+        # (engine alerts carry rule_name; rule_id is a constant 'R-ENGINE'), one
+        # windowed scan for both counters.
+        counts = {r["rule_name"]: r for r in conn.execute(
+            "SELECT rule_name, "
+            "SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS h24, COUNT(*) AS h7d "
+            f"FROM alerts WHERE ts >= ?{ascope} GROUP BY rule_name",
+            [cut24, cut7d] + aparams).fetchall()}
+    out = rows_to_dicts(rows)
+    for r in out:
+        c = counts.get(r["name"])
+        r["hits_24h"] = int(c["h24"] or 0) if c else 0
+        r["fired_last_7d"] = int(c["h7d"] or 0) if c else 0
+    out.sort(key=lambda r: r["hits_24h"], reverse=True)  # SQL sort used the stale column
+    return out
 
 
 def _reject_unsafe_regex(definition: dict | None) -> None:

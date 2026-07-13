@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-13 — SIEM rule "Hits (24h)" / "Fired (7d)" were frozen at seed value
+- `detection_rules.hits_24h` and `fired_last_7d` are written once at seed /
+  detection-pack-import time and **never updated** — the engine stamps
+  `last_fired` when a rule fires but not these counters — so the rules list
+  showed a frozen number that never reflected live detections (and the list
+  was even sorted by the stale `hits_24h`). Both are now computed live from the
+  alerts each rule produced, matched on `rule_name` (engine alerts all carry a
+  constant `rule_id='R-ENGINE'`, so rule_id can't distinguish rules): one
+  windowed `GROUP BY rule_name` over `alerts` yields the 24h and 7d counts,
+  which override the stored columns, and the list is re-sorted by the real
+  hits. Regression fence `test_siem_rule_counters.py`: alerts 3 days old count
+  toward 7d-not-24h, 10 days old count toward neither — green on SQLite +
+  Postgres.
+
 ### 2026-07-13 — Feeds "IOCs Today" showed a fabricated/cumulative total
 - The feeds/sources KPI "IOCs Today" summed each feed's `iocsPerDay` — a
   hardcoded per-feed rate in the static fallback, and (once live) each feed's
