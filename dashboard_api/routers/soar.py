@@ -912,12 +912,19 @@ def soar_metrics(user: dict = Depends(current_user)):
     now = datetime.now(timezone.utc)
     week = (now - timedelta(days=7)).replace(microsecond=0).isoformat()
     fortnight = (now - timedelta(days=14)).replace(microsecond=0).isoformat()
+    month = (now - timedelta(days=30)).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         cases = conn.execute(
             f"SELECT status, severity, playbook, created, updated, sla_hours FROM cases WHERE 1=1 {sc}",
             sp).fetchall()
         pbs = conn.execute(
             f"SELECT runs, success_rate, avg_time, last_run FROM playbooks WHERE 1=1 {sc}", sp).fetchall()
+        # Playbook runs in the trailing 30 days — the actual basis for "time saved
+        # this month". `playbooks.runs` is an all-time cumulative counter, so using
+        # it (as before) reported all-time hours under a "month" label.
+        runs_month = conn.execute(
+            f"SELECT COUNT(*) AS n FROM playbook_runs WHERE ts >= ? {sc}", [month] + sp
+        ).fetchone()["n"]
         # MTTR in minutes from per-alert response latency (consistent with SIEM KPIs).
         mttr_row = conn.execute(
             "SELECT AVG(respond_latency_sec) / 60.0 AS v FROM alerts "
@@ -968,7 +975,8 @@ def soar_metrics(user: dict = Depends(current_user)):
         "slaBreached": sla_breached,
         "mttr": mttr, "mttrTrendPct": mttr_trend_pct,
         "automationRate": automation_rate, "automationTrendPp": automation_trend_pp,
-        "timeSavedMonth": round(total_runs * avg_pb / 3600, 1),
+        "timeSavedMonth": round(runs_month * avg_pb / 3600, 1),
+        "runsMonth": runs_month,
         "totalRuns": total_runs,
         "playbooksToday": sum(1 for p in pbs if p["last_run"]),
         "avgPlaybookTime": avg_pb,

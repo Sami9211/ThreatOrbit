@@ -37,3 +37,31 @@ def test_cases_closed_week_windows_to_seven_days(client, auth):
     # Only the 2 recent closures count toward "this week" — the 3 old ones don't,
     # even though all 5 are closed. (Pre-fix this asserted +5.)
     assert after == base + 2
+
+
+def _insert_run(conn, ts_iso: str) -> None:
+    conn.execute(
+        "INSERT INTO playbook_runs (id,playbook_id,playbook_name,ts,status,trigger) "
+        "VALUES (?,?,?,?,?,?)",
+        (str(uuid.uuid4()), "pb-x", "Test PB", ts_iso, "success", "auto"),
+    )
+
+
+def test_runs_month_windows_to_thirty_days(client, auth):
+    """`timeSavedMonth` is derived from `runsMonth`, which must count only the
+    trailing 30 days of playbook runs — not the all-time cumulative counter that
+    used to feed the 'this month' tile."""
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=40)).replace(microsecond=0).isoformat()      # outside the month
+    recent = (now - timedelta(days=5)).replace(microsecond=0).isoformat()    # inside the month
+
+    base = client.get("/soar/metrics", headers=auth).json()["runsMonth"]
+    with get_conn() as conn:
+        for _ in range(4):
+            _insert_run(conn, old)
+        for _ in range(3):
+            _insert_run(conn, recent)
+        conn.commit()
+
+    after = client.get("/soar/metrics", headers=auth).json()["runsMonth"]
+    assert after == base + 3  # only the 3 runs inside the 30-day window count

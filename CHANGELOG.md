@@ -9,16 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
-### 2026-07-13 — "Cases Closed (week)" showed the all-time closed count
-- The SOAR metrics `cases` query has no time filter, so `casesClosedWeek`
-  reported `len(closed)` — every case ever closed — while the UI labels the
-  tile **"Cases Closed (week)"**. On a long-running deployment that reads as
-  hundreds where the real weekly figure is a handful. Now windowed to the last
-  7 days on the `updated` close-time proxy (the same basis the automation
-  week-over-week trend already uses; there's no dedicated `closed_at` column).
-  `automationRate` keeps its all-closed denominator (its field is unqualified;
-  the weekly movement is `automationTrendPp`). Regression fence in
-  `test_soar_metrics.py`: old closures (10d ago) don't count, recent ones do.
+### 2026-07-13 — SOAR "week"/"month" tiles showed all-time totals
+- **"Cases Closed (week)"** — the metrics `cases` query has no time filter, so
+  `casesClosedWeek` reported `len(closed)`, every case ever closed. On a
+  long-running deployment that reads as hundreds where the real weekly figure is
+  a handful. Now windowed to the last 7 days on the `updated` close-time proxy
+  (same basis the automation week-over-week trend already uses; no dedicated
+  `closed_at` column). `automationRate` keeps its all-closed denominator (its
+  field is unqualified; the weekly movement is `automationTrendPp`).
+- **"Time Saved (month)"** — same class: it multiplied `avg_playbook_time` by
+  `playbooks.runs`, the **all-time** cumulative run counter, under a "this
+  month" label. Now derives from a new `runsMonth` = `COUNT(*)` of
+  `playbook_runs` in the trailing 30 days (that history table exists and is
+  `ts`-indexed). The frontend tile's sub-line now reads "from N runs this
+  month" instead of the all-time total.
+- Regression fences in `test_soar_metrics.py`: old closures (10d ago) / old
+  runs (40d ago) don't count toward the week/month; recent ones do.
 
 ### 2026-07-13 — Asset risk breakdown could disagree with the stored score
 - `risk_breakdown` (the "why is this risky?" detail panel) summed each axis's

@@ -281,6 +281,8 @@ export interface SoarMetrics {
   /** Automation-rate movement in percentage points vs the prior week; null without a baseline. */
   automationTrendPp: number | null
   timeSavedMonth: number
+  /** Playbook runs in the trailing 30 days — the basis for timeSavedMonth. */
+  runsMonth: number
   totalRuns: number
   playbooksToday: number
   avgPlaybookTime: number

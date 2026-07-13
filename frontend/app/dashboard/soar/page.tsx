@@ -321,6 +321,7 @@ const SOAR_METRICS = {
   automationRate: 73,
   automationTrendPp: null as number | null,
   timeSavedMonth: 847,
+  runsMonth: 312,
   totalRuns: 1243,
   playbooksToday: 1243,
   avgPlaybookTime: '3m 08s',
@@ -976,6 +977,7 @@ export default function SOARPage() {
       automationRate: Math.round(soarApi.automationRate),
       automationTrendPp: soarApi.automationTrendPp,
       timeSavedMonth: Math.round(soarApi.timeSavedMonth),
+      runsMonth: soarApi.runsMonth,
       totalRuns: soarApi.totalRuns,
       playbooksToday: soarApi.playbooksToday,
       avgPlaybookTime: fmtSecsShort(soarApi.avgPlaybookTime),
@@ -1062,7 +1064,7 @@ export default function SOARPage() {
             { label: 'Automation Rate',       value: <><AnimatedNumber value={metrics.automationRate} />%</>,
               sub: metrics.automationTrendPp != null ? `${metrics.automationTrendPp > 0 ? '+' : ''}${metrics.automationTrendPp}pp vs prior week` : 'no prior-week baseline',
               color: 'text-violet', trend: metrics.automationTrendPp == null ? null : metrics.automationTrendPp > 0 ? 'up' : 'down' },
-            { label: 'Time Saved (month)',    value: <><AnimatedNumber value={metrics.timeSavedMonth} />h</>, sub: `from ${metrics.totalRuns.toLocaleString()} playbook runs`, color: 'text-amber', trend: null },
+            { label: 'Time Saved (month)',    value: <><AnimatedNumber value={metrics.timeSavedMonth} />h</>, sub: `from ${metrics.runsMonth.toLocaleString()} runs this month`, color: 'text-amber', trend: null },
             { label: 'Playbooks Today',       value: <AnimatedNumber value={metrics.playbooksToday} />, sub: `avg ${metrics.avgPlaybookTime}/run`, color: 'text-white',   trend: null },
           ].map((k) => (
             <div key={k.label} className="px-4 py-3 border-r border-white/5 last:border-r-0">
