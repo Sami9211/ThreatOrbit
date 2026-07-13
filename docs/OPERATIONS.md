@@ -133,6 +133,36 @@ build that supports the DB's version, or restore the pre-upgrade backup. Bump
 - **Error tracking:** set `SENTRY_DSN` and `pip install sentry-sdk` to
   forward unhandled exceptions to Sentry. With the DSN set but the SDK
   missing, the platform logs that tracking is off — it never pretends.
+- **Self-health surface:** `GET /self-health` (authenticated; same access as
+  `/config/leader`) aggregates the platform's *own* vitals — database
+  reachability + measured round-trip latency, code-vs-DB schema version,
+  detection-queue depth/lag backpressure, background-work leader lease, and
+  process uptime/counters — into one verdict (`ok` / `degraded` / `down`). The
+  overall verdict is the worst *gating* check (database `down` ⇒ down; schema
+  drift or a queue past its thresholds ⇒ degraded). Rendered live in the
+  dashboard at **Settings → General → System Health**. Queue thresholds tune
+  with `DASHBOARD_HEALTH_LAG_SECONDS` (default 300) and
+  `DASHBOARD_HEALTH_QUEUE_DEPTH` (default 10000).
+- **Self-health alerting:** in live mode a leader-gated monitor samples the
+  verdict every `DASHBOARD_HEALTH_MONITOR_SECONDS` (default 60; `0` disables)
+  and raises a `platform.health` notification — bell + SSE + Slack routing —
+  **only on a verdict transition** (degrade / recover), so a steadily-degraded
+  platform never spams. When the database is itself the fault the notification
+  can't be written, so the `CRITICAL` log line (plus `/metrics` and Sentry) is
+  the out-of-band channel — wire an alert on `threatorbit_domain_total{counter="errors"}`
+  or on scrape failure for that case.
+
+### Health probes (liveness vs. readiness)
+
+Two endpoints, two jobs — wire them to the matching Kubernetes/LB probe:
+
+| Endpoint | Probe | Checks | On failure |
+|---|---|---|---|
+| `GET /health` | **liveness** | process is up (static `ok`) | always 200 — a DB outage a restart can't fix must **not** trigger a pod kill |
+| `GET /ready` | **readiness** | `SELECT 1` + schema versions | **HTTP 503** when the DB is unreachable, so the orchestrator pulls the pod out of rotation instead of routing traffic it can't serve |
+
+The Helm chart (`deploy/helm/…`) already points `livenessProbe` at `/health`
+and `readinessProbe` at `/ready`.
 
 ## Key management
 
