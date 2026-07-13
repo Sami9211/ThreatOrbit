@@ -16,7 +16,8 @@ Three pieces:
 
   * **Error tracking** - `SENTRY_DSN` initialises sentry-sdk when the package
     is installed; if it isn't, we say so once instead of pretending.
-    Unhandled exceptions are counted in `threatorbit_errors_total` either way.
+    Unhandled exceptions are counted in `threatorbit_domain_total{counter="errors"}`
+    either way.
 """
 import json
 import logging

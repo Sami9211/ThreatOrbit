@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-13 — Ship Prometheus alert rules for the platform's own health
+- `deploy/prometheus/alerts.yml` + README: ready-to-use alert rules over the
+  metrics `GET /metrics` already exposes — target down, `/ready` returning 503
+  (DB unreachable), unhandled-error rate, engine-tick failures, detection queue
+  depth/lag, and mean request latency. Thresholds mirror the in-app self-health
+  defaults so a Prometheus/Alertmanager team gets paged on the same conditions
+  the System Health card shows, even when nobody's looking at the dashboard.
+  README documents the scrape_config, the metric table, and a PrometheusRule
+  CRD wrapper for the prometheus-operator. YAML + rule structure validated.
+- **Doc-accuracy fix:** observability.py's docstring claimed unhandled errors
+  land in `threatorbit_errors_total`; the metric is actually exposed as
+  `threatorbit_domain_total{counter="errors"}`. An operator alerting on the
+  named-but-nonexistent series would have gotten no data — corrected.
+
 ### 2026-07-13 — Platform self-health surface + a real /ready readiness contract
 - **Bug: `/ready` lied to orchestrators.** The readiness probe returned HTTP
   **200** with a `{"ready": false}` body when the database was unreachable.
