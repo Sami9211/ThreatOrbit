@@ -309,7 +309,9 @@ plus external compliance attestations.
       `dashboard_api/self_health.py` aggregates the platform's *own* vitals
       (DB reachability + latency, schema version, detection-queue backpressure,
       leader lease, process counters) into one verdict, surfaced at authed
-      `GET /self-health` and a Settings → System Health card; and `/ready` now
+      `GET /self-health` and a Settings → System Health card; a leader-gated
+      monitor thread raises a `platform.health` notification on verdict
+      transitions (alerting on the platform's own health); and `/ready` now
       returns a true 503 when the DB is unreachable (readiness-contract fix).
       Remaining: distributed tracing, SLOs + error budgets, and external
       synthetic checks (`/metrics` + self-health cover the in-process side).

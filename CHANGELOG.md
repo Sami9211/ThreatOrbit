@@ -35,6 +35,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 - Tests: `test_self_health.py` (readiness 503 regression, verdict logic for
   ok/degraded/down, endpoint auth) — green on fresh SQLite **and** Postgres;
   full backend suite (550) green; `frontend tsc` clean; `e2e/self-health.spec.ts`.
+- **Proactive alerting.** A leader-gated background monitor (live mode) samples
+  the verdict every `DASHBOARD_HEALTH_MONITOR_SECONDS` (default 60s) and raises
+  a `platform.health` notification — into the bell, SSE, and Slack routing —
+  only on a *verdict transition* (ok→degraded→down and recovery), so a
+  steadily-degraded platform never spams. Severity maps warning/critical/info;
+  leadership is a read-only `is_leader()` check so exactly one replica alerts
+  and it never fights the engine's lease. When the DB is itself the fault the
+  INSERT can't land, so the CRITICAL log line (+ /metrics, Sentry) is the
+  out-of-band channel. Transition logic covered by 5 more tests (no-alert on
+  first observation / steady state, degrade/recovery severities, DB-down
+  persist-failure swallowed).
 
 ### 2026-07-12 — Globe hotspot pulse: smooth breathe, not a cusped snap (user-reported "not smooth")
 - The threat-globe's city hotspot rings pulsed with `Math.abs(Math.sin(t))`,

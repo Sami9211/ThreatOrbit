@@ -20,12 +20,15 @@ Thresholds are env-tunable so a high-throughput deployment can widen them.
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timezone
 
 from dashboard_api import observability
 from dashboard_api.db import get_conn
+
+logger = logging.getLogger("dashboard_api.self_health")
 
 OK, DEGRADED, DOWN, UNKNOWN = "ok", "degraded", "down", "unknown"
 _RANK = {OK: 0, DEGRADED: 1, DOWN: 2}
@@ -142,3 +145,62 @@ def collect() -> dict:
         "checks": checks,
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+
+
+# ── Proactive alerting (the "alerting on the platform's own health" piece) ────────
+#
+# A background monitor samples the verdict and raises a notification-centre alert
+# only on a *transition* — a steadily-degraded platform must not spam the bell
+# every minute. The wiring (a leader-gated daemon thread) lives in main.py so
+# exactly one replica alerts; this module owns the transition logic + the alert.
+
+MONITOR_SECONDS = int(os.environ.get("DASHBOARD_HEALTH_MONITOR_SECONDS", "60"))
+_last_status: str | None = None
+
+_ALERT_SEVERITY = {DEGRADED: "warning", DOWN: "critical", OK: "info"}
+_ALERT_TITLE = {
+    DEGRADED: "Platform health degraded",
+    DOWN: "Platform health critical",
+    OK: "Platform health recovered",
+}
+_ALERT_LEVEL = {DOWN: logging.CRITICAL, DEGRADED: logging.WARNING, OK: logging.INFO}
+
+
+def _failing_summary(health: dict) -> str:
+    bad = [
+        f"{name}: {chk.get('detail') or chk.get('error') or chk['status']}"
+        for name, chk in health["checks"].items()
+        if chk.get("status") in (DEGRADED, DOWN)
+    ]
+    return "; ".join(bad) if bad else "all subsystems nominal"
+
+
+def _raise_alert(prev: str, status: str, health: dict) -> None:
+    detail = _failing_summary(health)
+    logger.log(_ALERT_LEVEL.get(status, logging.INFO),
+               "Platform self-health %s→%s: %s", prev, status, detail)
+    # Best-effort persist to the notification centre. When the DB is itself the
+    # fault (a down verdict for a DB reason) the INSERT can't land — the log line
+    # above, plus /metrics and Sentry, are the out-of-band channels for that case.
+    try:
+        from dashboard_api.routers.platform import notify
+        with get_conn() as conn:
+            notify(conn, type="platform.health", title=_ALERT_TITLE[status],
+                   severity=_ALERT_SEVERITY[status], detail=detail, link="/dashboard/config")
+            conn.commit()
+    except Exception:
+        logger.debug("self-health alert could not be persisted", exc_info=True)
+
+
+def monitor_once() -> dict:
+    """Sample the verdict; alert on a transition. The first call just records the
+    baseline (no alert). Returns the health snapshot so callers/tests can inspect
+    it. Not thread-safe by design — a single monitor thread drives it."""
+    global _last_status
+    health = collect()
+    status = health["status"]
+    prev = _last_status
+    _last_status = status
+    if prev is not None and status != prev:
+        _raise_alert(prev, status, health)
+    return health

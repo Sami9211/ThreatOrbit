@@ -110,3 +110,81 @@ def test_self_health_endpoint_returns_verdict(client, auth):
     assert body["status"] in {"ok", "degraded", "down"}
     assert body["checks"]["database"]["status"] == "ok"
     assert "uptimeSeconds" in body["checks"]["process"]
+
+
+# ── proactive alerting (monitor transitions) ──────────────────────────────────────
+
+def _fake_health(status):
+    bad = status in {"degraded", "down"}
+    return {
+        "status": status,
+        "checks": {
+            "database": {"status": "ok", "latencyMs": 1.0},
+            "schema": {"status": "ok"},
+            "queue": ({"status": status, "detail": "backlog"} if bad else {"status": "ok"}),
+            "leader": {"status": "ok"},
+            "process": {"status": "ok"},
+        },
+        "generatedAt": "2026-07-13T00:00:00+00:00",
+    }
+
+
+def _reset_monitor():
+    sh._last_status = None
+
+
+def test_monitor_first_observation_records_baseline_without_alerting():
+    _reset_monitor()
+    with patch.object(sh, "collect", return_value=_fake_health("ok")), \
+         patch("dashboard_api.routers.platform.notify") as notify:
+        sh.monitor_once()
+    notify.assert_not_called()
+    assert sh._last_status == "ok"
+
+
+def test_monitor_steady_state_does_not_spam():
+    _reset_monitor()
+    with patch.object(sh, "collect", return_value=_fake_health("degraded")), \
+         patch("dashboard_api.routers.platform.notify") as notify:
+        sh.monitor_once()          # baseline (no alert on first)
+        sh.monitor_once()          # same status → still no alert
+        sh.monitor_once()
+    notify.assert_not_called()
+
+
+def test_monitor_alerts_on_degrade_transition(client):
+    _reset_monitor()
+    with patch("dashboard_api.routers.platform.notify") as notify:
+        with patch.object(sh, "collect", return_value=_fake_health("ok")):
+            sh.monitor_once()
+        with patch.object(sh, "collect", return_value=_fake_health("degraded")):
+            sh.monitor_once()
+    notify.assert_called_once()
+    assert notify.call_args.kwargs["severity"] == "warning"
+    assert notify.call_args.kwargs["type"] == "platform.health"
+
+
+def test_monitor_alerts_critical_then_recovery(client):
+    _reset_monitor()
+    with patch("dashboard_api.routers.platform.notify") as notify:
+        for st in ("ok", "down", "ok"):
+            with patch.object(sh, "collect", return_value=_fake_health(st)):
+                sh.monitor_once()
+    severities = [c.kwargs["severity"] for c in notify.call_args_list]
+    assert severities == ["critical", "info"]   # down (critical) → recovered (info)
+
+
+def test_monitor_db_down_persist_failure_is_swallowed():
+    """When the DB is the fault, the notification INSERT can't land — the monitor
+    must log and move on, never raise (the log line is the alert of last resort)."""
+    _reset_monitor()
+    with patch.object(sh, "collect", return_value=_fake_health("ok")):
+        sh.monitor_once()
+
+    def boom(*a, **k):
+        raise RuntimeError("db gone")
+
+    with patch.object(sh, "collect", return_value=_fake_health("down")), \
+         patch("dashboard_api.self_health.get_conn", side_effect=boom):
+        health = sh.monitor_once()   # must not raise
+    assert health["status"] == "down"

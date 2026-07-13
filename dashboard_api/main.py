@@ -170,6 +170,27 @@ def _engine_loop():
         time.sleep(ENGINE_TICK_SECONDS)
 
 
+def _health_monitor():
+    """Background loop (live mode): watch the platform's *own* health and alert
+    the notification centre on a verdict transition (ok→degraded→down and
+    recovery). Leadership is checked read-only (`is_leader`, not `acquire`) so it
+    never fights the engine loop's lease — exactly one replica alerts. Disabled
+    when DASHBOARD_HEALTH_MONITOR_SECONDS<=0."""
+    import time
+    from dashboard_api import leader, self_health
+    if self_health.MONITOR_SECONDS <= 0:
+        logger.info("Self-health monitor disabled (DASHBOARD_HEALTH_MONITOR_SECONDS<=0)")
+        return
+    time.sleep(10)  # let the first engine tick claim leadership before we sample
+    while True:
+        try:
+            if leader.is_leader():
+                self_health.monitor_once()
+        except Exception:
+            logger.exception("Self-health monitor tick failed")
+        time.sleep(self_health.MONITOR_SECONDS)
+
+
 def _apply_engine_mode() -> bool:
     """Boot-time application of DASHBOARD_ENGINE. In real-data mode ("off") the
     engine is paused on EVERY start — the operator's env wins at boot, while the
@@ -248,6 +269,7 @@ def _startup():
                 logger.exception("Initial engine prime failed")
         threading.Thread(target=_connector_scheduler, daemon=True).start()
         threading.Thread(target=_engine_loop, daemon=True).start()
+        threading.Thread(target=_health_monitor, daemon=True).start()
         # Long-running log collectors (syslog UDP + file/dir watcher), if configured.
         try:
             from dashboard_api.log_listeners import start_listeners
