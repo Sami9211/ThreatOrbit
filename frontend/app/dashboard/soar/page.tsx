@@ -1267,7 +1267,7 @@ export default function SOARPage() {
                       { label: 'Automation Rate',     value: soarApi ? `${Math.round(soarApi.automationRate)}%` : '-', sub: 'of closed cases playbook-driven', color: 'text-safe' },
                       { label: 'Analyst Hours Saved', value: soarApi ? `${Math.round(soarApi.timeSavedMonth)}h` : '-', sub: 'this month, from run volume', color: 'text-violet' },
                       { label: 'Cases Closed (week)', value: soarApi ? String(soarApi.casesClosedWeek) : '-', sub: `${soarApi?.openCases ?? 0} still open`, color: 'text-amber' },
-                      { label: 'Playbooks Run Today', value: soarApi ? String(soarApi.playbooksToday) : '-', sub: 'with a recorded run', color: 'text-ink-300' },
+                      { label: 'Playbooks Run Today', value: soarApi ? String(soarApi.playbooksToday) : '-', sub: 'since midnight UTC', color: 'text-ink-300' },
                     ].map((m) => (
                       <div key={m.label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
                         <p className="text-[11px] text-ink-500">{m.label}</p>

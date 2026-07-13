@@ -5,7 +5,7 @@ Distinct from SIEM (internal detections) and CTI (indicator intelligence):
 this is what's being said about you *outside* your perimeter. Findings are
 produced live by the engine and can be triaged through a status lifecycle.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -55,10 +55,16 @@ def summary(user: dict = Depends(current_user)):
     # Workspace clause for the rollups - a no-op until multi-tenancy is on.
     from dashboard_api import tenancy
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT category, severity, status, matched_user FROM dark_web_findings WHERE 1=1 {sc}",
             sp).fetchall()
+        # Findings actually surfaced in the last 24h — windowed, not len(rows).
+        # (`last24h` used to alias `total`, i.e. every finding ever recorded.)
+        last24 = conn.execute(
+            f"SELECT COUNT(*) AS n FROM dark_web_findings WHERE ts >= ? {sc}", [cutoff] + sp
+        ).fetchone()["n"]
     total = len(rows)
     by_cat = {c: 0 for c in _CATEGORIES}
     for r in rows:
@@ -72,7 +78,7 @@ def summary(user: dict = Depends(current_user)):
         "takedownsRequested": sum(1 for r in rows if r["status"] == "takedown-requested"),
         "open": sum(1 for r in rows if r["status"] in ("new", "investigating", "takedown-requested")),
         "byCategory": by_cat,
-        "last24h": total,  # engine-produced, all recent
+        "last24h": last24,
     }
 
 

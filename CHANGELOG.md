@@ -23,8 +23,15 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   `playbook_runs` in the trailing 30 days (that history table exists and is
   `ts`-indexed). The frontend tile's sub-line now reads "from N runs this
   month" instead of the all-time total.
-- Regression fences in `test_soar_metrics.py`: old closures (10d ago) / old
-  runs (40d ago) don't count toward the week/month; recent ones do.
+- **"Playbooks Run Today"** — counted every playbook whose `last_run` was
+  non-null, i.e. that had *ever* run. Now `COUNT(*)` of `playbook_runs` since
+  midnight UTC; the tile sub-line changes from the hedge "with a recorded run"
+  to "since midnight UTC".
+- **Dark-web "last 24h"** — the `/darkweb/summary` `last24h` field aliased
+  `total` (every finding ever recorded). Now a real `ts >= now-24h` count.
+- Regression fences in `test_soar_metrics.py` and `test_darkweb_summary.py`:
+  old closures/runs/findings (30–40h+ ago) don't count toward the
+  week/month/today/24h; recent ones do.
 
 ### 2026-07-13 — Asset risk breakdown could disagree with the stored score
 - `risk_breakdown` (the "why is this risky?" detail panel) summed each axis's

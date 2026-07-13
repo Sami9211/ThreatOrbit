@@ -925,6 +925,13 @@ def soar_metrics(user: dict = Depends(current_user)):
         runs_month = conn.execute(
             f"SELECT COUNT(*) AS n FROM playbook_runs WHERE ts >= ? {sc}", [month] + sp
         ).fetchone()["n"]
+        # Runs since midnight UTC — the honest "Playbooks Run Today". Counting
+        # playbooks whose last_run is non-null (as before) counted every playbook
+        # that had *ever* run, not today's.
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        runs_today = conn.execute(
+            f"SELECT COUNT(*) AS n FROM playbook_runs WHERE ts >= ? {sc}", [midnight] + sp
+        ).fetchone()["n"]
         # MTTR in minutes from per-alert response latency (consistent with SIEM KPIs).
         mttr_row = conn.execute(
             "SELECT AVG(respond_latency_sec) / 60.0 AS v FROM alerts "
@@ -978,7 +985,7 @@ def soar_metrics(user: dict = Depends(current_user)):
         "timeSavedMonth": round(runs_month * avg_pb / 3600, 1),
         "runsMonth": runs_month,
         "totalRuns": total_runs,
-        "playbooksToday": sum(1 for p in pbs if p["last_run"]),
+        "playbooksToday": runs_today,
         "avgPlaybookTime": avg_pb,
         "casesClosedWeek": closed_this_week,
     }

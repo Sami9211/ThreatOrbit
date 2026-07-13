@@ -65,3 +65,22 @@ def test_runs_month_windows_to_thirty_days(client, auth):
 
     after = client.get("/soar/metrics", headers=auth).json()["runsMonth"]
     assert after == base + 3  # only the 3 runs inside the 30-day window count
+
+
+def test_playbooks_today_counts_only_todays_runs(client, auth):
+    """`playbooksToday` must count runs since midnight UTC, not every playbook
+    that has ever run (the old `p["last_run"] is not null` count)."""
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(hours=30)).replace(microsecond=0).isoformat()  # before midnight
+    recent = now.replace(microsecond=0).isoformat()                       # today
+
+    base = client.get("/soar/metrics", headers=auth).json()["playbooksToday"]
+    with get_conn() as conn:
+        for _ in range(3):
+            _insert_run(conn, old)
+        for _ in range(2):
+            _insert_run(conn, recent)
+        conn.commit()
+
+    after = client.get("/soar/metrics", headers=auth).json()["playbooksToday"]
+    assert after == base + 2  # only today's runs count
