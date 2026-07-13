@@ -937,12 +937,18 @@ def soar_metrics(user: dict = Depends(current_user)):
     sla_breached = sum(1 for c in cases if c["status"] not in ("resolved", "closed")
                        and _sla(dict(c))["slaStatus"] == "breached")
     closed = [c for c in cases if c["status"] in ("resolved", "closed")]
-    closed_week = len(closed)
+    closed_total = len(closed)
+    # "Cases closed this week" must actually window to the week — the cases query
+    # has no time filter, so len(closed) is the all-time closed count. Use the
+    # `updated` timestamp as the close-time proxy (same basis as the automation
+    # trend below; there's no dedicated closed_at column).
+    closed_this_week = sum(1 for c in closed if (c["updated"] or "") >= week)
     total_runs = sum(p["runs"] for p in pbs)
     avg_pb = int(sum(p["avg_time"] for p in pbs) / len(pbs)) if pbs else 0
-    # Automation rate: share of closed cases that were driven by an automated playbook.
+    # Automation rate: share of ALL closed cases that were driven by an automated
+    # playbook (field is unqualified; its week-over-week movement is automationTrendPp).
     automated = sum(1 for c in closed if c["playbook"])
-    automation_rate = round(automated / closed_week * 100, 1) if closed_week else 0
+    automation_rate = round(automated / closed_total * 100, 1) if closed_total else 0
     mttr = round(mttr_row["v"] or 0, 1)
     mttr_trend_pct = (round((wow["cur"] - wow["prev"]) / wow["prev"] * 100, 1)
                       if wow["cur"] is not None and wow["prev"] else None)
@@ -966,7 +972,7 @@ def soar_metrics(user: dict = Depends(current_user)):
         "totalRuns": total_runs,
         "playbooksToday": sum(1 for p in pbs if p["last_run"]),
         "avgPlaybookTime": avg_pb,
-        "casesClosedWeek": closed_week,
+        "casesClosedWeek": closed_this_week,
     }
 
 

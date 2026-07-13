@@ -9,6 +9,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-13 — "Cases Closed (week)" showed the all-time closed count
+- The SOAR metrics `cases` query has no time filter, so `casesClosedWeek`
+  reported `len(closed)` — every case ever closed — while the UI labels the
+  tile **"Cases Closed (week)"**. On a long-running deployment that reads as
+  hundreds where the real weekly figure is a handful. Now windowed to the last
+  7 days on the `updated` close-time proxy (the same basis the automation
+  week-over-week trend already uses; there's no dedicated `closed_at` column).
+  `automationRate` keeps its all-closed denominator (its field is unqualified;
+  the weekly movement is `automationTrendPp`). Regression fence in
+  `test_soar_metrics.py`: old closures (10d ago) don't count, recent ones do.
+
 ### 2026-07-13 — Asset risk breakdown could disagree with the stored score
 - `risk_breakdown` (the "why is this risky?" detail panel) summed each axis's
   contribution **after rounding it to 1 decimal**, then rounded the total;
