@@ -9,6 +9,20 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-13 — Asset risk breakdown could disagree with the stored score
+- `risk_breakdown` (the "why is this risky?" detail panel) summed each axis's
+  contribution **after rounding it to 1 decimal**, then rounded the total;
+  `asset_risk` (the stored score shown in the asset list) rounds the exact
+  weighted sum once. The per-axis rounding drifts by up to ~0.2 — enough to
+  land on the other side of a band boundary. Result: an asset reading
+  **at-risk (45)** in the list but **clean (44)** in its own breakdown. A sweep
+  of ~2.9M realistic inputs found 149,994 score mismatches, 4,929 of which
+  crossed a band. `risk_breakdown` now derives its headline `score`/`band` from
+  `asset_risk` itself — one source of truth, zero mismatches after the fix.
+  `fleet_risk_distribution` (org band counts, mean/max) consumed the same
+  divergent value and is now consistent too. Regression fence in
+  `test_scoring.py` (the known band-crossing case + a >5k-input sweep).
+
 ### 2026-07-13 — Ship Prometheus alert rules for the platform's own health
 - `deploy/prometheus/alerts.yml` + README: ready-to-use alert rules over the
   metrics `GET /metrics` already exposes — target down, `/ready` returning 503

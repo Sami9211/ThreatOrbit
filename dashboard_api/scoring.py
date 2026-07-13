@@ -93,7 +93,15 @@ def risk_breakdown(*, cves: dict, criticality: str, patch_age: int,
         for name, (value, weight) in axes.items()
     ]
     components.sort(key=lambda c: c["contribution"], reverse=True)
-    score = max(0, min(100, round(sum(c["contribution"] for c in components))))
+    # Headline score is the SAME value asset_risk stores — one source of truth, so
+    # the "why is this risky?" panel can never disagree with the asset's score/band.
+    # Summing the per-axis `contribution`s here instead would drift by up to ~0.2
+    # (each is rounded to 1dp), which was enough to cross a band boundary — an
+    # asset showing "at-risk" in the list but "clean" in its own breakdown.
+    score = asset_risk(
+        cves=cves, criticality=criticality, patch_age=patch_age,
+        open_alerts=open_alerts, open_ports=open_ports, tags=tags,
+    )
     return {
         "score": score,
         "band": risk_band(score),
