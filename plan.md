@@ -305,9 +305,14 @@ plus external compliance attestations.
       persisted cursor: at-least-once across restarts/outages, ordered, one
       drainer via the DB lease). Remaining: native syslog / object-lock writers
       for the audit sink.
-- [ ] **Platform SRE / self-observability** — distributed tracing, SLOs +
-      error budgets, alerting on the platform's *own* health, and synthetic
-      checks (`/metrics` exists today but the rest is missing).
+- [~] **Platform SRE / self-observability** — Started (2026-07-13):
+      `dashboard_api/self_health.py` aggregates the platform's *own* vitals
+      (DB reachability + latency, schema version, detection-queue backpressure,
+      leader lease, process counters) into one verdict, surfaced at authed
+      `GET /self-health` and a Settings → System Health card; and `/ready` now
+      returns a true 503 when the DB is unreachable (readiness-contract fix).
+      Remaining: distributed tracing, SLOs + error budgets, and external
+      synthetic checks (`/metrics` + self-health cover the in-process side).
 - [~] **Product, UX & quality.** Started (2026-07-08): automated a11y
       regression testing (`@axe-core/playwright`, `e2e/a11y.spec.ts`) now runs
       in CI against login/overview/SIEM/SOAR/Config, and its first run caught

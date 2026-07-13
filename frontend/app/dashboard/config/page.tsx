@@ -7,7 +7,7 @@ import {
   Eye, Copy, CheckCircle,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
   PanelLeftOpen, PanelLeftClose, ScrollText, Plus, RotateCcw, CreditCard, ExternalLink,
-  Monitor, LogOut,
+  Monitor, LogOut, Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -17,6 +17,7 @@ import {
   fetchApiKeys, createApiKey, revokeApiKey,
   fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
   fetchEngineStatus, controlEngine, enforceRetention,
+  fetchSelfHealth, type SelfHealth, type HealthStatus,
   fetchCurrentOrg, type Org,
   fetchLicense, activateLicense, type LicenseStatus,
   fetchBillingStatus, startCheckout, openBillingPortal, type BillingStatus,
@@ -1488,6 +1489,98 @@ function LiveEngineCard() {
   )
 }
 
+/* ── Platform self-health ────────────────────────────────────────── */
+const HEALTH_UI: Record<HealthStatus, { dot: string; pill: string; label: string }> = {
+  ok:       { dot: 'bg-safe',    pill: 'border-safe/25 bg-safe/10 text-safe',       label: 'Healthy'  },
+  degraded: { dot: 'bg-amber',   pill: 'border-amber/25 bg-amber/10 text-amber',    label: 'Degraded' },
+  down:     { dot: 'bg-threat',  pill: 'border-threat/25 bg-threat/10 text-threat', label: 'Down'     },
+  unknown:  { dot: 'bg-ink-600', pill: 'border-white/10 bg-white/5 text-ink-400',   label: 'Unknown'  },
+}
+
+function fmtUptime(s?: number): string {
+  if (!s || s < 0) return '—'
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
+  if (d) return `${d}d ${h}h`
+  if (h) return `${h}h ${m}m`
+  if (m) return `${m}m`
+  return `${s}s`
+}
+
+function HealthRow({ name, status, detail }: { name: string; status: HealthStatus; detail: string }) {
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-white/4 last:border-0 text-[11px]">
+      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', HEALTH_UI[status].dot,
+        status === 'ok' ? 'animate-pulse' : '')} />
+      <span className="text-ink-300 font-medium w-20 shrink-0">{name}</span>
+      <span className="text-ink-500 flex-1 min-w-0 truncate tabular-nums">{detail}</span>
+      <span className={cn('uppercase tracking-wide text-[9px] font-semibold shrink-0',
+        status === 'ok' ? 'text-safe' : status === 'degraded' ? 'text-amber'
+          : status === 'down' ? 'text-threat' : 'text-ink-600')}>{status}</span>
+    </div>
+  )
+}
+
+function SystemHealthCard() {
+  const [health, setHealth] = useState<SelfHealth | null>(null)
+  const [error, setError] = useState(false)
+
+  const load = () => fetchSelfHealth().then((h) => { setHealth(h); setError(false) }).catch(() => setError(true))
+  useEffect(() => {
+    load()
+    const t = setInterval(load, 10000)
+    return () => clearInterval(t)
+  }, [])
+
+  const c = health?.checks
+  const dbDetail = c?.database.status === 'down'
+    ? (c.database.error ?? 'unreachable')
+    : c?.database.latencyMs != null ? `${c.database.latencyMs} ms round-trip` : '—'
+  const schemaDetail = c?.schema.detail
+    ?? (c && c.schema.code != null ? `code v${c.schema.code} · db v${c.schema.db}` : '—')
+  const queueDetail = c?.queue.status === 'unknown' ? 'unknown'
+    : c?.queue ? `${c.queue.depth ?? 0} pending · ${c.queue.lagSeconds ?? 0}s lag${c.queue.detail ? ` · ${c.queue.detail}` : ''}` : '—'
+  const leaderDetail = c?.leader
+    ? (c.leader.isLeader ? 'this node holds the lease'
+        : c.leader.holder ? `held by ${c.leader.holder}`
+        : c.leader.electionEnabled ? 'no active leader' : 'election disabled')
+    : '—'
+  const procDetail = c?.process
+    ? `up ${fmtUptime(c.process.uptimeSeconds)} · ${c.process.errors ?? 0} errors · ${c.process.engineTicks ?? 0} ticks`
+    : '—'
+
+  return (
+    <Section title="System Health" icon={Activity} color={tk('safe')}>
+      <div className="flex items-center gap-3 mb-4">
+        {health ? (
+          <span className={cn('flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border font-semibold', HEALTH_UI[health.status].pill)}>
+            <span className={cn('w-1.5 h-1.5 rounded-full', HEALTH_UI[health.status].dot, health.status === 'ok' ? 'animate-pulse' : '')} />
+            {HEALTH_UI[health.status].label}
+          </span>
+        ) : (
+          <span className="text-[11px] text-ink-600 animate-pulse">Checking…</span>
+        )}
+        {health && <span className="text-[11px] text-ink-500">refreshed {relativeTime(health.generatedAt)}</span>}
+      </div>
+      <p className="text-[11px] text-ink-500 mb-4 leading-relaxed">
+        The platform watching its own vitals — every value below is measured live, not assumed. The
+        overall verdict follows the worst gating check (database, schema, or detection queue).
+      </p>
+      {error && !health && (
+        <p className="text-xs text-ink-600 py-6 text-center">Health surface unavailable. Start the dashboard API to see live vitals.</p>
+      )}
+      {c && (
+        <div className="space-y-0.5">
+          <HealthRow name="Database"  status={c.database.status} detail={dbDetail} />
+          <HealthRow name="Schema"    status={c.schema.status}   detail={schemaDetail} />
+          <HealthRow name="Queue"     status={c.queue.status}    detail={queueDetail} />
+          <HealthRow name="Leader"    status={c.leader.status}   detail={leaderDetail} />
+          <HealthRow name="Process"   status={c.process.status}  detail={procDetail} />
+        </div>
+      )}
+    </Section>
+  )
+}
+
 /* ── Background jobs ─────────────────────────────────────────────── */
 const JOB_LABEL: Record<string, string> = {
   'threat.sync_iocs': 'IOC sync from Threat API',
@@ -1613,6 +1706,9 @@ export default function ConfigPage() {
 
               {/* ── Live Processing Engine ──────────────────────────── */}
               <LiveEngineCard />
+
+              {/* ── Platform self-health ────────────────────────────── */}
+              <SystemHealthCard />
 
               {/* ── Experience Mode ─────────────────────────────────── */}
               <ExperienceModeCard />

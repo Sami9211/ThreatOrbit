@@ -9,6 +9,33 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-13 — Platform self-health surface + a real /ready readiness contract
+- **Bug: `/ready` lied to orchestrators.** The readiness probe returned HTTP
+  **200** with a `{"ready": false}` body when the database was unreachable.
+  A k8s/LB `httpGet` readiness probe treats any 2xx as READY, so a pod whose
+  DB had gone away stayed in service rotation and kept receiving traffic it
+  couldn't serve — the Helm chart already points its `readinessProbe` at
+  `/ready`. Fixed to return **503** when the DB check fails; `/health`
+  (liveness) stays a cheap always-200 on purpose (don't kill+restart a pod
+  for a DB outage a restart can't fix).
+- **Feature (plan.md: "alerting on the platform's *own* health").** New
+  `dashboard_api/self_health.py` aggregates real, cheap subsystem signals —
+  database reachability + measured round-trip latency, code-vs-DB schema
+  version, detection-queue depth/lag backpressure, background-work leader
+  lease, and process uptime/error counters — into one verdict. The overall
+  status is the worst *gating* check (database `down` ⇒ down; schema drift or
+  a queue past its env-tunable thresholds ⇒ degraded); informational checks
+  never gate, and DB-dependent checks are marked `unknown` rather than
+  fabricated when the DB is down. Exposed as authed `GET /self-health`
+  (same access as `/config/leader`).
+- **UI.** Settings → General gains a **System Health** card that renders the
+  live verdict + per-subsystem rows, polling every 10s. Every value is
+  measured, never assumed. Verified in-browser (demo boots Healthy, DB
+  ~0.7 ms) with a Playwright screenshot; new e2e fence pins the card.
+- Tests: `test_self_health.py` (readiness 503 regression, verdict logic for
+  ok/degraded/down, endpoint auth) — green on fresh SQLite **and** Postgres;
+  full backend suite (550) green; `frontend tsc` clean; `e2e/self-health.spec.ts`.
+
 ### 2026-07-12 — Globe hotspot pulse: smooth breathe, not a cusped snap (user-reported "not smooth")
 - The threat-globe's city hotspot rings pulsed with `Math.abs(Math.sin(t))`,
   which has a sharp cusp (V-shape) at every zero crossing — the ring

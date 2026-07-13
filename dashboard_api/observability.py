@@ -53,6 +53,18 @@ def record_request(method: str, path: str, status: int, seconds: float) -> None:
         _LATENCY_SUM[key] += seconds
 
 
+def counters_snapshot() -> dict[str, int]:
+    """Point-in-time copy of the domain counters (engine/ingest/errors). Used
+    by the self-health surface — reads under the same lock the writers use."""
+    with _LOCK:
+        return dict(_COUNTERS)
+
+
+def uptime_seconds() -> float:
+    """Seconds since the API process started (same clock as /metrics)."""
+    return time.time() - _START
+
+
 class BodySizeLimitMiddleware:
     """Pure-ASGI ingress body cap (DoS guard). Rejects an over-large request
     body with 413 BEFORE the app buffers it into memory — the line-count check

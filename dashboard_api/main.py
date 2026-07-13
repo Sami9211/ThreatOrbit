@@ -8,7 +8,7 @@ on first run.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -269,13 +269,18 @@ def health():
 
 
 @app.get("/ready", tags=["meta"])
-def ready():
+def ready(response: Response):
+    """Readiness probe (k8s/LB). Returns HTTP 503 — not 200 — when the DB is
+    unreachable, so an orchestrator pulls the pod out of rotation instead of
+    routing traffic to an instance that can't serve it. A 200 body with
+    ``ready:false`` looks READY to an httpGet probe; that was the bug."""
     try:
         from dashboard_api.db import schema_versions
         with get_conn() as conn:
             conn.execute("SELECT 1")
         return {"ready": True, "schema": schema_versions()}
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
+        response.status_code = 503
         return {"ready": False, "error": str(e)}
 
 

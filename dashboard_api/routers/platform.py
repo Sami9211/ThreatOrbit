@@ -386,3 +386,16 @@ def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
         out["archiveDir"] = config.ARCHIVE_DIR          # kept for back-compat
         out["archiveTargets"] = archive.targets()        # {dir?, s3?}
     return out
+
+
+# ── Platform self-health ─────────────────────────────────────────────────────────
+
+@router.get("/self-health")
+def self_health(_: dict = Depends(current_user)):
+    """The SOC's own vitals in one call: database reachability + latency, schema
+    version, detection-queue backpressure, background-work leadership, and
+    process uptime/counters — each with a status, plus an overall verdict
+    (ok / degraded / down). Read-only; any authenticated operator may view it
+    (same access as /config/leader). Powers the Settings → System health panel."""
+    from dashboard_api import self_health as sh
+    return sh.collect()

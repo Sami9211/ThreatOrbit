@@ -1518,6 +1518,21 @@ export interface EngineStatus {
   queue?: EngineQueue
 }
 export const fetchEngineStatus = () => api<EngineStatus>('/config/engine')
+
+/** Platform self-health: the SOC's own vitals (DB, schema, queue, leader, process). */
+export type HealthStatus = 'ok' | 'degraded' | 'down' | 'unknown'
+export interface SelfHealth {
+  status: HealthStatus
+  generatedAt: string
+  checks: {
+    database: { status: HealthStatus; latencyMs?: number; error?: string }
+    schema:   { status: HealthStatus; code?: number; db?: number | null; detail?: string }
+    queue:    { status: HealthStatus; depth?: number; inFlight?: number; lagSeconds?: number; detail?: string }
+    leader:   { status: HealthStatus; isLeader?: boolean; holder?: string | null; electionEnabled?: boolean; expiresInSeconds?: number }
+    process:  { status: HealthStatus; uptimeSeconds?: number; errors?: number; engineTicks?: number; engineTickFailures?: number; ingestedEvents?: number }
+  }
+}
+export const fetchSelfHealth = () => api<SelfHealth>('/self-health')
 export const controlEngine = (body: { enabled?: boolean; generate?: number }) =>
   api<{ enabled?: boolean; generated?: Record<string, number> }>('/config/engine', {
     method: 'POST', body: JSON.stringify(body),
