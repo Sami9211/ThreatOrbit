@@ -33,7 +33,7 @@ from dashboard_api.db import audit, dumps, get_conn, record_job
 _TIMEOUT = 20.0
 # Cap the response body a feed may return (DoS guard). httpx reads the whole
 # body into memory before .json()/.text, so a malicious, compromised, or simply
-# buggy feed returning a multi-GB dump would exhaust memory — and the per-request
+# buggy feed returning a multi-GB dump would exhaust memory - and the per-request
 # `limit` params we send are advisory (a hostile server ignores them). We stream
 # and reject past this bound. 64 MB is generous for an OSINT indicator feed.
 _MAX_FEED_BYTES = int(os.environ.get("DASHBOARD_MAX_FEED_BYTES", str(64 * 1024 * 1024)))
@@ -98,7 +98,7 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
                 total += len(chunk)
                 if total > _MAX_FEED_BYTES:
                     raise ValueError(
-                        f"feed response exceeds {_MAX_FEED_BYTES} bytes — refusing to buffer")
+                        f"feed response exceeds {_MAX_FEED_BYTES} bytes - refusing to buffer")
                 chunks.append(chunk)
             return _CappedResponse(b"".join(chunks))
     raise ValueError(f"too many redirects (> {_MAX_REDIRECTS})")
@@ -185,13 +185,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _is_companion(url: str) -> bool:
+    """True when `url` targets the deployment's own companion threat service.
+
+    THREAT_API_URL is deployment configuration (env/compose/helm, set by the
+    operator) - the same trust level as DATABASE_URL, not user input. On every
+    non-cloud install it is a loopback/private address (127.0.0.1:8000 locally,
+    a service name on Docker's bridge network), so the SSRF guard - which
+    exists for USER-registered connector URLs - must not block it: with the
+    guard applied, the bundled OSINT connector could never sync on a default
+    live install ("URL resolves to a private or reserved address")."""
+    base = (THREAT_API_URL or "").rstrip("/")
+    return bool(base) and (url == base or url.startswith(base + "/"))
+
+
 def _http_get(url: str, headers: dict | None = None, params: dict | None = None):
     # Re-validate at SEND time (not just when the connector was registered) so a
     # name can't rebind to an internal IP between configuration and fetch.
     # Redirects stay enabled here: feed URLs legitimately redirect (http→https,
     # CDN), unlike the push sinks which pin + block redirects.
     from dashboard_api.net_guard import validate_external_url
-    validate_external_url(url)
+    validate_external_url(url, allow_private=True if _is_companion(url) else None)
     # Streamed, size-capped read: a hostile/buggy feed can't OOM us with a
     # multi-GB body (the `limit` params we send are advisory, ignored by a
     # hostile server), and `run_connector` records the ValueError as last_error.
@@ -200,11 +214,11 @@ def _http_get(url: str, headers: dict | None = None, params: dict | None = None)
 
 def _http_post(url: str, headers: dict | None = None, json_body: dict | None = None):
     from dashboard_api.net_guard import validate_external_url
-    validate_external_url(url)
+    validate_external_url(url, allow_private=True if _is_companion(url) else None)
     return _read_capped("POST", url, headers=headers or {}, json=json_body or {})
 
 
-# ── Normalisation + import ─────────────────────────────────────────────────────
+# -- Normalisation + import -----------------------------------------------------
 
 def _severity_from_confidence(c: int) -> str:
     return "critical" if c >= 85 else "high" if c >= 70 else "medium" if c >= 40 else "low"
@@ -215,8 +229,8 @@ def _to_confidence(raw, default: int = 50) -> int:
 
     Real feeds are messy: confidence arrives as an int, a float, a numeric
     string ("75", "75.0", "75%"), null/empty, or plain junk ("high", "n/a").
-    A single unparseable value must NOT abort the whole import — that would
-    silently discard a feed's worth of good indicators — so junk falls back to
+    A single unparseable value must NOT abort the whole import - that would
+    silently discard a feed's worth of good indicators - so junk falls back to
     `default` and the record is still imported. `None`/`""` also use the default;
     anything numeric is clamped into range.
     """
@@ -276,7 +290,7 @@ def _import(indicators: list[dict], source: str) -> dict:
             "total": len(indicators), "alertsRaised": alerts}
 
 
-# ── Per-kind fetchers (return normalised indicator dicts) ───────────────────────
+# -- Per-kind fetchers (return normalised indicator dicts) -----------------------
 
 _THREATORBIT_TYPE = {"ip": "ip", "domain": "domain", "url": "url", "hash": "hash",
                      "md5": "hash", "sha1": "hash", "sha256": "hash", "email": "email"}
@@ -498,7 +512,7 @@ _FETCHERS = {
 }
 
 
-# ── Orchestration ───────────────────────────────────────────────────────────────
+# -- Orchestration ---------------------------------------------------------------
 
 def run_connector(connector: dict, actor: str = "scheduler") -> dict:
     """Fetch + normalise + import one connector. Updates its status and records

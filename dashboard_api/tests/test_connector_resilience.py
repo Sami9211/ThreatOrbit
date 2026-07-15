@@ -1,6 +1,6 @@
 """Connector feed resilience: a huge/hostile/buggy feed response must not be
 buffered unboundedly (memory-exhaustion DoS), and a connector that trips the
-cap degrades gracefully — it records the error and never crashes the API.
+cap degrades gracefully - it records the error and never crashes the API.
 
 A SIEM's threat-intel connectors fetch attacker-adjacent, third-party URLs on a
 schedule. `httpx.get()`/`.post()` read the whole body into memory before
@@ -37,7 +37,7 @@ class _FakeStream:
 
 
 def test_read_capped_rejects_oversized_body(monkeypatch):
-    """A body larger than the cap raises ValueError mid-stream — it is never
+    """A body larger than the cap raises ValueError mid-stream - it is never
     fully accumulated (we stop the moment the running total passes the bound)."""
     monkeypatch.setattr(conn_mod, "_MAX_FEED_BYTES", 1024)
     # 4 KB delivered in 512-byte chunks: the cap trips on the third chunk.
@@ -153,7 +153,7 @@ def test_read_capped_caps_redirect_chain_length(monkeypatch):
 
 def test_connector_oversized_feed_degrades_gracefully(client, auth, monkeypatch):
     """End-to-end: a JSON connector whose feed streams past the cap records an
-    error and status='error' — the run API returns cleanly, never crashes."""
+    error and status='error' - the run API returns cleanly, never crashes."""
     monkeypatch.setattr(conn_mod, "_MAX_FEED_BYTES", 2048)
     big = [b"y" * 4096]  # one 4 KB chunk, over the 2 KB cap
     monkeypatch.setattr(conn_mod.httpx, "stream",
@@ -169,13 +169,13 @@ def test_connector_oversized_feed_degrades_gracefully(client, auth, monkeypatch)
     assert "exceeds" in (run["connector"].get("last_error") or run["result"]["error"])
 
 
-# ── Malformed-record tolerance: one bad row must not discard a whole feed ──────
+# -- Malformed-record tolerance: one bad row must not discard a whole feed ------
 
 @pytest.mark.parametrize("raw,expected", [
     (75, 75), ("75", 75), ("75.0", 75), ("75%", 75), (75.9, 75),
     (None, 50), ("", 50), ("high", 50), ("n/a", 50), ({}, 50),
     (-5, 0), (250, 100), ("120", 100),
-    # Non-finite / overflow inputs must fall back, not raise OverflowError —
+    # Non-finite / overflow inputs must fall back, not raise OverflowError -
     # int(float("inf")) throws, which would otherwise abort the whole import.
     ("inf", 50), ("Infinity", 50), ("-inf", 50), ("nan", 50), ("1e999", 50),
 ])
@@ -199,8 +199,8 @@ def _fake_resp(data=None, text=""):
 
 
 def test_json_feed_bad_confidence_does_not_lose_the_feed(client, auth, monkeypatch):
-    """A record whose confidence is non-numeric ('high') must still import — with
-    the default confidence — instead of aborting the whole feed with a ValueError."""
+    """A record whose confidence is non-numeric ('high') must still import - with
+    the default confidence - instead of aborting the whole feed with a ValueError."""
     payload = {"data": [
         {"indicator": "192.0.2.171", "kind": "ip", "conf": "high"},   # junk conf
         {"indicator": "192.0.2.172", "kind": "ip", "conf": "82%"},    # percent
@@ -237,3 +237,46 @@ def test_json_feed_non_dict_rows_are_skipped(client, auth, monkeypatch):
     # Only the one dict row is parsed; the 3 junk elements are dropped, not
     # crashed. `total` is the parse count (deterministic vs. DB dedup state).
     assert run["result"]["total"] == 1
+
+
+# -- Companion-service exemption (bundled OSINT connector) ------------------------
+
+def test_companion_threat_api_url_passes_ssrf_guard(monkeypatch):
+    """The bundled OSINT connector targets THREAT_API_URL - operator-set
+    deployment config that is loopback/private on every non-cloud install. The
+    send-time SSRF guard used to block it ("URL resolves to a private or
+    reserved address"), which dead-ended the default live install's primary
+    intel source. Companion URLs must pass; other private URLs must not."""
+    import dashboard_api.connectors as conn_mod
+
+    monkeypatch.setattr(conn_mod, "THREAT_API_URL", "http://127.0.0.1:8000")
+    # conftest sets DASHBOARD_ALLOW_PRIVATE_URLS=true for the webhook tests;
+    # turn it off here so BOTH arms genuinely assert the guard's behaviour.
+    monkeypatch.setenv("DASHBOARD_ALLOW_PRIVATE_URLS", "false")
+    calls = {}
+
+    class _Resp:
+        status_code = 200
+        text = "[]"
+        def json(self):
+            return []
+        def raise_for_status(self):
+            return None
+
+    def fake_read(method, url, **kw):
+        calls["url"] = url
+        return _Resp()
+
+    monkeypatch.setattr(conn_mod, "_read_capped", fake_read)
+
+    # companion base + sub-path: allowed straight through to the request
+    conn_mod._http_get("http://127.0.0.1:8000/iocs", params={"limit": 5})
+    assert calls["url"] == "http://127.0.0.1:8000/iocs"
+
+    # any OTHER private target is still blocked at send time
+    from dashboard_api.net_guard import UnsafeUrlError
+    import pytest
+    with pytest.raises(UnsafeUrlError):
+        conn_mod._http_get("http://127.0.0.1:9999/steal")
+    with pytest.raises(UnsafeUrlError):
+        conn_mod._http_get("http://169.254.169.254/latest/meta-data/")
