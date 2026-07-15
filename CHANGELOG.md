@@ -9,6 +9,24 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 — Enrichment cache: repeat enrich returned a JSON string and fabricated availability
+- Two bugs in the IOC-enrichment cache-hit path, both user-visible on the
+  **second** enrich of an indicator within the cache TTL:
+  1. The write path stores `json.dumps(data)`, but the cache-hit path returned
+     the stored column raw — so a repeat enrich handed the UI a JSON *string*
+     where the first returned an object. Decoded on read now.
+  2. Unavailable provider results (e.g. VirusTotal with no API key — no call
+     was ever made) were cached and replayed with a hardcoded
+     `available: True` — fabricated availability on every repeat enrich.
+     Unavailable results are no longer cached at all (there's nothing to save).
+- Surfaced as suite failures when re-running against a persistent Postgres
+  database (CI's fresh DB always took the cache-miss path, so it never saw
+  either). Fence `test_enrichment_cache.py` enriches twice and pins the cached
+  result's shape, content, and honest availability; the dark-web connector
+  test's static fixture (whose dedupe made it single-shot against a persistent
+  DB) now uses per-run unique content — the backend suite is re-runnable
+  against a reused Postgres database.
+
 ### 2026-07-15 — UEBA /entities: SQL aggregation + missing tenant scoping; dark-web summary GROUP BY
 - **Scale**: `GET /siem/entities` fetched every alert with a non-null
   user/host/ip — three near-full table reads into Python per request

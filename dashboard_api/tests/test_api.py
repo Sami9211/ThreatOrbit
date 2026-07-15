@@ -2645,17 +2645,23 @@ def test_darkweb_credential_matching_and_takedown(client, auth):
 def test_darkweb_feed_connector(client, auth, monkeypatch):
     """The darkweb-json connector imports a leak feed into findings (deduped)
     and runs credential matching on the way in."""
+    import uuid as _uuid
     import dashboard_api.connectors as conn_mod
+
+    # Unique per run: the import dedupes on content, so static fixtures make
+    # this test single-shot against a persistent (Postgres) database — a
+    # second pytest session would see everything skipped.
+    mk = _uuid.uuid4().hex[:8]
 
     class FakeResp:
         def json(self):
             return [
-                {"headline": "Combo list with acme creds", "kind": "credential-leak",
+                {"headline": f"Combo list with acme creds {mk}", "kind": "credential-leak",
                  "level": "high", "who": "admin@threatorbit.space",
-                 "link": "https://leaksite.test/p/1",
+                 "link": f"https://leaksite.test/p/1-{mk}",
                  "note": "contains admin@threatorbit.space:hunter2"},
-                {"headline": "Brand mention on forum", "kind": "brand-mention",
-                 "level": "medium", "who": "ThreatOrbit", "link": "https://leaksite.test/p/2"},
+                {"headline": f"Brand mention on forum {mk}", "kind": "brand-mention",
+                 "level": "medium", "who": "ThreatOrbit", "link": f"https://leaksite.test/p/2-{mk}"},
                 {"headline": "", "kind": "x"},  # no title → skipped
             ]
     monkeypatch.setattr(conn_mod, "_http_get", lambda url, headers=None, params=None: FakeResp())

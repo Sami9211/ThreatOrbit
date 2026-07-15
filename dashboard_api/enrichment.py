@@ -333,8 +333,18 @@ def enrich(conn, value: str, ioc_type: str = "", *, providers: list[str] | None 
         if not refresh:
             c = _cached(conn, value, p)
             if c:
+                # The write path stores json.dumps(data); decode on the hit path
+                # so a cached result has the same shape as a fresh one. Without
+                # this, the SECOND enrich of an indicator within the TTL handed
+                # the UI a JSON *string* where the first returned an object.
+                data = c["data"]
+                if isinstance(data, str):
+                    try:
+                        data = json.loads(data)
+                    except ValueError:
+                        data = {}
                 results.append({"provider": p, "available": True, "verdict": c["verdict"],
-                                "summary": c["summary"], "data": c["data"], "cached": True,
+                                "summary": c["summary"], "data": data or {}, "cached": True,
                                 "ts": c["ts"]})
                 continue
         if p in BUILTIN:
@@ -343,11 +353,16 @@ def enrich(conn, value: str, ioc_type: str = "", *, providers: list[str] | None 
             res = _enrich_external(p, value, ioc_type)
         else:
             continue
-        conn.execute(
-            "INSERT INTO ioc_enrichments (id,ioc_value,provider,verdict,summary,data,ts) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), value, p, res.get("verdict"), res.get("summary"),
-             json.dumps(res.get("data", {}), separators=(",", ":")), _now()))
+        # Cache only results that actually ran: the cache-hit path replays rows
+        # as available=True, so caching an unavailable result (e.g. VirusTotal
+        # with no API key — no call was made, nothing to save) would fabricate
+        # availability on every repeat enrich within the TTL.
+        if res.get("available"):
+            conn.execute(
+                "INSERT INTO ioc_enrichments (id,ioc_value,provider,verdict,summary,data,ts) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), value, p, res.get("verdict"), res.get("summary"),
+                 json.dumps(res.get("data", {}), separators=(",", ":")), _now()))
         res["cached"] = False
         results.append(res)
     return {"value": value, "type": ioc_type, "verdict": _combined_verdict(results),
