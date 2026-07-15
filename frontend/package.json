@@ -38,7 +38,7 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.184.1",
     "@types/topojson-client": "^3.1.5",
-    "autoprefixer": "^10.5.2",
+    "autoprefixer": "^10.5.3",
     "eslint": "^9",
     "eslint-config-next": "^16.2.10",
     "postcss": "^8",
