@@ -9,6 +9,16 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - Live-mode route crawler (`npm run check:live`)
+- New QA tool `frontend/scripts/crawl-live.mjs`: logs into a **running** stack
+  (`./linux-start.sh`), visits all 27 dashboard routes in a real browser and
+  reports page exceptions, console errors, failed Dashboard-API calls
+  (HTTP >= 400) and body smells (`undefined` / `NaN` / `[object Object]`
+  rendered as text). Streams per-route results so an interrupted run still
+  yields findings, and exits non-zero when anything is found.
+- Verified against a fresh live boot (engine off, real ingested events from
+  two auto-discovered sources): **0 findings across all 27 routes**.
+
 ### 2026-07-15 - README audit: all six README files brought current
 - **Main README**: removed a stale "# Project Name" scaffold heading; §6
   became "Health checks and self-observability" documenting the

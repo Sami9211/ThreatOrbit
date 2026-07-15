@@ -35,6 +35,9 @@ npx tsc --noEmit         # typecheck (CI-enforced)
 npm run check:routes     # no dead internal links/anchors (CI-enforced)
 npx playwright test      # e2e: auth, workflows, data-honesty fences,
                          #   axe-core a11y, responsive, self-health card
+npm run check:live       # crawl every dashboard route against a RUNNING
+                         #   stack (./linux-start.sh) and report console
+                         #   errors, failed API calls, and body smells
 ```
 
 The e2e suite runs against a production build plus the dashboard API - CI

@@ -10,7 +10,8 @@
     "check:routes": "node scripts/check-routes.mjs",
     "start:e2e": "python3 ../scripts/serve_frontend.py 3000",
     "e2e": "playwright test",
-    "e2e:report": "playwright show-report"
+    "e2e:report": "playwright show-report",
+    "check:live": "node scripts/crawl-live.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
