@@ -88,7 +88,7 @@ def test_admin_revoke_requires_users_manage(client):
     assert client.post(f"/users/{vid}/revoke-sessions", headers=_h(tok)).status_code == 403
 
 
-# ── Per-device session list + individual revoke ──────────────────────────────
+# -- Per-device session list + individual revoke ------------------------------
 
 def test_sessions_list_and_individual_revoke(client):
     email = _email()

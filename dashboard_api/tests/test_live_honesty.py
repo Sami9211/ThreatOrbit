@@ -3,7 +3,7 @@ data, and DASHBOARD_ENGINE=off must produce nothing.
 
 These run in a SUBPROCESS against a throwaway DB so they exercise a genuinely
 fresh boot without touching the session's demo-seeded test database. They are
-the regression fence around the whole "real feeds only" guarantee — if someone
+the regression fence around the whole "real feeds only" guarantee - if someone
 later wires _seed_integrations (or any demo seeder) into bootstrap_live, or the
 engine-off gate stops pausing, these fail.
 """

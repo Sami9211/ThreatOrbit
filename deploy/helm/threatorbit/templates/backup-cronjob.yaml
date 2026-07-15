@@ -4,7 +4,7 @@
 {{- /* With Postgres enabled the dashboard store is not a SQLite file: this job
      then covers the two ingestion services; dump the dashboard DB with pg_dump
      (docs/OPERATIONS.md). RWO volumes mean this pod must land on the node that
-     holds the service PVCs — the affinity below co-schedules it with the
+     holds the service PVCs - the affinity below co-schedules it with the
      dashboard API, which is the common single-writer topology. */ -}}
 apiVersion: batch/v1
 kind: CronJob

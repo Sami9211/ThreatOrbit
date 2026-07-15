@@ -83,7 +83,7 @@ function Arc({ delay, color }: { delay: number; color: string }) {
     if (lineRef.current) {
       // Envelope must reach 0 at both ends of the cycle: the arc teleports to
       // a new random curve on reset, and a nonzero floor (was 0.12) made that
-      // swap a visible pop — a dim line snapping across the globe.
+      // swap a visible pop - a dim line snapping across the globe.
       ;(lineRef.current.material as THREE.LineBasicMaterial).opacity =
         0.44 * Math.sin(tt * Math.PI)
     }
@@ -147,7 +147,7 @@ function Hotspot({ lat, lon, color, animate }: { lat: number; lon: number; color
     if (!ringRef.current || !animate) return
     t.current += dt * 1.5
     // sin², not |sin|: same 0→1→0 breathing range/period, but it touches both
-    // extremes tangentially (zero derivative) — no sharp cusp at the bottom of
+    // extremes tangentially (zero derivative) - no sharp cusp at the bottom of
     // each pulse, which read as a repeating "snap". Smooth breathe.
     const sn = Math.sin(t.current)
     const pulse = sn * sn
@@ -246,7 +246,7 @@ function GlobeGroup({ arcCount, nodeCount, animate }: {
 export default function ThreatGlobe() {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
   // Mount the GL context well before the viewport, then KEEP it mounted (the
-  // `mounted` latch — same fix as the other scenes): a scroll-away must never
+  // `mounted` latch - same fix as the other scenes): a scroll-away must never
   // tear down the context, or scrolling back shows a blank while it rebuilds.
   // The render loop pauses off-screen instead (frameloop demand).
   const { ref, visible } = useInViewport<HTMLDivElement>('800px')
@@ -266,7 +266,7 @@ export default function ThreatGlobe() {
           frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0, 6.2], fov: 42 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          // Phone sharpness: cap dpr at 1.75–2 (was 1.25–1.5, visibly pixelated
+          // Phone sharpness: cap dpr at 1.75-2 (was 1.25-1.5, visibly pixelated
           // on dpr≈3 phones); AdaptiveDpr still lowers it under real load.
           dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}

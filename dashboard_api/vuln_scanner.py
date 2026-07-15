@@ -64,7 +64,7 @@ def _ver_tuple(v: str):
 
 def _ver_cmp(a: str, b: str) -> int:
     """Compare two dotted-numeric versions, ZERO-PADDED to equal length so
-    "2.0" == "2.0.0" (a raw tuple compare treats them as unequal — a real
+    "2.0" == "2.0.0" (a raw tuple compare treats them as unequal - a real
     vuln-scan miss at patch boundaries). Returns -1 / 0 / 1."""
     ta, tb = _ver_tuple(a), _ver_tuple(b)
     n = max(len(ta), len(tb))
@@ -130,7 +130,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-# ── NVD catalogue sync (live feed → cve_catalogue table) ─────────────────────────
+# -- NVD catalogue sync (live feed → cve_catalogue table) -------------------------
 
 _NVD_SEV = {"CRITICAL": "critical", "HIGH": "high", "MEDIUM": "medium", "LOW": "low"}
 

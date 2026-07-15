@@ -267,7 +267,7 @@ def job_status(job_id: str):
 @app.get("/report", response_class=HTMLResponse, dependencies=[Depends(require_user_key)])
 def report():
     """The most recently completed analysis's report. Prefer the per-job
-    /results/{id}/report — this 'latest' view is kept for backward compatibility."""
+    /results/{id}/report - this 'latest' view is kept for backward compatibility."""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT report_html FROM analysis_jobs WHERE status='completed' AND report_html IS NOT NULL "
@@ -288,7 +288,7 @@ def get_result(result_id: str):
 @app.get("/results/{result_id}/report", response_class=HTMLResponse,
          dependencies=[Depends(require_user_key)])
 def get_result_report(result_id: str):
-    """The report for ONE analysis (rendered from its stored result) — no shared
+    """The report for ONE analysis (rendered from its stored result) - no shared
     file, so concurrent analyses never overwrite each other's report."""
     with get_conn() as conn:
         row = conn.execute(

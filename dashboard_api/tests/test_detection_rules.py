@@ -104,11 +104,11 @@ def test_new_event_detected_through_engine(_db):
     assert res["matched"] >= 1, res
 
 
-# ── Malformed-rule resilience: a broken rule must not blind the SIEM ───────────
+# -- Malformed-rule resilience: a broken rule must not blind the SIEM -----------
 
 def test_evaluate_tolerates_non_numeric_aggregation():
     """A rule whose aggregation.threshold/window is non-numeric must NOT raise
-    from evaluate() — an exception there propagates out of the per-batch
+    from evaluate() - an exception there propagates out of the per-batch
     detection loop and blinds detection for every rule/event in the tick."""
     from dashboard_api.rule_engine import evaluate
     events = [{"event_type": "failed_login", "src_ip": "10.0.0.1", "ts":
@@ -152,7 +152,7 @@ def test_authoring_rejects_invalid_aggregation(client, auth):
 
 def test_one_broken_rule_does_not_stop_detection(client, auth):
     """A stored rule that raises during evaluation is skipped, and OTHER rules in
-    the same batch still fire — the engine isolates a bad rule per iteration."""
+    the same batch still fire - the engine isolates a bad rule per iteration."""
     import dashboard_api.rule_engine as re_mod
     seed_builtin_rules()
     tag = uuid.uuid4().hex[:8]

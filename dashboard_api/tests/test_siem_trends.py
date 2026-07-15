@@ -1,4 +1,4 @@
-"""GET /siem/analytics/trends — the per-day buckets behind the analytics
+"""GET /siem/analytics/trends - the per-day buckets behind the analytics
 sparklines. These replaced hardcoded frontend demo trends, so the contract
 matters: zero-filled days (a quiet day is an honest 0, not a gap), the range
 ends today, and the latency/FP semantics match /siem/kpis."""
@@ -47,7 +47,7 @@ def test_trends_bucket_math_matches_kpi_semantics(client, auth):
     The bucket is NOT empty (the seeded demo data lands on past days), so the
     expectation is computed by merging the planted values with the bucket's
     pre-existing rows, read with the same day-prefix bucketing the endpoint
-    uses. Only the arithmetic is mirrored — the endpoint's SQL cut, day
+    uses. Only the arithmetic is mirrored - the endpoint's SQL cut, day
     bucketing, unit conversion, and NULL-latency exclusion are all exercised
     for real (planting shifts every value, so returning seconds instead of
     minutes, or counting NULL latencies as 0, would fail these pins)."""

@@ -41,12 +41,12 @@ def _trend_sentence(conn, table: str, ts_col: str, since: str, until: str,
                     current: int, noun: str) -> str:
     """One comparable sentence per report domain: how this window's volume
     moved against the preceding window of equal length. Honest when there is
-    no baseline — it never invents a movement."""
+    no baseline - it never invents a movement."""
     if (table, ts_col) not in _TREND_TABLES:
         return ""
     try:
         # custom windows arrive tz-naive ("2026-07-01T00:00:00") while preset
-        # windows are tz-aware — normalise both to aware UTC before arithmetic
+        # windows are tz-aware - normalise both to aware UTC before arithmetic
         def _parse(ts: str) -> datetime:
             d = datetime.fromisoformat(ts)
             return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
@@ -86,7 +86,7 @@ def _meta(kind: str, title: str, label: str, since: str, until: str) -> dict:
     }
 
 
-# ── Per-kind builders ───────────────────────────────────────────────────────────
+# -- Per-kind builders -----------------------------------------------------------
 
 def _siem_report(conn, since, until, label) -> dict:
     rows = conn.execute(
@@ -508,7 +508,7 @@ def apply_audience(report: dict, audience: str = "technical") -> dict:
         out["findings"] = (report.get("findings") or [])[:8]
         out["breakdowns"] = [b for b in (report.get("breakdowns") or []) if b.get("type") == "severity"][:2]
         nar = report.get("summary", {}).get("narrative", "")
-        out["summary"] = {**report.get("summary", {}), "narrative": "Executive summary — " + nar}
+        out["summary"] = {**report.get("summary", {}), "narrative": "Executive summary - " + nar}
     elif audience == "compliance":
         kind = report.get("meta", {}).get("kind", "")
         out["compliance"] = _COMPLIANCE_CONTROLS.get(kind, _COMPLIANCE_CONTROLS["executive"])

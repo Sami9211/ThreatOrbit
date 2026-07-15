@@ -1,4 +1,4 @@
-"""Custom RBAC roles — operator-defined roles that extend the four built-ins.
+"""Custom RBAC roles - operator-defined roles that extend the four built-ins.
 
 A role bundles capabilities drawn from `permissions.CAPABILITIES`. The built-in
 roles (admin/manager/analyst/viewer) stay code-authoritative and read-only here;

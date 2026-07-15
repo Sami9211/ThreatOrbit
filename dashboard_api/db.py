@@ -894,7 +894,7 @@ def _safe_schema(conn: sqlite3.Connection):
 
     Backend note: the tolerant path must catch the *backend's* error type (a
     psycopg UndefinedColumn is not a sqlite3.OperationalError), and on Postgres
-    a failed statement aborts the whole transaction — so the fallback commits
+    a failed statement aborts the whole transaction - so the fallback commits
     each successful statement and rolls back after each failure, otherwise every
     statement after the first bad index would fail with InFailedSqlTransaction
     and an existing deployment could not boot across this upgrade."""

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'
 import { SkeletonRows } from '@/components/dashboard/Skeleton'
 
-/* ── Types ───────────────────────────────────────────────────────── */
+/* -- Types --------------------------------------------------------- */
 type Severity = 'critical' | 'high' | 'medium' | 'low'
 type VulnStatus = 'open' | 'in-progress' | 'patched' | 'accepted'
 type ExploitMaturity = 'kev' | 'weaponized' | 'poc' | 'none'
@@ -36,7 +36,7 @@ interface Vuln {
   references: string[]
 }
 
-/* ── Meta ───────────────────────────────────────────────────────── */
+/* -- Meta --------------------------------------------------------- */
 const SEVERITY_META: Record<Severity, { label: string; color: string }> = {
   critical: { label: 'Critical', color: tk('magenta') },
   high:     { label: 'High',     color: tk('threat') },
@@ -72,7 +72,7 @@ function severityFromCvss(score: number): Severity {
   return 'low'
 }
 
-/* ── Seed data ──────────────────────────────────────────────────── */
+/* -- Seed data ---------------------------------------------------- */
 const SEED: Vuln[] = [
   {
     id: 'CVE-2024-3094', cvss: 10.0, title: 'XZ Utils Backdoor (liblzma)',
@@ -256,7 +256,7 @@ const SEED: Vuln[] = [
   },
 ]
 
-/* ── Sub-components ─────────────────────────────────────────────── */
+/* -- Sub-components ----------------------------------------------- */
 function SeverityDistribution({ vulns }: { vulns: Vuln[] }) {
   const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 }
   vulns.forEach((v) => { counts[v.severity] += 1 })
@@ -304,10 +304,10 @@ function ExploitBadge({ exploit }: { exploit: ExploitMaturity }) {
   )
 }
 
-/* ── Main page ─────────────────────────────────────────────────── */
+/* -- Main page --------------------------------------------------- */
 export default function VulnsPage() {
   // Empty by default; real findings from the scanner replace it. SEED shows only
-  // when the API is unreachable (offline preview) — never on a real deployment
+  // when the API is unreachable (offline preview) - never on a real deployment
   // with an empty vuln store (which is honestly "nothing found yet").
   const [vulns, setVulns] = useState<Vuln[]>([])
   // First answer pending → skeleton rows, not "No vulnerabilities match"

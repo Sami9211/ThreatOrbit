@@ -2,7 +2,7 @@ import { test, expect } from './fixtures'
 
 /**
  * Mobile-responsive checks. Runs under the `mobile-safari` project (iPhone 13
- * viewport) — these assert the core pages are usable on a phone: no horizontal
+ * viewport) - these assert the core pages are usable on a phone: no horizontal
  * overflow, and the primary content/nav is reachable.
  */
 test.describe('Responsive (mobile viewport)', () => {

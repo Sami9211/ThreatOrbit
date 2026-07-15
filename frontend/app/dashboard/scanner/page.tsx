@@ -11,8 +11,8 @@ import {
 import { cn } from '@/lib/utils'
 import { tk, withAlpha } from '@/lib/colors'
 
-/* ── Recent-scan history row (populated live from /scans; empty on a fresh
-   install rather than showing invented history) ──────────────────── */
+/* -- Recent-scan history row (populated live from /scans; empty on a fresh
+   install rather than showing invented history) -------------------- */
 type ScanRow = {
   target: string
   type: string
@@ -22,7 +22,7 @@ type ScanRow = {
   time: string
 }
 
-/* ── Sample results for demo ─────────────────────────────────────── */
+/* -- Sample results for demo --------------------------------------- */
 const DEMO_RESULTS: Record<string, ScanResult> = {
   url: {
     target: 'http://malicious-phishing-site.xyz/login',
@@ -183,7 +183,7 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-/* ── Verdict gauge ────────────────────────────────────────────────── */
+/* -- Verdict gauge -------------------------------------------------- */
 function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
   const color = verdict === 'malicious' ? tk('magenta') : verdict === 'suspicious' ? tk('amber') : tk('safe')
   const pct   = score * 100
@@ -225,7 +225,7 @@ function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
   )
 }
 
-/* ── Engine table ────────────────────────────────────────────────── */
+/* -- Engine table -------------------------------------------------- */
 function EngineResults({ engines }: { engines: ScanResult['engines'] }) {
   const [showAll, setShowAll] = useState(false)
   const visible = showAll ? engines : engines.slice(0, 8)
@@ -270,7 +270,7 @@ function EngineResults({ engines }: { engines: ScanResult['engines'] }) {
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
 export default function ScannerPage() {
   const [scanType, setScanType] = useState<string>('url')
   const [query, setQuery] = useState('')
@@ -595,7 +595,7 @@ export default function ScannerPage() {
               <div className="px-5 py-12 text-center">
                 <Clock className="w-6 h-6 text-ink-700 mx-auto mb-2" />
                 <p className="text-xs text-ink-400">No scans yet</p>
-                <p className="text-[10px] text-ink-600 mt-1">Run your first scan above — results will appear here.</p>
+                <p className="text-[10px] text-ink-600 mt-1">Run your first scan above - results will appear here.</p>
               </div>
             ) : (
             <div className="divide-y divide-white/4">

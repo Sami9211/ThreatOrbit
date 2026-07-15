@@ -1,8 +1,8 @@
 """SOAR metrics honesty fences.
 
 `casesClosedWeek` is shown in the UI as "Cases Closed (week)". The cases query
-has no time filter, so it used to report `len(closed)` — the *all-time* closed
-count — which on a long-running deployment reads as hundreds where the real
+has no time filter, so it used to report `len(closed)` - the *all-time* closed
+count - which on a long-running deployment reads as hundreds where the real
 weekly figure is a dozen. It now windows on the `updated` close-time proxy.
 """
 import uuid
@@ -34,7 +34,7 @@ def test_cases_closed_week_windows_to_seven_days(client, auth):
         conn.commit()
 
     after = client.get("/soar/metrics", headers=auth).json()["casesClosedWeek"]
-    # Only the 2 recent closures count toward "this week" — the 3 old ones don't,
+    # Only the 2 recent closures count toward "this week" - the 3 old ones don't,
     # even though all 5 are closed. (Pre-fix this asserted +5.)
     assert after == base + 2
 
@@ -49,7 +49,7 @@ def _insert_run(conn, ts_iso: str) -> None:
 
 def test_runs_month_windows_to_thirty_days(client, auth):
     """`timeSavedMonth` is derived from `runsMonth`, which must count only the
-    trailing 30 days of playbook runs — not the all-time cumulative counter that
+    trailing 30 days of playbook runs - not the all-time cumulative counter that
     used to feed the 'this month' tile."""
     now = datetime.now(timezone.utc)
     old = (now - timedelta(days=40)).replace(microsecond=0).isoformat()      # outside the month

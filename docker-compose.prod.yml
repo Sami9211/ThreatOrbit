@@ -1,4 +1,4 @@
-# Production overlay — REAL FEEDS ONLY.
+# Production overlay - REAL FEEDS ONLY.
 #
 # Layer this on top of docker-compose.yml to run ThreatOrbit as a real
 # deployment: live mode, NO synthetic telemetry, secrets enforced, backups on.
@@ -10,14 +10,14 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 #
 # Add scheduled backups by also passing --profile backup. Put TLS (nginx/Caddy
-# or an ALB) in front — do not expose these ports to untrusted networks.
+# or an ALB) in front - do not expose these ports to untrusted networks.
 # Full runbook: docs/GOING_LIVE.md.
 
 services:
   threat_api:
     environment:
       # Real OSINT on a schedule. Provide the free keys in .env to widen coverage
-      # (OTX_API_KEY, ABUSECH_AUTH_KEY, VIRUSTOTAL_API_KEY) — see GOING_LIVE §2.
+      # (OTX_API_KEY, ABUSECH_AUTH_KEY, VIRUSTOTAL_API_KEY) - see GOING_LIVE §2.
       - ENABLE_SCHEDULER=true
 
   dashboard_api:
@@ -29,7 +29,7 @@ services:
       - DASHBOARD_ENGINE=off
       # Closed deployment: admins create accounts (no open self-registration).
       - DASHBOARD_ALLOW_REGISTRATION=false
-      # These MUST be set in .env — no dev fallback in production. `?err` makes a
+      # These MUST be set in .env - no dev fallback in production. `?err` makes a
       # missing value abort `up` with a clear message instead of booting insecure.
       - DASHBOARD_JWT_SECRET=${DASHBOARD_JWT_SECRET:?set a long random value in .env}
       - DASHBOARD_ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD:?set a strong bootstrap password in .env}

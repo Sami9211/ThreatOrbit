@@ -1,4 +1,4 @@
-# Load limits — measured baseline
+# Load limits - measured baseline
 
 Real, reproducible throughput numbers for the ingest → detection pipeline, so
 capacity planning is grounded in measurement rather than guesses. Reproduce with:
@@ -12,63 +12,63 @@ The benchmark (`dashboard_api/bench.py`) spins up an **isolated temp database**,
 seeds the detection rules + the curated pack, and times two stages with a
 realistic event mix (failed logins, large egress, process starts, beacons):
 
-- **ingest+detect** — raw JSON log lines parsed → events inserted → detection run
+- **ingest+detect** - raw JSON log lines parsed → events inserted → detection run
   inline (the end-to-end `/siem/ingest` path);
-- **drain xN** — a pre-seeded backlog processed by the detection worker pool at
+- **drain xN** - a pre-seeded backlog processed by the detection worker pool at
   N workers.
 
 ## Captured baseline
 
-> Point-in-time, on the hardware below. **Re-run on your reference hardware** —
-> numbers vary run-to-run by ~10–20%.
+> Point-in-time, on the hardware below. **Re-run on your reference hardware** -
+> numbers vary run-to-run by ~10-20%.
 
 **Environment:** Linux x86_64 · 4 vCPU · Python 3.11 · SQLite WAL (single node)
 
 | Stage | Events | Alerts | Seconds | Events/sec |
 |---|---:|---:|---:|---:|
 | ingest + detect (inline) | 5,000 | 244 | 0.46 | **~10,800** |
-| detect drain — 1 worker | 10,000 | 10,000 | 1.36 | **~7,400** |
-| detect drain — 4 workers | 10,000 | 10,000 | 1.87 | **~5,400** |
+| detect drain - 1 worker | 10,000 | 10,000 | 1.36 | **~7,400** |
+| detect drain - 4 workers | 10,000 | 10,000 | 1.87 | **~5,400** |
 
 **Environment:** same host · Postgres 16 (local, loopback TCP) ·
-`DASHBOARD_DB_BACKEND=postgres` — the previously "remaining" Tier-2 baseline
+`DASHBOARD_DB_BACKEND=postgres` - the previously "remaining" Tier-2 baseline
 (`plan.md`), now measured rather than assumed. `ingest+detect` reflects the
 batched-write fix below (§4); the `drain` stages are unchanged from the first
 measurement (the detection worker's claim/complete path was already
-batched — see §4):
+batched - see §4):
 
 | Stage | Events | Alerts | Seconds | Events/sec |
 |---|---:|---:|---:|---:|
 | ingest + detect (inline) | 5,000 | 242 | 1.32 | **~3,800** |
-| detect drain — 1 worker | 10,000 | 10,000 | 24.82 | **~400** |
-| detect drain — 4 workers | 10,000 | 10,000 | 26.04 | **~380** |
+| detect drain - 1 worker | 10,000 | 10,000 | 24.82 | **~400** |
+| detect drain - 4 workers | 10,000 | 10,000 | 26.04 | **~380** |
 
 ## What this means (read before scaling)
 
-1. **A single SQLite node sustains roughly 8–11k EPS** of ingest+detect and
-   ~7k EPS of pure detection on modest (4 vCPU) hardware — comfortably enough for
+1. **A single SQLite node sustains roughly 8-11k EPS** of ingest+detect and
+   ~7k EPS of pure detection on modest (4 vCPU) hardware - comfortably enough for
    a small/mid team. The bounded-ingest backpressure (HTTP 429 once the backlog
    passes `DASHBOARD_INGEST_MAX_BACKLOG`) protects the node above that.
 
-2. **The detection worker pool does NOT increase throughput on SQLite — it is
+2. **The detection worker pool does NOT increase throughput on SQLite - it is
    slightly slower** (4 workers < 1 worker above). This is expected and honest:
    SQLite has a **single writer**, so more workers add lock contention without
    write parallelism. The pool exists for **correctness** (a concurrency-safe,
    restart-resilient claim contract) and to **scale on Postgres** (real
    row-level locking + concurrent writers), *not* to speed up SQLite. Run the
-   pool at 1 worker on SQLite — the app **logs a startup warning** if
+   pool at 1 worker on SQLite - the app **logs a startup warning** if
    `DASHBOARD_DETECTION_WORKERS > 1` on the SQLite backend, so this misconfig is
    hard to hit silently.
 
 3. **Postgres is still slower than SQLite for this pipeline, but ingest+detect
    is now ~5.7x faster than the first measurement** (~670 → ~3,800 EPS) after
-   batching the ingest write path — correcting an earlier assumption in this
+   batching the ingest write path - correcting an earlier assumption in this
    doc that simply switching to Postgres would go "materially higher" *and*
    the follow-up measurement that first quantified the gap. Root cause of the
    original number, confirmed by reading the code: `ingest_lines` issued **one
    round-trip statement per row** (a Python loop of `conn.execute(...)`). Fixed
    by collecting the batch's rows and issuing one `conn.executemany(...)` call
-   instead — verified empirically first (a standalone benchmark against this
+   instead - verified empirically first (a standalone benchmark against this
    same local Postgres instance measured `executemany` at ~6x a row-by-row
    loop, matching a hand-built multi-row `VALUES` INSERT's throughput with far
    less code), then confirmed on the real pipeline via this bench. No
@@ -77,25 +77,25 @@ batched — see §4):
    issued.
 4. **The `drain` stages didn't move, and didn't need to**: `event_queue.claim`
    (one `UPDATE … WHERE id IN (…)`) and `.complete` (already `executemany`)
-   were already batched — the "detection-claim path" named in the original
+   were already batched - the "detection-claim path" named in the original
    roadmap item turned out not to be the bottleneck once actually read; only
    the ingest INSERT loop was. `detect drain` stays network-round-trip-bound
    on the *processing* side (rule evaluation + `_insert_alert` per match, and
    here every event matches), not the claim/complete plumbing.
 5. **What's still not batched**: `_insert_alert` (one write per firing match)
-   and the built-in engine's own inline path — lower priority, since matches
+   and the built-in engine's own inline path - lower priority, since matches
    are a small fraction of raw events in a typical mix (244 alerts for 5,000
    events above) unlike `drain`'s pathological all-match test data. For very
    high sustained EPS beyond what batching buys, externalise the event store
    to a columnar/search engine (ClickHouse/OpenSearch) behind the same hunt
-   API — the remaining P0 pipeline item already tracked in `plan.md`.
+   API - the remaining P0 pipeline item already tracked in `plan.md`.
 
 ## Caveats
 
-- SQLite WAL, single node — no network/disk-latency component a managed DB adds.
+- SQLite WAL, single node - no network/disk-latency component a managed DB adds.
 - The event mix favours rules that match (so detection does real work); a quieter
   stream will measure higher EPS.
-- These are pipeline numbers, not an end-to-end SLA — front the API with TLS, a
+- These are pipeline numbers, not an end-to-end SLA - front the API with TLS, a
   reverse proxy, and the resource limits in `deploy/helm/`.
 
 ## API dataset ceilings (UI safety)
@@ -110,7 +110,7 @@ over-cap value is rejected with HTTP 422; the cap is the hard ceiling:
 | CTI IOCs / TAXII objects / fleet vulns | 1000 |
 | MISP export | 5000 · STIX bundle | 10000 |
 | Audit-log read | 2000 · audit CSV export | 50000 |
-| Overview rollups (recent/top/geo/feed) | 100–500 |
+| Overview rollups (recent/top/geo/feed) | 100-500 |
 | SOAR run history / action trails | 500 |
 | Notifications | 100 · global search | 25 |
 | SIEM FP-triage (`/siem/alerts/fp-triage`) | 200 per page, 300-alert working set |

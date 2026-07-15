@@ -92,7 +92,7 @@ def cert_pem() -> str:
     return f"-----BEGIN CERTIFICATE-----\n{lines}\n-----END CERTIFICATE-----\n"
 
 
-# ── SP-initiated request ──────────────────────────────────────────────────────
+# -- SP-initiated request ------------------------------------------------------
 
 # Redirect-binding signature algorithm URIs (xmldsig-more).
 _SIG_RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
@@ -110,7 +110,7 @@ def _sign_redirect_query(query: str) -> str:
     The detached signature covers the exact transmitted octets of
     `SAMLRequest=…&RelayState=…&SigAlg=…` (in that order, values URL-encoded);
     the base64 signature is then appended as the `Signature` parameter. This is
-    what IdPs verify when WantAuthnRequestsSigned is on — no XML-DSig involved
+    what IdPs verify when WantAuthnRequestsSigned is on - no XML-DSig involved
     for this binding. RSA-SHA256 and ECDSA-SHA256 keys are supported.
     """
     from cryptography.hazmat.primitives import hashes, serialization
@@ -168,7 +168,7 @@ def _xml_text(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-# ── Response verification ─────────────────────────────────────────────────────
+# -- Response verification -----------------------------------------------------
 
 def _parse_time(s: str | None) -> datetime | None:
     if not s:
@@ -327,7 +327,7 @@ def map_role(groups: list[str]) -> str:
     return SAML_DEFAULT_ROLE if SAML_DEFAULT_ROLE in _VALID_ROLES else "viewer"
 
 
-# ── Signed RelayState (stateless, HMAC-signed with the dashboard JWT secret) ──
+# -- Signed RelayState (stateless, HMAC-signed with the dashboard JWT secret) --
 # Carries our AuthnRequest ID (for InResponseTo) + the post-login return path, so
 # the ACS needs no server-side session store and the RelayState can't be forged.
 

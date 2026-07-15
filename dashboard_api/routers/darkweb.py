@@ -57,7 +57,7 @@ def summary(user: dict = Depends(current_user)):
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     with get_conn() as conn:
-        # One grouped pass instead of fetching every finding into Python — the
+        # One grouped pass instead of fetching every finding into Python - the
         # rollup was a full-table read on a store that grows for its whole
         # retention window. `matched_user != ''` mirrors the old truthiness
         # check; the 24h window rides the same scan via SUM(CASE).

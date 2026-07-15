@@ -55,7 +55,7 @@ def feeds_summary(user: dict = Depends(current_user)):
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT status, enabled, indicators, type FROM feeds WHERE 1=1 {sc}", sp).fetchall()
-        # Real "IOCs today" — indicators first seen since midnight UTC, not a sum
+        # Real "IOCs today" - indicators first seen since midnight UTC, not a sum
         # of per-feed nominal daily rates.
         new_today = conn.execute(
             f"SELECT COUNT(*) AS n FROM iocs WHERE first_seen >= ? {sc}", [midnight] + sp

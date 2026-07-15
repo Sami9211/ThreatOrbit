@@ -171,7 +171,7 @@ def seed_builtin_playbooks():
         conn.commit()
 
 
-# ── Context ──────────────────────────────────────────────────────────────────────
+# -- Context ----------------------------------------------------------------------
 
 def build_context(conn, alert_id: str | None) -> dict:
     """Assemble the run context from the triggering alert (if any)."""
@@ -212,7 +212,7 @@ def _integration_action(conn, keywords: tuple, action: str, dry_run: bool) -> st
     return f" via {target['name']}"
 
 
-# ── Step implementations ─────────────────────────────────────────────────────────
+# -- Step implementations ---------------------------------------------------------
 # Each returns (status, detail). status: success | skipped | failed.
 
 def _step_enrich(conn, ctx, params, dry_run):
@@ -408,7 +408,7 @@ _STEP_FNS = {
 }
 
 
-# ── Executor ─────────────────────────────────────────────────────────────────────
+# -- Executor ---------------------------------------------------------------------
 
 def _exec_from(conn, steps: list[dict], results: list[dict], start: int,
                ctx: dict, dry_run: bool) -> str:
@@ -559,7 +559,7 @@ def resolve_approval(conn, run_id: str, *, approve: bool, actor: str) -> dict | 
     return run
 
 
-# ── Automation triggers ──────────────────────────────────────────────────────────
+# -- Automation triggers ----------------------------------------------------------
 
 def _alert_matches(match: dict, alert: dict) -> bool:
     sevs = match.get("severities")

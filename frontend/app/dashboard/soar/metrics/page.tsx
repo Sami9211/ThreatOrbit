@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { tk, withAlpha } from '@/lib/colors'
 
-/* ── Static data ─────────────────────────────────────────────────── */
+/* -- Static data --------------------------------------------------- */
 const KPI_DATA = [
   {
     label: 'MTTD',
@@ -82,7 +82,7 @@ const TACTIC_ID: Record<string, string> = {
 }
 
 
-/* ── Helpers ──────────────────────────────────────────────────────── */
+/* -- Helpers -------------------------------------------------------- */
 function coverageColor(pct: number): string {
   if (pct >= 80) return tk('safe')
   if (pct >= 60) return tk('violet')
@@ -97,9 +97,9 @@ function mitreHeatBg(pct: number): string {
   return withAlpha(tk('threat'), 0.18)
 }
 
-/* ── Sub-components ───────────────────────────────────────────────── */
+/* -- Sub-components ------------------------------------------------- */
 
-// Stacked bar chart (SVG) — live 7-day alert volume by severity.
+// Stacked bar chart (SVG) - live 7-day alert volume by severity.
 function AlertVolumeChart({ data }: { data: AlertVolumeDay[] }) {
   const hasData = data.length > 0 && data.some((d) => d.critical + d.high + d.medium + d.low > 0)
   const maxTotal = Math.max(1, ...data.map((d) => d.critical + d.high + d.medium + d.low))
@@ -204,7 +204,7 @@ function AlertVolumeChart({ data }: { data: AlertVolumeDay[] }) {
 function AnalystThroughputChart({ data }: { data: ThroughputRow[] }) {
   const max = Math.max(1, ...data.map((a) => a.closed))
   if (data.length === 0) {
-    return <p className="text-xs text-ink-500">No closed cases yet — throughput appears once analysts resolve cases.</p>
+    return <p className="text-xs text-ink-500">No closed cases yet - throughput appears once analysts resolve cases.</p>
   }
 
   return (
@@ -291,7 +291,7 @@ function DonutChart({
   )
 }
 
-/* ── Main page ────────────────────────────────────────────────────── */
+/* -- Main page ------------------------------------------------------ */
 export default function SOCMetricsPage() {
   const [mode] = useExperienceMode()
   const [metrics, setMetrics] = useState<SoarMetrics | null>(null)
@@ -346,7 +346,7 @@ export default function SOCMetricsPage() {
     const total = t.techniques.length
     const covered = t.techniques.filter((x) => x.covered).length
     return {
-      id: TACTIC_ID[t.tactic] ?? '—',
+      id: TACTIC_ID[t.tactic] ?? '-',
       name: t.tactic,
       coverage: total ? Math.round((covered / total) * 100) : 0,
     }
@@ -370,7 +370,7 @@ export default function SOCMetricsPage() {
     <div className="overflow-y-auto h-full">
       <div className="px-6 py-5 space-y-6 max-w-screen-2xl mx-auto pb-12">
 
-        {/* ── Page header ──────────────────────────────────────────── */}
+        {/* -- Page header -------------------------------------------- */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-xl font-bold text-white">SOC Metrics</h1>
@@ -380,13 +380,13 @@ export default function SOCMetricsPage() {
           </div>
         </div>
 
-        {/* ── KPI strip ────────────────────────────────────────────── */}
+        {/* -- KPI strip ---------------------------------------------- */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {KPI_DATA.map((k, i) => {
             const Icon = k.icon
-            // Real metric or a neutral placeholder — never a fabricated fallback.
-            // An empty real deployment can't compute MTTD/MTTR yet, so show '—'.
-            const value = liveValue[k.label] ?? '—'
+            // Real metric or a neutral placeholder - never a fabricated fallback.
+            // An empty real deployment can't compute MTTD/MTTR yet, so show '-'.
+            const value = liveValue[k.label] ?? '-'
 
             return (
               <motion.div
@@ -413,7 +413,7 @@ export default function SOCMetricsPage() {
           })}
         </div>
 
-        {/* ── Charts row ───────────────────────────────────────────── */}
+        {/* -- Charts row --------------------------------------------- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* 1. Alert Volume Trend (live) */}
           <div className="lg:col-span-2 bg-surface-2/50 rounded-xl border border-white/6 p-5">
@@ -470,7 +470,7 @@ export default function SOCMetricsPage() {
           <AnalystThroughputChart data={throughput} />
         </div>
 
-        {/* ── MITRE ATT&CK Coverage ────────────────────────────────── */}
+        {/* -- MITRE ATT&CK Coverage ---------------------------------- */}
         <div className="bg-surface-2/50 rounded-xl border border-white/6 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -551,7 +551,7 @@ export default function SOCMetricsPage() {
           </div>
         </div>
 
-        {/* ── Bottom row: leaderboard + donut + playbook effectiveness ── */}
+        {/* -- Bottom row: leaderboard + donut + playbook effectiveness -- */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
           {/* Analyst leaderboard */}
@@ -576,7 +576,7 @@ export default function SOCMetricsPage() {
 
             {leaderboard.length === 0 && (
               <div className="px-5 py-8 text-center text-xs text-ink-500">
-                No analyst activity yet — assign cases to build the leaderboard.
+                No analyst activity yet - assign cases to build the leaderboard.
               </div>
             )}
             {leaderboard.map((a, i) => {
@@ -618,7 +618,7 @@ export default function SOCMetricsPage() {
 
                 {/* Avg resolve time */}
                 <span className="text-[11px] font-mono text-right text-ink-300">
-                  {a.avgResolveMins != null ? `${a.avgResolveMins}m` : '—'}
+                  {a.avgResolveMins != null ? `${a.avgResolveMins}m` : '-'}
                 </span>
 
                 {/* Critical open */}
@@ -633,7 +633,7 @@ export default function SOCMetricsPage() {
           {/* Right column: disposition donut + playbook table */}
           <div className="lg:col-span-2 flex flex-col gap-4">
 
-            {/* Alert disposition donut (live — from the alerts' disposition column). */}
+            {/* Alert disposition donut (live - from the alerts' disposition column). */}
             <div className="bg-surface-2/50 rounded-xl border border-white/6 p-5 flex-1">
               <div className="mb-4">
                 <p className="text-sm font-semibold text-white">Alert Disposition</p>
@@ -644,18 +644,18 @@ export default function SOCMetricsPage() {
               ) : (
                 <DonutChart
                   segments={dispSegments}
-                  label={topDisp ? `${topDisp.value}%` : '—'}
+                  label={topDisp ? `${topDisp.value}%` : '-'}
                   sublabel={topDisp?.label}
                   size={100}
                 />
               )}
               <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2">
                 <div className="bg-white/3 rounded-lg px-3 py-2 text-center">
-                  <p className="text-sm font-bold text-magenta">{siem ? siem.totalAlerts.toLocaleString() : '—'}</p>
+                  <p className="text-sm font-bold text-magenta">{siem ? siem.totalAlerts.toLocaleString() : '-'}</p>
                   <p className="text-[9px] text-ink-600">Total alerts</p>
                 </div>
                 <div className="bg-white/3 rounded-lg px-3 py-2 text-center">
-                  <p className="text-sm font-bold text-safe">{siem ? `${siem.fpRate}%` : '—'}</p>
+                  <p className="text-sm font-bold text-safe">{siem ? `${siem.fpRate}%` : '-'}</p>
                   <p className="text-[9px] text-ink-600">FP rate</p>
                 </div>
               </div>
@@ -663,7 +663,7 @@ export default function SOCMetricsPage() {
           </div>
         </div>
 
-        {/* ── Playbook effectiveness (live) ─────────────────────────── */}
+        {/* -- Playbook effectiveness (live) --------------------------- */}
         <div className="bg-surface-2/50 rounded-xl border border-white/6 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
             <div>

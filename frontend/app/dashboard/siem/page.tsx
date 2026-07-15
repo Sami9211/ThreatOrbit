@@ -22,7 +22,7 @@ import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorr
 import { fadeInUp, listContainer, listItem } from '@/lib/motion'
 import { tk } from '@/lib/colors'
 
-/* ── Types ────────────────────────────────────────────────────────── */
+/* -- Types ---------------------------------------------------------- */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 type AlertStatus = 'new' | 'assigned' | 'in-progress' | 'pending' | 'resolved' | 'closed'
 type Disposition = 'undetermined' | 'true-positive' | 'false-positive' | 'benign' | 'duplicate'
@@ -72,7 +72,7 @@ type SiemAlert = {
   bytesOut: number
 }
 
-/* ── Static alert dataset ─────────────────────────────────────────── */
+/* -- Static alert dataset ------------------------------------------- */
 const ALERTS: SiemAlert[] = [
   {
     id: 'a001', ts: '2024-11-12T14:22:00Z',
@@ -316,7 +316,7 @@ const ALERTS: SiemAlert[] = [
   },
 ]
 
-/* ── Correlation rules ────────────────────────────────────────────── */
+/* -- Correlation rules ---------------------------------------------- */
 type CorrelationRule = {
   id: string
   name: string
@@ -349,7 +349,7 @@ const RULES: CorrelationRule[] = [
   { id: 'PATCH-0040', name: 'Critical Patch Application Failure',   source: 'WSUS',     mitreTactic: 'Initial Access',       mitreTechId: 'T1190',     severity: 'low',      enabled: false, firedLast7d: 0,    lastFired: '3d ago',    fpRate: 60, description: 'Critical or high CVSS patch fails to deploy within 72 hours of release. Disabled: too noisy.' },
 ]
 
-/* ── Data source health ───────────────────────────────────────────── */
+/* -- Data source health --------------------------------------------- */
 const DATA_SOURCES = [
   { name: 'Windows EDR',      type: 'EDR',      eps: 4821, status: 'healthy', lastEvent: '< 1s', events7d: '41.2M'  },
   { name: 'AWS CloudTrail',   type: 'Cloud',    eps: 843,  status: 'healthy', lastEvent: '< 1s', events7d: '7.2M'   },
@@ -373,7 +373,7 @@ function fmtMins(minutes: number): string {
   return `${m}m ${String(s).padStart(2, '0')}s`
 }
 
-/* ── Static metric calculations ──────────────────────────────────── */
+/* -- Static metric calculations ------------------------------------ */
 const METRICS = {
   totalAlerts: 2847,
   critical: 43,
@@ -411,7 +411,7 @@ const MITRE_DIST = [
   { tactic: 'Persistence',        count: 49,  color: '#A78BFA'  },
 ]
 
-/* ── ATT&CK coverage matrix data ─────────────────────────────────── */
+/* -- ATT&CK coverage matrix data ----------------------------------- */
 const COVERED_TECH_IDS = new Set(RULES.map((r) => r.mitreTechId))
 
 const MITRE_MATRIX = [
@@ -497,7 +497,7 @@ const MITRE_MATRIX = [
   ]},
 ]
 
-/* ── Shared helpers ───────────────────────────────────────────────── */
+/* -- Shared helpers ------------------------------------------------- */
 const SEV: Record<Severity, { bg: string; text: string; border: string; dot: string }> = {
   critical: { bg: 'bg-magenta/15', text: 'text-magenta', border: 'border-magenta/30', dot: tk('magenta') },
   high:     { bg: 'bg-threat/15',  text: 'text-threat',  border: 'border-threat/30',  dot: tk('threat') },
@@ -536,7 +536,7 @@ function fmtBytes(b: number): string {
   return `${(b / 1073741824).toFixed(2)} GB`
 }
 
-/* ── Alert detail panel ───────────────────────────────────────────── */
+/* -- Alert detail panel --------------------------------------------- */
 function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   alert: SiemAlert; onClose: () => void; simplified?: boolean
   onUpdate: (id: string, patch: Partial<SiemAlert>) => void
@@ -546,7 +546,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
   const [fpChecking, setFpChecking] = useState(false)
   // Real UEBA context for the identity/host tabs (fetched lazily when the tab
-  // opens; these replaced hardcoded demo rows — "Domain CORP", "UEBA 44/100").
+  // opens; these replaced hardcoded demo rows - "Domain CORP", "UEBA 44/100").
   const [userEntity, setUserEntity] = useState<EntityDetail | null>(null)
   const [hostEntity, setHostEntity] = useState<EntityDetail | null>(null)
   const s = SEV[alert.severity]
@@ -819,7 +819,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
 
         {tab === 'identity' && (
           <>
-            {/* Real UEBA context from /siem/entities/detail — deviation from
+            {/* Real UEBA context from /siem/entities/detail - deviation from
                 the user's OWN learned baseline, not invented directory data */}
             <Section title="User Context">
               {alert.username ? (
@@ -836,7 +836,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                           : `${userEntity.baseline.current} today · norm ${userEntity.baseline.mean} ± ${userEntity.baseline.stdDev}`} />
                       {userEntity.baseline.confidence !== 'insufficient-history' && (
                         <Row label="Baseline Deviation"
-                          value={`z = ${userEntity.baseline.zScore}${userEntity.baseline.deviating ? ' — DEVIATING' : ' (normal)'}`}
+                          value={`z = ${userEntity.baseline.zScore}${userEntity.baseline.deviating ? ' - DEVIATING' : ' (normal)'}`}
                           highlight={userEntity.baseline.deviating ? 'threat' : undefined} />
                       )}
                       {userEntity.topTechniques.length > 0 && (
@@ -854,7 +854,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             </Section>
             <p className="text-[10px] text-ink-600 italic px-1">
               Directory / IdP attributes (department, sessions, MFA) require an
-              identity-provider integration — only activity-derived context is shown.
+              identity-provider integration - only activity-derived context is shown.
             </p>
           </>
         )}
@@ -862,7 +862,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
         {tab === 'host' && (
           <>
             {/* Real host context: fields carried by the alert + this host's
-                UEBA record (replaced hardcoded demo rows — fake OS build,
+                UEBA record (replaced hardcoded demo rows - fake OS build,
                 vuln counts, patch age) */}
             <Section title="Asset Profile">
               {alert.hostname ? (
@@ -877,7 +877,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                       <Row label="Related Alerts" value={`${hostEntity.alertCount}`} />
                       {hostEntity.baseline.confidence !== 'insufficient-history' && (
                         <Row label="Baseline Deviation"
-                          value={`z = ${hostEntity.baseline.zScore}${hostEntity.baseline.deviating ? ' — DEVIATING' : ' (normal)'}`}
+                          value={`z = ${hostEntity.baseline.zScore}${hostEntity.baseline.deviating ? ' - DEVIATING' : ' (normal)'}`}
                           highlight={hostEntity.baseline.deviating ? 'threat' : undefined} />
                       )}
                     </>
@@ -942,7 +942,7 @@ function Row({ label, value, mono, highlight }: { label: string; value: string; 
   )
 }
 
-/* ── Metrics minibar (sparkline) ─────────────────────────────────── */
+/* -- Metrics minibar (sparkline) ----------------------------------- */
 function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   const max = Math.max(...data)
   const min = Math.min(...data)
@@ -966,7 +966,7 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
-/* ── Threat hunting ───────────────────────────────────────────────────
+/* -- Threat hunting ---------------------------------------------------
    The real, full-featured hunt workspace lives at /dashboard/siem/hunt and
    runs live queries against the event store (POST /siem/search). This in-page
    tab links to it rather than duplicating it with a second (previously mocked)
@@ -981,7 +981,7 @@ function ThreatHunt() {
         <p className="text-sm font-semibold text-white">Threat Hunting Workspace</p>
         <p className="text-xs text-ink-500 mt-1 max-w-md leading-relaxed">
           Run live KQL queries against your event store with saved hunts, time
-          ranges, and real matched events — in the full hunt workspace.
+          ranges, and real matched events - in the full hunt workspace.
         </p>
       </div>
       <Link
@@ -994,7 +994,7 @@ function ThreatHunt() {
   )
 }
 
-/* ── ATT&CK coverage matrix component ────────────────────────────── */
+/* -- ATT&CK coverage matrix component ------------------------------ */
 function MitreCoverageMatrix() {
   const [hoveredTech, setHoveredTech] = useState<string | null>(null)
   const allTechs = MITRE_MATRIX.flatMap((r) => r.techniques)
@@ -1090,7 +1090,7 @@ function MitreCoverageMatrix() {
   )
 }
 
-/* ── Normal Mode: Alert Triage Board ─────────────────────────────── */
+/* -- Normal Mode: Alert Triage Board ------------------------------- */
 function NormalSIEM({
   alerts,
   onUpdate,
@@ -1207,12 +1207,12 @@ function NormalSIEM({
   )
 }
 
-/* ── Main page ────────────────────────────────────────────────────── */
+/* -- Main page ------------------------------------------------------ */
 export default function SIEMPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources' | 'hunt' | 'fp-triage'>('queue')
-  // Empty until the API answers — the alert queue is the API's to fill. An empty
+  // Empty until the API answers - the alert queue is the API's to fill. An empty
   // queue on a real deployment is honest ("nothing detected yet"), not a cue to
   // show demo alerts. ALERTS is a first-load-offline fallback only (see loadSiem).
   const [alerts, setAlerts] = useState<SiemAlert[]>([])
@@ -1335,7 +1335,7 @@ export default function SIEMPage() {
   }, [apiKpis])
 
   // Honest KPI-strip annotations, derived from real data (they were static
-  // demo strings — "-12% vs yesterday", "+4 in last hour" — shown unchanged
+  // demo strings - "-12% vs yesterday", "+4 in last hour" - shown unchanged
   // next to live values). null on any piece means "not enough data": the
   // cell then shows an em-dash instead of inventing a movement.
   const kpiDerived = useMemo(() => {
@@ -1346,7 +1346,7 @@ export default function SIEMPage() {
       ? Math.round(((today.alerts - yday.alerts) / yday.alerts) * 100)
       : null
     // 7-day averages over days that actually have telemetry (a 0 bucket means
-    // "no data that day", not "instant response" — including it would fake an
+    // "no data that day", not "instant response" - including it would fake an
     // improvement).
     const avgOf = (sel: (d: SiemTrendDay) => number) => {
       const vals = (t ?? []).map(sel).filter((v) => v > 0)
@@ -1473,7 +1473,7 @@ export default function SIEMPage() {
           </div>
         </div>
 
-        {/* KPI strip — values count up; sub-annotations are computed from the
+        {/* KPI strip - values count up; sub-annotations are computed from the
             trends buckets / live queue (previously static demo strings) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 border-b border-white/5 shrink-0">
           {([
@@ -1481,7 +1481,7 @@ export default function SIEMPage() {
               label: 'Total Alerts Today', color: 'text-white',
               value: <AnimatedNumber value={kpiDerived.today ? kpiDerived.today.alerts : metrics.totalAlerts} />,
               sub: kpiDerived.alertsDeltaPct !== null
-                ? `${kpiDerived.alertsDeltaPct > 0 ? '+' : ''}${kpiDerived.alertsDeltaPct}% vs yesterday` : '—',
+                ? `${kpiDerived.alertsDeltaPct > 0 ? '+' : ''}${kpiDerived.alertsDeltaPct}% vs yesterday` : '-',
               up: (kpiDerived.alertsDeltaPct ?? 0) > 0,
             },
             {
@@ -1492,12 +1492,12 @@ export default function SIEMPage() {
             },
             {
               label: 'MTTD', color: 'text-safe', value: metrics.mttd,
-              sub: kpiDerived.mttdAvg !== null ? `7d avg ${fmtMins(kpiDerived.mttdAvg)}` : '—',
+              sub: kpiDerived.mttdAvg !== null ? `7d avg ${fmtMins(kpiDerived.mttdAvg)}` : '-',
               up: kpiDerived.mttdAvg !== null && !!apiKpis && apiKpis.mttd > kpiDerived.mttdAvg,
             },
             {
               label: 'MTTR', color: 'text-amber', value: metrics.mttr,
-              sub: kpiDerived.mttrAvg !== null ? `7d avg ${fmtMins(kpiDerived.mttrAvg)}` : '—',
+              sub: kpiDerived.mttrAvg !== null ? `7d avg ${fmtMins(kpiDerived.mttrAvg)}` : '-',
               up: kpiDerived.mttrAvg !== null && !!apiKpis && apiKpis.mttr > kpiDerived.mttrAvg,
             },
             {
@@ -1508,7 +1508,7 @@ export default function SIEMPage() {
             {
               label: 'False Positive Rate', color: 'text-violet',
               value: <><AnimatedNumber value={metrics.fpRate} format={(v) => `${Math.round(v * 10) / 10}`} />%</>,
-              sub: kpiDerived.fpAvg !== null ? `7d avg ${kpiDerived.fpAvg.toFixed(1)}%` : '—',
+              sub: kpiDerived.fpAvg !== null ? `7d avg ${kpiDerived.fpAvg.toFixed(1)}%` : '-',
               up: kpiDerived.fpAvg !== null && !!apiKpis && apiKpis.fpRate > kpiDerived.fpAvg,
             },
           ] as Array<{ label: string; color: string; value: ReactNode; sub: string; up: boolean }>).map((k) => (
@@ -1551,11 +1551,11 @@ export default function SIEMPage() {
           </span>
         </div>
 
-        {/* Tab content — keyed on the tab so switching replays a smooth
+        {/* Tab content - keyed on the tab so switching replays a smooth
             fade-up enter (shared tokens from lib/motion). */}
         <div className="flex-1 overflow-hidden">
           <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show" className="h-full">
-          {/* ── ALERT QUEUE ─────────────────────────────────────────── */}
+          {/* -- ALERT QUEUE ------------------------------------------- */}
           {tab === 'queue' && (
             <div className="flex flex-col h-full">
               {/* Filters */}
@@ -1631,7 +1631,7 @@ export default function SIEMPage() {
             </div>
           )}
 
-          {/* ── FP TRIAGE (bulk, Phase 3) ──────────────────────────── */}
+          {/* -- FP TRIAGE (bulk, Phase 3) ---------------------------- */}
           {tab === 'fp-triage' && (
             <div className="flex flex-col h-full">
               <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
@@ -1660,7 +1660,7 @@ export default function SIEMPage() {
                 </button>
               </div>
               {/* keyed on band + count: the items arrive async, and children
-                  mounting into an already-"show" parent don't animate — the
+                  mounting into an already-"show" parent don't animate - the
                   remount on data arrival is what makes the stagger play. */}
               <motion.div key={`${fpTriageBand}-${fpTriageItems.length}`}
                 variants={listContainer()} initial="hidden" animate="show"
@@ -1694,13 +1694,13 @@ export default function SIEMPage() {
             </div>
           )}
 
-          {/* ── THREAT HUNTING ─────────────────────────────────────── */}
+          {/* -- THREAT HUNTING --------------------------------------- */}
           {tab === 'hunt' && <ThreatHunt />}
 
-          {/* ── ANALYTICS ──────────────────────────────────────────── */}
+          {/* -- ANALYTICS -------------------------------------------- */}
           {tab === 'analytics' && (
             <div className="overflow-y-auto h-full p-6 space-y-6">
-              {/* Metric trend row — live per-day buckets from
+              {/* Metric trend row - live per-day buckets from
                   /siem/analytics/trends; skeletons until the first answer */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {trends === null ? (
@@ -1884,7 +1884,7 @@ export default function SIEMPage() {
             </div>
           )}
 
-          {/* ── DETECTION RULES ─────────────────────────────────────── */}
+          {/* -- DETECTION RULES --------------------------------------- */}
           {tab === 'rules' && (
             <div className="flex flex-col h-full">
               <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 shrink-0">
@@ -1914,7 +1914,7 @@ export default function SIEMPage() {
             </div>
           )}
 
-          {/* ── DATA SOURCES ────────────────────────────────────────── */}
+          {/* -- DATA SOURCES ------------------------------------------ */}
           {tab === 'sources' && (
             <div className="overflow-y-auto h-full p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -1965,7 +1965,7 @@ export default function SIEMPage() {
   )
 }
 
-/* ── Alert table row ──────────────────────────────────────────────── */
+/* -- Alert table row ------------------------------------------------ */
 function AlertRow({ alert, idx, selected, onClick }: {
   alert: SiemAlert; idx: number; selected: boolean; onClick: () => void
 }) {
@@ -2026,7 +2026,7 @@ function AlertRow({ alert, idx, selected, onClick }: {
   )
 }
 
-/* ── Rule table row ───────────────────────────────────────────────── */
+/* -- Rule table row ------------------------------------------------- */
 function RuleRow({ rule, idx }: { rule: CorrelationRule; idx: number }) {
   const [enabled, setEnabled] = useState(rule.enabled)
   const s = SEV[rule.severity]
@@ -2055,7 +2055,7 @@ function RuleRow({ rule, idx }: { rule: CorrelationRule; idx: number }) {
   )
 }
 
-/* ── Mini filter select ───────────────────────────────────────────── */
+/* -- Mini filter select --------------------------------------------- */
 function MiniFilter({ label, value, options, onChange }: {
   label: string; value: string; options: string[]; onChange: (v: string) => void
 }) {

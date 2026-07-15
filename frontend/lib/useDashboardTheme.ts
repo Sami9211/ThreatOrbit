@@ -37,7 +37,7 @@ export const THEMES: {
   { id: 'ember',   label: 'Ember',       desc: 'Warm rose · gold on charcoal', swatch: ['#0E0A09', '#FB923C', '#F472B6', '#FACC15'] },
 ]
 
-/* ── Detailed customization knobs (layered on top of the chosen theme) ──────
+/* -- Detailed customization knobs (layered on top of the chosen theme) ------
    Persisted separately and applied by ThemeScope: a custom accent (overrides
    the theme's primary), a UI scale (zoom), reduced motion, and compact
    density. Synced cross-tab like the theme. */

@@ -104,7 +104,7 @@ def run_ml_detector(entries: List[ParsedLogEntry]) -> List[AnomalyFinding]:
             extra=_feature_dict(feat),
         ))
 
-    # Highest-ranked (most unusual + corroborated) first — this is a triage
+    # Highest-ranked (most unusual + corroborated) first - this is a triage
     # ranking, not a ground-truth detection list.
     findings.sort(key=lambda f: f.severity_score, reverse=True)
     return findings
@@ -211,7 +211,7 @@ def _build_description(ip: str, feat: list, score: int, reason: str = "") -> str
         parts.append(f"High request rate: {feat[5]:.0f} RPM.")
     if feat[6] > 3:
         parts.append(f"{int(feat[6])} authentication failures.")
-    parts.append("(Unsupervised outlier ranking for triage — not a confirmed detection.)")
+    parts.append("(Unsupervised outlier ranking for triage - not a confirmed detection.)")
     return " ".join(parts)
 
 

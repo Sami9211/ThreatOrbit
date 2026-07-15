@@ -9,7 +9,7 @@ import { NUM_TO_META, ISO2_TO_NUM } from '@/lib/geo/countryMeta'
 import { fetchGeo, type GeoCountry } from '@/lib/api'
 import { tk, withAlpha } from '@/lib/colors'
 
-/* ── Geometry, computed once at module load (identical for every mount) ──────
+/* -- Geometry, computed once at module load (identical for every mount) ------
    The world-atlas TopoJSON ships inside the npm package (no network), keyed by
    ISO-3166 numeric ids - the same ids countryMeta maps to ISO-2 + continent, so
    we can join the API's attack counts (ISO-2) onto the polygons. Antarctica is
@@ -30,7 +30,7 @@ const SHAPES = FEATURES.map((f) => {
   return { id, d: PATH(f) || '', name: meta?.name || f.properties?.name || 'Unknown', continent: meta?.continent || 'Other' }
 }).filter((s) => s.d)
 
-/* ── Colour scale: cold land (no attacks) -> hot magenta (most attacks) ── */
+/* -- Colour scale: cold land (no attacks) -> hot magenta (most attacks) -- */
 const NODATA = '#1b1830'
 // Choropleth ramp: the accent at rising opacity, so it follows the theme.
 const SCALE = [0.16, 0.3, 0.48, 0.7, 1].map((a) => withAlpha(tk('magenta'), a))

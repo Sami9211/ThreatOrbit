@@ -7,7 +7,7 @@ lease for a TTL and renews it each tick; followers see a live lease held by
 someone else and stay idle. If the leader dies, the lease expires and a follower
 takes over within one TTL.
 
-The claim is a single conditional UPDATE — atomic per row on both SQLite (global
+The claim is a single conditional UPDATE - atomic per row on both SQLite (global
 write serialisation) and Postgres (row lock under READ COMMITTED): two nodes
 racing a free/expired lease serialise on the row, the first wins, the second's
 WHERE no longer matches and it gets rowcount 0. Times are integer epoch seconds
@@ -46,7 +46,7 @@ def _ensure_row(conn, name: str) -> None:
         conn.commit()
     except Exception:
         # Another replica inserted the row concurrently; the unique PK rejected
-        # ours. That's fine — the row now exists for the UPDATE below.
+        # ours. That's fine - the row now exists for the UPDATE below.
         pass
 
 

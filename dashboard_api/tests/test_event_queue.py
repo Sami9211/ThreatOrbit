@@ -112,7 +112,7 @@ def test_engine_status_exposes_backpressure(client, auth):
     assert set(body["queue"]) >= {"depth", "lagSeconds", "inFlight", "maxBacklog", "shedding"}
 
 
-# ── bounded ingest queue (429 backpressure) ──────────────────────────────────
+# -- bounded ingest queue (429 backpressure) ----------------------------------
 
 def test_ingest_sheds_load_with_429(clean_queue, client, auth, monkeypatch):
     monkeypatch.setattr("dashboard_api.config.INGEST_MAX_BACKLOG", 3)

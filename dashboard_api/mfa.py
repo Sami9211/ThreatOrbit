@@ -76,7 +76,7 @@ def otpauth_uri(secret_b32: str, email: str, issuer: str = "ThreatOrbit") -> str
             f"&algorithm=SHA1&digits={DIGITS}&period={STEP_SECONDS}")
 
 
-# ── Recovery (backup) codes ───────────────────────────────────────────────────
+# -- Recovery (backup) codes ---------------------------------------------------
 # One-time codes shown ONCE at enrolment so a lost authenticator isn't a lockout.
 # Only their SHA-256 hashes are stored; the high entropy (50 bits) makes a plain
 # hash safe (no fast-hash brute-force risk on a random code).

@@ -4,7 +4,7 @@
 # safe (patch/minor) ones once those gates are green. Major bumps stay manual.
 version: 2
 updates:
-  # ── Python services ──────────────────────────────────────────────
+  # -- Python services ----------------------------------------------
   - package-ecosystem: pip
     directory: /dashboard_api
     schedule: { interval: weekly }
@@ -32,7 +32,7 @@ updates:
     labels: ["dependencies", "backend"]
     commit-message: { prefix: "deps(log_api)" }
 
-  # ── Frontend ─────────────────────────────────────────────────────
+  # -- Frontend -----------------------------------------------------
   # Minor/patch are grouped (low noise, auto-mergeable); majors (e.g. tailwindcss
   # 4, @types/node 25) open separately for human review. The big framework set -
   # next 16, react 19, the react-three-fiber v9 chain, framer-motion 12 - has
@@ -59,7 +59,7 @@ updates:
     labels: ["dependencies", "frontend"]
     commit-message: { prefix: "deps(frontend)" }
 
-  # ── Container base images (python-slim, node-alpine, nginx-alpine) ──
+  # -- Container base images (python-slim, node-alpine, nginx-alpine) --
   # Keep the *tags* fixed at the versions the app is built + tested on
   # (python 3.11, node 22 LTS, nginx 1.27) and let Dependabot only refresh their
   # immutable @sha256 digests for base-OS security patches. Major/minor *tag*
@@ -77,7 +77,7 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message: { prefix: "deps(docker)" }
 
-  # ── CI workflow actions (clears the Node-20 action deprecation, etc.) ──
+  # -- CI workflow actions (clears the Node-20 action deprecation, etc.) --
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }

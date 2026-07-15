@@ -1,9 +1,9 @@
-"""'Social OSINT' source — an RSS/Atom feed reader, NOT a social-media API client.
+"""'Social OSINT' source - an RSS/Atom feed reader, NOT a social-media API client.
 
 It reads whatever feeds are listed in `social_sources.txt` via the shared RSS
 fetcher and tags the resulting indicators as community-sourced. There is no
 social-platform collection here: treat it as a pluggable slot for security-
-community RSS feeds. It is **empty by default** until you add sources — see the
+community RSS feeds. It is **empty by default** until you add sources - see the
 README's "Project status" section for the honest framing.
 """
 from datetime import datetime, timezone

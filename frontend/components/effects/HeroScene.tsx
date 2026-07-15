@@ -9,7 +9,7 @@ import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
-/* ── Floating solid objects ──
+/* -- Floating solid objects --
    Hex prisms are tilted to present their hexagonal face to the camera:
    Float's rotation wobble is bounded, so without an initial tilt a prism
    can sit edge-on and read as a solid rectangle ("a box"). */
@@ -32,7 +32,7 @@ const OBJECTS: Array<{
 
 function SceneObject({ p, s, g, c, fs, wire, r, animate, bright }: typeof OBJECTS[0] & { animate: boolean; bright: boolean }) {
   // bright=true means bloom is off (mobile/degraded). A flat unlit material
-  // there rendered every solid as a featureless filled silhouette — hex prisms
+  // there rendered every solid as a featureless filled silhouette - hex prisms
   // literally read as boxes. Keep the shaded material in both modes and lean
   // on a directional key light (added by the parent when bloom is off) so the
   // facets stay visible; bump the emissive so nothing goes murky.
@@ -53,7 +53,7 @@ function SceneObject({ p, s, g, c, fs, wire, r, animate, bright }: typeof OBJECT
   )
 }
 
-/* ── Large slow-drifting wireframe torus knot for depth ── */
+/* -- Large slow-drifting wireframe torus knot for depth -- */
 function BackdropKnot({ animate }: { animate: boolean }) {
   const ref = useRef<THREE.Mesh>(null)
   useFrame((_, dt) => {
@@ -73,7 +73,7 @@ function BackdropKnot({ animate }: { animate: boolean }) {
   )
 }
 
-/* ── Distant starfield ── */
+/* -- Distant starfield -- */
 function Stars({ count }: { count: number }) {
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3)
@@ -136,8 +136,8 @@ export default function HeroScene({ mouseX, mouseY }: {
   const bloomOn   = !isLowPower && !degraded
   const bright    = !bloomOn   // brighten emissive when bloom can't carry the glow
   const starCount = isLowPower ? 50 : 120
-  // Phones are dpr≈3: capping at 1.25–1.5 read as visibly pixelated. Cap at
-  // 1.75–2 for sharpness; AdaptiveDpr (smooth, not nearest-neighbour) still
+  // Phones are dpr≈3: capping at 1.25-1.5 read as visibly pixelated. Cap at
+  // 1.75-2 for sharpness; AdaptiveDpr (smooth, not nearest-neighbour) still
   // lowers resolution under real GPU load, and bloom drops out when degraded.
   const dpr: [number, number] | number = degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]
 

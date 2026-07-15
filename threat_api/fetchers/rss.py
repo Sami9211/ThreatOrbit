@@ -128,7 +128,7 @@ def _item_link(item):
 # Bound the text a single item's IOC extraction runs over. RSS/Atom bodies are
 # third-party and attacker-influenceable (a compromised or hostile feed), and the
 # regexes below have no match timeout. Without a cap, a crafted blob (e.g. a long
-# "a.a.a.a…" run) makes the domain regex backtrack for many seconds — a ReDoS that
+# "a.a.a.a…" run) makes the domain regex backtrack for many seconds - a ReDoS that
 # stalls the OSINT refresh thread. A real item's title+link+description is tiny;
 # this cap is generous for legitimate content and hard-bounds the pathological case.
 _MAX_EXTRACT_CHARS = 20000

@@ -458,7 +458,7 @@ def revoke_api_key(key_id: str, actor: dict = Depends(require_perm("config.manag
     return None
 
 
-# ── Webhooks ──────────────────────────────────────────────────────────────────
+# -- Webhooks ------------------------------------------------------------------
 
 _WEBHOOK_EVENTS = {"alert.created", "incident.resolved", "ioc.confirmed", "case.created",
                    "playbook.failed", "playbook.completed", "playbook.action",

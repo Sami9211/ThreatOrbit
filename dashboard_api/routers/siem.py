@@ -97,7 +97,7 @@ class EventSearch(BaseModel):
     time_range: str = "24h"
 
 
-# ── Alerts ────────────────────────────────────────────────────────────────────
+# -- Alerts --------------------------------------------------------------------
 
 # Whitelisted sort columns → SQL ORDER BY expressions. Severity sorts by
 # operational priority (critical first), not alphabetically. Anything not in
@@ -145,7 +145,7 @@ def list_alerts(
     # `id` tie-breaker: ts has second precision, so a burst of alerts ties on
     # every sort key. Without a total order, tied rows come back in arbitrary
     # (backend/plan-dependent) order and offset/limit pagination can skip or
-    # duplicate rows across pages — surfaced as a real Postgres-only CI flake.
+    # duplicate rows across pages - surfaced as a real Postgres-only CI flake.
     order_sql = f"{_ALERT_SORTS[sort]} {order.upper()}, id {order.upper()}"
     with get_conn() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM alerts {where}", params).fetchone()[0]
@@ -419,7 +419,7 @@ def delete_suppression(suppression_id: str, user: dict = Depends(require_perm("s
     return None
 
 
-# ── KPIs ──────────────────────────────────────────────────────────────────────
+# -- KPIs ----------------------------------------------------------------------
 
 @router.get("/kpis")
 def siem_kpis(user: dict = Depends(current_user)):
@@ -428,7 +428,7 @@ def siem_kpis(user: dict = Depends(current_user)):
     with get_conn() as conn:
         # Aggregate in SQL: this endpoint is polled every 30s by the SIEM page,
         # and the old version fetched EVERY alert row into Python to count them
-        # (a full-table transfer per poll — the hot spot at 100k+ alerts). The
+        # (a full-table transfer per poll - the hot spot at 100k+ alerts). The
         # grouped result is at most |severities|×|statuses|×|dispositions| rows.
         groups = conn.execute(
             f"SELECT severity, status, disposition, COUNT(*) AS n "
@@ -512,7 +512,7 @@ def siem_trends(days: int = Query(7, ge=1, le=30), user: dict = Depends(current_
     ]}
 
 
-# ── SOC triage queue + SLA ─────────────────────────────────────────────────────
+# -- SOC triage queue + SLA -----------------------------------------------------
 
 # SLA policy in minutes, by severity. Ack = first move off 'new'; resolve =
 # reaching resolved/closed. Admin-tunable via settings keys sla_ack_<sev>_mins
@@ -598,7 +598,7 @@ def soc_triage(user: dict = Depends(current_user)):
     }
 
 
-# ── MITRE distribution ────────────────────────────────────────────────────────
+# -- MITRE distribution --------------------------------------------------------
 
 _SEV_WEIGHT = {"critical": 25, "high": 15, "medium": 7, "low": 3, "info": 1}
 _ENTITY_FIELD = {"user": "username", "host": "hostname", "ip": "src_ip"}
@@ -612,14 +612,14 @@ def list_entities(type: str = Query("all", pattern="^(all|user|host|ip)$"),
     history - severity-weighted volume plus ATT&CK technique diversity.
 
     Aggregates in SQL (GROUP BY entity), not Python: the previous version
-    fetched every alert with a non-null user/host/ip — three near-full table
+    fetched every alert with a non-null user/host/ip - three near-full table
     scans into Python per request, ~2.6s at 200k alerts. One grouped row per
     entity is orders of magnitude less data. Sample technique names are then
     resolved with a second query bounded to just the returned top-N."""
     types = [type] if type != "all" else ["user", "host", "ip"]
     # Workspace clause: this endpoint aggregated across ALL tenants before.
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
-    # Severity→weight CASE built from the same dict the old Python loop used —
+    # Severity→weight CASE built from the same dict the old Python loop used -
     # one source of truth, and the keys are code constants (not user input).
     weight_case = ("CASE severity " +
                    " ".join(f"WHEN '{s}' THEN {w}" for s, w in _SEV_WEIGHT.items()) +
@@ -644,7 +644,7 @@ def list_entities(type: str = Query("all", pattern="^(all|user|host|ip)$"),
                 f"FROM alerts WHERE {field} IS NOT NULL AND {field} != '' {sc} "
                 f"GROUP BY {field}", sp).fetchall()
             # One grouped row per entity; only the returned top-N become dicts
-            # (an IP-heavy store can have tens of thousands of entities — the
+            # (an IP-heavy store can have tens of thousands of entities - the
             # summary needs counters, not materialised objects).
             for r in rows:
                 risk = min(100, int(r["score"] or 0) + int(r["tdiv"] or 0) * 4)
@@ -665,7 +665,7 @@ def list_entities(type: str = Query("all", pattern="^(all|user|host|ip)$"),
                 "band": ("critical" if risk >= 70 else "high" if risk >= 45
                          else "elevated" if risk >= 20 else "normal"),
             })
-        # Up to 6 sample technique ids per returned entity — resolved only for
+        # Up to 6 sample technique ids per returned entity - resolved only for
         # the top-N (bounded), grouped per entity-type to use the right column.
         for etype in types:
             names = [e["value"] for e in top if e["type"] == etype]
@@ -755,7 +755,7 @@ def mitre_distribution():
              "color": TACTIC_COLOR.get(r["tactic"], "#7A3CFF")} for r in rows]
 
 
-# ── Rules ─────────────────────────────────────────────────────────────────────
+# -- Rules ---------------------------------------------------------------------
 
 @router.get("/rules")
 def list_rules(category: str | None = None, status: str | None = None,
@@ -779,7 +779,7 @@ def list_rules(category: str | None = None, status: str | None = None,
     with get_conn() as conn:
         rows = conn.execute(f"SELECT * FROM detection_rules {where}", params).fetchall()
         # hits_24h / fired_last_7d are stored on the rule but only ever set at
-        # seed/import time — never updated as the engine fires — so they'd show a
+        # seed/import time - never updated as the engine fires - so they'd show a
         # frozen number. Compute them live from the alerts the rule produced
         # (engine alerts carry rule_name; rule_id is a constant 'R-ENGINE'), one
         # windowed scan for both counters.
@@ -813,7 +813,7 @@ def _reject_invalid_rule(definition: dict | None) -> None:
     """Authoring-time validation for a detection-rule definition: reject an unsafe
     regex (ReDoS) and a non-evaluable aggregation (non-numeric threshold/window),
     so a broken rule is caught with clear feedback instead of silently firing
-    nothing — or, before the engine was hardened, crashing the detection batch."""
+    nothing - or, before the engine was hardened, crashing the detection batch."""
     _reject_unsafe_regex(definition)
     from dashboard_api.rule_engine import invalid_aggregation_in
     bad = invalid_aggregation_in(definition)
@@ -1065,7 +1065,7 @@ async def ingest_raw(
     user: dict = Depends(require_perm("siem.write")),
 ):
     """Vendor-friendly ingest for certified Fluent Bit / Vector / Filebeat
-    configs: POST raw text (newline-delimited), NDJSON, or a JSON array — no
+    configs: POST raw text (newline-delimited), NDJSON, or a JSON array - no
     `{lines:[…]}` envelope required. Same parsing, detection, backpressure and
     audit as /siem/ingest."""
     raw = await request.body()
@@ -1218,7 +1218,7 @@ def delete_rule(rule_id: str, user: dict = Depends(require_perm("siem.write"))):
     return None
 
 
-# ── Log sources ───────────────────────────────────────────────────────────────
+# -- Log sources ---------------------------------------------------------------
 
 @router.get("/sources")
 def list_sources(user: dict = Depends(current_user)):
@@ -1238,7 +1238,7 @@ def list_sources(user: dict = Depends(current_user)):
         # wired-up source gets a REAL events/24h + last-event instead of the
         # registration-time total_events_24h snapshot (which is never updated).
         # Sources whose name has never appeared in the event flow keep their
-        # stored values — seeded demo sources stay sample-data by contract.
+        # stored values - seeded demo sources stay sample-data by contract.
         flow = {r["source"]: r for r in conn.execute(
             "SELECT source, COUNT(*) AS ever, "
             "SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS h24, MAX(ts) AS last_ts "
@@ -1274,7 +1274,7 @@ def create_source(body: SourceCreate, user: dict = Depends(require_perm("siem.wr
     return row_to_dict(row)
 
 
-# ── Correlations ──────────────────────────────────────────────────────────────
+# -- Correlations --------------------------------------------------------------
 
 @router.get("/correlations")
 def correlations(min_alerts: int = Query(2, ge=2, le=50)):
@@ -1322,7 +1322,7 @@ def correlations(min_alerts: int = Query(2, ge=2, le=50)):
     return clusters
 
 
-# ── Saved hunts ───────────────────────────────────────────────────────────────
+# -- Saved hunts ---------------------------------------------------------------
 
 @router.get("/hunts")
 def list_hunts(user: dict = Depends(current_user)):

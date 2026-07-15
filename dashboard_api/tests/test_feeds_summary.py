@@ -1,7 +1,7 @@
 """Feeds summary honesty fence.
 
 The feeds/sources "IOCs Today" tile used to sum each feed's nominal daily rate
-(and, once live, each feed's *cumulative* indicator total) — never an actual
+(and, once live, each feed's *cumulative* indicator total) - never an actual
 count of indicators seen today. `newToday` is now a real count of IOCs first
 seen since midnight UTC.
 """

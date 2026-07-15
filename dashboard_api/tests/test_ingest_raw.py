@@ -1,7 +1,7 @@
 """Vendor-friendly raw ingest (/siem/ingest/raw): the endpoint the certified
 Fluent Bit / Vector / Filebeat configs target. It must accept the shapes those
-agents emit natively — plain text, NDJSON, JSON string-arrays, JSON object-arrays
-— with no {lines:[…]} envelope, authenticated by an API key.
+agents emit natively - plain text, NDJSON, JSON string-arrays, JSON object-arrays
+- with no {lines:[…]} envelope, authenticated by an API key.
 """
 import json
 

@@ -36,7 +36,7 @@ import {
 import { useCursorEffect } from '@/lib/useCursorEffect'
 import { tk, withAlpha } from '@/lib/colors'
 
-/* ── Two-factor authentication (real TOTP, per-user) ─────────────── */
+/* -- Two-factor authentication (real TOTP, per-user) --------------- */
 function MyMfaPanel() {
   const [status, setStatus] = useState<{ enabled: boolean; pending: boolean; recoveryCodesRemaining: number } | null>(null)
   const [enrolment, setEnrolment] = useState<{ secret: string; otpauthUri: string } | null>(null)
@@ -175,7 +175,7 @@ function MyMfaPanel() {
   )
 }
 
-/* ── Personal Slack routing (per-user, backed by /auth/me/slack) ── */
+/* -- Personal Slack routing (per-user, backed by /auth/me/slack) -- */
 function MySlackRouting() {
   const [url, setUrl] = useState('')
   const [minSev, setMinSev] = useState('high')
@@ -240,7 +240,7 @@ function MySlackRouting() {
   )
 }
 
-/* ── Shared input ────────────────────────────────────────────────── */
+/* -- Shared input -------------------------------------------------- */
 function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
   label: string; value: string; type?: string; hint?: string
   onChange?: (v: string) => void; placeholder?: string
@@ -291,7 +291,7 @@ function Toggle({ label, description, checked, value, onChange }: {
   )
 }
 
-/* ── Live API keys panel (backed by /config/api-keys) ────────────── */
+/* -- Live API keys panel (backed by /config/api-keys) -------------- */
 const SCOPE_PREFIX: Record<string, string> = {
   admin: 'to_ak_live_', write: 'to_sk_live_', read: 'to_rk_live_',
 }
@@ -428,7 +428,7 @@ function LiveApiKeys() {
   )
 }
 
-/* ── Live feed sources (backed by /feeds) ────────────────────────── */
+/* -- Live feed sources (backed by /feeds) -------------------------- */
 const FEED_ICONS: Record<string, string> = {
   commercial: '🛡️', opensource: '🛸', community: '🌐', internal: '🏠',
 }
@@ -488,7 +488,7 @@ function LiveFeedSources() {
   )
 }
 
-/* ── Live integrations (backed by /soar/integrations) ────────────── */
+/* -- Live integrations (backed by /soar/integrations) -------------- */
 function LiveIntegrations() {
   const [items, setItems] = useState<Integration[] | null>(null)
   const [unavailable, setUnavailable] = useState(false)
@@ -537,7 +537,7 @@ function LiveIntegrations() {
   )
 }
 
-/* ── Experience mode ─────────────────────────────────────────────── */
+/* -- Experience mode ----------------------------------------------- */
 function ExperienceModeCard() {
   const [mode, setMode] = useExperienceMode()
 
@@ -647,7 +647,7 @@ function ExperienceModeCard() {
   )
 }
 
-/* ── Two-option segmented control ────────────────────────────────── */
+/* -- Two-option segmented control ---------------------------------- */
 function Segmented<T extends string>({ label, desc, value, options, onChange }: {
   label: string; desc: string; value: T
   options: { v: T; l: string }[]; onChange: (v: T) => void
@@ -672,7 +672,7 @@ function Segmented<T extends string>({ label, desc, value, options, onChange }: 
   )
 }
 
-/* ── Appearance: theme + accent + scale + motion + density ───────────
+/* -- Appearance: theme + accent + scale + motion + density -----------
    The theme recolours the dashboard; the accent overrides the theme's
    primary; scale and density rescale the rem baseline (real zoom / density);
    reduced motion stops animations. All persist per-browser and sync across
@@ -737,7 +737,7 @@ function ThemeCard({ saveTick }: { saveTick: number }) {
         )}
       </div>
 
-      {/* ── Theme presets ── */}
+      {/* -- Theme presets -- */}
       <div className="p-3 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         {THEMES.map((t) => {
           const isActive = t.id === dTheme
@@ -777,7 +777,7 @@ function ThemeCard({ saveTick }: { saveTick: number }) {
         })}
       </div>
 
-      {/* ── Detailed customization ── */}
+      {/* -- Detailed customization -- */}
       <div className="px-4 pb-4 sm:px-5 sm:pb-5 pt-4 border-t border-white/5 space-y-5">
         {/* Accent colour */}
         <div>
@@ -874,7 +874,7 @@ function ThemeCard({ saveTick }: { saveTick: number }) {
   )
 }
 
-/* ── Section wrapper ─────────────────────────────────────────────── */
+/* -- Section wrapper ----------------------------------------------- */
 function Section({ title, icon: Icon, color, children }: {
   title: string; icon: React.ComponentType<any>; color: string; children: React.ReactNode
 }) {
@@ -895,7 +895,7 @@ function Section({ title, icon: Icon, color, children }: {
   )
 }
 
-/* ── Tabs ────────────────────────────────────────────────────────── */
+/* -- Tabs ---------------------------------------------------------- */
 const TABS = [
   { id: 'general',     label: 'General',         icon: Settings },
   { id: 'api',         label: 'API Keys',         icon: Key      },
@@ -905,7 +905,7 @@ const TABS = [
   { id: 'integrations',label: 'Integrations',     icon: Plug     },
 ]
 
-/* ── Settings navigation ─────────────────────────────────────────────
+/* -- Settings navigation ---------------------------------------------
    Mobile  (< sm): horizontal scrollable icon+label strip above the content
    Desktop (sm+) : vertical collapsible icon rail with hover-to-expand      */
 function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => void }) {
@@ -915,7 +915,7 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
 
   return (
     <>
-      {/* ── Mobile horizontal strip ── */}
+      {/* -- Mobile horizontal strip -- */}
       <nav aria-label="Settings sections" className="sm:hidden overflow-x-auto flex gap-1 pb-2 -mx-4 px-4 scrollbar-none">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
@@ -934,7 +934,7 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
         ))}
       </nav>
 
-      {/* ── Desktop vertical rail ── */}
+      {/* -- Desktop vertical rail -- */}
       <nav
         aria-label="Settings sections"
         onMouseEnter={() => setHovered(true)}
@@ -987,8 +987,8 @@ function SettingsNav({ tab, setTab }: { tab: string; setTab: (id: string) => voi
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
-/* ── Audit trail ─────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
+/* -- Audit trail --------------------------------------------------- */
 const ACTION_COLOR: Record<string, string> = {
   create: tk('safe'), update: tk('amber'), delete: tk('threat'),
   revoke: tk('threat'), toggle: tk('violet'), run: tk('magenta'),
@@ -1011,7 +1011,7 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-/* ── Change password ─────────────────────────────────────────────── */
+/* -- Change password ----------------------------------------------- */
 function ChangePassword() {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -1061,7 +1061,7 @@ function ChangePassword() {
   )
 }
 
-/* ── Active sessions (per-device): list & individually revoke ─────── */
+/* -- Active sessions (per-device): list & individually revoke ------- */
 function describeAgent(ua: string | null): string {
   if (!ua) return 'Unknown device'
   const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
@@ -1209,7 +1209,7 @@ function AuditTrail() {
   )
 }
 
-/* ── Live engine control ─────────────────────────────────────────── */
+/* -- Live engine control ------------------------------------------- */
 function WorkspaceCard() {
   const [org, setOrg] = useState<Org | null>(null)
   useEffect(() => { fetchCurrentOrg().then(setOrg).catch(() => {}) }, [])
@@ -1327,7 +1327,7 @@ function LicenseCard() {
   )
 }
 
-/* ── Billing (Stripe self-serve; honest "not configured" fallback) ── */
+/* -- Billing (Stripe self-serve; honest "not configured" fallback) -- */
 function BillingCard() {
   const [bs, setBs] = useState<BillingStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -1489,7 +1489,7 @@ function LiveEngineCard() {
   )
 }
 
-/* ── Platform self-health ────────────────────────────────────────── */
+/* -- Platform self-health ------------------------------------------ */
 const HEALTH_UI: Record<HealthStatus, { dot: string; pill: string; label: string }> = {
   ok:       { dot: 'bg-safe',    pill: 'border-safe/25 bg-safe/10 text-safe',       label: 'Healthy'  },
   degraded: { dot: 'bg-amber',   pill: 'border-amber/25 bg-amber/10 text-amber',    label: 'Degraded' },
@@ -1498,7 +1498,7 @@ const HEALTH_UI: Record<HealthStatus, { dot: string; pill: string; label: string
 }
 
 function fmtUptime(s?: number): string {
-  if (!s || s < 0) return '—'
+  if (!s || s < 0) return '-'
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
   if (d) return `${d}d ${h}h`
   if (h) return `${h}h ${m}m`
@@ -1534,19 +1534,19 @@ function SystemHealthCard() {
   const c = health?.checks
   const dbDetail = c?.database.status === 'down'
     ? (c.database.error ?? 'unreachable')
-    : c?.database.latencyMs != null ? `${c.database.latencyMs} ms round-trip` : '—'
+    : c?.database.latencyMs != null ? `${c.database.latencyMs} ms round-trip` : '-'
   const schemaDetail = c?.schema.detail
-    ?? (c && c.schema.code != null ? `code v${c.schema.code} · db v${c.schema.db}` : '—')
+    ?? (c && c.schema.code != null ? `code v${c.schema.code} · db v${c.schema.db}` : '-')
   const queueDetail = c?.queue.status === 'unknown' ? 'unknown'
-    : c?.queue ? `${c.queue.depth ?? 0} pending · ${c.queue.lagSeconds ?? 0}s lag${c.queue.detail ? ` · ${c.queue.detail}` : ''}` : '—'
+    : c?.queue ? `${c.queue.depth ?? 0} pending · ${c.queue.lagSeconds ?? 0}s lag${c.queue.detail ? ` · ${c.queue.detail}` : ''}` : '-'
   const leaderDetail = c?.leader
     ? (c.leader.isLeader ? 'this node holds the lease'
         : c.leader.holder ? `held by ${c.leader.holder}`
         : c.leader.electionEnabled ? 'no active leader' : 'election disabled')
-    : '—'
+    : '-'
   const procDetail = c?.process
     ? `up ${fmtUptime(c.process.uptimeSeconds)} · ${c.process.errors ?? 0} errors · ${c.process.engineTicks ?? 0} ticks`
-    : '—'
+    : '-'
 
   return (
     <Section title="System Health" icon={Activity} color={tk('safe')}>
@@ -1562,7 +1562,7 @@ function SystemHealthCard() {
         {health && <span className="text-[11px] text-ink-500">refreshed {relativeTime(health.generatedAt)}</span>}
       </div>
       <p className="text-[11px] text-ink-500 mb-4 leading-relaxed">
-        The platform watching its own vitals — every value below is measured live, not assumed. The
+        The platform watching its own vitals - every value below is measured live, not assumed. The
         overall verdict follows the worst gating check (database, schema, or detection queue).
       </p>
       {error && !health && (
@@ -1581,7 +1581,7 @@ function SystemHealthCard() {
   )
 }
 
-/* ── Background jobs ─────────────────────────────────────────────── */
+/* -- Background jobs ----------------------------------------------- */
 const JOB_LABEL: Record<string, string> = {
   'threat.sync_iocs': 'IOC sync from Threat API',
   'logs.analyse': 'Log anomaly analysis',
@@ -1679,7 +1679,7 @@ export default function ConfigPage() {
         </div>
       </div>
 
-      {/* Always-reachable Save — pinned top-right so it stays clickable from
+      {/* Always-reachable Save - pinned top-right so it stays clickable from
           any scroll position (no scrolling back up to the header). */}
       <FloatingSave onSave={save} saved={saved} />
 
@@ -1687,33 +1687,33 @@ export default function ConfigPage() {
         {/* Nav: horizontal strip on mobile, vertical rail on sm+ */}
         <SettingsNav tab={tab} setTab={setTab} />
 
-        {/* Content — keyed on the tab so switching replays a smooth enter */}
+        {/* Content - keyed on the tab so switching replays a smooth enter */}
         <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show"
           className="flex-1 min-w-0 space-y-5">
           {tab === 'general' && (
             <>
-              {/* ── Workspace (multi-tenancy) ───────────────────────── */}
+              {/* -- Workspace (multi-tenancy) ------------------------- */}
               <WorkspaceCard />
 
-              {/* ── License & plan limits ───────────────────────────── */}
+              {/* -- License & plan limits ----------------------------- */}
               <LicenseCard />
 
-              {/* ── Billing (Stripe self-serve) ─────────────────────── */}
+              {/* -- Billing (Stripe self-serve) ----------------------- */}
               <BillingCard />
 
-              {/* ── Storage backend (Postgres staged) ───────────────── */}
+              {/* -- Storage backend (Postgres staged) ----------------- */}
               <StorageCard />
 
-              {/* ── Live Processing Engine ──────────────────────────── */}
+              {/* -- Live Processing Engine ---------------------------- */}
               <LiveEngineCard />
 
-              {/* ── Platform self-health ────────────────────────────── */}
+              {/* -- Platform self-health ------------------------------ */}
               <SystemHealthCard />
 
-              {/* ── Experience Mode ─────────────────────────────────── */}
+              {/* -- Experience Mode ----------------------------------- */}
               <ExperienceModeCard />
 
-              {/* ── Dashboard Theme ─────────────────────────────────── */}
+              {/* -- Dashboard Theme ----------------------------------- */}
               <ThemeCard saveTick={saveTick} />
 
               <Section title="Platform Settings" icon={Settings} color={tk('violet')}>

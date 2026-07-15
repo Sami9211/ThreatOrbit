@@ -1,5 +1,5 @@
-"""SOC-metrics analyst leaderboard / throughput is REAL — aggregated from the
-cases each analyst owns — not a hardcoded list (audit: dashboard widgets that
+"""SOC-metrics analyst leaderboard / throughput is REAL - aggregated from the
+cases each analyst owns - not a hardcoded list (audit: dashboard widgets that
 render demo data as if live).
 """
 

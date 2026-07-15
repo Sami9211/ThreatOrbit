@@ -110,7 +110,7 @@ def _connector_scheduler():
     while True:
         # HA: only the leader replica runs scheduled work, or two nodes would
         # double-import connectors and double-deliver reports. (is_leader, not
-        # acquire — the engine loop renews the shared lease.)
+        # acquire - the engine loop renews the shared lease.)
         if not leader.is_leader():
             time.sleep(CONNECTOR_TICK_SECONDS)
             continue
@@ -148,7 +148,7 @@ def _engine_loop():
     time.sleep(5)
     while True:
         try:
-            # HA: the engine loop also drives leader election — acquire/renew the
+            # HA: the engine loop also drives leader election - acquire/renew the
             # shared lease each tick. A follower (someone else holds a live lease)
             # idles, so exactly one replica generates telemetry.
             if not leader.acquire():
@@ -174,7 +174,7 @@ def _health_monitor():
     """Background loop (live mode): watch the platform's *own* health and alert
     the notification centre on a verdict transition (ok→degraded→down and
     recovery). Leadership is checked read-only (`is_leader`, not `acquire`) so it
-    never fights the engine loop's lease — exactly one replica alerts. Disabled
+    never fights the engine loop's lease - exactly one replica alerts. Disabled
     when DASHBOARD_HEALTH_MONITOR_SECONDS<=0."""
     import time
     from dashboard_api import leader, self_health
@@ -193,7 +193,7 @@ def _health_monitor():
 
 def _apply_engine_mode() -> bool:
     """Boot-time application of DASHBOARD_ENGINE. In real-data mode ("off") the
-    engine is paused on EVERY start — the operator's env wins at boot, while the
+    engine is paused on EVERY start - the operator's env wins at boot, while the
     UI toggle can still resume it deliberately until the next restart. Returns
     True when synthetic telemetry is disabled."""
     from dashboard_api.config import ENGINE_MODE
@@ -216,7 +216,7 @@ def _startup():
     # mandatory in production.
     init_db()
     # Guardrail: a multi-worker detection pool has NO throughput benefit on
-    # SQLite (single writer) and measurably regresses it under lock contention —
+    # SQLite (single writer) and measurably regresses it under lock contention -
     # it only helps on Postgres (docs/LOAD_LIMITS.md). Warn an operator who set
     # workers > 1 on the default SQLite backend so they don't silently footgun.
     try:
@@ -292,7 +292,7 @@ def health():
 
 @app.get("/ready", tags=["meta"])
 def ready(response: Response):
-    """Readiness probe (k8s/LB). Returns HTTP 503 — not 200 — when the DB is
+    """Readiness probe (k8s/LB). Returns HTTP 503 - not 200 - when the DB is
     unreachable, so an orchestrator pulls the pod out of rotation instead of
     routing traffic to an instance that can't serve it. A 200 body with
     ``ready:false`` looks READY to an httpGet probe; that was the bug."""

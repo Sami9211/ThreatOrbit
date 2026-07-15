@@ -1,4 +1,4 @@
-"""Multi-worker detection pool — the concurrency-safe drain over the event queue.
+"""Multi-worker detection pool - the concurrency-safe drain over the event queue.
 
 The engine's inline tick processes detection with a single worker (engine-0).
 To catch up on a large backlog, this runs a POOL of workers that each atomically
@@ -12,7 +12,7 @@ already-claimed rows excluded. Processing reuses the normal detection path
 behaves exactly as the inline worker.
 
 At-least-once: if a worker dies after claiming but before completing, the lease
-expires and `requeue_stale` re-flows the batch (a re-run may re-alert — the same
+expires and `requeue_stale` re-flows the batch (a re-run may re-alert - the same
 durable-queue trade-off the inline lease already documents).
 """
 import logging

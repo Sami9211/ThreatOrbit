@@ -182,7 +182,7 @@ export default function ConnectorsPanel() {
   )
 }
 
-/* ── Add-connector modal ─────────────────────────────────────────── */
+/* -- Add-connector modal ------------------------------------------- */
 function AddConnectorModal({ kinds, onClose, onAdd }: {
   kinds: ConnectorKind[]
   onClose: () => void

@@ -3,7 +3,7 @@
 Two things under test:
 
   * ``/ready`` must return HTTP **503** (not a 200 body saying ``ready:false``)
-    when the DB is unreachable — otherwise a k8s httpGet readiness probe reads
+    when the DB is unreachable - otherwise a k8s httpGet readiness probe reads
     the 200 as READY and keeps routing traffic to a broken pod.
   * ``self_health.collect`` derives an honest overall verdict from real
     subsystem signals, degrading only on the gating checks.
@@ -13,7 +13,7 @@ from unittest.mock import patch
 from dashboard_api import self_health as sh
 
 
-# ── /ready readiness contract ────────────────────────────────────────────────────
+# -- /ready readiness contract ----------------------------------------------------
 
 def test_ready_healthy_is_200(client):
     r = client.get("/ready")
@@ -37,19 +37,19 @@ def test_ready_db_down_is_503(client):
 
 def test_health_liveness_stays_static(client):
     """Liveness stays a cheap always-200 (don't kill+restart a pod for a DB
-    outage a restart can't fix — that's readiness's job)."""
+    outage a restart can't fix - that's readiness's job)."""
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
 
 
-# ── verdict logic ─────────────────────────────────────────────────────────────────
+# -- verdict logic -----------------------------------------------------------------
 
 def test_worst_ranks_down_over_degraded_over_ok():
     assert sh._worst(["ok", "degraded", "down"]) == "down"
     assert sh._worst(["ok", "degraded"]) == "degraded"
     assert sh._worst(["ok", "ok"]) == "ok"
-    # unknown never gates — the real signal lives in the failing check
+    # unknown never gates - the real signal lives in the failing check
     assert sh._worst(["ok", "unknown"]) == "ok"
     # nothing measurable succeeded → down
     assert sh._worst(["unknown"]) == "down"
@@ -79,7 +79,7 @@ def test_collect_db_down_is_down(client):
 
 def test_collect_queue_lag_is_degraded(client):
     """A backlog past the lag threshold degrades the verdict without the DB
-    being down — the EPS-ceiling signal."""
+    being down - the EPS-ceiling signal."""
     over = sh._LAG_WARN + 60
     with patch("dashboard_api.event_queue.stats",
                return_value={"depth": 3, "inFlight": 0, "lagSeconds": over}):
@@ -96,7 +96,7 @@ def test_collect_schema_drift_is_degraded(client):
     assert h["checks"]["schema"]["status"] == "degraded"
 
 
-# ── /platform/self-health endpoint ────────────────────────────────────────────────
+# -- /platform/self-health endpoint ------------------------------------------------
 
 def test_self_health_endpoint_requires_auth(client):
     r = client.get("/self-health")
@@ -112,7 +112,7 @@ def test_self_health_endpoint_returns_verdict(client, auth):
     assert "uptimeSeconds" in body["checks"]["process"]
 
 
-# ── proactive alerting (monitor transitions) ──────────────────────────────────────
+# -- proactive alerting (monitor transitions) --------------------------------------
 
 def _fake_health(status):
     bad = status in {"degraded", "down"}
@@ -175,7 +175,7 @@ def test_monitor_alerts_critical_then_recovery(client):
 
 
 def test_monitor_db_down_persist_failure_is_swallowed():
-    """When the DB is the fault, the notification INSERT can't land — the monitor
+    """When the DB is the fault, the notification INSERT can't land - the monitor
     must log and move on, never raise (the log line is the alert of last resort)."""
     _reset_monitor()
     with patch.object(sh, "collect", return_value=_fake_health("ok")):

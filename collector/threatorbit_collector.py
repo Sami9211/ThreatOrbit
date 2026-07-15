@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ThreatOrbit log collector — a lightweight, dependency-free shipping agent.
+"""ThreatOrbit log collector - a lightweight, dependency-free shipping agent.
 
 "POST your logs here" is not an enterprise answer; this is the agent that does
 the POSTing. It tails one or more log files, persists read offsets so a restart
@@ -21,7 +21,7 @@ pip step. Configure with env vars or flags:
   THREATORBIT_STATE      checkpoint file (default /var/lib/threatorbit/collector.state)
   THREATORBIT_CA         CA bundle to verify the server cert (TLS)
   THREATORBIT_CLIENT_CERT / THREATORBIT_CLIENT_KEY   client cert/key for mTLS enrolment
-  THREATORBIT_INSECURE   "1" to skip TLS verification (lab only — never in prod)
+  THREATORBIT_INSECURE   "1" to skip TLS verification (lab only - never in prod)
 
 Run:  python3 threatorbit_collector.py            # daemon loop
       python3 threatorbit_collector.py --once     # single pass (cron-friendly)
@@ -44,7 +44,7 @@ HARD_LINE_CAP = 5000          # server rejects > 5000 lines/request
 DEFAULT_STATE = "/var/lib/threatorbit/collector.state"
 
 
-# ── checkpoint store ────────────────────────────────────────────────────────
+# -- checkpoint store --------------------------------------------------------
 class Checkpoint:
     """Per-file {inode, offset} progress, persisted as JSON. Survives restarts
     so we resume exactly where we left off and never re-ship a line."""
@@ -61,7 +61,7 @@ class Checkpoint:
     def offset_for(self, file_path: str, inode: int) -> int:
         rec = self.data.get(file_path)
         # Rotation: a new inode (or a file shorter than our offset) means the log
-        # was rotated/truncated — start from the top of the new file.
+        # was rotated/truncated - start from the top of the new file.
         if not rec or rec.get("inode") != inode:
             return 0
         return int(rec.get("offset", 0))
@@ -79,11 +79,11 @@ class Checkpoint:
         os.replace(tmp, self.path)   # atomic: a crash never corrupts the state
 
 
-# ── file tailing ────────────────────────────────────────────────────────────
+# -- file tailing ------------------------------------------------------------
 def read_new_lines(file_path: str, start_offset: int, max_lines: int):
     """Read up to `max_lines` complete lines from `start_offset`. Returns
     (lines, new_offset, inode). A trailing partial line (no newline yet) is left
-    unread so we never ship half a record — its bytes stay before new_offset."""
+    unread so we never ship half a record - its bytes stay before new_offset."""
     st = os.stat(file_path)
     inode = st.st_ino
     if start_offset > st.st_size:        # truncated since last read → restart
@@ -117,7 +117,7 @@ def discover(globs: list[str]) -> list[str]:
     return uniq
 
 
-# ── shipping ────────────────────────────────────────────────────────────────
+# -- shipping ----------------------------------------------------------------
 class Shipper:
     def __init__(self, base_url: str, api_key: str, fmt: str, source: str,
                  ssl_ctx: ssl.SSLContext | None = None, timeout: int = 30):
@@ -165,7 +165,7 @@ def build_ssl_context(ca: str | None, client_cert: str | None,
     return ctx
 
 
-# ── orchestration ───────────────────────────────────────────────────────────
+# -- orchestration -----------------------------------------------------------
 def run_pass(globs, checkpoint: Checkpoint, shipper: Shipper, batch: int,
              dry_run: bool, log=print) -> int:
     """One tail-and-ship sweep over all matched files. Returns lines shipped."""

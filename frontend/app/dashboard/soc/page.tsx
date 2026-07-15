@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * SOC Console — the analyst-facing operational view, distinct from the
+ * SOC Console - the analyst-facing operational view, distinct from the
  * executive Overview. Everything here is live from the backend: the open-alert
  * queue and SLA breaches come from /siem/triage (ages computed from real alert
  * timestamps), response metrics from /siem/kpis, pipeline backpressure from
@@ -108,7 +108,7 @@ export default function SocConsolePage() {
             <Gauge className="w-4 h-4 text-magenta" />
             <h1 className="text-lg font-display font-semibold text-white">SOC Console</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Live analyst operations — open queue, SLA timers, pipeline health</p>
+          <p className="text-xs text-ink-500 mt-0.5">Live analyst operations - open queue, SLA timers, pipeline health</p>
         </div>
         <div className="flex items-center gap-3">
           {updated && (
@@ -123,17 +123,17 @@ export default function SocConsolePage() {
         </div>
       </div>
 
-      {/* KPI strip — live operational numbers */}
+      {/* KPI strip - live operational numbers */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 divide-x divide-white/5 border-b border-white/5 shrink-0">
-        <KpiTile label="Open queue" value={open?.total ?? '—'} icon={Inbox} color="#fff"
+        <KpiTile label="Open queue" value={open?.total ?? '-'} icon={Inbox} color="#fff"
           sub={open ? `${open.unassigned} unassigned` : undefined} />
-        <KpiTile label="Critical open" value={open?.critical ?? '—'} icon={Flame} color={SEV_COLOR.critical} />
-        <KpiTile label="SLA breaches" value={triage?.sla.breachCount ?? '—'} icon={AlertTriangle}
+        <KpiTile label="Critical open" value={open?.critical ?? '-'} icon={Flame} color={SEV_COLOR.critical} />
+        <KpiTile label="SLA breaches" value={triage?.sla.breachCount ?? '-'} icon={AlertTriangle}
           color={triage && triage.sla.breachCount > 0 ? SEV_COLOR.high : tk('safe')} />
-        <KpiTile label="Oldest open" value={triage ? age(triage.oldestOpenMinutes) : '—'} icon={Clock} color={tk('amber')} />
-        <KpiTile label="MTTA" value={kpis ? `${kpis.mtta}m` : '—'} icon={Timer} color={tk('violet')} />
-        <KpiTile label="MTTR" value={kpis ? `${kpis.mttr}m` : '—'} icon={Timer} color={tk('violet')} />
-        <KpiTile label="Ingest EPS" value={kpis?.totalEps ?? '—'} icon={Activity} color={tk('safe')} />
+        <KpiTile label="Oldest open" value={triage ? age(triage.oldestOpenMinutes) : '-'} icon={Clock} color={tk('amber')} />
+        <KpiTile label="MTTA" value={kpis ? `${kpis.mtta}m` : '-'} icon={Timer} color={tk('violet')} />
+        <KpiTile label="MTTR" value={kpis ? `${kpis.mttr}m` : '-'} icon={Timer} color={tk('violet')} />
+        <KpiTile label="Ingest EPS" value={kpis?.totalEps ?? '-'} icon={Activity} color={tk('safe')} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -141,7 +141,7 @@ export default function SocConsolePage() {
           <p className="text-xs text-ink-600 py-16 text-center animate-pulse">Loading live SOC telemetry…</p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* ── SLA breach queue (primary work surface) ───────────────── */}
+            {/* -- SLA breach queue (primary work surface) ----------------- */}
             <div className="lg:col-span-2">
               <Panel title={`SLA Breach Queue${triage ? ` · ${triage.sla.breachCount}` : ''}`} icon={AlertTriangle}
                 action={<Link href="/dashboard/siem" className="text-[11px] text-magenta hover:underline flex items-center gap-0.5">Full queue<ArrowUpRight className="w-3 h-3" /></Link>}>
@@ -167,7 +167,7 @@ export default function SocConsolePage() {
                               </span>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-[10px] text-ink-500">
-                              <span>{b.ruleName || b.mitreTactic || '—'}</span>
+                              <span>{b.ruleName || b.mitreTactic || '-'}</span>
                               {b.srcIp && <span className="font-mono text-ink-600">{b.srcIp}</span>}
                               <span className="flex items-center gap-0.5"><User className="w-2.5 h-2.5" />{b.owner ?? 'unassigned'}</span>
                             </div>
@@ -182,7 +182,7 @@ export default function SocConsolePage() {
                     ))}
                     {triage && triage.sla.breachCount > breaches.length && (
                       <p className="text-[10px] text-ink-600 text-center pt-1">
-                        +{triage.sla.breachCount - breaches.length} more — showing worst {breaches.length}
+                        +{triage.sla.breachCount - breaches.length} more - showing worst {breaches.length}
                       </p>
                     )}
                   </div>
@@ -190,7 +190,7 @@ export default function SocConsolePage() {
               </Panel>
             </div>
 
-            {/* ── Right rail: pipeline + breakdowns ─────────────────────── */}
+            {/* -- Right rail: pipeline + breakdowns ----------------------- */}
             <div className="space-y-4">
               {/* Pipeline health */}
               <Panel title="Pipeline Health" icon={Zap}>
@@ -239,7 +239,7 @@ export default function SocConsolePage() {
                   ) : <p className="text-[10px] text-ink-600">Queue telemetry unavailable.</p>}
                   <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5">
                     <span className="text-ink-400 flex items-center gap-1.5"><Activity className="w-3 h-3" />Ingest EPS</span>
-                    <span className="font-mono text-safe">{kpis?.totalEps ?? '—'}</span>
+                    <span className="font-mono text-safe">{kpis?.totalEps ?? '-'}</span>
                   </div>
                 </div>
               </Panel>

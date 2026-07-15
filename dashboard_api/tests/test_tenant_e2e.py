@@ -1,4 +1,4 @@
-"""End-to-end multi-tenant validation — the gate before flipping
+"""End-to-end multi-tenant validation - the gate before flipping
 DASHBOARD_MULTI_TENANT on by default for MSSP builds.
 
 Unlike the per-surface scope tests (search/stream/ingest/quotas/lifecycle),
@@ -11,7 +11,7 @@ workspace with its own admin creates data in every core domain
   * list endpoints and the overview aggregates show only the caller's
     workspace,
   * id-addressed detail reads AND mutations 404 across workspaces,
-  * bulk IOC import dedup is per-workspace — one tenant's indicators are
+  * bulk IOC import dedup is per-workspace - one tenant's indicators are
     neither an existence oracle nor a silent drop for another tenant's import.
 """
 import uuid
@@ -69,7 +69,7 @@ def test_tenant_journey_create_stamp_list_detail_mutate(client, auth, monkeypatc
     org_b, hb = _second_workspace(client)
     mk = f"E2E-{uuid.uuid4().hex[:8]}"
 
-    # ── Tenant B creates data in every core domain through the API ──────────
+    # -- Tenant B creates data in every core domain through the API ----------
     alert = client.post("/siem/alerts", headers=hb, json={
         "title": f"{mk} suspicious login", "severity": "high",
         "rule_name": "E2E manual"}).json()
@@ -84,7 +84,7 @@ def test_tenant_journey_create_stamp_list_detail_mutate(client, auth, monkeypatc
         "confidence": 80}).json()
     assert imp["imported"] == 1
 
-    # ── Every creation stamped the creator's workspace ──────────────────────
+    # -- Every creation stamped the creator's workspace ----------------------
     assert _db_org_of("alerts", "id", alert["id"]) == org_b
     assert _db_org_of("cases", "id", case["id"]) == org_b
     assert _db_org_of("assets", "id", asset["id"]) == org_b
@@ -93,7 +93,7 @@ def test_tenant_journey_create_stamp_list_detail_mutate(client, auth, monkeypatc
                            (f"{mk.lower()}.evil.test",)).fetchone()
     assert row and row["org_id"] == org_b
 
-    # ── Own workspace sees its data through every list endpoint ─────────────
+    # -- Own workspace sees its data through every list endpoint -------------
     assert any(a["id"] == alert["id"] for a in
                client.get(f"/siem/alerts?q={mk}", headers=hb).json()["items"])
     assert any(c["id"] == case["id"] for c in
@@ -103,14 +103,14 @@ def test_tenant_journey_create_stamp_list_detail_mutate(client, auth, monkeypatc
     assert any(i["value"] == f"{mk.lower()}.evil.test" for i in
                client.get(f"/cti/iocs?q={mk.lower()}", headers=hb).json()["items"])
 
-    # ── The other workspace's lists never surface them ──────────────────────
+    # -- The other workspace's lists never surface them ----------------------
     assert client.get(f"/siem/alerts?q={mk}", headers=auth).json()["items"] == []
     assert not any(c["id"] == case["id"] for c in
                    client.get("/soar/cases", headers=auth).json())
     assert client.get(f"/assets?q={mk.lower()}", headers=auth).json()["items"] == []
     assert client.get(f"/cti/iocs?q={mk.lower()}", headers=auth).json()["items"] == []
 
-    # ── Id-addressed reads 404 across workspaces (no detail leak) ───────────
+    # -- Id-addressed reads 404 across workspaces (no detail leak) -----------
     assert client.get(f"/siem/alerts/{alert['id']}", headers=auth).status_code == 404
     assert client.get(f"/soar/cases/{case['id']}", headers=auth).status_code == 404
     assert client.get(f"/assets/{asset['id']}", headers=auth).status_code == 404
@@ -119,7 +119,7 @@ def test_tenant_journey_create_stamp_list_detail_mutate(client, auth, monkeypatc
     assert client.get(f"/soar/cases/{case['id']}", headers=hb).status_code == 200
     assert client.get(f"/assets/{asset['id']}", headers=hb).status_code == 200
 
-    # ── Mutations across workspaces 404 and change nothing ──────────────────
+    # -- Mutations across workspaces 404 and change nothing ------------------
     r = client.patch(f"/siem/alerts/{alert['id']}", headers=auth,
                      json={"status": "resolved"})
     assert r.status_code == 404
@@ -203,7 +203,7 @@ def test_ioc_import_dedup_is_per_workspace(client, auth, monkeypatch):
 
 def test_sub_resource_reads_are_cross_org_guarded(client, auth, monkeypatch):
     """Id-addressed sub-resource GETs (case/related, asset vulns/activity, report
-    read/misp, case attribution, ioc enrichment) must 404 across workspaces —
+    read/misp, case attribution, ioc enrichment) must 404 across workspaces -
     the MSSP gap where a guessable id leaked another tenant's linked data."""
     monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
     org_b, hb = _second_workspace(client)

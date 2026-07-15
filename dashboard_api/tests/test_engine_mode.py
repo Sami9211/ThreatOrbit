@@ -1,4 +1,4 @@
-"""DASHBOARD_ENGINE — the real-data switch. With "off", boot pauses the
+"""DASHBOARD_ENGINE - the real-data switch. With "off", boot pauses the
 synthetic telemetry engine (every start, operator env wins); the UI can still
 resume it deliberately. With the default "on", boot leaves the UI-owned
 setting alone.

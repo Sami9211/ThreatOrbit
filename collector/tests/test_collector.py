@@ -1,6 +1,6 @@
 """Collector core: tailing, checkpointing, rotation, batching, at-least-once.
 
-These pin the durability contract that makes the agent enterprise-safe — a
+These pin the durability contract that makes the agent enterprise-safe - a
 restart never re-ships or drops a line, a rotation resets cleanly, and a failed
 ship leaves the checkpoint untouched so the batch is retried.
 """

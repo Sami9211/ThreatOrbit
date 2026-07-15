@@ -28,7 +28,7 @@ def _make(client, email, **extra):
     return client.post("/scim/v2/Users", headers=AUTH, json=body)
 
 
-# ── degradation + auth ──────────────────────────────────────────────────────
+# -- degradation + auth ------------------------------------------------------
 
 def test_unconfigured_returns_404(client):
     # No SCIM_TOKEN set → the whole surface is 404 (feature off).
@@ -50,7 +50,7 @@ def test_discovery_documents(client, scim_on):
     assert sch["Resources"][0]["id"] == scim.USER_SCHEMA
 
 
-# ── lifecycle ───────────────────────────────────────────────────────────────
+# -- lifecycle ---------------------------------------------------------------
 
 def test_create_read_filter_and_dedup(client, scim_on):
     email = "scim.ada@threatorbit.space"
@@ -115,7 +115,7 @@ def test_missing_email_is_400(client, scim_on):
     assert r.status_code == 400
 
 
-# ── pure mappers ────────────────────────────────────────────────────────────
+# -- pure mappers ------------------------------------------------------------
 
 def test_from_scim_pulls_email_from_emails_array():
     out = scim.from_scim({"emails": [{"value": "X@Y.COM", "primary": True}]})

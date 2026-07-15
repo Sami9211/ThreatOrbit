@@ -1,10 +1,10 @@
 /**
- * Theme-aware semantic colours — the single source of truth for severity,
+ * Theme-aware semantic colours - the single source of truth for severity,
  * status and categorical chart colours across the dashboard.
  *
  * Values are `rgb(var(--token))`, NOT hardcoded hex, so they follow whichever
  * `[data-theme]` the user picks (globals.css redefines the tokens per theme).
- * A hardcoded "#FF2E97" would stay Plasma-Noir pink in every theme — that's why
+ * A hardcoded "#FF2E97" would stay Plasma-Noir pink in every theme - that's why
  * some surfaces "don't respect the palette". Use these in inline `style`/SVG
  * (which can't take Tailwind classes); use Tailwind tokens (text-magenta, …) in
  * className.
@@ -45,7 +45,7 @@ export const SEVERITY_COLORS: Record<string, string> = {
   low: tk('safe'),
   info: tk('violet'),
 }
-/** Singular alias — many components use the name `SEV_COLOR` locally. */
+/** Singular alias - many components use the name `SEV_COLOR` locally. */
 export const SEVERITY_COLOR = SEVERITY_COLORS
 
 export const STATUS_COLORS: Record<string, string> = {

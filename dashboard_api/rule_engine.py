@@ -101,10 +101,10 @@ def _coerce_num(v):
         return None
 
 
-# ── ReDoS guard ──────────────────────────────────────────────────────────────
+# -- ReDoS guard --------------------------------------------------------------
 # Detection rules accept analyst-authored `regex` conditions, and Python's `re`
 # has no match timeout. A catastrophic-backtracking pattern (e.g. `(a+)+$`) run
-# against a crafted field can hang the detection thread for seconds→minutes —
+# against a crafted field can hang the detection thread for seconds→minutes -
 # freezing the engine tick and, on the ingest path, the HTTP request. Since
 # rules run synchronously per event over every batch, one bad pattern is a
 # denial of service for the whole deployment.
@@ -185,7 +185,7 @@ def _match_condition(event: dict, cond: dict) -> bool:
         return {"gt": a > e, "lt": a < e, "gte": a >= e, "lte": a <= e}[op]
     if op == "regex":
         pat = str(expected)
-        # An unsafe/invalid pattern never runs — it can't match, and more
+        # An unsafe/invalid pattern never runs - it can't match, and more
         # importantly can't hang the detection thread (ReDoS guard).
         if not is_safe_regex(pat):
             return False
@@ -228,7 +228,7 @@ def evaluate(rule: dict, events: list[dict], now: datetime | None = None) -> lis
                  "event": e, "count": 1} for e in matching]
 
     # Aggregation is configured. Coerce its numerics defensively: a rule stored
-    # with a non-numeric threshold/window (e.g. "high", "5m" — analyst typo or a
+    # with a non-numeric threshold/window (e.g. "high", "5m" - analyst typo or a
     # malformed imported rule) must NOT raise here, or the exception propagates
     # out of the per-batch detection loop and blinds the SIEM for every rule and
     # event in the tick. A broken threshold → this rule fires nothing (it can't

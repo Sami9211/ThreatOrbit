@@ -1,7 +1,7 @@
 """RBAC on write endpoints: a read-only principal must NOT be able to mutate
 shared SOC data. Regression guard for the finding that several write endpoints
 (ingest, detection-rule edit, sources, hunts, asset create, feed manage,
-integration test) were gated only by `current_user` — so a read-scoped API key
+integration test) were gated only by `current_user` - so a read-scoped API key
 (viewer role, zero capabilities) could inject forged alerts or even disable
 detections. Each must now return 403 for a viewer and succeed for an analyst.
 """

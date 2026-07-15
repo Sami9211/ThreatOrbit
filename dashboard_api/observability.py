@@ -56,7 +56,7 @@ def record_request(method: str, path: str, status: int, seconds: float) -> None:
 
 def counters_snapshot() -> dict[str, int]:
     """Point-in-time copy of the domain counters (engine/ingest/errors). Used
-    by the self-health surface — reads under the same lock the writers use."""
+    by the self-health surface - reads under the same lock the writers use."""
     with _LOCK:
         return dict(_COUNTERS)
 
@@ -68,7 +68,7 @@ def uptime_seconds() -> float:
 
 class BodySizeLimitMiddleware:
     """Pure-ASGI ingress body cap (DoS guard). Rejects an over-large request
-    body with 413 BEFORE the app buffers it into memory — the line-count check
+    body with 413 BEFORE the app buffers it into memory - the line-count check
     inside /siem/ingest runs only after the whole body is read/parsed, so
     without this a multi-GB POST (or one enormous line) exhausts memory first.
 
@@ -254,7 +254,7 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
-# ── Structured logging ──────────────────────────────────────────────────────────
+# -- Structured logging ----------------------------------------------------------
 
 class JsonFormatter(logging.Formatter):
     """One JSON object per line - machine-shippable log records."""
@@ -282,7 +282,7 @@ def configure_logging() -> None:
     logger.info("Structured JSON logging enabled")
 
 
-# ── Error tracking ──────────────────────────────────────────────────────────────
+# -- Error tracking --------------------------------------------------------------
 
 def init_error_tracking() -> bool:
     """Initialise Sentry when SENTRY_DSN is set AND sentry-sdk is installed.

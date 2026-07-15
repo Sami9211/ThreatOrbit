@@ -1,6 +1,6 @@
 """Direct unit tests for dashboard_api/webhooks.py: HMAC signing/verification,
 `_subscribers` event + tenant filtering, and the `_post_with_retry` delivery
-primitive (monkeypatched net_guard.safe_post — no real sockets involved).
+primitive (monkeypatched net_guard.safe_post - no real sockets involved).
 
 test_webhook_signing.py already covers the end-to-end HTTP delivery path
 (rotate-secret, idempotent retry-then-succeed via a real local HTTP server).
@@ -38,7 +38,7 @@ def _delete_webhook(wid: str):
         conn.commit()
 
 
-# ── sign_payload / verify_signature ──────────────────────────────────────────────
+# -- sign_payload / verify_signature ----------------------------------------------
 
 def test_sign_verify_roundtrip_valid():
     secret = wh.new_webhook_secret()
@@ -97,7 +97,7 @@ def test_verify_signature_accepts_any_matching_v1_when_multiple_present():
     assert wh.verify_signature(secret, body, combined)
 
 
-# ── _subscribers: event + tenant filtering ───────────────────────────────────────
+# -- _subscribers: event + tenant filtering ---------------------------------------
 
 def test_subscribers_filters_by_event_name():
     tag = uuid.uuid4().hex[:8]
@@ -171,7 +171,7 @@ def test_subscribers_tenant_scoping(monkeypatch):
         _delete_webhook(other)
 
 
-# ── _post_with_retry ──────────────────────────────────────────────────────────────
+# -- _post_with_retry --------------------------------------------------------------
 
 def test_post_with_retry_succeeds_on_first_attempt(monkeypatch):
     monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
@@ -231,7 +231,7 @@ def test_post_with_retry_transient_error_then_success(monkeypatch):
 
 
 def test_post_with_retry_ssrf_blocked_never_retries(monkeypatch):
-    """An SSRF-guard rejection is a permanent verdict for this URL — retrying
+    """An SSRF-guard rejection is a permanent verdict for this URL - retrying
     won't make a blocked target become allowed, so the function must give up
     on the FIRST attempt rather than burning the retry budget."""
     monkeypatch.setattr(wh, "SYNC_DELIVERY", True)
@@ -247,7 +247,7 @@ def test_post_with_retry_ssrf_blocked_never_retries(monkeypatch):
     assert len(calls) == 1   # no retry after an SSRF block
 
 
-# ── _deliver: end-to-end status bookkeeping (monkeypatched transport) ────────────
+# -- _deliver: end-to-end status bookkeeping (monkeypatched transport) ------------
 
 def test_deliver_marks_webhook_active_on_success_and_failing_on_failure(monkeypatch):
     monkeypatch.setattr(wh, "SYNC_DELIVERY", True)

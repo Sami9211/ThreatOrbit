@@ -26,7 +26,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-/* ─── Narrative beat ─────────────────────────────────────────────── */
+/* --- Narrative beat ----------------------------------------------- */
 function Beat({
   progress, range, yFrom = 40, children, className = '',
 }: {
@@ -47,7 +47,7 @@ function Beat({
   )
 }
 
-/* ─── Section ────────────────────────────────────────────────────── */
+/* --- Section ------------------------------------------------------ */
 export default function ScrollStory() {
   const ref       = useRef<HTMLElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)

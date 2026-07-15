@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 
 /**
- * True when the device's *primary* pointer is coarse — i.e. touch-first
+ * True when the device's *primary* pointer is coarse - i.e. touch-first
  * devices (phones, tablets) where the OS reports `(pointer: coarse)`.
  *
  * Hover-only affordances (a hover-to-reveal sidebar, a 4px hover strip, …)

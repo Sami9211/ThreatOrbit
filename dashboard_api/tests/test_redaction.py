@@ -8,7 +8,7 @@ from dashboard_api import config, redaction
 from dashboard_api.db import get_conn
 
 
-# ── the pure redactor ─────────────────────────────────────────────────────────
+# -- the pure redactor ---------------------------------------------------------
 
 def test_disabled_is_verbatim():
     line = "login jdoe@corp.example password=hunter2 4111 1111 1111 1111"
@@ -48,7 +48,7 @@ def test_ssn_dashed_form():
         == "SSN [SSN-REDACTED] on file"
 
 
-# ── wired into the ingest seam ────────────────────────────────────────────────
+# -- wired into the ingest seam ------------------------------------------------
 
 def test_ingest_persists_redacted_raw_but_keeps_pivots(monkeypatch):
     from dashboard_api.ingest import ingest_lines

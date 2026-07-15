@@ -21,7 +21,7 @@ const CONNECTOR_MATCH: Record<string, string[]> = {
   o365: ['office 365', 'o365', 'microsoft 365', 'exchange'], slack: ['slack'], github: ['github'],
 }
 
-/* ── Types ───────────────────────────────────────────────────────── */
+/* -- Types --------------------------------------------------------- */
 type ConnCategory = 'Cloud' | 'Identity' | 'Endpoint' | 'Network' | 'SaaS'
 type ConnStatus = 'connected' | 'unconfigured'
 
@@ -43,7 +43,7 @@ interface CustomSourceType {
   icon: React.ComponentType<any>
 }
 
-/* ── Seed data ───────────────────────────────────────────────────── */
+/* -- Seed data ----------------------------------------------------- */
 const CONNECTORS: Connector[] = [
   // Cloud
   { id: 'aws',    name: 'Amazon Web Services', vendor: 'AWS',              category: 'Cloud',    status: 'connected',    color: tk('amber'), dataTypes: ['CloudTrail', 'GuardDuty', 'VPC Flow Logs'],     endpoint: 'https://cloudtrail.us-east-1.amazonaws.com' },
@@ -83,7 +83,7 @@ const CATEGORIES: { id: ConnCategory; icon: React.ComponentType<any>; color: str
   { id: 'SaaS',     icon: AppWindow,         color: tk('magenta') },
 ]
 
-/* ── Config form panel ───────────────────────────────────────────── */
+/* -- Config form panel --------------------------------------------- */
 function ConfigPanel({ connector, onClose, onConnected }: {
   connector: Connector; onClose: () => void; onConnected: () => void
 }) {
@@ -244,7 +244,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
   )
 }
 
-/* ── Connector card ──────────────────────────────────────────────── */
+/* -- Connector card ------------------------------------------------ */
 function ConnectorCard({ connector, onConfigure }: { connector: Connector; onConfigure: () => void }) {
   const connected = connector.status === 'connected'
   return (
@@ -294,7 +294,7 @@ function ConnectorCard({ connector, onConfigure }: { connector: Connector; onCon
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
 // User-defined vendor connectors persist in the settings store under this key
 // so they survive reloads and appear alongside the built-in catalogue.
 const CUSTOM_CONNECTORS_KEY = 'custom_connectors'

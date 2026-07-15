@@ -111,7 +111,7 @@ def list_iocs(type: str | None = None, severity: str | None = None,
     if q:
         clauses.append("value LIKE ?"); params.append(f"%{q}%")
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    # id tie-breaker for a total order — same rationale as the alerts list:
+    # id tie-breaker for a total order - same rationale as the alerts list:
     # tied sort keys (bulk imports share a last_seen second) otherwise come
     # back in arbitrary backend-dependent order, breaking offset pagination.
     order_sql = f"{_IOC_SORTS[sort]} {order.upper()}, id {order.upper()}"
@@ -700,7 +700,7 @@ def graph_path(from_: str = Query(..., alias="from"), to: str = Query(...)):
         return cti_graph.shortest_path(conn, from_, to)
 
 
-# ── Scanner history ────────────────────────────────────────────────────────────
+# -- Scanner history ------------------------------------------------------------
 
 _SCAN_TYPES = {"url", "ip", "hash", "domain", "file"}
 _VERDICTS = {"malicious", "suspicious", "clean"}

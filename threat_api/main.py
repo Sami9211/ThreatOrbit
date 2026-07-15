@@ -600,7 +600,7 @@ def _startup():
     """Idempotent boot: init the DB, restore IOCs into the in-memory store, and
     start the fetch scheduler. Called from __main__ (local dev) AND at import time
     under a production WSGI server (gunicorn), which imports the module rather than
-    running it as __main__ — gated on THREAT_API_BOOT so tests/imports don't boot."""
+    running it as __main__ - gated on THREAT_API_BOOT so tests/imports don't boot."""
     global _store, _started
     if _started:
         return

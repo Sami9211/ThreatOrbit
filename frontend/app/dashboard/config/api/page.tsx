@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/* ── Types ───────────────────────────────────────────────────────── */
+/* -- Types --------------------------------------------------------- */
 type Scope = 'read' | 'write' | 'admin'
 type KeyStatus = 'active' | 'revoked'
 
@@ -39,7 +39,7 @@ interface WebhookEndpoint {
   lastDelivery: string
 }
 
-/* ── Seed data ───────────────────────────────────────────────────── */
+/* -- Seed data ----------------------------------------------------- */
 const API_KEYS: ApiKey[] = [
   { id: 'k1', label: 'Production Backend',  masked: 'to_sk_live_••••4f2a', scopes: ['read', 'write'],        created: 'Jan 12, 2026', lastUsed: '8s ago',  requestsToday: 1204, requestsTotal: 84213, status: 'active'  },
   { id: 'k2', label: 'SIEM Integration',    masked: 'to_sk_live_••••9b71', scopes: ['read'],                 created: 'Nov 03, 2025', lastUsed: '2m ago',  requestsToday: 655, requestsTotal: 41902, status: 'active'  },
@@ -84,7 +84,7 @@ const CURL_SNIPPET = `curl https://api.threatorbit.space/v2/alerts \\
   -H "Authorization: Bearer to_sk_live_••••4f2a" \\
   -H "Content-Type: application/json"`
 
-/* ── KPI tile ────────────────────────────────────────────────────── */
+/* -- KPI tile ------------------------------------------------------ */
 function Kpi({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="px-5 py-3">
@@ -94,7 +94,7 @@ function Kpi({ label, value, color }: { label: string; value: string; color: str
   )
 }
 
-/* ── Copy button ─────────────────────────────────────────────────── */
+/* -- Copy button --------------------------------------------------- */
 function CopyBtn({ value, className }: { value: string; className?: string }) {
   const [copied, setCopied] = useState(false)
   const copy = () => {
@@ -109,7 +109,7 @@ function CopyBtn({ value, className }: { value: string; className?: string }) {
   )
 }
 
-/* ── Generate key modal: name+scope form, then the one-time secret ── */
+/* -- Generate key modal: name+scope form, then the one-time secret -- */
 function GenerateModal({ onCreate, onClose }: {
   onCreate: (name: string, scope: Scope) => Promise<string>
   onClose: () => void
@@ -211,7 +211,7 @@ function GenerateModal({ onCreate, onClose }: {
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
 const remoteToRow = (k: RemoteApiKey): ApiKey => ({
   id: k.id,
   label: k.name,
@@ -235,7 +235,7 @@ const remoteWebhookToRow = (w: RemoteWebhook): WebhookEndpoint => ({
 export default function ApiKeysPage() {
   const [showModal, setShowModal] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  // Empty until the API answers — never flash fabricated key/webhook metadata on
+  // Empty until the API answers - never flash fabricated key/webhook metadata on
   // a credentials page. The seed constants are an offline-only fallback (catch).
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([])
@@ -346,7 +346,7 @@ export default function ApiKeysPage() {
       <div className="grid grid-cols-3 divide-x divide-white/5 border-b border-white/5 shrink-0">
         <Kpi label="Active Keys"    value={String(keys.filter(k => k.status === 'active').length)}    color="text-safe"   />
         <Kpi label="Requests Today" value={keys.reduce((a, k) => a + k.requestsToday, 0).toLocaleString()} color="text-violet" />
-        {/* was a hardcoded "Rate Limit 1M/mo" — no such quota exists in the API */}
+        {/* was a hardcoded "Rate Limit 1M/mo" - no such quota exists in the API */}
         <Kpi label="Revoked Keys"   value={String(keys.filter(k => k.status === 'revoked').length)} color="text-amber"  />
       </div>
 

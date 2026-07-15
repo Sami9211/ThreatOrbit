@@ -10,7 +10,7 @@ Delivery is an **outbox drain** with a persisted cursor: the committed
 last row id successfully delivered. The background worker drains rows beyond
 the cursor in id order and only advances the cursor on success, so a sink
 outage or a process restart replays the undelivered tail instead of losing it
-— at-least-once, in order (consumers can dedupe on the event `id`). `ship()`
+- at-least-once, in order (consumers can dedupe on the event `id`). `ship()`
 is a wake-up nudge, not the data path; a periodic poll catches events whose
 transaction committed after the nudge, plus anything left over from before a
 restart. Only committed rows are shipped, so a rolled-back action is never
@@ -71,7 +71,7 @@ def _post(event: dict) -> bool:
         return False
 
 
-# ── Outbox cursor ─────────────────────────────────────────────────────────────
+# -- Outbox cursor -------------------------------------------------------------
 
 def _get_cursor(conn) -> int:
     row = conn.execute("SELECT last_id FROM audit_sink_cursor WHERE id=1").fetchone()

@@ -919,13 +919,13 @@ def soar_metrics(user: dict = Depends(current_user)):
             sp).fetchall()
         pbs = conn.execute(
             f"SELECT runs, success_rate, avg_time, last_run FROM playbooks WHERE 1=1 {sc}", sp).fetchall()
-        # Playbook runs in the trailing 30 days — the actual basis for "time saved
+        # Playbook runs in the trailing 30 days - the actual basis for "time saved
         # this month". `playbooks.runs` is an all-time cumulative counter, so using
         # it (as before) reported all-time hours under a "month" label.
         runs_month = conn.execute(
             f"SELECT COUNT(*) AS n FROM playbook_runs WHERE ts >= ? {sc}", [month] + sp
         ).fetchone()["n"]
-        # Runs since midnight UTC — the honest "Playbooks Run Today". Counting
+        # Runs since midnight UTC - the honest "Playbooks Run Today". Counting
         # playbooks whose last_run is non-null (as before) counted every playbook
         # that had *ever* run, not today's.
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
@@ -952,7 +952,7 @@ def soar_metrics(user: dict = Depends(current_user)):
                        and _sla(dict(c))["slaStatus"] == "breached")
     closed = [c for c in cases if c["status"] in ("resolved", "closed")]
     closed_total = len(closed)
-    # "Cases closed this week" must actually window to the week — the cases query
+    # "Cases closed this week" must actually window to the week - the cases query
     # has no time filter, so len(closed) is the all-time closed count. Use the
     # `updated` timestamp as the close-time proxy (same basis as the automation
     # trend below; there's no dedicated closed_at column).

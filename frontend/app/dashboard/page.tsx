@@ -35,7 +35,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   low:      tk('safe'),
 } as const
 
-/* ── KPI Card ────────────────────────────────────────────────────── */
+/* -- KPI Card ------------------------------------------------------ */
 function KPICard({
   label, value, format, sub, icon: Icon, color, trend, trendVal,
 }: {
@@ -83,7 +83,7 @@ function KPICard({
   )
 }
 
-/* ── Trending CVEs (static - no CVE endpoint yet) ────────────────── */
+/* -- Trending CVEs (static - no CVE endpoint yet) ------------------ */
 function TrendingCVEs() {
   const [cves, setCves] = useState<FleetVulnFinding[]>([])
   useEffect(() => {
@@ -117,7 +117,7 @@ function TrendingCVEs() {
         {cves.map((cve, i) => {
           const tag = cve.kev ? 'KEV' : cve.exploit ? 'Exploit' : (cve.severity || 'CVE')
           const color = cve.cvss >= 9 ? tk('magenta') : cve.cvss >= 7 ? tk('threat') : tk('amber')
-          const affected = cve.products?.[0] ?? cve.summary ?? '—'
+          const affected = cve.products?.[0] ?? cve.summary ?? '-'
           return (
           <motion.div
             key={cve.cve}
@@ -152,7 +152,7 @@ function TrendingCVEs() {
   )
 }
 
-/* ── Intel Brief ─────────────────────────────────────────────────── */
+/* -- Intel Brief --------------------------------------------------- */
 
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
@@ -188,7 +188,7 @@ function IntelBrief({ alerts }: { alerts: OverviewAlert[] }) {
       {!live ? (
         <div className="flex-1 flex items-center justify-center px-5 py-8">
           <p className="text-[11px] text-ink-500 text-center leading-relaxed">
-            No intel briefs yet — they appear as alerts arrive.<br />
+            No intel briefs yet - they appear as alerts arrive.<br />
             Connect feeds (Feeds → Sources) or forward logs (SIEM → Sources).
           </p>
         </div>
@@ -513,11 +513,11 @@ function EventTimeline({ hourly }: { hourly: number[] }) {
   )
 }
 
-/* ── Threat Heatmap ──────────────────────────────────────────────── */
+/* -- Threat Heatmap ------------------------------------------------ */
 
 function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }> }) {
   // Live rows are MITRE tactics over six ~28h windows. Honest empty state when
-  // no detections exist yet — never a fabricated heatmap on a fresh install.
+  // no detections exist yet - never a fabricated heatmap on a fresh install.
   const live = rows.length > 0
   const data = rows
   const nCols = data[0]?.vals.length ?? 6
@@ -540,7 +540,7 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
       <div className="glass border border-white/5 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-white mb-4">MITRE Tactic Heatmap (7d)</h3>
         <p className="text-[11px] text-ink-500 text-center py-8 leading-relaxed">
-          No detections in the last 7 days — the heatmap builds as alerts arrive.
+          No detections in the last 7 days - the heatmap builds as alerts arrive.
         </p>
       </div>
     )
@@ -581,7 +581,7 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
   )
 }
 
-/* ── Live Threat Feed (with filters) ─────────────────────────────── */
+/* -- Live Threat Feed (with filters) ------------------------------- */
 const REGIONS = ['All', 'N. America', 'S. America', 'Europe', 'Africa', 'Asia', 'Oceania']
 const SEVS = ['All', 'critical', 'high', 'medium', 'low'] as const
 
@@ -697,7 +697,7 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
   )
 }
 
-/* ── Normal Mode Dashboard ───────────────────────────────────────── */
+/* -- Normal Mode Dashboard ----------------------------------------- */
 function NormalDashboard({ count, alerts, incidents, siem, soar }: {
   count: { threats: number; iocs: number; sources: number; score: number }
   alerts: OverviewAlert[]; incidents: Incident[]
@@ -740,7 +740,7 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
         </div>
       </div>
 
-      {/* Top row: health gauge + key status cards — fills wide screens */}
+      {/* Top row: health gauge + key status cards - fills wide screens */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Health Score */}
       <div className="lg:col-span-5 xl:col-span-4 glass border border-white/5 rounded-2xl p-8 text-center relative overflow-hidden">
@@ -810,7 +810,7 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
       </div>
       </div>
 
-      {/* Priority actions (primary) + Quick access — two columns on wide screens */}
+      {/* Priority actions (primary) + Quick access - two columns on wide screens */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Priority actions */}
       <div className="lg:col-span-7 xl:col-span-8 glass border border-white/5 rounded-xl overflow-hidden self-start">
@@ -898,7 +898,7 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
 export default function DashboardOverview() {
   const [kpis, setKpis]           = useState<OverviewKpis>({ threats: 0, iocs: 0, sources: 0, score: 0 })
   const [recentAlerts, setRecentAlerts]     = useState<OverviewAlert[]>([])
@@ -933,7 +933,7 @@ export default function DashboardOverview() {
   }, [])
 
   // Honest movement note for the Active Threats card. That KPI is a STOCK
-  // (open critical/high right now), so a volume delta would mislabel it —
+  // (open critical/high right now), so a volume delta would mislabel it -
   // instead show the clearly-labelled FLOW: new critical/high raised today
   // vs yesterday, from the same trends buckets the SIEM header uses.
   const severeFlow = useMemo(() => {
@@ -946,7 +946,7 @@ export default function DashboardOverview() {
   if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} siem={siemKpis} soar={soarMetrics} />
 
   // Real security-posture HEALTH (higher = better) = inverse of the org RISK
-  // score the API returns — same derivation the Normal dashboard uses, so the
+  // score the API returns - same derivation the Normal dashboard uses, so the
   // gauge is never a hardcoded number.
   const health = Math.max(0, Math.min(100, 100 - Math.round(Number(kpis.score ?? 0))))
   const healthBand = health >= 80 ? 'Strong' : health >= 60 ? 'Good' : health >= 40 ? 'At risk' : 'Critical'
@@ -1082,7 +1082,7 @@ export default function DashboardOverview() {
 
           <div className="border-t border-white/5 pt-4 space-y-2.5">
             <h3 className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">System Status</h3>
-            {/* Real service reachability from /services/status — the Dashboard API
+            {/* Real service reachability from /services/status - the Dashboard API
                 is up by definition (this page loaded from it). No fabricated rows. */}
             {[
               { label: 'Dashboard API', up: true },

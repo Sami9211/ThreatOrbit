@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'
 
-/* ─── Types ─────────────────────────────────────────────────────────── */
+/* --- Types ----------------------------------------------------------- */
 type HuntStatus = 'active' | 'paused' | 'completed'
 type HypothesisStatus = 'confirmed' | 'refuted' | 'investigating'
 
@@ -42,7 +42,7 @@ interface Hunt {
   hypotheses: Hypothesis[]
 }
 
-/* ─── Seed data ──────────────────────────────────────────────────────── */
+/* --- Seed data -------------------------------------------------------- */
 const HUNTS: Hunt[] = [
   {
     id: 'hunt-volt',
@@ -235,7 +235,7 @@ const HUNTS: Hunt[] = [
   },
 ]
 
-/* ─── Status config ──────────────────────────────────────────────────── */
+/* --- Status config ---------------------------------------------------- */
 const HUNT_STATUS: Record<HuntStatus, { label: string; color: string; icon: React.ComponentType<any> }> = {
   active:    { label: 'Active',    color: tk('safe'), icon: Play },
   paused:    { label: 'Paused',    color: tk('amber'), icon: Pause },
@@ -248,7 +248,7 @@ const HYP_STATUS: Record<HypothesisStatus, { label: string; color: string; icon:
   investigating: { label: 'Investigating', color: tk('amber'), icon: Search },
 }
 
-/* ─── MITRE coverage matrix tactics ──────────────────────────────────── */
+/* --- MITRE coverage matrix tactics ------------------------------------ */
 const MATRIX_TACTICS = [
   'Initial Access',
   'Execution',
@@ -259,8 +259,8 @@ const MATRIX_TACTICS = [
   'Exfiltration',
 ] as const
 
-/* ─── KPI strip ──────────────────────────────────────────────────────── */
-/* ─── Hypothesis row ─────────────────────────────────────────────────── */
+/* --- KPI strip -------------------------------------------------------- */
+/* --- Hypothesis row --------------------------------------------------- */
 function HypothesisRow({ hyp }: { hyp: Hypothesis }) {
   const cfg = HYP_STATUS[hyp.status]
   const Icon = cfg.icon
@@ -314,7 +314,7 @@ function HypothesisRow({ hyp }: { hyp: Hypothesis }) {
   )
 }
 
-/* ─── Hunt card ──────────────────────────────────────────────────────── */
+/* --- Hunt card -------------------------------------------------------- */
 function HuntCard({ hunt, expanded, onToggle, onRun }: {
   hunt: Hunt; expanded: boolean; onToggle: () => void; onRun: () => void
 }) {
@@ -454,7 +454,7 @@ function HuntCard({ hunt, expanded, onToggle, onRun }: {
   )
 }
 
-/* ─── MITRE coverage mini-matrix ─────────────────────────────────────── */
+/* --- MITRE coverage mini-matrix --------------------------------------- */
 function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
   // tactic -> covering active hunts
   const coverage = useMemo(() => {
@@ -522,9 +522,9 @@ function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
   )
 }
 
-/* ─── Page ───────────────────────────────────────────────────────────── */
+/* --- Page ------------------------------------------------------------- */
 export default function ThreatHuntPage() {
-  // Empty until the API answers — hunts are NOT seeded in live mode, so an empty
+  // Empty until the API answers - hunts are NOT seeded in live mode, so an empty
   // list is honest on a real deployment. HUNTS is an offline-only fallback.
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [hunts, setHunts] = useState<Hunt[]>([])
@@ -548,7 +548,7 @@ export default function ThreatHuntPage() {
 
   useEffect(() => {
     fetchCtiHunts().then((data: ApiSavedHunt[]) => {
-      // Applied even when empty — a real deployment with no hunts shows none.
+      // Applied even when empty - a real deployment with no hunts shows none.
       const merged: Hunt[] = data.map((h) => {
         const seed = HUNTS.find((s) => s.id === h.id || s.name === h.name)
         return seed
@@ -636,7 +636,7 @@ export default function ThreatHuntPage() {
           <div className="space-y-3">
             {hunts.length === 0 && (
               <p className="text-[11px] text-ink-600 py-6 text-center">
-                No hunt campaigns yet — start one to track a hypothesis here.
+                No hunt campaigns yet - start one to track a hypothesis here.
               </p>
             )}
             {hunts.map((hunt) => (

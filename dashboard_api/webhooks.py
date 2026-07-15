@@ -145,7 +145,7 @@ def _deliver(event: str, payload: dict, subs: list[dict]):
             logger.warning("Webhook delivery failed: %s -> %s", event, sub["url"])
 
 
-# ── Per-user Slack routing ────────────────────────────────────────────────────────
+# -- Per-user Slack routing --------------------------------------------------------
 # Users register a personal Slack incoming-webhook URL (+ a minimum severity);
 # every platform notification at-or-above that severity is mirrored to it.
 

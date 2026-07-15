@@ -21,7 +21,7 @@ const TYPE_CONFIG = {
   url: { icon: Link2, color: 'text-safe', bg: 'bg-safe/10' },
 }
 
-/* ── Procedural IOC generator for the live feed ── */
+/* -- Procedural IOC generator for the live feed -- */
 const SOURCES = ['OTX', 'abuse.ch', 'VT', 'RSS', 'OSINT', 'URLhaus', 'MalwareBazaar']
 const TLDS = ['xyz', 'ru', 'cc', 'top', 'info', 'su', 'tk', 'biz']
 const TAG_POOL = {

@@ -38,17 +38,17 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Auth      | `POST /auth/login`, `POST /auth/register` (self-service signup, throttled), `GET /auth/me`, `POST /auth/change-password` |
 | Users     | `GET/POST /users`, `PATCH /users/{id}` (incl. `mfa_enabled`), `DELETE /users/{id}` |
 | Overview  | `/overview/kpis`, `/threat-vectors`, `/hourly-volume`, `/mitre-heatmap`, `/recent-alerts`, `/recent-incidents`, `/top-actors`, `/live-feed` |
-| SIEM      | `/siem/alerts` (GET/POST — sortable/filterable, manual/intel escalation), `/siem/alerts/{id}` (GET/PATCH), `/siem/kpis`, `/siem/correlations`, `/siem/mitre-distribution`, `POST /siem/ingest` (native log collector), `/siem/entities` + `/siem/entities/detail` (UEBA), `/siem/attack-coverage` (ATT&CK navigator), `/siem/rules` (GET/POST), `/siem/rule-schema`, `POST /siem/rules/test` (backtest), `/siem/rules/{id}` (PATCH/DELETE), `/siem/sources` (GET/POST), `/siem/hunts` (GET/POST), `POST /siem/hunts/{id}/run`, `POST /siem/hunt-query` (ad-hoc hunt engine) |
+| SIEM      | `/siem/alerts` (GET/POST - sortable/filterable, manual/intel escalation), `/siem/alerts/{id}` (GET/PATCH), `/siem/kpis`, `/siem/correlations`, `/siem/mitre-distribution`, `POST /siem/ingest` (native log collector), `/siem/entities` + `/siem/entities/detail` (UEBA), `/siem/attack-coverage` (ATT&CK navigator), `/siem/rules` (GET/POST), `/siem/rule-schema`, `POST /siem/rules/test` (backtest), `/siem/rules/{id}` (PATCH/DELETE), `/siem/sources` (GET/POST), `/siem/hunts` (GET/POST), `POST /siem/hunts/{id}/run`, `POST /siem/hunt-query` (ad-hoc hunt engine) |
 | SOAR      | `/soar/cases` (GET/POST), `/soar/cases/{id}` (GET/PATCH), `POST /soar/cases/{id}/notes`, `PATCH /soar/cases/{id}/tasks/{task_id}`, `/soar/playbooks`, `/soar/playbooks/{id}`, `POST /soar/playbooks/{id}/run`, `/soar/integrations` (GET/POST), `POST /soar/integrations/{id}/test`, `POST /soar/integrations/{id}/actions/run`, `/soar/metrics` |
-| CTI       | `/cti/actors`, `/cti/actors/{id}`, `/cti/iocs` (sortable/filterable), `POST /cti/iocs/import`, `/cti/lookup`, `/cti/ioc-types`, `/cti/summary`, `/cti/hunts` (GET/POST), `POST /cti/hunts/{id}/run`, `/cti/graph`, `/cti/scans` (GET/POST — IntelScope history) |
+| CTI       | `/cti/actors`, `/cti/actors/{id}`, `/cti/iocs` (sortable/filterable), `POST /cti/iocs/import`, `/cti/lookup`, `/cti/ioc-types`, `/cti/summary`, `/cti/hunts` (GET/POST), `POST /cti/hunts/{id}/run`, `/cti/graph`, `/cti/scans` (GET/POST - IntelScope history) |
 | Assets    | `/assets` (GET/POST), `/assets/{id}` (incl. per-axis `riskBreakdown`), `/assets/summary`, `/assets/vulns`, `/assets/risk-distribution`, `POST /assets/recompute-risk` |
 | Feeds     | `/feeds` (GET/POST), `/feeds/summary`, `PATCH /feeds/{id}` |
 | Config    | `/config/settings` (GET/PUT), `/config/api-keys` (GET/POST/DELETE), `/config/webhooks` (GET/POST/PATCH/DELETE), `POST /config/webhooks/{id}/test`, `/config/jobs`, `/config/audit-log` |
-| Connectors| `/connectors` (GET/POST), `/connectors/kinds`, `/connectors/{id}` (PATCH/DELETE), `POST /connectors/{id}/run` — real threat-intel ingestion (threatorbit / nvd / otx / json / csv / stix) into the IOC store |
+| Connectors| `/connectors` (GET/POST), `/connectors/kinds`, `/connectors/{id}` (PATCH/DELETE), `POST /connectors/{id}/run` - real threat-intel ingestion (threatorbit / nvd / otx / json / csv / stix) into the IOC store |
 | Dark Web  | `/darkweb/findings` (GET, filterable), `/darkweb/summary`, `PATCH /darkweb/findings/{id}` (triage status) |
 | Engine    | `GET /config/engine` (live engine status), `POST /config/engine` (pause/resume, or `generate` N bursts of live data) |
 | Platform  | `/notifications` (GET + read), `/search` (global), `/report-schedules` (CRUD + run), `/saved-views` (CRUD), `/config/audit-export` (CSV), `POST /config/retention/enforce` |
-| Reports   | `/reports/kinds`, `GET /reports/{kind}?period=daily\|weekly\|monthly\|custom&from=&to=` — structured reports (executive / siem / soar / cti / assets / darkweb) with summary, breakdowns, findings, recommendations |
+| Reports   | `/reports/kinds`, `GET /reports/{kind}?period=daily\|weekly\|monthly\|custom&from=&to=` - structured reports (executive / siem / soar / cti / assets / darkweb) with summary, breakdowns, findings, recommendations |
 | Services  | `/services/status`, `/services/threat/source-health`, `/services/threat/iocs`, `POST /services/threat/fetch`, `/services/threat/jobs/{id}`, `/services/threat/opencti-status`, `POST /services/threat/sync-iocs`, `POST /services/logs/analyse` (multipart), `/services/logs/results/{id}`, `/services/logs/trends` |
 | Meta      | `/health`, `/ready` |
 
@@ -76,19 +76,19 @@ runs persist `last_run`, `hit_count`, `status`, `progress`.
 
 ## Algorithms
 
-- **Risk scoring** (`scoring.py`) — a transparent, CVSS-inspired model. Each
-  asset's 0–100 score blends four bounded axes (vulnerability burden, exposure,
+- **Risk scoring** (`scoring.py`) - a transparent, CVSS-inspired model. Each
+  asset's 0-100 score blends four bounded axes (vulnerability burden, exposure,
   patch hygiene, active alert pressure) with weights summing to 1.0, scaled by
   business criticality. `GET /assets/{id}` returns the per-axis breakdown;
   `POST /assets/recompute-risk` recomputes the fleet from live alert pressure,
   so triaging alerts visibly lowers asset risk. The org-level score in
   `/overview/kpis` is the criticality-weighted mean.
-- **SOC metrics** — MTTD/MTTA/MTTR in `/siem/kpis` are computed from per-alert
+- **SOC metrics** - MTTD/MTTA/MTTR in `/siem/kpis` are computed from per-alert
   latency telemetry (detect/ack/respond columns), not hardcoded. The SOAR
   automation rate is the real share of playbook-driven closed cases.
-- **Correlation engine** — `/siem/correlations` clusters unresolved alerts by
+- **Correlation engine** - `/siem/correlations` clusters unresolved alerts by
   shared pivot (src_ip / hostname / username), ranked by cluster size.
-- **Audit trail** — every mutation (alerts, rules, cases, playbook runs, users,
+- **Audit trail** - every mutation (alerts, rules, cases, playbook runs, users,
   settings, keys, feeds, imports, recomputes) writes an `audit_log` row with
   actor/action/target, readable via `/config/audit-log`.
 
@@ -130,7 +130,7 @@ python -m dashboard_api.seed   # force-rebuilds every table
 | Variable | Default | Purpose |
 | -------- | ------- | ------- |
 | `DASHBOARD_DB_PATH` | `dashboard_api/dashboard.db` | SQLite file |
-| `DASHBOARD_JWT_SECRET` | dev default | HS256 signing key (**set in prod** — startup logs a warning on the default) |
+| `DASHBOARD_JWT_SECRET` | dev default | HS256 signing key (**set in prod** - startup logs a warning on the default) |
 | `DASHBOARD_JWT_TTL_MINUTES` | `720` | Token lifetime |
 | `DASHBOARD_ADMIN_EMAIL` / `_PASSWORD` | admin@… / ChangeMe123! | Bootstrap admin |
 | `DASHBOARD_CORS_ORIGINS` | localhost:3000,… | Allowed browser origins |

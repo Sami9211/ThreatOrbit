@@ -54,7 +54,7 @@ def _base(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-# ── Discovery ────────────────────────────────────────────────────────────────
+# -- Discovery ----------------------------------------------------------------
 
 @router.get("/ServiceProviderConfig", dependencies=[Depends(require_scim)])
 def service_provider_config():
@@ -105,7 +105,7 @@ def schemas():
             "itemsPerPage": 1, "Resources": [user_schema]}
 
 
-# ── Users ────────────────────────────────────────────────────────────────────
+# -- Users --------------------------------------------------------------------
 
 @router.get("/Users", dependencies=[Depends(require_scim)])
 def list_users(request: Request, filter: str | None = None,

@@ -1,4 +1,4 @@
-# ThreatOrbit — one-command workflows.
+# ThreatOrbit - one-command workflows.
 # Run `make help` (or just `make`) to see what's available.
 
 .DEFAULT_GOAL := help

@@ -8,7 +8,7 @@ const BASE =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) ||
   'http://localhost:8002'
 
-// ── Key names for localStorage ──────────────────────────────────────
+// -- Key names for localStorage --------------------------------------
 export const TOKEN_KEY = 'to_token'
 export const USER_KEY  = 'to_user'
 
@@ -41,7 +41,7 @@ export interface MyPermissions {
   capabilities: Record<string, boolean>
 }
 
-// ── Utility: snake_case → camelCase (recursive) ─────────────────────
+// -- Utility: snake_case → camelCase (recursive) ---------------------
 function sc2cc(s: string) {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 }
@@ -55,7 +55,7 @@ function toCamel(v: unknown): unknown {
   return v
 }
 
-// ── Core fetch wrapper ───────────────────────────────────────────────
+// -- Core fetch wrapper -----------------------------------------------
 async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
   const res = await fetch(`${BASE}${path}`, {
@@ -77,7 +77,7 @@ async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return toCamel(json) as T
 }
 
-// ── Types ────────────────────────────────────────────────────────────
+// -- Types ------------------------------------------------------------
 export type UserRole = 'admin' | 'manager' | 'analyst' | 'viewer'
 
 export interface User {
@@ -251,7 +251,7 @@ export interface Playbook {
   triggerMatch: Record<string, unknown>
   description: string
   runs: number
-  successRate: number   // percent 0–100 (converted from the API's 0–1 fraction)
+  successRate: number   // percent 0-100 (converted from the API's 0-1 fraction)
   avgTime: number
   lastRun: string | null
   lastRunStatus: string
@@ -281,7 +281,7 @@ export interface SoarMetrics {
   /** Automation-rate movement in percentage points vs the prior week; null without a baseline. */
   automationTrendPp: number | null
   timeSavedMonth: number
-  /** Playbook runs in the trailing 30 days — the basis for timeSavedMonth. */
+  /** Playbook runs in the trailing 30 days - the basis for timeSavedMonth. */
   runsMonth: number
   totalRuns: number
   playbooksToday: number
@@ -471,7 +471,7 @@ export interface FeedsSummary {
   active: number
   errored: number
   totalIndicators: number
-  /** IOCs first seen since midnight UTC — the real "IOCs today" count. */
+  /** IOCs first seen since midnight UTC - the real "IOCs today" count. */
   newToday: number
   byType: Record<string, number>
 }
@@ -499,7 +499,7 @@ export interface AuditEntry {
   detail: string | null
 }
 
-// ── Auth ─────────────────────────────────────────────────────────────
+// -- Auth -------------------------------------------------------------
 export const authLogin = (email: string, password: string, code?: string) =>
   api<{ token: string; user: User }>('/auth/login', {
     method: 'POST',
@@ -527,7 +527,7 @@ export const authMe = () => api<User>('/auth/me')
 export const fetchMyPermissions = () => api<MyPermissions>('/auth/permissions')
 
 // Organization mode (simple|power): which feature areas the UI surfaces. A
-// UI-curation preference, not a security boundary — the backend keeps
+// UI-curation preference, not a security boundary - the backend keeps
 // enforcing real RBAC regardless of what this hides.
 export interface OrgMode {
   mode: 'simple' | 'power'
@@ -588,7 +588,7 @@ export const fetchSessions = () => api<SessionInfo[]>('/auth/sessions')
 export const revokeSession = (id: string) =>
   api<{ ok: boolean }>(`/auth/sessions/${id}/revoke`, { method: 'POST' })
 
-// ── Overview ─────────────────────────────────────────────────────────
+// -- Overview ---------------------------------------------------------
 export const fetchKpis    = () => api<OverviewKpis>('/overview/kpis')
 export const fetchVectors = () => api<ThreatVector[]>('/overview/threat-vectors')
 export const fetchHourly  = () => api<number[]>('/overview/hourly-volume')
@@ -610,7 +610,7 @@ export const fetchLiveFeed   = (limit = 20) => api<LiveFeedItem[]>(`/overview/li
 export interface FpEvidence { signal: string; weight: number; detail: string }
 export interface FpAssessment { score: number; band: 'likely-fp' | 'uncertain' | 'likely-real'; evidence: FpEvidence[] }
 
-// ── SIEM ─────────────────────────────────────────────────────────────
+// -- SIEM -------------------------------------------------------------
 export const fetchSiemAlerts = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
   return api<{ total: number; items: SiemAlert[] }>(`/siem/alerts${q}`)
@@ -700,7 +700,7 @@ export const exportSigmaRule = (id: string) =>
 export const loadDetectionPack = () =>
   api<{ created: string[]; skipped: string[] }>('/siem/rules/load-pack', { method: 'POST' })
 
-// ── Alert tuning: suppressions / allow-lists ─────────────────────────
+// -- Alert tuning: suppressions / allow-lists -------------------------
 export interface Suppression {
   id: string; ruleId: string; field: 'src_ip' | 'username' | 'hostname'
   value: string; mode: 'suppress' | 'allow'; reason: string | null
@@ -727,7 +727,7 @@ export const createSuppression = (body: {
 export const deleteSuppression = (id: string) =>
   api<void>(`/siem/suppressions/${id}`, { method: 'DELETE' })
 
-// ── Detection rule editor ────────────────────────────────────────────
+// -- Detection rule editor --------------------------------------------
 export interface RuleCondition { field: string; op: string; value: string }
 export interface RuleDefinition {
   conditions: RuleCondition[]
@@ -754,7 +754,7 @@ export const createDetectionRule = (body: {
 export const updateRuleDefinition = (id: string, definition: RuleDefinition) =>
   api<Rule>(`/siem/rules/${id}`, { method: 'PATCH', body: JSON.stringify({ definition }) })
 
-// ── Native log ingestion + ATT&CK coverage ──────────────────────────
+// -- Native log ingestion + ATT&CK coverage --------------------------
 export const ingestLogs = (lines: string[], format = 'auto', source = 'collector') =>
   api<{ ingested: number; parsed: number; alerts: number; tiMatches: number; source: string }>(
     '/siem/ingest', { method: 'POST', body: JSON.stringify({ lines, format, source }) })
@@ -766,7 +766,7 @@ export interface AttackCoverage {
 }
 export const fetchAttackCoverage = () => api<AttackCoverage>('/siem/attack-coverage')
 
-// ── UEBA (entity risk analytics) ─────────────────────────────────────
+// -- UEBA (entity risk analytics) -------------------------------------
 export interface RiskEntity {
   value: string; type: 'user' | 'host' | 'ip'; risk: number; alerts: number
   band: 'critical' | 'high' | 'elevated' | 'normal'; open: number
@@ -786,7 +786,7 @@ export interface EntityDetail {
 export const fetchEntityDetail = (type: string, value: string) =>
   api<EntityDetail>(`/siem/entities/detail?type=${type}&value=${encodeURIComponent(value)}`)
 
-// ── Platform: notifications, search, schedules, views, audit ─────────
+// -- Platform: notifications, search, schedules, views, audit ---------
 export interface Notification {
   id: string; ts: string; type: string; severity: string | null
   title: string; detail: string | null; link: string | null; read: number
@@ -927,7 +927,7 @@ export type SiemTrendDay = {
 export const fetchSiemTrends = (days = 7) =>
   api<{ days: SiemTrendDay[] }>(`/siem/analytics/trends?days=${days}`)
 
-// ── SOAR ─────────────────────────────────────────────────────────────
+// -- SOAR -------------------------------------------------------------
 export const fetchCases = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
   return api<Case[]>(`/soar/cases${q}`)
@@ -953,14 +953,14 @@ export const addCaseNote = (id: string, content: string, type = 'manual') =>
   api<Case>(`/soar/cases/${id}/notes`, { method: 'POST', body: JSON.stringify({ content, type }) })
 export const patchCaseTask = (caseId: string, taskId: string, body: { status?: string; assignee?: string; notes?: string }) =>
   api<Case>(`/soar/cases/${caseId}/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(body) })
-// The backend stores success_rate as a 0–1 fraction (its running-average
-// math); every UI treats it as a percent, so normalize once at the boundary —
+// The backend stores success_rate as a 0-1 fraction (its running-average
+// math); every UI treats it as a percent, so normalize once at the boundary -
 // live cards used to render "0.9%" where the truth was 93.6%.
 export const fetchPlaybooks = () =>
   api<Playbook[]>('/soar/playbooks').then((rows) =>
     rows.map((p) => ({ ...p, successRate: Math.round((p.successRate ?? 0) * 1000) / 10 })))
 
-// ── Playbook execution engine ────────────────────────────────────────
+// -- Playbook execution engine ----------------------------------------
 export interface PlaybookRunStep {
   idx: number; kind: string | null; name: string
   status: 'success' | 'skipped' | 'failed' | 'pending-approval'
@@ -1085,7 +1085,7 @@ export interface AnalystStat {
 }
 export const fetchSoarAnalysts = () => api<AnalystStat[]>('/soar/analysts')
 
-// ── CTI ──────────────────────────────────────────────────────────────
+// -- CTI --------------------------------------------------------------
 export const fetchActors  = () => api<Actor[]>('/cti/actors')
 export const fetchIocs    = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
@@ -1198,7 +1198,7 @@ export const expandGraphNode = (node: string) =>
 export const findGraphPath = (from: string, to: string) =>
   api<GraphPath>(`/cti/graph/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
 
-// ── Assets ───────────────────────────────────────────────────────────
+// -- Assets -----------------------------------------------------------
 export const fetchAssets = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
   return api<{ total: number; items: Asset[] }>(`/assets${q}`)
@@ -1277,7 +1277,7 @@ export interface AssetActivity {
 }
 export const fetchAssetActivity = (id: string) => api<AssetActivity>(`/assets/${id}/activity`)
 
-// ── Feeds ─────────────────────────────────────────────────────────────
+// -- Feeds -------------------------------------------------------------
 export const fetchFeeds   = () => api<Feed[]>('/feeds')
 export const createFeed = (body: {
   name: string; provider?: string; type?: string; url?: string
@@ -1295,7 +1295,7 @@ export const fetchFeedsSummary = () => api<FeedsSummary>('/feeds/summary')
 export const toggleFeed   = (id: string, enabled: boolean) =>
   api<Feed>(`/feeds/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) })
 
-// ── Config ────────────────────────────────────────────────────────────
+// -- Config ------------------------------------------------------------
 export const fetchSettings   = () => api<Record<string, string>>('/config/settings')
 export const updateSettings  = (values: Record<string, string>) =>
   api<Record<string, string>>('/config/settings', { method: 'PUT', body: JSON.stringify({ values }) })
@@ -1342,7 +1342,7 @@ export const fetchAuditLog   = (limit = 100, action?: string) => {
   return api<AuditEntry[]>(`/config/audit-log?${q.toString()}`)
 }
 
-// ── Reports (structured, Nessus-style) ───────────────────────────────
+// -- Reports (structured, Nessus-style) -------------------------------
 export interface ReportFinding {
   title: string
   severity: string
@@ -1404,7 +1404,7 @@ export async function downloadReport(kind: string, opts: {
   URL.revokeObjectURL(url)
 }
 
-// ── Case linked evidence (SLA + related alerts/IOCs/runs/timeline) ───
+// -- Case linked evidence (SLA + related alerts/IOCs/runs/timeline) ---
 export interface CaseRelated {
   caseId: string
   alerts: Array<{ id: string; ts: string; title: string; severity: string; status: string
@@ -1421,7 +1421,7 @@ export interface CaseRelated {
 export const fetchCaseRelated = (caseId: string) =>
   api<CaseRelated>(`/soar/cases/${caseId}/related`)
 
-// ── Dark Web monitoring ──────────────────────────────────────────────
+// -- Dark Web monitoring ----------------------------------------------
 export interface DarkWebFinding {
   id: string
   ts: string
@@ -1471,7 +1471,7 @@ export const activateLicense = (key: string) =>
     { method: 'POST', body: JSON.stringify({ key }) })
 export const clearLicense = () => api<void>('/config/license', { method: 'DELETE' })
 
-// ── Billing (Stripe self-serve; degrades to not-configured) ───────────────
+// -- Billing (Stripe self-serve; degrades to not-configured) ---------------
 export interface BillingStatus {
   configured: boolean
   plans: Array<{ plan: string; label: string; seats: number | null; connectors: number | null }>
@@ -1503,7 +1503,7 @@ export const fetchOnboarding = () => api<OnboardingStatus>('/config/onboarding')
 export const dismissOnboarding = () =>
   api<{ dismissed: boolean }>('/config/onboarding/dismiss', { method: 'POST' })
 
-// ── Live engine control ──────────────────────────────────────────────
+// -- Live engine control ----------------------------------------------
 export interface EngineQueue {
   depth: number
   inFlight: number
@@ -1542,7 +1542,7 @@ export const controlEngine = (body: { enabled?: boolean; generate?: number }) =>
     method: 'POST', body: JSON.stringify(body),
   })
 
-// ── Connectors (real threat-intel ingestion) ────────────────────────
+// -- Connectors (real threat-intel ingestion) ------------------------
 export interface Connector {
   id: string
   name: string
@@ -1588,7 +1588,7 @@ export interface ConnectorRunResult {
 export const runConnector = (id: string) =>
   api<ConnectorRunResult>(`/connectors/${id}/run`, { method: 'POST' })
 
-// ── Companion services (Threat API + Log API, proxied server-side) ───
+// -- Companion services (Threat API + Log API, proxied server-side) ---
 export interface ServiceState { url: string; available: boolean; health: unknown }
 export interface ServicesStatus { threatApi: ServiceState; logApi: ServiceState; keyConfigured: boolean }
 export const fetchServicesStatus = () => api<ServicesStatus>('/services/status')
@@ -1637,7 +1637,7 @@ export async function analyseLogFile(file: globalThis.File, logFormat = 'generic
   return toCamel(await res.json()) as LogAnalysisResult
 }
 
-// ── Users ─────────────────────────────────────────────────────────────
+// -- Users -------------------------------------------------------------
 export const fetchUsers = () => api<User[]>('/users')
 export const createUser = (body: { email: string; password: string; name: string; role: UserRole }) =>
   api<User>('/users', { method: 'POST', body: JSON.stringify(body) })
@@ -1651,7 +1651,7 @@ export const patchUser  = (id: string, body: Partial<Pick<User, 'name' | 'role' 
   })
 export const deleteUser = (id: string) => api<void>(`/users/${id}`, { method: 'DELETE' })
 
-// ── Dashboard assistant (security-bounded, read-only agent) ───────────
+// -- Dashboard assistant (security-bounded, read-only agent) -----------
 export interface AssistantNav { label: string; path: string }
 export interface AssistantReply {
   reply: string; toolsUsed: string[]; navigations: AssistantNav[]; mode: 'ai' | 'basic' | 'empty'

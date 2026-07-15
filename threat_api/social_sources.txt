@@ -1,11 +1,11 @@
 # Security-community / social OSINT RSS feeds (one URL per line; lines starting
-# with # are ignored). This is NOT a social-media API client — it's a pluggable
+# with # are ignored). This is NOT a social-media API client - it's a pluggable
 # slot for public RSS exposed by community platforms. The fetcher tags items as
 # community-sourced (see fetchers/social_osint.py). Add API-backed sources here
 # if you have keys for them.
 
-# Mastodon (infosec.exchange) — public #threatintel tag
+# Mastodon (infosec.exchange) - public #threatintel tag
 https://infosec.exchange/tags/threatintel.rss
 
-# Reddit r/netsec — community security discussion
+# Reddit r/netsec - community security discussion
 https://www.reddit.com/r/netsec/.rss

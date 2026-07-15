@@ -1315,7 +1315,7 @@ def test_nvd_catalogue_sync_drives_scanning(client, auth, monkeypatch):
 
 def test_nvd_catalogue_sync_isolates_malformed_records():
     """One malformed CVE (non-numeric baseScore, or a non-dict entry) in the NVD
-    batch must not abort the whole catalogue sync — the good records still parse."""
+    batch must not abort the whole catalogue sync - the good records still parse."""
     from dashboard_api.vuln_scanner import nvd_to_catalogue
     good = {"cve": {"id": "CVE-2026-1", "metrics": {"cvssMetricV31": [
                 {"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}]},
@@ -1437,7 +1437,7 @@ def test_darkweb_triage(client, auth):
 
 def test_credential_leak_matching_excludes_public_domains(client, auth):
     """A directory that includes a personal/SSO account on a public provider
-    (e.g. gmail.com) must NOT turn that provider into an 'org domain' — otherwise
+    (e.g. gmail.com) must NOT turn that provider into an 'org domain' - otherwise
     every unrelated leaked gmail address is flagged as a workforce credential leak
     (false-positive critical). Corporate-domain and exact-email matches still work.
     """
@@ -2649,7 +2649,7 @@ def test_darkweb_feed_connector(client, auth, monkeypatch):
     import dashboard_api.connectors as conn_mod
 
     # Unique per run: the import dedupes on content, so static fixtures make
-    # this test single-shot against a persistent (Postgres) database — a
+    # this test single-shot against a persistent (Postgres) database - a
     # second pytest session would see everything skipped.
     mk = _uuid.uuid4().hex[:8]
 
@@ -3989,7 +3989,7 @@ def test_fp_feedback_bumps_rule_fp_rate(client, auth):
     # on a collision this same ingest ALSO fires an R-TIMATCH alert in the same
     # second. ts-DESC ties are broken arbitrarily on Postgres (SQLite happens to
     # preserve insertion order), so items[0] can be the TI-match alert and the
-    # +2 then lands on the wrong rule — a real CI failure. Select the
+    # +2 then lands on the wrong rule - a real CI failure. Select the
     # brute-force alert by rule name (engine alerts carry rule_id='R-ENGINE',
     # so the name is the discriminator) instead of trusting result order.
     items = client.get(f"/siem/alerts?q={ip}", headers=auth).json()["items"]

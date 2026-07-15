@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Internal-route integrity gate — the "dead hyperlinks" guard.
+ * Internal-route integrity gate - the "dead hyperlinks" guard.
  *
  * A static export ships every page as a file; a link to a route that does not
  * exist 404s silently in production and never shows up in `next build`. This
@@ -82,7 +82,7 @@ function toRoute(raw) {
 // whose id no target renders is a silently-broken link a static export can't
 // catch. We collect every literal `id="…"` and every `href="#…"` in one pass,
 // then cross-check. Dynamic ids (`id={foo}`) can't be resolved statically, so
-// this only flags anchors with NO matching literal id anywhere — the real bug,
+// this only flags anchors with NO matching literal id anywhere - the real bug,
 // with no false positive on the shared-layout ids used today.
 const ANCHOR_PATTERNS = [
   /\bhref\s*=\s*"(#[^"]*)"/g,
@@ -134,7 +134,7 @@ for (const file of sources(ROOT === APP ? APP : ROOT)) {
 const anchorFailures = []
 for (const a of anchors) {
   const target = a.raw.slice(1)                       // strip the leading '#'
-  if (target === '') {                                 // bare href="#" — dead end
+  if (target === '') {                                 // bare href="#" - dead end
     anchorFailures.push(`${a.file}:${a.line}  →  href="#"  (bare anchor, goes nowhere)`)
   } else if (!ids.has(target)) {
     anchorFailures.push(`${a.file}:${a.line}  →  href="${a.raw}"  (no element with id="${target}")`)

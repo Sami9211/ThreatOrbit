@@ -1,8 +1,8 @@
 """Multi-worker detection pool: a concurrency-safe drain over the event queue.
 
 The decisive invariant is that a multi-worker drain yields the SAME alerts as a
-single-worker drain of identical input — i.e. no event is claimed (and so
-alerted on) twice, and none is missed — regardless of how the work is sharded.
+single-worker drain of identical input - i.e. no event is claimed (and so
+alerted on) twice, and none is missed - regardless of how the work is sharded.
 """
 import uuid
 
@@ -42,11 +42,11 @@ def test_pool_drain_matches_single_worker(client, auth):
     r6 = run_pool(workers=6, batch=4)                          # real contention: 5 batches / 6 workers
     a6 = _alerts_with(m6)
 
-    assert a1 > 0, "baseline produced no alerts — rule not matching"
+    assert a1 > 0, "baseline produced no alerts - rule not matching"
     assert a6 == a1, f"multi-worker drift: 1-worker={a1}, 6-worker={a6} (double-processing?)"
     assert r6["workers"] == 6
 
-    # both batches fully drained — nothing left pending
+    # both batches fully drained - nothing left pending
     with get_conn() as conn:
         pending = conn.execute(
             "SELECT COUNT(*) c FROM events WHERE raw IN (?,?) AND processed=0", (m1, m6)).fetchone()["c"]

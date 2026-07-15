@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 
 /**
- * The core analyst value chain, end to end against the live stack — not just
+ * The core analyst value chain, end to end against the live stack - not just
  * "the page loads": triage an alert, escalate it into a SOAR case, see the
  * case appear on the board, and execute a playbook for real.
  */
@@ -21,7 +21,7 @@ test.describe('Analyst workflow', () => {
     await expect(row).toBeVisible({ timeout: 20_000 })
     await row.click()
 
-    // Assign it — optimistic UI + PATCH to the API.
+    // Assign it - optimistic UI + PATCH to the API.
     await page.getByRole('button', { name: /assign to me/i }).click()
     await expect(page.getByText('Assigned to you')).toBeVisible()
 

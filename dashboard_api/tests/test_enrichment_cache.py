@@ -1,7 +1,7 @@
 """Enrichment cache-hit contract fence.
 
 The write path stores `json.dumps(data)`; the cache-hit path used to return
-the stored column raw — so the SECOND enrich of an indicator within the TTL
+the stored column raw - so the SECOND enrich of an indicator within the TTL
 handed the API consumer a JSON *string* where the first returned an object.
 (Surfaced as a re-run failure against a persistent Postgres DB; it was equally
 broken on SQLite for any repeat enrich inside one process's TTL window.)
@@ -30,7 +30,7 @@ def test_cached_enrichment_data_stays_an_object(client, auth):
     assert p2["internal"]["data"] == p1["internal"]["data"]
     assert p2["internal"]["verdict"] == p1["internal"]["verdict"]
     # Regression 2: unavailable results (VirusTotal with no API key) used to be
-    # cached and replayed as available=True — fabricated availability on every
+    # cached and replayed as available=True - fabricated availability on every
     # repeat enrich. Unavailable results are no longer cached at all.
     assert p1["virustotal"]["available"] is False
     assert p2["virustotal"]["available"] is False

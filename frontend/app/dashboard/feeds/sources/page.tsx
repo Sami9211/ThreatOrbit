@@ -135,7 +135,7 @@ export default function FeedSourcesPage() {
   const [summary, setSummary] = useState<FeedsSummary | null>(null)
   const activeFeeds = feeds.filter(f => f.enabled).length
   // Real "IOCs today" from the summary endpoint (indicators first seen since
-  // midnight UTC) — not a sum of per-feed nominal daily rates.
+  // midnight UTC) - not a sum of per-feed nominal daily rates.
   const iocsToday = summary?.newToday ?? null
 
   return (
@@ -161,7 +161,7 @@ export default function FeedSourcesPage() {
       <div className="grid grid-cols-4 divide-x divide-white/5 border-b border-white/5 shrink-0">
         {[
           { label: 'Active Feeds',     value: activeFeeds,                          color: 'text-safe'    },
-          { label: 'IOCs Today',       value: iocsToday === null ? '—' : iocsToday.toLocaleString(),  color: 'text-magenta' },
+          { label: 'IOCs Today',       value: iocsToday === null ? '-' : iocsToday.toLocaleString(),  color: 'text-magenta' },
           { label: 'Total Indicators', value: summary ? summary.totalIndicators.toLocaleString() : '-', color: 'text-violet' },
           { label: 'Feeds Errored',    value: summary ? String(summary.errored) : '-', color: 'text-amber' },
         ].map(({ label, value, color }) => (

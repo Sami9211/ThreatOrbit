@@ -4,9 +4,9 @@ So "load limits" are backed by **real, reproducible numbers measured on the host
 you run this on**, not guesses. It spins up an isolated temp database, seeds the
 detection rules, and times two stages:
 
-  * ingest  — raw log lines parsed → events inserted → detection run inline
+  * ingest  - raw log lines parsed → events inserted → detection run inline
               (the end-to-end `/siem/ingest` path), and
-  * drain   — a pre-seeded backlog processed by the detection worker pool,
+  * drain   - a pre-seeded backlog processed by the detection worker pool,
               at 1 and N workers.
 
 Run:  python -m dashboard_api.bench           # full, SQLite (default)
@@ -134,7 +134,7 @@ def _env() -> str:
 def main():
     quick = "--quick" in sys.argv
     out = run(quick=quick)
-    print(f"\nThreatOrbit load benchmark — {out['env']}\n")
+    print(f"\nThreatOrbit load benchmark - {out['env']}\n")
     print(f"{'stage':<16}{'events':>9}{'alerts':>9}{'seconds':>10}{'events/sec':>12}")
     print("-" * 56)
     for r in out["results"]:

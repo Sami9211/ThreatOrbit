@@ -58,7 +58,7 @@ Set all of:
 DASHBOARD_SYSLOG_TLS_PORT=6514
 DASHBOARD_SYSLOG_TLS_CERT=/etc/threatorbit/syslog.crt
 DASHBOARD_SYSLOG_TLS_KEY=/etc/threatorbit/syslog.key
-# optional — require a client certificate (mutual TLS):
+# optional - require a client certificate (mutual TLS):
 DASHBOARD_SYSLOG_TLS_CA=/etc/threatorbit/clients-ca.crt
 ```
 
@@ -68,7 +68,7 @@ senders (rsyslog `omfwd` with `octet-counted`, syslog-ng `tls()`) and simple
 newline emitters work. Framing is handled by the unit-tested
 `log_listeners.deframe_syslog`, which correctly carries a frame that spans TCP
 segments. Like the UDP listener, the TLS listener is single-writer by
-deployment — bind it on one node (or a VIP) per cluster.
+deployment - bind it on one node (or a VIP) per cluster.
 
 ## What is *not* yet first-class (honest gaps)
 

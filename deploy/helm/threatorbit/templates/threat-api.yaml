@@ -10,7 +10,7 @@ metadata:
 spec:
   replicas: {{ .Values.threatApi.replicas }}
   strategy:
-    type: Recreate          # single RWO volume — avoid two pods mounting it at once
+    type: Recreate          # single RWO volume - avoid two pods mounting it at once
   selector:
     matchLabels:
       {{- include "threatorbit.selectorLabels" $sel | nindent 6 }}

@@ -47,7 +47,7 @@ def test_wired_source_gets_live_24h_count_and_last_event(client, auth):
 
 def test_quiet_wired_source_shows_zero_not_stale(client, auth):
     """A source that HAS flowed events but none in the last 24h must show a
-    truthful 0 — not fall back to a stale stored number."""
+    truthful 0 - not fall back to a stale stored number."""
     name = f"pytest-quiet-{uuid.uuid4().hex[:8]}"
     assert client.post("/siem/sources", json={"name": name, "type": "Syslog"},
                        headers=auth).status_code == 201
@@ -59,7 +59,7 @@ def test_quiet_wired_source_shows_zero_not_stale(client, auth):
 
 
 def test_never_wired_source_keeps_stored_value(client, auth):
-    """Seeded demo sources have no matching events — their stored sample values
+    """Seeded demo sources have no matching events - their stored sample values
     must pass through untouched (demo stays sample-data by contract)."""
     sources = client.get("/siem/sources", headers=auth).json()
     seeded = next((s for s in sources if s["name"] == "Palo Alto Firewall"), None)
@@ -72,7 +72,7 @@ def test_never_wired_source_keeps_stored_value(client, auth):
 
 
 def test_ingest_stamps_source_on_events(client, auth):
-    """The ingest path records its source name on each stored event — the
+    """The ingest path records its source name on each stored event - the
     attribution everything above depends on."""
     src = f"pytest-ingest-{uuid.uuid4().hex[:8]}"
     r = client.post("/siem/ingest", headers=auth, json={
@@ -89,7 +89,7 @@ def test_ingest_stamps_source_on_events(client, auth):
 def test_ingest_auto_registers_unknown_source(client, auth):
     """A collector ingesting under a name with no log_sources row must appear
     on SIEM → Sources automatically (zero-setup discovery), with the live
-    Events(24h) count attached — and repeat ingests must not duplicate it."""
+    Events(24h) count attached - and repeat ingests must not duplicate it."""
     src = f"pytest-auto-{uuid.uuid4().hex[:8]}"
     line = '{"event_type": "connection", "src_ip": "203.0.113.20"}'
     for _ in range(2):  # two batches: first registers, second must not duplicate
@@ -112,7 +112,7 @@ def test_zz_init_db_upgrades_pre_source_schema(client):
     sqlite3.OperationalError (so the old tolerant path missed it) and aborts
     the transaction (so every later statement failed too). init_db must
     tolerate the bad index, add the column via migration, then create the
-    index on the second pass. (zz-prefix: runs last — it drops/re-adds the
+    index on the second pass. (zz-prefix: runs last - it drops/re-adds the
     column, nulling `source` on rows earlier tests created.)"""
     from dashboard_api.db import init_db
     with get_conn() as conn:

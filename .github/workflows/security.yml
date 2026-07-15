@@ -24,7 +24,7 @@ jobs:
       - name: Audit Python dependencies (PyPI advisory DB + OSV)
         # All three services GATE the build (--strict): a CVE in any of them fails
         # CI. Only PYSEC-2026-161 (starlette Host-header validation) is ignored,
-        # and only for the two FastAPI services — its fix is starlette>=1.0.1 which
+        # and only for the two FastAPI services - its fix is starlette>=1.0.1 which
         # no FastAPI release supports yet; mitigated in deployment (the reference
         # proxy configs set an explicit Host and the API never builds absolute URLs
         # from it). Re-check whenever FastAPI's starlette ceiling moves (tracked in
@@ -54,5 +54,5 @@ jobs:
       - name: Audit frontend dependencies (gate with expiring allowlist)
         working-directory: frontend
         # Fails on any untriaged high/critical advisory AND on any allowlist
-        # entry past its expiry — triage decisions cannot rot silently.
+        # entry past its expiry - triage decisions cannot rot silently.
         run: node scripts/audit-gate.mjs

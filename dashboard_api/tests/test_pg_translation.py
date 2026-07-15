@@ -4,7 +4,7 @@ The `backend-postgres` CI job caught a real break: sqlglot 30.x renders a SQLite
 `ON CONFLICT(col)` target as `col NULLS FIRST`, which Postgres rejects
 ("NULLS FIRST/LAST is not allowed in ON CONFLICT clause"), breaking every upsert.
 These assert the translator emits a clean conflict target for the exact upsert
-shapes the app uses — so a future transpiler bump that reintroduces the ordering
+shapes the app uses - so a future transpiler bump that reintroduces the ordering
 wrapper fails here (fast, unit-level) instead of only in the live-Postgres job.
 """
 import pytest
@@ -27,7 +27,7 @@ _UPSERTS = [
 
 @pytest.mark.parametrize("sql", _UPSERTS)
 def test_on_conflict_never_emits_nulls_ordering(sql):
-    """Postgres forbids NULLS FIRST/LAST inside ON CONFLICT — the translator must
+    """Postgres forbids NULLS FIRST/LAST inside ON CONFLICT - the translator must
     never produce it (the sqlglot 30.x regression this guards against)."""
     out = to_postgres(sql).upper()
     assert "ON CONFLICT" in out, out

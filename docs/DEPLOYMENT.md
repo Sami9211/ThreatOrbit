@@ -8,26 +8,26 @@ deployment's job.
 ## Topology
 
 ```
-internet ──TLS──> reverse proxy (nginx/caddy)
-                    ├── /            → frontend  (static export, :3000 or files)
-                    └── /api/*       → dashboard_api (:8002)
+internet --TLS--> reverse proxy (nginx/caddy)
+                    ├-- /            → frontend  (static export, :3000 or files)
+                    └-- /api/*       → dashboard_api (:8002)
                                        threat_api (:8000), log_api (:8001) stay internal
 ```
 
 - Terminate TLS at the proxy. The app services speak plain HTTP **on an
-  internal network only** — never publish :8000/:8001/:8002 directly.
+  internal network only** - never publish :8000/:8001/:8002 directly.
 - The frontend is a static export (`next build` with `output: 'export'`), so
-  its security headers (CSP, HSTS) are set by whatever serves the files —
+  its security headers (CSP, HSTS) are set by whatever serves the files -
   reference configs below.
 
 ## Environment checklist (fail the deploy if unset)
 
 | Variable | Why |
 |---|---|
-| `DASHBOARD_JWT_SECRET` | session signing — `openssl rand -hex 32`; the boot log warns on the dev default |
-| `DASHBOARD_ENCRYPTION_KEY` | secrets-at-rest key — pin it BEFORE first use (docs/OPERATIONS.md) |
+| `DASHBOARD_JWT_SECRET` | session signing - `openssl rand -hex 32`; the boot log warns on the dev default |
+| `DASHBOARD_ENCRYPTION_KEY` | secrets-at-rest key - pin it BEFORE first use (docs/OPERATIONS.md) |
 | `DASHBOARD_EVIDENCE_SECRET` | evidence-bundle signatures survive JWT rotation |
-| `CORS_ORIGINS` | the exact frontend origin(s) — never `*` in production |
+| `CORS_ORIGINS` | the exact frontend origin(s) - never `*` in production |
 | `DASHBOARD_METRICS_TOKEN` | gate `/metrics` if the proxy exposes it |
 | `SMTP_*` / `SENTRY_DSN` / `DASHBOARD_LOG_FORMAT=json` | mail, error tracking, log shipping (optional, honest-degrade) |
 | `ANTHROPIC_API_KEY` | enables the full AI dashboard assistant (optional). Unset = the assistant degrades to a deterministic command set. `DASHBOARD_ASSISTANT_MODEL` overrides the model (default `claude-opus-4-8`). The assistant is read-only, runs as the caller, and never returns credentials. |
@@ -47,7 +47,7 @@ server {
     add_header X-Frame-Options DENY always;
     add_header Referrer-Policy no-referrer always;
     # CSP for the static frontend (Next.js export uses inline bootstrap
-    # scripts — hence 'unsafe-inline'; tighten with hashes if you fork the UI):
+    # scripts - hence 'unsafe-inline'; tighten with hashes if you fork the UI):
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'" always;
 
     root /srv/threatorbit/frontend;          # the static export
@@ -108,9 +108,9 @@ threatorbit.example.com {
 
 ## What the platform refuses to pretend about
 
-- No TLS in the app processes — terminate at the proxy (above).
-- `/metrics` is open unless `DASHBOARD_METRICS_TOKEN` is set — gate it or
+- No TLS in the app processes - terminate at the proxy (above).
+- `/metrics` is open unless `DASHBOARD_METRICS_TOKEN` is set - gate it or
   keep it off the public proxy.
 - The syslog listener (`DASHBOARD_SYSLOG_PORT`) is plain UDP RFC 3164/5424;
-  TLS syslog (RFC 5425) is a Tier-2 roadmap item — until then, keep log
+  TLS syslog (RFC 5425) is a Tier-2 roadmap item - until then, keep log
   transport on trusted networks (VPN/VPC).

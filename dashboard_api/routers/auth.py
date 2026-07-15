@@ -195,7 +195,7 @@ def me(user: dict = Depends(current_user)):
     return user
 
 
-# ── TOTP multi-factor authentication ─────────────────────────────────────────────
+# -- TOTP multi-factor authentication ---------------------------------------------
 
 class MfaCode(BaseModel):
     code: str
@@ -311,7 +311,7 @@ def regenerate_recovery_codes(body: MfaCode, user: dict = Depends(current_user))
     return {"recoveryCodes": codes}
 
 
-# ── Per-user Slack notification routing ─────────────────────────────────────────
+# -- Per-user Slack notification routing -----------------------------------------
 
 class SlackPrefs(BaseModel):
     webhook_url: str | None = None  # null/empty clears the routing

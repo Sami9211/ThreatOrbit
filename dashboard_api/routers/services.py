@@ -54,7 +54,7 @@ def services_status():
     }
 
 
-# ── Threat API (ingestion engine) ─────────────────────────────────────────────
+# -- Threat API (ingestion engine) ---------------------------------------------
 
 @router.get("/threat/source-health")
 def threat_source_health():
@@ -155,7 +155,7 @@ def sync_threat_iocs(limit: int = Query(500, le=10000), user: dict = Depends(req
             "total": len(upstream)}
 
 
-# ── Log API (anomaly analysis) ────────────────────────────────────────────────
+# -- Log API (anomaly analysis) ------------------------------------------------
 
 _LOG_FORMATS = {"syslog", "apache", "windows_event", "generic"}
 

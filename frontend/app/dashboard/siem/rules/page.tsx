@@ -18,7 +18,7 @@ import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
 import StarterPackButton from '@/components/dashboard/StarterPackButton'
 import { tk } from '@/lib/colors'
 
-/* ─── Types ─────────────────────────────────────────────────────────── */
+/* --- Types ----------------------------------------------------------- */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
 type RuleStatus = 'enabled' | 'disabled' | 'suppressed'
 type Category   = 'Network' | 'Endpoint' | 'Cloud' | 'Identity' | 'Threat Intel'
@@ -46,7 +46,7 @@ interface DetectionRule {
   noise?:      string | null
 }
 
-/* ─── Seed data ──────────────────────────────────────────────────────── */
+/* --- Seed data -------------------------------------------------------- */
 const RULES_DATA: DetectionRule[] = [
   {
     id: 'EDR-9001',
@@ -345,7 +345,7 @@ AND NOT source.ip: (lookup TI_ALLOWLIST ip)
   },
 ]
 
-/* ─── Severity config ───────────────────────────────────────────────── */
+/* --- Severity config ------------------------------------------------- */
 const SEV_CONFIG: Record<Severity, { bg: string; text: string; border: string; dot: string; label: string }> = {
   critical: { bg: 'bg-magenta/15',  text: 'text-magenta',  border: 'border-magenta/30',  dot: tk('magenta'), label: 'Critical' },
   high:     { bg: 'bg-threat/15',   text: 'text-threat',   border: 'border-threat/30',   dot: tk('threat'), label: 'High' },
@@ -362,7 +362,7 @@ const CAT_COLOR: Record<Category, string> = {
   'Threat Intel': tk('magenta'),
 }
 
-/* ─── Sub-components ─────────────────────────────────────────────────── */
+/* --- Sub-components --------------------------------------------------- */
 function SeverityPill({ severity }: { severity: Severity }) {
   const c = SEV_CONFIG[severity]
   return (
@@ -397,7 +397,7 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
   )
 }
 
-/* ─── Rule Detail Panel ──────────────────────────────────────────────── */
+/* --- Rule Detail Panel ------------------------------------------------ */
 function RulePanel({ rule, onClose, onToggle }: {
   rule: DetectionRule
   onClose: () => void
@@ -634,7 +634,7 @@ function DataRow({ label, value, mono }: { label: string; value: string; mono?: 
   )
 }
 
-/* ─── Main Page ─────────────────────────────────────────────────────── */
+/* --- Main Page ------------------------------------------------------- */
 export default function RulesEnginePage() {
   useExperienceMode()
   const { can } = usePermissions()
@@ -726,7 +726,7 @@ export default function RulesEnginePage() {
 
   return (
     <div className="p-6 space-y-6 min-h-screen">
-      {/* ── Page header ── */}
+      {/* -- Page header -- */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -757,7 +757,7 @@ export default function RulesEnginePage() {
         )}
       </motion.div>
 
-      {/* ── KPI strip ── */}
+      {/* -- KPI strip -- */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -792,7 +792,7 @@ export default function RulesEnginePage() {
         ))}
       </motion.div>
 
-      {/* ── Filter bar ── */}
+      {/* -- Filter bar -- */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -863,7 +863,7 @@ export default function RulesEnginePage() {
         </span>
       </motion.div>
 
-      {/* ── Rules table ── */}
+      {/* -- Rules table -- */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1001,7 +1001,7 @@ export default function RulesEnginePage() {
         </div>
       </motion.div>
 
-      {/* ── Alert tuning: suppressions & allow-lists ── */}
+      {/* -- Alert tuning: suppressions & allow-lists -- */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1010,7 +1010,7 @@ export default function RulesEnginePage() {
         <SuppressionsPanel />
       </motion.div>
 
-      {/* ── Rule detail panel (slide-over) ── */}
+      {/* -- Rule detail panel (slide-over) -- */}
       <AnimatePresence>
         {selectedRule && (
           <>
@@ -1043,7 +1043,7 @@ export default function RulesEnginePage() {
   )
 }
 
-/* ─── Filter select helper ───────────────────────────────────────────── */
+/* --- Filter select helper --------------------------------------------- */
 function FilterSelect({
   value,
   onChange,

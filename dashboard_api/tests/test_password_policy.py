@@ -1,6 +1,6 @@
 """Password screening (NIST SP 800-63B): every set-password path (register,
 admin-create, change-password) rejects common/breached and self-referential
-passwords, while strong passphrases — even ones containing a common word — pass.
+passwords, while strong passphrases - even ones containing a common word - pass.
 """
 import uuid
 
@@ -24,7 +24,7 @@ def test_policy_helper_screens_weak_accepts_strong():
         pp.validate_password("johnsmith", email="johnsmith@acme.io")   # is the email local-part
     with pytest.raises(ValueError):
         pp.validate_password("john smith", name="John Smith")          # is the account name
-    # Strong inputs pass — including a passphrase that merely *contains* a word.
+    # Strong inputs pass - including a passphrase that merely *contains* a word.
     pp.validate_password("correct horse battery staple")
     pp.validate_password("Sup3rSecret!2026", email="x@y.com", name="X")
 

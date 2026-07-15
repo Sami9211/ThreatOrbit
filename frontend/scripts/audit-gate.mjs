@@ -6,7 +6,7 @@
  * next.js advisories only fix in a breaking major), which trains people to
  * ignore CI. Instead: every high/critical advisory must either fail the
  * build or be consciously triaged in .audit-allowlist.json with a reason
- * and an expiry — when the expiry passes, the build goes red again, so a
+ * and an expiry - when the expiry passes, the build goes red again, so a
  * triage decision can never rot silently. Any NEW advisory fails immediately.
  */
 import { execSync } from 'node:child_process'
@@ -18,7 +18,7 @@ let raw
 try {
   raw = execSync('npm audit --omit=dev --json', { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 } catch (e) {
-  // npm audit exits non-zero when vulnerabilities exist — the JSON is still on stdout
+  // npm audit exits non-zero when vulnerabilities exist - the JSON is still on stdout
   raw = e.stdout?.toString() ?? ''
   if (!raw) { console.error('npm audit produced no output:', e.message); process.exit(2) }
 }
@@ -39,11 +39,11 @@ for (const [pkg, vuln] of Object.entries(report.vulnerabilities ?? {})) {
   if (!FAIL_LEVELS.has(vuln.severity)) continue
   const ids = (vuln.via ?? []).filter((v) => typeof v === 'object')
     .map((v) => (v.url ?? '').split('/').pop()).filter(Boolean)
-  if (ids.length === 0) continue // transitive marker entries ("via": ["next"]) — the root package carries the ids
+  if (ids.length === 0) continue // transitive marker entries ("via": ["next"]) - the root package carries the ids
   for (const id of ids) {
     const entry = allowed.get(id)
-    if (!entry) failures.push(`${pkg} ${vuln.severity} ${id} — NOT triaged (add a fix or an allowlist entry with reason+expiry)`)
-    else if (entry.expires < today) failures.push(`${pkg} ${vuln.severity} ${id} — allowlist entry EXPIRED ${entry.expires}: ${entry.reason}`)
+    if (!entry) failures.push(`${pkg} ${vuln.severity} ${id} - NOT triaged (add a fix or an allowlist entry with reason+expiry)`)
+    else if (entry.expires < today) failures.push(`${pkg} ${vuln.severity} ${id} - allowlist entry EXPIRED ${entry.expires}: ${entry.reason}`)
     else triaged.push(`${pkg} ${id} (until ${entry.expires})`)
   }
 }

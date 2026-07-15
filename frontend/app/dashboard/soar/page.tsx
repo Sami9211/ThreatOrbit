@@ -18,7 +18,7 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
-/* ── Types ────────────────────────────────────────────────────────── */
+/* -- Types ---------------------------------------------------------- */
 /* Responsive grid for the case queue. Status (hidden until md) and Owner (hidden
    until lg) would otherwise leave their fixed tracks reserved on smaller screens,
    shifting the remaining columns out of alignment and squashing the row. The
@@ -69,7 +69,7 @@ type Playbook = {
   category: string
 }
 
-/* ── Case data ────────────────────────────────────────────────────── */
+/* -- Case data ------------------------------------------------------ */
 const CASES: CaseRecord[] = [
   {
     id: 'CASE-0441',
@@ -232,7 +232,7 @@ const CASES: CaseRecord[] = [
   },
 ]
 
-/* ── Playbook data ────────────────────────────────────────────────── */
+/* -- Playbook data -------------------------------------------------- */
 const PLAYBOOKS: Playbook[] = [
   {
     id: 'pb-001', name: 'Endpoint Ransomware Containment', trigger: 'EDR: mass file encryption',
@@ -312,7 +312,7 @@ const PLAYBOOKS: Playbook[] = [
   },
 ]
 
-/* ── Metrics (offline fallback only; replaced by live /soar/metrics) ─ */
+/* -- Metrics (offline fallback only; replaced by live /soar/metrics) - */
 const SOAR_METRICS = {
   openCases: 5,
   criticalOpen: 1,
@@ -342,7 +342,7 @@ function fmtSecsShort(secs: number): string {
   return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
 }
 
-/* ── Helpers ──────────────────────────────────────────────────────── */
+/* -- Helpers -------------------------------------------------------- */
 const SEV_STYLE: Record<Severity, string> = {
   critical: 'text-magenta border-magenta/30 bg-magenta/10',
   high:     'text-threat  border-threat/30  bg-threat/10',
@@ -404,7 +404,7 @@ function slaLabel(created: string, slaHours: number): string {
   return h > 0 ? `${h}h ${m}m left` : `${m}m left`
 }
 
-/* ── Case detail panel ────────────────────────────────────────────── */
+/* -- Case detail panel ---------------------------------------------- */
 function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => void; simplified?: boolean }) {
   const [tab, setTab] = useState<'overview' | 'warroom' | 'tasks' | 'evidence'>('overview')
   const [tasks, setTasks] = useState(c.tasks)
@@ -733,7 +733,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   )
 }
 
-/* ── Normal Mode: Case Kanban Board ──────────────────────────────── */
+/* -- Normal Mode: Case Kanban Board -------------------------------- */
 function NormalSOAR({ cases: casesData, casesPending = false }: { cases: CaseRecord[]; casesPending?: boolean }) {
   const CASES = casesData
   const SEV_COLOR: Record<string, string> = {
@@ -833,7 +833,7 @@ function NormalSOAR({ cases: casesData, casesPending = false }: { cases: CaseRec
   )
 }
 
-/* ── New case modal ───────────────────────────────────────────────── */
+/* -- New case modal ------------------------------------------------- */
 function NewCaseModal({ onClose, onCreate }: {
   onClose: () => void
   onCreate: (body: { title: string; severity: string; type: string; description: string }) => Promise<void>
@@ -928,12 +928,12 @@ function NewCaseModal({ onClose, onCreate }: {
   )
 }
 
-/* ── Main page ────────────────────────────────────────────────────── */
+/* -- Main page ------------------------------------------------------ */
 export default function SOARPage() {
   const [mode] = useExperienceMode()
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'cases' | 'playbooks' | 'metrics'>('cases')
-  // Empty until the API answers — cases/playbooks are the API's to fill. An
+  // Empty until the API answers - cases/playbooks are the API's to fill. An
   // empty case board on a real deployment is honest; the demo constants are an
   // offline-only fallback (loadedRef gates them to a first-load failure).
   const [cases, setCases] = useState<CaseRecord[]>([])
@@ -1110,7 +1110,7 @@ export default function SOARPage() {
         {/* keyed on the tab: switching replays a smooth fade-up enter */}
         <motion.div key={tab} variants={fadeInUp} initial="hidden" animate="show"
           className="flex-1 overflow-hidden">
-          {/* ── CASE QUEUE ─────────────────────────────────────────── */}
+          {/* -- CASE QUEUE ------------------------------------------- */}
           {tab === 'cases' && (
             <div className="flex flex-col h-full">
               <div className={cn(CASE_GRID, 'px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide shrink-0')}>
@@ -1126,7 +1126,7 @@ export default function SOARPage() {
                 {cases.length === 0 && casesPending && <SkeletonRows rows={8} />}
                 {cases.length === 0 && !casesPending && (
                   <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
-                    No cases yet — correlated alerts escalate here automatically
+                    No cases yet - correlated alerts escalate here automatically
                   </div>
                 )}
                 {cases.map((c, i) => (
@@ -1137,7 +1137,7 @@ export default function SOARPage() {
             </div>
           )}
 
-          {/* ── PLAYBOOKS ───────────────────────────────────────────── */}
+          {/* -- PLAYBOOKS --------------------------------------------- */}
           {tab === 'playbooks' && (
             <div className="flex h-full overflow-hidden">
               {/* Playbook list */}
@@ -1213,7 +1213,7 @@ export default function SOARPage() {
             </div>
           )}
 
-          {/* ── METRICS ────────────────────────────────────────────── */}
+          {/* -- METRICS ---------------------------------------------- */}
           {tab === 'metrics' && (
             <div className="overflow-y-auto h-full p-6 space-y-6">
               {/* Cases by type + automation donut row */}
@@ -1222,7 +1222,7 @@ export default function SOARPage() {
                   <p className="text-xs font-semibold text-white mb-4">Cases by Type (Last 30 days)</p>
                   {(() => {
                     // Live derivation from the same case list the KPI table
-                    // below uses (this block used to be a hardcoded sample —
+                    // below uses (this block used to be a hardcoded sample -
                     // the last fabrication-sweep miss on this page).
                     const cutoff = Date.now() - 30 * 24 * 3600 * 1000
                     const counts = new Map<string, number>()
@@ -1344,7 +1344,7 @@ export default function SOARPage() {
   )
 }
 
-/* ── Case table row ───────────────────────────────────────────────── */
+/* -- Case table row ------------------------------------------------- */
 function CaseRow({ c, idx, selected, onClick }: {
   c: CaseRecord; idx: number; selected: boolean; onClick: () => void
 }) {
@@ -1396,7 +1396,7 @@ function CaseRow({ c, idx, selected, onClick }: {
   )
 }
 
-/* ── Playbook card ────────────────────────────────────────────────── */
+/* -- Playbook card -------------------------------------------------- */
 function PlaybookCard({ pb, selected, onClick, onRun }: {
   pb: Playbook; selected: boolean; onClick: () => void; onRun?: (e: React.MouseEvent) => void
 }) {

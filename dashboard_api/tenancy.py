@@ -86,7 +86,7 @@ def org_of(user: dict) -> str:
     return user.get("org_id") or DEFAULT_ORG_ID
 
 
-# ── Tenant lifecycle (create/suspend/export/delete) ───────────────────────────
+# -- Tenant lifecycle (create/suspend/export/delete) ---------------------------
 
 def org_status(conn, org_id: str) -> str:
     """A workspace's lifecycle status ('active'/'suspended'); 'active' if unknown."""
@@ -145,7 +145,7 @@ def purge_org(conn, org_id: str) -> dict:
     return counts
 
 
-# ── Per-tenant quotas + retention (limits stored as org-scoped settings) ───────
+# -- Per-tenant quotas + retention (limits stored as org-scoped settings) -------
 
 _LIMIT_KEY = {"users": "org_quota_users", "assets": "org_quota_assets",
               "retention_days": "org_retention_days"}
@@ -203,7 +203,7 @@ def org_retention_days(conn, org_id: str, default: int) -> int:
     return v if v is not None else default
 
 
-# ── Data-isolation helpers (wired into every TENANT_TABLES list endpoint) ─────────
+# -- Data-isolation helpers (wired into every TENANT_TABLES list endpoint) ---------
 
 def enforced() -> bool:
     """Whether per-tenant data isolation is switched on for this deployment."""

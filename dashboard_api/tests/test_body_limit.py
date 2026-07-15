@@ -29,7 +29,7 @@ def test_oversize_body_rejected_413():
 
 def test_oversize_body_rejected_even_without_content_length():
     """Chunked / streamed bodies (no declared content-length) are still bounded
-    by the streaming byte counter — the app buffers at most ~cap, then the body
+    by the streaming byte counter - the app buffers at most ~cap, then the body
     is truncated so it can't be a 200, and memory never grows unbounded."""
     tc, hdr = _small_client()
 

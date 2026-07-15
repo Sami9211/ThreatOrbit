@@ -4,13 +4,13 @@ import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { tk } from '@/lib/colors'
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ---------------------------------------------------------------------
    Entity relationship / investigation graph.
    A deterministic radial layout (no randomness → SSR-safe): a central
    entity surrounded by grouped satellite nodes, each group occupying an
    angular sector. Edges connect the center to every satellite. Hovering a
    node highlights it and its edge and surfaces a label tooltip.
-   ───────────────────────────────────────────────────────────────────── */
+   --------------------------------------------------------------------- */
 
 export type GraphGroup = {
   kind: string          // e.g. "Campaign", "IOC", "Sector", "TTP"

@@ -20,7 +20,7 @@ What you can expect:
 
 The `main` branch is the supported line; fixes land there first. Deployments
 should track tagged releases and apply security releases promptly (the
-upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
+upgrade contract is additive-only migrations - see `docs/OPERATIONS.md`).
 
 ## What's already in place
 
@@ -45,7 +45,7 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
   their base image by immutable `@sha256:` digest, so a build can't silently
   inherit a re-pushed tag (Dependabot keeps the digests current). The
   tag-triggered `release.yml` workflow ships each release with **cosign keyless
-  signatures** (Sigstore Fulcio + Rekor transparency log — no long-lived key)
+  signatures** (Sigstore Fulcio + Rekor transparency log - no long-lived key)
   over the SBOMs, source archive, and checksums, plus **SLSA3 build provenance**
   (in-toto) from the official generator. Verification commands are in the
   workflow header. Remaining (tracked in `plan.md`): signing published container
@@ -57,10 +57,10 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
 - **Identity lifecycle**: optional **OIDC** SSO (ID-token RS256 verification),
   **SAML 2.0** SP (signed-assertion verification against a pinned IdP cert, with
   signature-wrapping defence, audience/recipient/issuer/time-window checks,
-  InResponseTo binding, and one-time-use replay rejection — see
+  InResponseTo binding, and one-time-use replay rejection - see
   `dashboard_api/saml.py` + `test_saml.py`), and **SCIM 2.0** provisioning
   (bearer-token `/scim/v2`) so an IdP can automatically *deactivate* departed
-  users — closing the "ex-employee keeps access" gap. All degrade to off when
+  users - closing the "ex-employee keeps access" gap. All degrade to off when
   unconfigured; email+password is unaffected.
 - **SSRF guard** (`net_guard.py`) on every user-supplied outbound URL
   (webhooks, custom connectors, personal Slack routing): http/https only, and
@@ -90,4 +90,4 @@ upgrade contract is additive-only migrations — see `docs/OPERATIONS.md`).
 _Resolved: the 14 Next.js 14 server advisories were **fixed** by upgrading to next@16 (2026-06-14), not just triaged._
 
 A third-party penetration test is a pre-sale requirement (plan.md Tier 1)
-and has **not** been performed yet — this file does not claim otherwise.
+and has **not** been performed yet - this file does not claim otherwise.

@@ -10,7 +10,7 @@ import { EASE } from '@/lib/motion'
  * a satisfying tick-up rather than a jump cut).
  *
  * Imperative `animate()` on a text node doesn't go through MotionConfig, so
- * reduced motion is honoured explicitly here via `useReducedMotion` — those
+ * reduced motion is honoured explicitly here via `useReducedMotion` - those
  * users get the final value set instantly.
  */
 export default function AnimatedNumber({ value, format, duration = 0.8 }: {

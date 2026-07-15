@@ -1,5 +1,5 @@
 """SSE stream tickets (audit B3): the live stream is opened with a short-lived,
-single-use ticket minted from the session — the long-lived JWT is never put in
+single-use ticket minted from the session - the long-lived JWT is never put in
 the stream URL, and a ticket can't be replayed as a session token.
 """
 import pytest

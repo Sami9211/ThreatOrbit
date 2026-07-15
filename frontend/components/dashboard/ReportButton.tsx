@@ -316,7 +316,7 @@ function ReportBody({ report }: { report: ReportData }) {
   )
 }
 
-/* Static SVG severity donut for the printable report — computed from the
+/* Static SVG severity donut for the printable report - computed from the
    first severity-type breakdown; pure markup, so it prints and emails fine. */
 function severityDonutSvg(report: ReportData): string {
   const sev = report.breakdowns.find((b) => b.type === 'severity')

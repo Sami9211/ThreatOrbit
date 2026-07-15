@@ -10,7 +10,7 @@ from threat_api.stix_converter.converter import convert_to_stix_bundle
 from threat_api.trust_scoring import _canonical_source_name, apply_trust_scoring
 
 
-# ── Normalisation ──────────────────────────────────────────────────────────────
+# -- Normalisation --------------------------------------------------------------
 def test_normalize_canonicalises_values_and_drops_invalid():
     iocs = [
         IOC(ioc_type="domain", value="Evil.COM.", source="otx"),       # lower + trailing-dot strip
@@ -27,7 +27,7 @@ def test_normalize_canonicalises_values_and_drops_invalid():
 
 def test_normalize_survives_malformed_values():
     """A feed value that makes urlparse raise (e.g. an unclosed IPv6 bracket)
-    must not abort the whole refresh — the bad IOC is skipped/kept-raw and the
+    must not abort the whole refresh - the bad IOC is skipped/kept-raw and the
     good ones from every source still come through."""
     iocs = [
         IOC(ioc_type="ip", value="8.8.4.4", source="otx"),
@@ -70,7 +70,7 @@ def test_correlation_boosts_multi_source_confidence():
     assert single.confidence == 50 and "multi-source-confirmed" not in single.tags
 
 
-# ── Trust scoring ──────────────────────────────────────────────────────────────
+# -- Trust scoring --------------------------------------------------------------
 def test_trust_scoring_applies_source_weight_and_base():
     config = {"default_weight": 1.0, "default_base_confidence": 40, "feed_overrides": {},
               "sources": {"AlienVault OTX": {"weight": 1.2, "base_confidence": 60},
@@ -90,7 +90,7 @@ def test_canonical_source_name():
     assert _canonical_source_name("darkweb-monitor") == "DarkWeb OSINT"
 
 
-# ── STIX 2.1 conversion ────────────────────────────────────────────────────────
+# -- STIX 2.1 conversion --------------------------------------------------------
 def test_stix_bundle_structure_and_patterns():
     iocs = [
         EnrichedIOC(ioc_type="ip", value="1.2.3.4", source="otx", confidence=80, tags=["botnet"]),

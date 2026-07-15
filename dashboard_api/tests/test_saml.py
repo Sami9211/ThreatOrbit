@@ -110,7 +110,7 @@ def saml_on(monkeypatch):
     return True
 
 
-# ── happy path ───────────────────────────────────────────────────────────────
+# -- happy path ---------------------------------------------------------------
 
 def test_valid_assertion_accepted():
     u = saml.parse_response(_signed_response(), "_req123")
@@ -124,7 +124,7 @@ def test_role_mapping(monkeypatch):
     assert saml.parse_response(_signed_response(groups=("soc",)), "_req123")["role"] == "analyst"
 
 
-# ── the rejections (each must raise) ─────────────────────────────────────────
+# -- the rejections (each must raise) -----------------------------------------
 
 def test_rejects_unsigned():
     with pytest.raises(ValueError):
@@ -183,7 +183,7 @@ def test_rejects_replay():
         saml.parse_response(resp, "_req123")
 
 
-# ── relay state ──────────────────────────────────────────────────────────────
+# -- relay state --------------------------------------------------------------
 
 def test_relay_state_roundtrip_and_tamper():
     st = saml.make_relay_state("_req999", "/dashboard")
@@ -193,7 +193,7 @@ def test_relay_state_roundtrip_and_tamper():
         saml.read_relay_state(st[:-3] + "xyz")  # broken signature
 
 
-# ── router endpoints ─────────────────────────────────────────────────────────
+# -- router endpoints ---------------------------------------------------------
 
 def test_status_and_login_redirect(client):
     assert client.get("/auth/saml/status").json()["configured"] is True
@@ -205,7 +205,7 @@ def test_status_and_login_redirect(client):
     assert "SigAlg=" not in loc and "Signature=" not in loc
 
 
-# ── SP-signed AuthnRequest (HTTP-Redirect detached signature, B9 residual) ───
+# -- SP-signed AuthnRequest (HTTP-Redirect detached signature, B9 residual) ---
 
 def _decode_authn_request(loc: str):
     """Pull the deflated AuthnRequest back out of a login redirect URL."""
@@ -241,7 +241,7 @@ def test_sp_signed_authn_request_rsa(client, monkeypatch):
     assert r.status_code == 302
     loc = r.headers["location"]
     signed_part = _verify_redirect_signature(loc, sp_key)
-    # Spec ordering: SAMLRequest, then RelayState, then SigAlg — as transmitted.
+    # Spec ordering: SAMLRequest, then RelayState, then SigAlg - as transmitted.
     assert signed_part.index("SAMLRequest=") < signed_part.index("RelayState=") \
         < signed_part.index("SigAlg=")
     assert "rsa-sha256" in signed_part
@@ -265,7 +265,7 @@ def test_sp_signed_authn_request_ec(client, monkeypatch):
 
 
 def test_sp_signing_tamper_is_detectable(monkeypatch):
-    # Flipping anything in the signed octets must fail IdP-side verification —
+    # Flipping anything in the signed octets must fail IdP-side verification -
     # proves the signature actually covers SAMLRequest + RelayState + SigAlg.
     sp_key, _ = _mint_idp()
     monkeypatch.setattr("dashboard_api.saml.SAML_SP_PRIVATE_KEY", sp_key.decode())

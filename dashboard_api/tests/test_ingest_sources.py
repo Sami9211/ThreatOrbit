@@ -320,7 +320,7 @@ def test_deframe_syslog_octet_counting_and_newline():
 
 def test_deframe_syslog_rejects_oversized_frames_dos_guard():
     """A malicious octet-count frame or an unterminated giant line must be
-    rejected (ValueError), not buffered forever — the TLS listener would
+    rejected (ValueError), not buffered forever - the TLS listener would
     otherwise exhaust memory. The connection handler drops the peer on this."""
     import pytest
     from dashboard_api.log_listeners import MAX_SYSLOG_MSG
@@ -338,7 +338,7 @@ def test_deframe_syslog_rejects_oversized_frames_dos_guard():
     # An unterminated newline line past the cap → rejected (no infinite buffer).
     with pytest.raises(ValueError, match="without a newline"):
         deframe_syslog(b"Z" * (MAX_SYSLOG_MSG + 5))
-    # A normal partial frame still just waits — not every incomplete read errors.
+    # A normal partial frame still just waits - not every incomplete read errors.
     msgs, rem = deframe_syslog(b"20 short")
     assert msgs == [] and rem == b"20 short"
 
@@ -372,7 +372,7 @@ def test_ingest_endpoint_stores_windows_and_cloudtrail(client, auth):
     assert w["event_type"] == "failed_login" and c["event_type"] == "create_access_key"
 
 
-# ── Ingest resilience: one crafted line must not abort the whole batch ─────────
+# -- Ingest resilience: one crafted line must not abort the whole batch ---------
 
 def test_deeply_nested_json_line_does_not_crash_parse():
     """A pathologically deep JSON line (crafted to blow the decoder's recursion
@@ -398,7 +398,7 @@ def test_flatten_depth_is_bounded():
 
 def test_one_bad_line_does_not_drop_the_whole_batch(client, auth):
     """A batch containing a crafted line that would crash the parser still ingests
-    every other line — the bad one is skipped and counted, the POST stays 200."""
+    every other line - the bad one is skipped and counted, the POST stays 200."""
     tag = uuid.uuid4().hex[:8]
     good1 = json.dumps({"event_type": "failed_login", "src_ip": "203.0.113.5",
                         "user": f"g1-{tag}", "host": "H1"})
@@ -410,7 +410,7 @@ def test_one_bad_line_does_not_drop_the_whole_batch(client, auth):
     assert r.status_code == 200, r.text
     body = r.json()
     # Both good lines parsed; the crafted one didn't take the batch down. (It may
-    # be skipped, or degrade to a generic event — either way both goods survive.)
+    # be skipped, or degrade to a generic event - either way both goods survive.)
     with get_conn() as conn:
         g1 = conn.execute("SELECT 1 FROM events WHERE username=?", (f"g1-{tag}",)).fetchone()
         g2 = conn.execute("SELECT 1 FROM events WHERE username=?", (f"g2-{tag}",)).fetchone()

@@ -1,6 +1,6 @@
 # ThreatOrbit Collector Ecosystem
 
-Enterprise log shipping for ThreatOrbit — a lightweight first-party agent plus
+Enterprise log shipping for ThreatOrbit - a lightweight first-party agent plus
 **certified configs** for Fluent Bit, Vector, and the Elastic Beats stack. All
 of them authenticate with a scoped API key and ship to the SIEM's ingest
 endpoints, which parse the lines into events and run detections + threat-intel
@@ -40,13 +40,13 @@ Run it under systemd with `threatorbit-collector.service` +
 
 ## 2. Certified vendor configs (`configs/`)
 
-Drop-in, no record shaping required — each posts to `/siem/ingest/raw`.
+Drop-in, no record shaping required - each posts to `/siem/ingest/raw`.
 
-- **`fluent-bit.conf`** — `tail` input → `http` output (JSON). Built-in DB file
+- **`fluent-bit.conf`** - `tail` input → `http` output (JSON). Built-in DB file
   checkpoints offsets.
-- **`vector.toml`** — `file` source → `http` sink (JSON array). `data_dir`
+- **`vector.toml`** - `file` source → `http` sink (JSON array). `data_dir`
   checkpoints offsets; retries on 429.
-- **`filebeat-logstash.conf`** — Beats have no native HTTP output, so the
+- **`filebeat-logstash.conf`** - Beats have no native HTTP output, so the
   certified path is **Filebeat → Logstash → HTTP**. Contains the Logstash
   pipeline (`json_batch`) and the matching `filebeat.yml`.
 
@@ -59,12 +59,12 @@ roles:
 
 | Scope | Prefix | Role | Use |
 | --- | --- | --- | --- |
-| `write` | `to_sk_live_` | analyst | **collectors** — ingest logs |
+| `write` | `to_sk_live_` | analyst | **collectors** - ingest logs |
 | `read`  | `to_rk_live_` | viewer | read-only automation |
 | `admin` | `to_ak_live_` | admin  | administration |
 
 Give each collector its **own** write-scoped key so it can be revoked
-individually (Settings → API → Revoke) without touching the others — keys are
+individually (Settings → API → Revoke) without touching the others - keys are
 verified server-side on every request and a revoked key is rejected immediately.
 Present the key as either `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 
@@ -73,7 +73,7 @@ Present the key as either `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 TLS terminates at your ingress (nginx/Helm chart). For **mutual-TLS enrolment**,
 issue a per-collector client certificate from your PKI and configure the ingress
 to require it; each agent then presents its cert in addition to the API key
-(defence in depth — transport identity *and* an application credential):
+(defence in depth - transport identity *and* an application credential):
 
 - **agent**: `THREATORBIT_CLIENT_CERT` / `THREATORBIT_CLIENT_KEY` (+ `THREATORBIT_CA`)
 - **Fluent Bit**: `tls.crt_file` / `tls.key_file` / `tls.ca_file`
@@ -81,5 +81,5 @@ to require it; each agent then presents its cert in addition to the API key
 - **Logstash**: `client_cert` / `client_key` / `cacert`
 
 This pairs a revocable application credential (the API key) with a revocable
-transport identity (the client cert) — "POST your logs here" with enrolment, not
+transport identity (the client cert) - "POST your logs here" with enrolment, not
 an open door.

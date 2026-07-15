@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 _HTTP_TIMEOUT = 30
 
 
-# ── configuration (read live from config so tests/ops can flip it) ──
+# -- configuration (read live from config so tests/ops can flip it) --
 def _local_dir() -> str:
     from dashboard_api import config
     return getattr(config, "ARCHIVE_DIR", "") or ""
@@ -110,7 +110,7 @@ def _write_s3(s3: dict, table: str, body: str) -> str:
         raise OSError(f"S3 archive PUT failed: {e}") from e
 
 
-# ── AWS Signature Version 4 (stdlib only) ──
+# -- AWS Signature Version 4 (stdlib only) --
 def _signing_key(secret: str, datestamp: str, region: str, service: str) -> bytes:
     def _h(key: bytes, msg: str) -> bytes:
         return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()

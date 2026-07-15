@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, ArrowRight } from 'lucide-react'
 import { SEVERITY_COLOR as SEV_COLOR, withAlpha } from '@/lib/colors'
 
-/* ── Public payload + helper ─────────────────────────────────────────
+/* -- Public payload + helper -----------------------------------------
    Any component can open the drawer without prop-drilling:
      import { openDetail } from '@/components/dashboard/DetailDrawer'
      openDetail({ title, subtitle, severity, rows, actions, body })            */

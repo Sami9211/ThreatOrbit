@@ -7,12 +7,12 @@ import * as THREE from 'three'
 /**
  * Round point-sprite cloud: crisp circular dots at ANY on-screen size, because
  * a fragment shader discards fragments outside the circle. Small sphere *meshes*
- * (sphereGeometry) alias into squares at sub-pixel size — and antialiasing can't
+ * (sphereGeometry) alias into squares at sub-pixel size - and antialiasing can't
  * save them when the scene renders through a bloom EffectComposer pass, which
  * bypasses the canvas MSAA. Points sidestep both problems.
  *
  * Per-point colour + size, plus an optional GPU-side pulse (per-point phase, so
- * dots breathe out of sync) driven entirely by a uniform — no per-frame JS over
+ * dots breathe out of sync) driven entirely by a uniform - no per-frame JS over
  * the node list.
  */
 export default function RoundPoints({

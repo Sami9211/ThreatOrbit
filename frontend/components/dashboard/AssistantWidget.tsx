@@ -62,11 +62,11 @@ export default function AssistantWidget() {
 
   return (
     <>
-      {/* Launcher — a compact icon that expands to reveal the label on
+      {/* Launcher - a compact icon that expands to reveal the label on
           hover/focus (keeps the screen clear; full affordance on demand). */}
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label="Ask ThreatOrbit — open the security assistant"
+        aria-label="Ask ThreatOrbit - open the security assistant"
         title="Ask ThreatOrbit"
         className={cn(
           'group fixed bottom-5 right-5 z-50 flex items-center gap-0 hover:gap-2 focus-visible:gap-2',

@@ -48,7 +48,7 @@ def _entropy(s: str) -> float:
     return round(-sum((c / n) * math.log2(c / n) for c in freq.values()), 2)
 
 
-# ── Built-in enrichers ───────────────────────────────────────────────────────────
+# -- Built-in enrichers -----------------------------------------------------------
 
 def _enrich_internal(conn, value: str, ioc_type: str) -> dict:
     """Cross-reference the platform's own stores - the most useful, zero-cost
@@ -355,7 +355,7 @@ def enrich(conn, value: str, ioc_type: str = "", *, providers: list[str] | None 
             continue
         # Cache only results that actually ran: the cache-hit path replays rows
         # as available=True, so caching an unavailable result (e.g. VirusTotal
-        # with no API key — no call was made, nothing to save) would fabricate
+        # with no API key - no call was made, nothing to save) would fabricate
         # availability on every repeat enrich within the TTL.
         if res.get("available"):
             conn.execute(

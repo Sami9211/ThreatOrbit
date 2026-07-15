@@ -1,6 +1,6 @@
 """Dark-web summary honesty fence.
 
-`last24h` used to alias `total` — every finding ever recorded — despite the
+`last24h` used to alias `total` - every finding ever recorded - despite the
 name. It now windows on `ts >= now-24h`.
 """
 import uuid

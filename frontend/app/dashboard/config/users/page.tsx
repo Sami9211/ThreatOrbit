@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 
-/* ── Types ───────────────────────────────────────────────────────── */
+/* -- Types --------------------------------------------------------- */
 type RoleName = 'Admin' | 'SOC Manager' | 'Senior Analyst' | 'Analyst' | 'Read-Only' | 'Auditor'
 type UserStatus = 'active' | 'suspended' | 'invited'
 
@@ -51,7 +51,7 @@ interface Role {
   permissions: Record<Permission, boolean>
 }
 
-/* ── Seed data ───────────────────────────────────────────────────── */
+/* -- Seed data ----------------------------------------------------- */
 const USERS: TeamUser[] = [
   { id: 'u01', name: 'Priya Nair',        email: 'priya.nair@acme.io',     role: 'Admin',          lastActive: '2m ago',   mfa: true,  status: 'active'    },
   { id: 'u02', name: 'Marcus Holloway',   email: 'marcus.h@acme.io',       role: 'SOC Manager',    lastActive: '14m ago',  mfa: true,  status: 'active'    },
@@ -107,7 +107,7 @@ const STATUS_CFG: Record<UserStatus, { label: string; cls: string }> = {
   invited:   { label: 'Invited',   cls: 'text-amber border-amber/20 bg-amber/10'  },
 }
 
-/* ── Initials avatar ─────────────────────────────────────────────── */
+/* -- Initials avatar ----------------------------------------------- */
 function Avatar({ name, color, size = 'md' }: { name: string; color: string; size?: 'sm' | 'md' }) {
   const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('')
   return (
@@ -123,7 +123,7 @@ function Avatar({ name, color, size = 'md' }: { name: string; color: string; siz
   )
 }
 
-/* ── Invite user modal ───────────────────────────────────────────── */
+/* -- Invite user modal --------------------------------------------- */
 function InviteModal({ onClose, onInvite }: {
   onClose: () => void
   onInvite: (body: { name: string; email: string; role: RoleName; password: string }) => Promise<void>
@@ -218,7 +218,7 @@ function InviteModal({ onClose, onInvite }: {
   )
 }
 
-/* ── User detail panel ───────────────────────────────────────────── */
+/* -- User detail panel --------------------------------------------- */
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   if (diff < 60) return `${Math.floor(diff)}s ago`
@@ -238,7 +238,7 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
   const color = ROLE_COLORS[user.role]
 
   // Real activity for this user from the audit trail (filtered by actor email),
-  // not fabricated samples. Empty is honest — the user simply hasn't acted yet.
+  // not fabricated samples. Empty is honest - the user simply hasn't acted yet.
   const [activity, setActivity] = useState<AuditEntry[] | null>(null)
   useEffect(() => {
     let live = true
@@ -312,7 +312,7 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
             </div>
           </div>
 
-          {/* Activity log — real audit-trail entries for this user */}
+          {/* Activity log - real audit-trail entries for this user */}
           <div>
             <p className="text-xs font-medium text-ink-300 mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Activity Log</p>
             <div className="space-y-2">
@@ -356,7 +356,7 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
 const apiToTeamUser = (u: ApiUser): TeamUser => ({
   id: u.id,
   name: u.name,

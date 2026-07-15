@@ -147,7 +147,7 @@ function CredentialsForm({ integration, onSaved }: {
 }
 
 export default function SoarIntegrationsPage() {
-  // Empty until the API answers — integrations are NOT seeded in live mode, so
+  // Empty until the API answers - integrations are NOT seeded in live mode, so
   // an empty list is the honest truth on a real deployment. Demo vendors would
   // misrepresent what SOAR can actually act on, so they're offline-only.
   const [integrations, setIntegrations] = useState<Integration[]>([])

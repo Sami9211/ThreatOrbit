@@ -48,7 +48,7 @@ def test_api_key_usage_is_per_key(client, auth):
         assert r.status_code == 201
         keys.append(r.json())
 
-    # use key A twice, key B once — counts must not bleed across keys
+    # use key A twice, key B once - counts must not bleed across keys
     ha = {"Authorization": f"Bearer {keys[0]['secret']}"}
     hb = {"Authorization": f"Bearer {keys[1]['secret']}"}
     assert client.get("/siem/kpis", headers=ha).status_code == 200

@@ -88,7 +88,7 @@ def _validate(ticket: str, token: str) -> dict:
 def issue_stream_ticket(user: dict = Depends(current_user)):
     """Mint a short-lived, single-use SSE ticket for the authenticated caller.
     The browser fetches this with its normal Authorization header, then opens
-    `GET /stream?ticket=…` — so the session JWT is never put in a URL."""
+    `GET /stream?ticket=…` - so the session JWT is never put in a URL."""
     return {"ticket": create_stream_ticket(user["id"]), "expires_in": 60}
 
 

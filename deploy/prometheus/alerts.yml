@@ -1,15 +1,15 @@
-# ThreatOrbit — Prometheus alert rules for the platform's OWN health.
+# ThreatOrbit - Prometheus alert rules for the platform's OWN health.
 #
 # These alert on the metrics the dashboard API exposes at GET /metrics (see
 # docs/OPERATIONS.md → Observability). They mirror the in-app self-health
 # verdict (Settings → System Health) so an operator gets paged even when nobody
-# is looking at the dashboard — the "alerting on the platform's own health"
+# is looking at the dashboard - the "alerting on the platform's own health"
 # path for teams that already run Prometheus/Alertmanager.
 #
 # Thresholds intentionally match the self-health defaults
 # (DASHBOARD_HEALTH_QUEUE_DEPTH=10000, DASHBOARD_HEALTH_LAG_SECONDS=300); tune
 # both together. The `job` label below assumes a scrape job named
-# "threatorbit" — see README.md for the scrape_config.
+# "threatorbit" - see README.md for the scrape_config.
 #
 # Load with rule_files: ["alerts.yml"] in prometheus.yml, or wrap the groups in
 # a PrometheusRule CRD for the prometheus-operator (README shows both).
@@ -23,7 +23,7 @@ groups:
           severity: critical
         annotations:
           summary: "ThreatOrbit API target down"
-          description: "Prometheus cannot scrape {{ $labels.instance }} — the API is unreachable or /metrics is failing (2m)."
+          description: "Prometheus cannot scrape {{ $labels.instance }} - the API is unreachable or /metrics is failing (2m)."
 
       - alert: ThreatOrbitReadinessProbeFlapping
         # A pod that is up but repeatedly returning 503 on /ready is serving
@@ -34,7 +34,7 @@ groups:
           severity: warning
         annotations:
           summary: "ThreatOrbit readiness failing"
-          description: "/ready has returned 503 within the last 5m on {{ $labels.instance }} — the database is likely unreachable; the pod should be out of rotation."
+          description: "/ready has returned 503 within the last 5m on {{ $labels.instance }} - the database is likely unreachable; the pod should be out of rotation."
 
       - alert: ThreatOrbitHighErrorRate
         expr: rate(threatorbit_domain_total{counter="errors"}[5m]) > 0.5
@@ -52,7 +52,7 @@ groups:
           severity: warning
         annotations:
           summary: "ThreatOrbit detection engine ticks failing"
-          description: "{{ printf \"%.0f\" $value }} engine tick failures in 10m on {{ $labels.instance }} — live detection may be stalled."
+          description: "{{ printf \"%.0f\" $value }} engine tick failures in 10m on {{ $labels.instance }} - live detection may be stalled."
 
   - name: threatorbit-detection-backpressure
     rules:
@@ -63,7 +63,7 @@ groups:
           severity: warning
         annotations:
           summary: "ThreatOrbit detection backlog growing"
-          description: "{{ $value }} events pending detection for 10m on {{ $labels.instance }} — the pipeline is past its EPS ceiling (matches the self-health queue-depth threshold)."
+          description: "{{ $value }} events pending detection for 10m on {{ $labels.instance }} - the pipeline is past its EPS ceiling (matches the self-health queue-depth threshold)."
 
       - alert: ThreatOrbitDetectionLag
         expr: threatorbit_event_queue_lag_seconds > 300
@@ -72,7 +72,7 @@ groups:
           severity: warning
         annotations:
           summary: "ThreatOrbit detection lag high"
-          description: "Oldest pending event is {{ printf \"%.0f\" $value }}s old on {{ $labels.instance }} — detections are falling behind ingest."
+          description: "Oldest pending event is {{ printf \"%.0f\" $value }}s old on {{ $labels.instance }} - detections are falling behind ingest."
 
   - name: threatorbit-latency
     rules:
@@ -88,4 +88,4 @@ groups:
           severity: warning
         annotations:
           summary: "ThreatOrbit mean request latency > 1s"
-          description: "Average API request latency is {{ printf \"%.2f\" $value }}s over 5m — investigate DB/query load."
+          description: "Average API request latency is {{ printf \"%.2f\" $value }}s over 5m - investigate DB/query load."

@@ -9,7 +9,7 @@ ThreatOrbit's state lives in three SQLite databases (WAL mode):
 | `log_api` | `/data/log_api.db` | log-analysis findings/reports |
 
 The tooling takes a **live-safe, point-in-time snapshot** of each (SQLite's
-online backup API — no need to stop the service), verifies each with
+online backup API - no need to stop the service), verifies each with
 `PRAGMA integrity_check`, and bundles them into one timestamped `tar.gz`.
 
 ## Back up
@@ -58,13 +58,13 @@ python -m dashboard_api.backup restore \
 
 - **RPO** (how much data you can lose) = your backup interval. Run `backup.sh`
   from cron / a systemd timer at that cadence (e.g. hourly) and **ship the
-  archives off-box** (object storage / another host) — a backup on the same disk
+  archives off-box** (object storage / another host) - a backup on the same disk
   is not disaster recovery.
 - **RTO** (how long to recover) is a `down` → `restore.sh` → `up`, typically a
   minute or two for these database sizes.
 - **Retention**: keep a rolling window (e.g. 24 hourly + 30 daily) and prune
   older archives; each archive is self-contained.
-- **Verify restores periodically** — restore into a throwaway path and diff a
+- **Verify restores periodically** - restore into a throwaway path and diff a
   few row counts. An untested backup is a hope, not a plan.
 
 ## Encryption
@@ -72,7 +72,7 @@ python -m dashboard_api.backup restore \
 Archives contain operational data; encrypt them at rest in transit/off-box
 (e.g. `age`/`gpg` the `tar.gz`, or rely on encrypted object storage). Secrets
 already stored in the dashboard DB are Fernet-encrypted at the application layer
-(`DASHBOARD_ENCRYPTION_KEY`) — keep that key backed up **separately** from the
+(`DASHBOARD_ENCRYPTION_KEY`) - keep that key backed up **separately** from the
 archives, or a restore can't decrypt them.
 
 ## Postgres deployments

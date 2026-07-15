@@ -219,12 +219,12 @@ def record_api_key_use(conn, key_id: str, now_iso: str) -> None:
 def _principal_from_api_key(token: str) -> dict | None:
     """If `token` is a ThreatOrbit API key, verify it and return a synthetic
     service principal; None if it isn't key-shaped (so the JWT path takes over).
-    A key-shaped but invalid/revoked token raises 401 — it never falls through."""
+    A key-shaped but invalid/revoked token raises 401 - it never falls through."""
     if not any(token.startswith(p) for p in _API_KEY_PREFIXES):
         return None
     # The stored secret_hash is sha256 of the full secret; look the key up by
     # that hash directly (the high-entropy digest is the lookup key, GitHub-PAT
-    # style — no plaintext secret is ever stored or compared).
+    # style - no plaintext secret is ever stored or compared).
     digest = hashlib.sha256(token.encode()).hexdigest()
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
@@ -264,7 +264,7 @@ def current_user(
     if service is not None:
         return service
     payload = decode_token(token)
-    # A stream ticket is a 60s SSE-only credential — never a session token.
+    # A stream ticket is a 60s SSE-only credential - never a session token.
     if payload.get("typ") == "stream":
         raise HTTPException(status_code=401, detail="Not a session token")
     sid = payload.get("sid")
@@ -284,7 +284,7 @@ def current_user(
         raise HTTPException(status_code=401, detail="Session ended; please sign in again")
     # Per-device session: tokens minted with a `sid` are killable individually
     # ("sign out this device") via a row flag. Tokens without one (older sessions,
-    # SSO/SAML) fall through on the epoch check alone — backward compatible.
+    # SSO/SAML) fall through on the epoch check alone - backward compatible.
     if sid:
         if sess is None or sess["revoked"]:
             raise HTTPException(status_code=401, detail="Session ended; please sign in again")
@@ -334,7 +334,7 @@ def tenancy_enforced() -> bool:
 
 def current_session_id(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> str | None:
     """The caller's session id (JWT `sid`), so the sessions list can flag which
-    row is "this device". None for sid-less tokens. Never raises — the paired
+    row is "this device". None for sid-less tokens. Never raises - the paired
     `current_user` dependency already authenticates."""
     if creds is None or not creds.credentials:
         return None

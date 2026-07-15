@@ -1,6 +1,6 @@
 """Report narratives carry an honest prior-window trend sentence: a real
 movement (or flat) when the preceding window has data, an explicit no-baseline
-note when it doesn't — never an invented movement."""
+note when it doesn't - never an invented movement."""
 import datetime as dt
 import uuid
 
@@ -8,7 +8,7 @@ from dashboard_api.db import get_conn
 
 
 def test_siem_report_trend_sentence_computed(client, auth):
-    # Plant one alert 36h back so the daily report's preceding window (24–48h
+    # Plant one alert 36h back so the daily report's preceding window (24-48h
     # ago) is guaranteed non-empty regardless of seed/suite state.
     prior_ts = (dt.datetime.now(dt.timezone.utc)
                 - dt.timedelta(hours=36)).replace(microsecond=0).isoformat()

@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils'
 import Navbar from '@/components/layout/Navbar'
 import Logo from '@/components/ui/Logo'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// --- Types -------------------------------------------------------------------
 
 interface Module {
   id: string
@@ -49,7 +49,7 @@ interface TierFeature {
   enterprise: boolean | string
 }
 
-// ─── Data ────────────────────────────────────────────────────────────────────
+// --- Data --------------------------------------------------------------------
 
 const MODULES: Module[] = [
   {
@@ -231,7 +231,7 @@ const TIER_FEATURES: TierFeature[] = [
   },
 ]
 
-// ─── Animated Total ───────────────────────────────────────────────────────────
+// --- Animated Total -----------------------------------------------------------
 
 function AnimatedPrice({ value }: { value: number }) {
   const [displayValue, setDisplayValue] = useState(value)
@@ -261,7 +261,7 @@ function AnimatedPrice({ value }: { value: number }) {
   return <span>{displayValue.toLocaleString()}</span>
 }
 
-// ─── Feature Cell ─────────────────────────────────────────────────────────────
+// --- Feature Cell -------------------------------------------------------------
 
 function FeatureCell({ value }: { value: boolean | string }) {
   if (typeof value === 'string') {
@@ -285,7 +285,7 @@ function FeatureCell({ value }: { value: boolean | string }) {
   )
 }
 
-// ─── Module Chip ─────────────────────────────────────────────────────────────
+// --- Module Chip -------------------------------------------------------------
 
 function ModuleChip({
   module,
@@ -395,7 +395,7 @@ function ModuleChip({
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// --- Main Page ----------------------------------------------------------------
 
 export default function PricingPage() {
   const [selected, setSelected] = useState<Set<string>>(
@@ -439,7 +439,7 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0612] text-ink-100 overflow-x-hidden">
-      {/* ── Ambient background ── */}
+      {/* -- Ambient background -- */}
       <div className="fixed inset-0 pointer-events-none z-0" aria-hidden>
         {orbs.map((orb, i) => (
           <div
@@ -467,11 +467,11 @@ export default function PricingPage() {
         />
       </div>
 
-      {/* ── Navbar ── */}
+      {/* -- Navbar -- */}
       <Navbar />
 
       <main id="main-content" className="relative z-10">
-        {/* ── Hero ── */}
+        {/* -- Hero -- */}
         <section className="pt-32 pb-16 px-4 sm:px-6 text-center">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -505,7 +505,7 @@ export default function PricingPage() {
         <section className="px-4 sm:px-6 pb-24 max-w-[1400px] mx-auto">
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-8 xl:gap-10 items-start">
 
-            {/* ── Left: Module grid ── */}
+            {/* -- Left: Module grid -- */}
             <div>
               <motion.p
                 initial={{ opacity: 0 }}
@@ -563,7 +563,7 @@ export default function PricingPage() {
               </motion.div>
             </div>
 
-            {/* ── Right: Pricing summary card ── */}
+            {/* -- Right: Pricing summary card -- */}
             <motion.div
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
@@ -932,7 +932,7 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* ── FAQ / Trust strip ── */}
+        {/* -- FAQ / Trust strip -- */}
         <section className="px-4 sm:px-6 pb-32 max-w-4xl mx-auto text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1033,7 +1033,7 @@ export default function PricingPage() {
   )
 }
 
-// ─── Tier Header Sub-component ───────────────────────────────────────────────
+// --- Tier Header Sub-component -----------------------------------------------
 
 interface TierHeaderProps {
   name: string

@@ -167,7 +167,7 @@ def bundle(objects: list[dict]) -> dict:
     return {"type": "bundle", "id": f"bundle--{uuid.uuid4()}", "objects": objects}
 
 
-# ── Inbound: parse STIX → IOCs (TAXII write / push ingest) ────────────────────────
+# -- Inbound: parse STIX → IOCs (TAXII write / push ingest) ------------------------
 
 _PATTERN_RE = re.compile(
     r"(ipv4-addr|ipv6-addr|domain-name|url|email-addr|file:hashes[^=]*)"

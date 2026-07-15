@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'
 
-/* ─── Types ─────────────────────────────────────────────────────────── */
+/* --- Types ----------------------------------------------------------- */
 type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction' | 'Disruption'
 type ActorType = 'Nation-State' | 'Cybercrime' | 'Hacktivist'
 
@@ -42,7 +42,7 @@ interface ThreatActor {
   iocs: string[]
 }
 
-/* ─── Seed data ─────────────────────────────────────────────────────── */
+/* --- Seed data ------------------------------------------------------- */
 const ACTORS: ThreatActor[] = [
   {
     id: 'apt29',
@@ -316,7 +316,7 @@ const ACTORS: ThreatActor[] = [
   },
 ]
 
-/* ─── Config / lookups ──────────────────────────────────────────────── */
+/* --- Config / lookups ------------------------------------------------ */
 const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ComponentType<any> }> = {
   Espionage:   { color: tk('violet'), icon: Globe },
   Financial:   { color: tk('safe'), icon: DollarSign },
@@ -343,7 +343,7 @@ const FALLBACK_THREAT = { color: tk('amber'), label: 'Elevated' }
 // Lookup that tolerates any string the API might send.
 const threatCfg = (lvl: string) => THREAT_CFG[lvl as ThreatActor['threatLevel']] ?? FALLBACK_THREAT
 
-/* ─── Sophistication meter ──────────────────────────────────────────── */
+/* --- Sophistication meter -------------------------------------------- */
 function SophMeter({ level, color = tk('magenta') }: { level: number; color?: string }) {
   return (
     <div className="flex items-center gap-0.5">
@@ -361,7 +361,7 @@ function SophMeter({ level, color = tk('magenta') }: { level: number; color?: st
   )
 }
 
-/* ─── Motivation badge ──────────────────────────────────────────────── */
+/* --- Motivation badge ------------------------------------------------ */
 function MotivationBadge({ m }: { m: string }) {
   const cfg = MOTIVATION_CFG[m as Motivation] ?? FALLBACK_MOTIVATION
   const Icon = cfg.icon
@@ -375,7 +375,7 @@ function MotivationBadge({ m }: { m: string }) {
   )
 }
 
-/* ─── Actor card ────────────────────────────────────────────────────── */
+/* --- Actor card ------------------------------------------------------ */
 function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => void }) {
   const threat = threatCfg(actor.threatLevel)
   return (
@@ -425,7 +425,7 @@ function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => vo
   )
 }
 
-/* ─── Detail slide-over ─────────────────────────────────────────────── */
+/* --- Detail slide-over ----------------------------------------------- */
 function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => void }) {
   const threat = threatCfg(actor.threatLevel)
   return (
@@ -574,7 +574,7 @@ function SectionHead({ icon: Icon, title }: { icon: React.ComponentType<any>; ti
   )
 }
 
-/* ─── KPI strip ─────────────────────────────────────────────────────── */
+/* --- KPI strip ------------------------------------------------------- */
 const KPIS: { label: string; value: string | number; icon: React.ComponentType<any>; color: string; sub: string }[] = [
   { label: 'Tracked Actors',     value: 47, icon: Users,    color: tk('violet'), sub: 'in library' },
   { label: 'Active Campaigns',   value: 12, icon: Activity, color: tk('magenta'), sub: 'ongoing' },
@@ -582,7 +582,7 @@ const KPIS: { label: string; value: string | number; icon: React.ComponentType<a
   { label: 'Ransomware Groups',  value: 16, icon: Skull,    color: tk('amber'), sub: 'RaaS / extortion' },
 ]
 
-/* ─── Filter pill ───────────────────────────────────────────────────── */
+/* --- Filter pill ----------------------------------------------------- */
 function FilterSelect({
   value, onChange, options, icon: Icon,
 }: {
@@ -607,7 +607,7 @@ function FilterSelect({
   )
 }
 
-/* ─── Page ──────────────────────────────────────────────────────────── */
+/* --- Page ------------------------------------------------------------ */
 export default function ActorProfilesPage() {
   const [search, setSearch] = useState('')
   const [filterOrigin, setFilterOrigin] = useState<string>('all')

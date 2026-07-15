@@ -66,7 +66,7 @@ def configured() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
 
-# ── Tool registry (read-only, runs as the caller) ────────────────────────────────
+# -- Tool registry (read-only, runs as the caller) --------------------------------
 # Each entry: name -> (json-schema, fn(user, **input) -> JSON-safe dict).
 # Functions must never return secret columns.
 

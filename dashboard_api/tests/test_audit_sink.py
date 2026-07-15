@@ -81,7 +81,7 @@ def _failable_sink():
 
 def test_outbox_drain_orders_persists_and_replays(monkeypatch):
     """The durable path: committed rows beyond the persisted cursor are
-    delivered in id order; a sink outage never loses events — the cursor stays
+    delivered in id order; a sink outage never loses events - the cursor stays
     put and the next pass (same as a process restart) replays the tail."""
     from dashboard_api.db import audit, get_conn
     server, received, state = _failable_sink()
@@ -116,7 +116,7 @@ def test_outbox_drain_orders_persists_and_replays(monkeypatch):
         out = audit_sink.drain_once()
         assert out["delivered"] == 0 and out["pending"] == 1 and out["ok"] is False
         state["fail"] = False
-        # A fresh pass reads the cursor from the DB — exactly what a restart does.
+        # A fresh pass reads the cursor from the DB - exactly what a restart does.
         out = audit_sink.drain_once()
         assert out["delivered"] == 1 and received[-1]["action"] == "outbox.three"
     finally:

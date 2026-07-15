@@ -1,6 +1,6 @@
 name: E2E (Playwright)
 
-# Boots the real stack — seeded dashboard API + the production frontend export —
+# Boots the real stack - seeded dashboard API + the production frontend export -
 # and runs the Playwright suite (desktop + mobile projects) against it.
 
 on:

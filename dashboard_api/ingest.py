@@ -10,17 +10,17 @@ JSON ingest additionally recognises high-value source shapes and maps their
 distinctive fields onto the native vocabulary so the same rules fire on them:
 **Windows Security events** (EventID → event_type, e.g. 4625 → failed_login),
 **Sysmon** operational events (EID 1 → process_start, 3 → network_connect …),
-the three major clouds' audit logs — **AWS CloudTrail** (eventName →
+the three major clouds' audit logs - **AWS CloudTrail** (eventName →
 event_type), **Microsoft Entra / Azure AD** sign-in + directory audit, and
-**GCP Cloud Audit** (methodName → event_type); **endpoint EDR** — **CrowdStrike
+**GCP Cloud Audit** (methodName → event_type); **endpoint EDR** - **CrowdStrike
 Falcon** (event_simpleName / DetectionSummaryEvent) and **SentinelOne** (threat
-alerts); **Microsoft 365** — **Defender for Endpoint** Advanced-Hunting
+alerts); **Microsoft 365** - **Defender for Endpoint** Advanced-Hunting
 (ActionType) and the **Office 365 / M365 unified audit log** (Operation); and
-**firewalls** — **Palo Alto PAN-OS** (TRAFFIC/THREAT) and **Fortinet FortiGate**
-(JSON or key=value) — so e.g. a failed cloud/EDR/M365 sign-in lands as
+**firewalls** - **Palo Alto PAN-OS** (TRAFFIC/THREAT) and **Fortinet FortiGate**
+(JSON or key=value) - so e.g. a failed cloud/EDR/M365 sign-in lands as
 failed_login, a new key as create_access_key, and an AV/IPS hit as
 malware_detected / ips_alert across all of them. The two ubiquitous appliance
-envelopes — **CEF** (ArcSight) and **LEEF** (IBM QRadar) — are decoded too
+envelopes - **CEF** (ArcSight) and **LEEF** (IBM QRadar) - are decoded too
 (header classification + extension field mapping). TLS syslog (RFC 5425) streams
 in through the same pipeline (see `log_listeners.deframe_syslog`).
 
@@ -399,7 +399,7 @@ def _apply_gcp_audit(ev: dict, obj: dict) -> bool:
     return True
 
 
-# ── CrowdStrike Falcon (Streaming API / FDR) ──
+# -- CrowdStrike Falcon (Streaming API / FDR) --
 # event_simpleName keys most telemetry; DetectionSummaryEvent carries the
 # detection verdict. Mapped onto the native endpoint/network/auth vocabulary.
 _CS_SEV = {"critical": "critical", "high": "high", "medium": "medium",
@@ -415,7 +415,7 @@ _CROWDSTRIKE_SIMPLENAME = {
     "UserLogon2": ("login_success", "auth", "low", "T1078"),
 }
 
-# ── Microsoft 365 Defender / Defender for Endpoint (Advanced Hunting) ──
+# -- Microsoft 365 Defender / Defender for Endpoint (Advanced Hunting) --
 # Every Advanced-Hunting row is keyed by ActionType across the Device* tables.
 _DEFENDER_ACTIONTYPE = {
     "LogonFailed": ("failed_login", "auth", "high", "T1110"),
@@ -434,7 +434,7 @@ _DEFENDER_ACTIONTYPE = {
     "RegistryValueSet": ("registry_change", "endpoint", "low", "T1112"),
 }
 
-# ── Microsoft 365 / Office 365 Unified Audit Log (Management Activity API) ──
+# -- Microsoft 365 / Office 365 Unified Audit Log (Management Activity API) --
 # Keyed by Operation across Workloads (AzureActiveDirectory, Exchange, …).
 _M365_OPERATION = {
     "UserLoggedIn": ("login_success", "auth", "low", "T1078"),
@@ -453,7 +453,7 @@ _M365_OPERATION = {
     "Disable Strong Authentication.": ("mfa_disabled", "identity", "high", "T1556.006"),
 }
 
-# ── Palo Alto PAN-OS THREAT subtype → native type ──
+# -- Palo Alto PAN-OS THREAT subtype → native type --
 _PANOS_SUBTYPE = {
     "vulnerability": ("ips_alert", "high", "T1190"),
     "spyware": ("malware_detected", "high", "T1071"),
@@ -826,7 +826,7 @@ def _parse_apache(line: str) -> dict | None:
     return ev
 
 
-# ── CEF (ArcSight) and LEEF (IBM QRadar) - the two ubiquitous appliance envelopes ──
+# -- CEF (ArcSight) and LEEF (IBM QRadar) - the two ubiquitous appliance envelopes --
 _CEF_KV = re.compile(r"([A-Za-z][A-Za-z0-9_.]*)=(.*?)(?=(?:\s+[A-Za-z][A-Za-z0-9_.]*=)|$)")
 _WORD_SEV = {"low": "low", "medium": "medium", "high": "high",
              "very-high": "critical", "critical": "critical", "unknown": "info"}
@@ -1039,7 +1039,7 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
                 ev = parse_line(line, fmt)
             except Exception:
                 # A single malformed/crafted line must never abort the whole
-                # batch — that would drop every other forwarded line in the POST
+                # batch - that would drop every other forwarded line in the POST
                 # and 500 the ingest endpoint. Skip it; the rest still ingest.
                 logger.warning("skipping unparseable ingest line", exc_info=True)
                 skipped += 1
@@ -1063,7 +1063,7 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
                 rows)
             # Auto-discover the source: a collector whose name has no log_sources
             # row is invisible on SIEM → Sources. Register it on first ingest so
-            # the page reflects the real flow with zero setup — the live
+            # the page reflects the real flow with zero setup - the live
             # Events(24h) count attaches by name. One existence check per batch;
             # a rare concurrent first-ingest can duplicate the row (no unique
             # constraint on name), which is cosmetic and operator-fixable.

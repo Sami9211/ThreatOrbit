@@ -1,20 +1,20 @@
-"""Platform self-health — the SOC watching its own vitals.
+"""Platform self-health - the SOC watching its own vitals.
 
 Aggregates real, cheap subsystem signals into one verdict so operators (and the
-UI) can answer "is the platform itself healthy right now?" — the piece plan.md
+UI) can answer "is the platform itself healthy right now?" - the piece plan.md
 called out as missing (alerting on the platform's *own* health).
 
 Every number here is measured, never assumed:
 
-  * **database** — a real ``SELECT 1`` with its round-trip latency
-  * **schema**   — code vs. on-disk migration version (drift ⇒ degraded)
-  * **queue**    — detection backlog depth + lag of the oldest pending event
-  * **leader**   — background-work lease snapshot (informational)
-  * **process**  — uptime + cumulative error/engine counters (informational)
+  * **database** - a real ``SELECT 1`` with its round-trip latency
+  * **schema**   - code vs. on-disk migration version (drift ⇒ degraded)
+  * **queue**    - detection backlog depth + lag of the oldest pending event
+  * **leader**   - background-work lease snapshot (informational)
+  * **process**  - uptime + cumulative error/engine counters (informational)
 
 The overall verdict is the worst *gating* check: database down ⇒ ``down``;
 schema drift or a queue past its thresholds ⇒ ``degraded``; otherwise ``ok``.
-Informational checks (leader, process) never gate — a follower that holds no
+Informational checks (leader, process) never gate - a follower that holds no
 lease is perfectly healthy, and cumulative counters are context, not a verdict.
 Thresholds are env-tunable so a high-throughput deployment can widen them.
 """
@@ -35,14 +35,14 @@ _RANK = {OK: 0, DEGRADED: 1, DOWN: 2}
 
 # Backpressure thresholds (env-tunable). Defaults are generous: a healthy live
 # pipeline drains within seconds, so 300s of lag or a 10k backlog means the
-# detection loop is falling behind — worth flagging degraded, not down.
+# detection loop is falling behind - worth flagging degraded, not down.
 _LAG_WARN = float(os.environ.get("DASHBOARD_HEALTH_LAG_SECONDS", "300"))
 _DEPTH_WARN = int(os.environ.get("DASHBOARD_HEALTH_QUEUE_DEPTH", "10000"))
 
 
 def _worst(statuses) -> str:
     """Worst status among the gating checks (down > degraded > ok). Statuses
-    outside the rank table (e.g. ``unknown``) don't gate — the check that
+    outside the rank table (e.g. ``unknown``) don't gate - the check that
     caused them, such as ``database=down``, already carries the real signal."""
     ranked = [s for s in statuses if s in _RANK]
     if not ranked:
@@ -88,7 +88,7 @@ def _queue_check(conn) -> dict:
 
 def _leader_check() -> dict:
     """Background-work lease snapshot (informational). A single-replica install
-    is always its own leader; a follower simply holds no lease — neither is a
+    is always its own leader; a follower simply holds no lease - neither is a
     fault, so this never gates the verdict."""
     try:
         from dashboard_api import leader
@@ -102,7 +102,7 @@ def _leader_check() -> dict:
 
 def _process_check() -> dict:
     """Uptime + cumulative domain counters (informational). Counters are
-    monotonic totals since process start, not a rate — context for the verdict,
+    monotonic totals since process start, not a rate - context for the verdict,
     never the verdict itself."""
     snap = observability.counters_snapshot()
     return {
@@ -120,7 +120,7 @@ def collect() -> dict:
 
     Opens one connection and reuses it for the DB-dependent checks. If the DB
     is unreachable the database check reports ``down`` and the checks that need
-    it are marked ``unknown`` rather than fabricated — the caller still gets a
+    it are marked ``unknown`` rather than fabricated - the caller still gets a
     truthful ``down`` verdict."""
     checks: dict[str, dict] = {}
     t0 = time.perf_counter()
@@ -147,10 +147,10 @@ def collect() -> dict:
     }
 
 
-# ── Proactive alerting (the "alerting on the platform's own health" piece) ────────
+# -- Proactive alerting (the "alerting on the platform's own health" piece) --------
 #
 # A background monitor samples the verdict and raises a notification-centre alert
-# only on a *transition* — a steadily-degraded platform must not spam the bell
+# only on a *transition* - a steadily-degraded platform must not spam the bell
 # every minute. The wiring (a leader-gated daemon thread) lives in main.py so
 # exactly one replica alerts; this module owns the transition logic + the alert.
 
@@ -180,7 +180,7 @@ def _raise_alert(prev: str, status: str, health: dict) -> None:
     logger.log(_ALERT_LEVEL.get(status, logging.INFO),
                "Platform self-health %s→%s: %s", prev, status, detail)
     # Best-effort persist to the notification centre. When the DB is itself the
-    # fault (a down verdict for a DB reason) the INSERT can't land — the log line
+    # fault (a down verdict for a DB reason) the INSERT can't land - the log line
     # above, plus /metrics and Sentry, are the out-of-band channels for that case.
     try:
         from dashboard_api.routers.platform import notify
@@ -195,7 +195,7 @@ def _raise_alert(prev: str, status: str, health: dict) -> None:
 def monitor_once() -> dict:
     """Sample the verdict; alert on a transition. The first call just records the
     baseline (no alert). Returns the health snapshot so callers/tests can inspect
-    it. Not thread-safe by design — a single monitor thread drives it."""
+    it. Not thread-safe by design - a single monitor thread drives it."""
     global _last_status
     health = collect()
     status = health["status"]

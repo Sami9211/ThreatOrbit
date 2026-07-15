@@ -17,7 +17,7 @@ import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { fetchAssets, fetchAsset, createAsset, deleteAsset, recomputeAssetRisk, scanAssetVulns, fetchAssetActivity, type RiskBreakdown, type AssetActivity } from '@/lib/api'
 import { tk, withAlpha } from '@/lib/colors'
 
-/* ── Types ───────────────────────────────────────────────────────── */
+/* -- Types --------------------------------------------------------- */
 type AssetType = 'domain' | 'ip' | 'server' | 'cloud' | 'database' | 'endpoint'
 type ScanStatus = 'clean' | 'scanning' | 'at-risk' | 'critical' | 'unscanned'
 type Criticality = 'critical' | 'high' | 'medium' | 'low'
@@ -41,7 +41,7 @@ type Asset = {
   uptime?: number
 }
 
-/* ── Meta ───────────────────────────────────────────────────────── */
+/* -- Meta --------------------------------------------------------- */
 const TYPE_META: Record<AssetType, { icon: React.ComponentType<any>; label: string; color: string }> = {
   domain:   { icon: Globe,      label: 'Domain',     color: tk('violet') },
   ip:       { icon: Wifi,       label: 'IP / Host',  color: tk('teal') },
@@ -63,7 +63,7 @@ const CRIT_COLOR: Record<Criticality, string> = {
   critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'),
 }
 
-/* ── Seed data ──────────────────────────────────────────────────── */
+/* -- Seed data ---------------------------------------------------- */
 const SEED: Asset[] = [
   {
     id: 'a1', name: 'Corporate Website', type: 'domain', value: 'acme-corp.com',
@@ -128,7 +128,7 @@ const ROW_GRID =
   'md:grid-cols-[1.4fr_70px_90px_80px_100px_80px] ' +          // +CVEs
   'lg:grid-cols-[1.4fr_70px_90px_110px_80px_100px_80px]'       // +Ports/OS
 
-/* ── Sub-components ─────────────────────────────────────────────── */
+/* -- Sub-components ----------------------------------------------- */
 function RiskRing({ score, size = 52 }: { score: number; size?: number }) {
   const r = size / 2 - 7
   const circ = 2 * Math.PI * r
@@ -170,9 +170,9 @@ function CveBadges({ cves }: { cves: Asset['cves'] }) {
   )
 }
 
-/* ── Main page ─────────────────────────────────────────────────── */
+/* -- Main page --------------------------------------------------- */
 export default function AssetsPage() {
-  // Empty by default — the API is the source of truth. On a real deployment an
+  // Empty by default - the API is the source of truth. On a real deployment an
   // empty inventory is honest ("no assets yet"), never a cue to show demo hosts.
   // SEED is used only if the API is unreachable (offline/marketing preview).
   const [assets, setAssets] = useState<Asset[]>([])
@@ -314,7 +314,7 @@ export default function AssetsPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ── Main column ─────────────────────────────────────────── */}
+      {/* -- Main column ------------------------------------------- */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/5 flex flex-wrap gap-3 items-center justify-between shrink-0">
@@ -428,7 +428,7 @@ export default function AssetsPage() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          {/* ── TABLE VIEW ───────────────────────────────────────── */}
+          {/* -- TABLE VIEW ----------------------------------------- */}
           {view === 'table' && (
             <>
               <div className={cn(ROW_GRID, 'px-4 py-2 border-b border-white/5 text-[10px] text-ink-600 uppercase tracking-wide')}>
@@ -548,7 +548,7 @@ export default function AssetsPage() {
             </>
           )}
 
-          {/* ── CARD VIEW ────────────────────────────────────────── */}
+          {/* -- CARD VIEW ------------------------------------------ */}
           {view === 'cards' && (
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filtered.length === 0 && (assetsPending
@@ -693,7 +693,7 @@ export default function AssetsPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Right panel ─────────────────────────────────────────────
+      {/* -- Right panel ---------------------------------------------
           xl+: static column in normal flow.
           below xl: fixed slide-over drawer, visible only when an asset
           is selected (the inline column would otherwise be unreachable). */}
@@ -954,7 +954,7 @@ export default function AssetsPage() {
         )}
       </div>
 
-      {/* ── Add asset modal ──────────────────────────────────────── */}
+      {/* -- Add asset modal ---------------------------------------- */}
       <AnimatePresence>
         {showAdd && (
           <motion.div

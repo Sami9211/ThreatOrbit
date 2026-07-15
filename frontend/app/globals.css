@@ -37,7 +37,7 @@
   color-scheme: dark;
 }
 
-/* ── Monochrome - "black & white" graphite ─────────────────────────── */
+/* -- Monochrome - "black & white" graphite --------------------------- */
 [data-theme='mono'] {
   --bg: 10 10 11;
   --surface: 19 19 21;
@@ -68,7 +68,7 @@
   color: #0a0a0b !important;
 }
 
-/* ── Arctic - cool sky/indigo on deep navy ─────────────────────────── */
+/* -- Arctic - cool sky/indigo on deep navy --------------------------- */
 [data-theme='arctic'] {
   --bg: 6 11 18;
   --surface: 10 17 28;
@@ -90,7 +90,7 @@
   --ink-800: 30 41 59;
 }
 
-/* ── Matrix - terminal green on near-black ─────────────────────────── */
+/* -- Matrix - terminal green on near-black --------------------------- */
 [data-theme='matrix'] {
   --bg: 5 10 5;
   --surface: 8 17 8;
@@ -112,7 +112,7 @@
   --ink-800: 26 34 26;
 }
 
-/* ── Solar Flare - amber/orange on warm dark ───────────────────────── */
+/* -- Solar Flare - amber/orange on warm dark ------------------------- */
 [data-theme='solar'] {
   --bg: 18 11 5;
   --surface: 26 16 8;
@@ -134,7 +134,7 @@
   --ink-800: 38 31 24;
 }
 
-/* ── Crimson - rose/red threat aesthetic ───────────────────────────── */
+/* -- Crimson - rose/red threat aesthetic ----------------------------- */
 [data-theme='crimson'] {
   --bg: 15 6 8;
   --surface: 23 10 13;
@@ -156,7 +156,7 @@
   --ink-800: 39 26 30;
 }
 
-/* ── Nebula - violet/fuchsia/cyan on deep indigo ───────────────────── */
+/* -- Nebula - violet/fuchsia/cyan on deep indigo --------------------- */
 [data-theme='nebula'] {
   --bg: 11 8 24;
   --surface: 18 13 36;
@@ -178,7 +178,7 @@
   --ink-800: 38 33 56;
 }
 
-/* ── Oceanic - cyan/aqua/blue on deep teal-navy ────────────────────── */
+/* -- Oceanic - cyan/aqua/blue on deep teal-navy ---------------------- */
 [data-theme='oceanic'] {
   --bg: 5 14 20;
   --surface: 8 22 31;
@@ -200,7 +200,7 @@
   --ink-800: 28 40 48;
 }
 
-/* ── Cyberpunk - neon cyan/magenta/lime on pure black ──────────────── */
+/* -- Cyberpunk - neon cyan/magenta/lime on pure black ---------------- */
 [data-theme='cyber'] {
   --bg: 6 6 10;
   --surface: 12 12 18;
@@ -222,7 +222,7 @@
   --ink-800: 28 36 44;
 }
 
-/* ── Slate - cool professional blue-grey ───────────────────────────── */
+/* -- Slate - cool professional blue-grey ----------------------------- */
 [data-theme='slate'] {
   --bg: 9 12 18;
   --surface: 15 20 30;
@@ -244,7 +244,7 @@
   --ink-800: 34 42 58;
 }
 
-/* ── Ember - warm rose/gold on charcoal ────────────────────────────── */
+/* -- Ember - warm rose/gold on charcoal ------------------------------ */
 [data-theme='ember'] {
   --bg: 14 10 9;
   --surface: 22 16 14;
@@ -266,7 +266,7 @@
   --ink-800: 40 32 28;
 }
 
-/* ── Customization knobs (layered on top of the active theme) ──────────
+/* -- Customization knobs (layered on top of the active theme) ----------
    Reduced motion is enforced here. UI scale and compact density act on the
    document's rem baseline (set by ThemeScope), and the custom accent is
    applied inline (--magenta override) by ThemeScope. */
@@ -296,7 +296,7 @@ body {
   overflow-x: hidden;
 }
 
-/* ── Fluid page container ────────────────────────────────────────────
+/* -- Fluid page container --------------------------------------------
  * Single source of truth for the marketing/site content width. The old
  * fixed `max-w-7xl` (80rem) left large empty gutters on wide / ultrawide
  * displays. Instead the width now tracks the viewport: it stays at the
@@ -600,7 +600,7 @@ body {
   }
 }
 
-/* ── Dashboard page density ─────────────────────────────────────────
+/* -- Dashboard page density -----------------------------------------
  * The Overview page is authored at a dense, laptop-friendly scale. The other
  * dashboard routes were built a touch larger, so on laptop/desktop they read as
  * "zoomed in". We scale their content down to match Overview - but only from the

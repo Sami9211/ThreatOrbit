@@ -12,7 +12,7 @@ def normalize_iocs(iocs: List[IOC]) -> List[IOC]:
     for ioc in iocs:
         # Per-IOC isolation: one malformed value from a feed (e.g. a url/domain
         # like "http://[" that makes urlparse raise) must never abort the whole
-        # refresh — that would discard every IOC from every source. Skip it.
+        # refresh - that would discard every IOC from every source. Skip it.
         try:
             v = (ioc.value or "").strip()
             if not v:

@@ -17,7 +17,7 @@ import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt
 import CreateModal from '@/components/dashboard/CreateModal'
 import { tk } from '@/lib/colors'
 
-/* ── Threat Actors ───────────────────────────────────────────────── */
+/* -- Threat Actors ------------------------------------------------- */
 type Actor = {
   id: string
   name: string
@@ -115,7 +115,7 @@ const ACTORS: Actor[] = [
   },
 ]
 
-/* ── MITRE ATT&CK mini matrix ────────────────────────────────────── */
+/* -- MITRE ATT&CK mini matrix -------------------------------------- */
 const MITRE_TACTICS = [
   { id: 'recon',        name: 'Recon',         techs: ['T1590', 'T1591', 'T1593'] },
   { id: 'resource',     name: 'Resource Dev',  techs: ['T1583', 'T1584', 'T1585'] },
@@ -147,7 +147,7 @@ function heatColor(level: number) {
   return 'transparent'
 }
 
-/* ── IOC counts ──────────────────────────────────────────────────── */
+/* -- IOC counts ---------------------------------------------------- */
 const IOC_TYPES = [
   { type: 'IP Addresses',   count: 4821,  icon: Globe,  color: tk('magenta') },
   { type: 'Domains',        count: 3247,  icon: Network, color: tk('violet') },
@@ -155,7 +155,7 @@ const IOC_TYPES = [
   { type: 'URLs',           count: 2103,  icon: Target,  color: tk('teal') },
 ]
 
-/* ── Actor card ──────────────────────────────────────────────────── */
+/* -- Actor card ---------------------------------------------------- */
 function ActorCard({ actor, selected, onSelect }: { actor: Actor; selected: boolean; onSelect: () => void }) {
   return (
     <div
@@ -195,7 +195,7 @@ function ActorCard({ actor, selected, onSelect }: { actor: Actor; selected: bool
   )
 }
 
-/* ── Actor detail ────────────────────────────────────────────────── */
+/* -- Actor detail -------------------------------------------------- */
 function ActorDetail({ actor }: { actor: Actor }) {
   return (
     <motion.div
@@ -283,7 +283,7 @@ function ActorDetail({ actor }: { actor: Actor }) {
   )
 }
 
-/* ── Per-actor campaign names (for the investigation graph) ──────── */
+/* -- Per-actor campaign names (for the investigation graph) -------- */
 const ACTOR_CAMPAIGNS: Record<string, string[]> = {
   apt38:     ['TraderTraitor', 'AppleJeus', 'Operation Dream Job'],
   apt29:     ['SolarWinds', 'Midnight Blizzard', 'Cozy Bear DNC'],
@@ -325,7 +325,7 @@ function buildGraph(actor: Actor): GraphData {
   }
 }
 
-/* ── Threat Hunt Panel ───────────────────────────────────────────── */
+/* -- Threat Hunt Panel --------------------------------------------- */
 type HuntStatus = 'active' | 'completed' | 'paused'
 const HUNTS = [
   { id: 'h1', name: 'Lazarus BLINDINGCAN Sweep', hypothesis: 'Undetected BLINDINGCAN RAT samples in endpoint telemetry', status: 'active' as HuntStatus, artifacts: 3, analyst: 'Alice', progress: 62, created: '2d ago' },
@@ -457,7 +457,7 @@ function ThreatHuntPanel() {
   )
 }
 
-/* ── Sector Targeting ──────────────────────────────────────────────
+/* -- Sector Targeting ----------------------------------------------
    Derived live from the tracked actors' `sectors` field (no hardcoded list):
    the "heat" of a sector is how many tracked actors target it, normalised so
    the most-targeted sector reads 100. */
@@ -488,7 +488,7 @@ function SectorTargeting({ actors }: { actors: Actor[] }) {
         <h3 className="text-sm font-semibold text-white">Sector Targeting Heat</h3>
       </div>
       {data.length === 0 ? (
-        <p className="text-xs text-ink-500">No sector data yet — add tracked actors with target sectors.</p>
+        <p className="text-xs text-ink-500">No sector data yet - add tracked actors with target sectors.</p>
       ) : (
       <div className="space-y-2.5">
         {data.map(({ sector, score, actors }, i) => (
@@ -521,7 +521,7 @@ function SectorTargeting({ actors }: { actors: Actor[] }) {
   )
 }
 
-/* ── Normal Mode: Threat Brief ───────────────────────────────────── */
+/* -- Normal Mode: Threat Brief ------------------------------------- */
 function NormalCTI() {
   const [sum, setSum] = useState<CtiSummary | null>(null)
   const [actors, setActors] = useState<Actor[]>([])
@@ -650,7 +650,7 @@ function NormalCTI() {
   )
 }
 
-/* ── Page ────────────────────────────────────────────────────────── */
+/* -- Page ---------------------------------------------------------- */
 // API actors use a different shape (motivations[], campaign_count, integer
 // sophistication, ISO dates). Map them explicitly - a blind cast crashes the
 // page as soon as live data loads.
@@ -685,7 +685,7 @@ function apiActorToPage(a: ApiActor): Actor {
 export default function CTIPage() {
   const [actors, setActors] = useState<Actor[]>(ACTORS)
   const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
-  // Empty until the API answers — the per-type counts are the store's, never
+  // Empty until the API answers - the per-type counts are the store's, never
   // the demo constants. IOC_TYPES shows only if the fetch fails (offline).
   const [iocTypes, setIocTypes] = useState<typeof IOC_TYPES>([])
   const [mode] = useExperienceMode()

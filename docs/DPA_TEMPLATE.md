@@ -1,4 +1,4 @@
-# Data Processing Agreement (DPA) — template
+# Data Processing Agreement (DPA) - template
 
 > **This is a template, not legal advice.** It is provided to speed an
 > enterprise procurement / privacy review. Have it reviewed by qualified counsel
@@ -17,7 +17,7 @@ the processing of Personal Data in connection with the ThreatOrbit platform (the
 2016/679, **"GDPR"**) and, where applicable, the UK GDPR and other Data
 Protection Laws.
 
-## 0. Deployment model — read first
+## 0. Deployment model - read first
 
 ThreatOrbit can run in two ways, and the processing roles differ:
 
@@ -26,7 +26,7 @@ ThreatOrbit can run in two ways, and the processing roles differ:
   Processor has **no access** to Personal Data processed in that deployment and
   is **not a processor** of it. The Processor acts as a processor only for any
   diagnostic, support, or telemetry data the Customer chooses to share (e.g. when
-  raising a support request). Sections 4–9 then apply only to that shared data.
+  raising a support request). Sections 4-9 then apply only to that shared data.
 - **Managed / SaaS (Processor-operated).** The Processor hosts the Service for
   the Customer and processes Customer Personal Data on the Customer's behalf.
   The full DPA applies.
@@ -79,7 +79,7 @@ term.
 organisational measures and insofar as possible, to respond to Data-Subject
 requests (Section 6).
 
-3.6 **Assistance.** Assist the Customer in ensuring compliance with Art. 32–36
+3.6 **Assistance.** Assist the Customer in ensuring compliance with Art. 32-36
 (security, breach notification, DPIAs and prior consultation), taking into
 account the nature of Processing and the information available to the Processor.
 
@@ -124,20 +124,20 @@ as Sub-processors under its own DPAs.
 The Service provides tooling so the Customer can fulfil Data-Subject rights
 without bespoke engineering (see Annex II):
 
-- **Access / portability** — self-service export (`GET /privacy/me`) and an
+- **Access / portability** - self-service export (`GET /privacy/me`) and an
   admin export of a subject's data (`GET /privacy/export/{user_id}`), returned as
   structured JSON.
-- **Erasure (right to be forgotten)** — `POST /privacy/erase/{user_id}`
+- **Erasure (right to be forgotten)** - `POST /privacy/erase/{user_id}`
   **anonymises** the subject's PII and disables the account (operational and
   audit integrity are preserved by replacing rather than hard-deleting linked
   records), satisfying Art. 17 by rendering data no longer attributable.
-- **Rectification / restriction** — user-management endpoints let the Customer
+- **Rectification / restriction** - user-management endpoints let the Customer
   correct or disable accounts.
 
 If the Processor receives a Data-Subject request directly, it will (unless legally
 required to act) refer the Data Subject to the Customer and notify the Customer.
 
-## 7. Personal Data Breach (Art. 33–34)
+## 7. Personal Data Breach (Art. 33-34)
 
 7.1 The Processor will notify the Customer **without undue delay, and in any
 event within [48] hours**, after becoming aware of a Personal Data Breach
@@ -202,7 +202,7 @@ Personal Data under the Principal Agreement.
 
 ---
 
-## Annex I — Details of Processing
+## Annex I - Details of Processing
 
 | Item | Detail |
 |---|---|
@@ -211,11 +211,11 @@ Personal Data under the Principal Agreement.
 | **Duration** | The term of the Principal Agreement |
 | **Nature & purpose** | Collection, storage, organisation, analysis, alerting and reporting of security telemetry and platform-user account data to deliver security monitoring and response |
 | **Categories of Data Subjects** | The Customer's platform **users/operators** (analysts, admins); **individuals appearing in ingested security telemetry** (e.g. usernames, source IPs in logs/events); individuals named in threat-intelligence or dark-web findings the Customer ingests |
-| **Categories of Personal Data** | Account data (name, email, role, hashed credentials, MFA secrets — encrypted, audit/login metadata); telemetry-derived identifiers (usernames, IP addresses, hostnames, device/process names) within ingested events/alerts; any Personal Data the Customer chooses to ingest |
+| **Categories of Personal Data** | Account data (name, email, role, hashed credentials, MFA secrets - encrypted, audit/login metadata); telemetry-derived identifiers (usernames, IP addresses, hostnames, device/process names) within ingested events/alerts; any Personal Data the Customer chooses to ingest |
 | **Special categories (Art. 9)** | None intended. The Customer must not ingest special-category data unless it has a lawful basis and has configured appropriate safeguards |
 | **Frequency** | Continuous, for the term |
 
-## Annex II — Technical & Organisational Measures (Art. 32)
+## Annex II - Technical & Organisational Measures (Art. 32)
 
 Grounded in controls the Service **actually implements** (evidence in the
 repository; see `docs/COMPLIANCE.md` for the full SOC 2 / ISO 27001 mapping):
@@ -241,11 +241,11 @@ The Customer is responsible for measures within its control: TLS termination,
 network/firewall configuration, OS/disk encryption, infrastructure hardening,
 and (self-hosted) backups and patching.
 
-## Annex III — Sub-processors
+## Annex III - Sub-processors
 
 For a **managed/SaaS** deployment, the mandatory Sub-processor is the hosting
 provider; the integrations below are engaged **only if the Customer enables
-them**. For a **self-hosted** deployment there are no mandatory Sub-processors —
+them**. For a **self-hosted** deployment there are no mandatory Sub-processors -
 the Customer chooses all of these.
 
 | Sub-processor | Purpose | Engaged when |
@@ -264,7 +264,7 @@ the Customer chooses all of these.
 > indicator value to enrich), not bulk Personal Data. The Customer controls which
 > are enabled.
 
-## Annex IV — Standard Contractual Clauses (if applicable)
+## Annex IV - Standard Contractual Clauses (if applicable)
 
 Where restricted international transfers occur, the EU SCCs (Commission
 Implementing Decision (EU) 2021/914) Module **[Two: Controller→Processor]** apply

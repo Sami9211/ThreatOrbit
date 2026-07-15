@@ -1,7 +1,7 @@
 # ThreatOrbit Helm chart
 
-Deploys the full platform on Kubernetes — `dashboard-api` (:8002), `threat-api`
-(:8000), `log-api` (:8000) and the `frontend` (nginx :80) — mirroring
+Deploys the full platform on Kubernetes - `dashboard-api` (:8002), `threat-api`
+(:8000), `log-api` (:8000) and the `frontend` (nginx :80) - mirroring
 [`docker-compose.yml`](../../docker-compose.yml).
 
 ## Quick start

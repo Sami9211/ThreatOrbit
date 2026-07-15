@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { tk, withAlpha } from '@/lib/colors'
 
-/* ── Types ───────────────────────────────────────────────────────── */
+/* -- Types --------------------------------------------------------- */
 type Zone = 'dmz' | 'internal' | 'cloud' | 'ot'
 type NodeType = 'internet' | 'firewall' | 'server' | 'workstation' | 'cloud' | 'database' | 'ot'
 type Risk = 'critical' | 'warning' | 'healthy'
@@ -36,7 +36,7 @@ interface Link {
   to: string
 }
 
-/* ── Meta ───────────────────────────────────────────────────────── */
+/* -- Meta --------------------------------------------------------- */
 const ZONE_META: Record<Zone, { label: string; color: string }> = {
   dmz:      { label: 'DMZ',      color: tk('amber') },
   internal: { label: 'Internal', color: tk('violet') },
@@ -60,7 +60,7 @@ const TYPE_LABEL: Record<NodeType, string> = {
   workstation: 'Workstation', cloud: 'Cloud Resource', database: 'Database', ot: 'OT / ICS Device',
 }
 
-/* ── Topology coordinate space and zone panels ───────────────────── */
+/* -- Topology coordinate space and zone panels --------------------- */
 const VB_W = 1000
 const VB_H = 640
 
@@ -189,7 +189,7 @@ function shortestPath(links: Link[], from: string, to: string): string[] | null 
   return null
 }
 
-/* ── Main page ─────────────────────────────────────────────────── */
+/* -- Main page --------------------------------------------------- */
 export default function NetworkMapPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
@@ -301,7 +301,7 @@ export default function NetworkMapPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  /* ── Pointer interactions: drag nodes, pan canvas, wheel zoom ──── */
+  /* -- Pointer interactions: drag nodes, pan canvas, wheel zoom ---- */
   const toSvg = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
@@ -360,7 +360,7 @@ export default function NetworkMapPage() {
 
   // Zoom toward a fractional anchor (fx,fy in 0..1 of the SVG box; default
   // centre). The anchor's user-space point is derived from the LIVE `prev`
-  // inside the updater — not a mirrored ref — so a fast/held pinch doesn't
+  // inside the updater - not a mirrored ref - so a fast/held pinch doesn't
   // drift the centre and wobble. ViewBox values are rounded to kill the
   // sub-pixel shimmer that also reads as "shake".
   const zoomBy = useCallback((factor: number, fx = 0.5, fy = 0.5) => {
@@ -374,7 +374,7 @@ export default function NetworkMapPage() {
     })
   }, [])
 
-  // Button zoom takes one big step, so ease it (wheel/pinch stays instant —
+  // Button zoom takes one big step, so ease it (wheel/pinch stays instant -
   // it's already incremental and must track the finger). Reduced motion jumps.
   const vbRef = useRef(vb)
   useEffect(() => { vbRef.current = vb }, [vb])
@@ -547,7 +547,7 @@ export default function NetworkMapPage() {
                     stroke={onAttackPath ? tk('magenta') : active ? '#B98AFF' : 'url(#nm-link)'}
                     strokeWidth={onAttackPath ? 2.4 : active ? 1.8 : 1.1}
                     strokeOpacity={dim ? 0.07 : onAttackPath ? 0.95 : active ? 0.85 : 0.4} />
-                  {/* Traffic particle — SMIL, so gate on reduced motion directly */}
+                  {/* Traffic particle - SMIL, so gate on reduced motion directly */}
                   {!dim && !reduced && (
                     <circle r={onAttackPath ? 3 : 1.8}
                       fill={onAttackPath ? tk('magenta') : '#B98AFF'}
@@ -594,7 +594,7 @@ export default function NetworkMapPage() {
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ duration: DUR.base, delay: Math.min(nodeIdx * 0.025, 0.45), ease: [...EASE] }}>
 
-                  {/* Critical pulse / selection ring — SMIL, gated on reduced motion */}
+                  {/* Critical pulse / selection ring - SMIL, gated on reduced motion */}
                   {(isSel || isMatch || (n.risk === 'critical' && !dim)) && (
                     <circle r={r + 11} fill="none" stroke={isMatch ? tk('safe') : riskColor} strokeWidth={1.2} opacity={0.5}>
                       {!reduced && <>

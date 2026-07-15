@@ -1,6 +1,6 @@
 # Test-only dependencies (NOT installed into the production image).
 #
-# httpx2 — Starlette >=1.3 prefers `httpx2` for its TestClient and only falls
+# httpx2 - Starlette >=1.3 prefers `httpx2` for its TestClient and only falls
 #   back to the legacy `httpx` shim with a StarletteDeprecationWarning; a future
 #   Starlette release drops that fallback entirely. Needed only so the FastAPI
 #   TestClient in the test suite runs on the sanctioned client.

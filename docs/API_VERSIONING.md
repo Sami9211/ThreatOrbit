@@ -12,8 +12,8 @@ GET /siem/alerts        ==  GET /v1/siem/alerts
 POST /auth/login        ==  POST /v1/auth/login
 ```
 
-`/v1/...` is an exact alias of the canonical handler — same request, same
-response — implemented as a pure-ASGI path rewrite
+`/v1/...` is an exact alias of the canonical handler - same request, same
+response - implemented as a pure-ASGI path rewrite
 ([`dashboard_api/api_versioning.py`](../dashboard_api/api_versioning.py)), so
 there is a single route table and no duplicated OpenAPI operations. Responses to
 `/v1` requests carry an **`X-API-Version: v1`** header.
@@ -29,7 +29,7 @@ Within a major version (`v1`) we guarantee, for every documented path in
 
 - the path will not be **removed** or renamed;
 - existing request fields keep their meaning; responses are **additive only**
-  (new fields may appear — clients must tolerate unknown fields);
+  (new fields may appear - clients must tolerate unknown fields);
 - authentication and status-code semantics for a route don't change
   incompatibly.
 
@@ -46,11 +46,11 @@ When a route or field must be retired:
 
 1. **Announce** in the CHANGELOG (`plan.md`) and mark it deprecated in the
    OpenAPI description.
-2. **Signal at runtime** — the retiring handler calls
+2. **Signal at runtime** - the retiring handler calls
    `api_versioning.mark_deprecated(response, sunset=…)`, so its responses carry
    `Deprecation: true` and, where a removal date is set, a `Sunset: <HTTP-date>`
    header (RFC 8594).
-3. **Grace period** — at least **6 months** (or two minor releases, whichever is
+3. **Grace period** - at least **6 months** (or two minor releases, whichever is
    longer) between announcement and removal.
 4. **Remove** only in a new major version; the previous version keeps serving
    the old behaviour until its own sunset.
@@ -59,8 +59,8 @@ When a route or field must be retired:
 
 FastAPI serves the live schema and interactive docs:
 
-- `GET /openapi.json` — machine-readable schema
-- `GET /docs` — Swagger UI · `GET /redoc` — ReDoc
+- `GET /openapi.json` - machine-readable schema
+- `GET /docs` - Swagger UI · `GET /redoc` - ReDoc
 
 Per-release snapshots are produced by
 [`scripts/openapi_snapshot.py`](../scripts/openapi_snapshot.py):

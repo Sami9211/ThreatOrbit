@@ -23,6 +23,6 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 
 # Single worker: analysis results are persisted to the DB (so they're shared),
-# but the metrics counters are still in-process — keep one worker until those are
+# but the metrics counters are still in-process - keep one worker until those are
 # externalised, then this can scale.
 CMD ["uvicorn", "log_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

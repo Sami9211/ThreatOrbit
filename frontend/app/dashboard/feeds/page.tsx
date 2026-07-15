@@ -26,7 +26,7 @@ function classifyIoc(v: string): 'ip' | 'cve' | 'hash' | 'url' | 'domain' | null
   return null
 }
 
-/* ── Types ────────────────────────────────────────────────────────── */
+/* -- Types ---------------------------------------------------------- */
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 type ThreatStatus = 'confirmed' | 'unconfirmed'
 
@@ -50,7 +50,7 @@ type ThreatEntry = {
   tags: string[]
 }
 
-/* ── Seed data ────────────────────────────────────────────────────── */
+/* -- Seed data ------------------------------------------------------ */
 const CONFIRMED_SEED: ThreatEntry[] = [
   {
     id: 'c001', ts: '2024-11-12T14:22:00Z', cve: 'CVE-2024-6387',
@@ -254,7 +254,7 @@ function timeAgo(ts: string) {
   return `${Math.floor(diff / 3600)}h ago`
 }
 
-/* ── Confidence Ring ─────────────────────────────────────────────── */
+/* -- Confidence Ring ----------------------------------------------- */
 function ConfidenceRing({ value }: { value: number }) {
   const r = 10
   const circ = 2 * Math.PI * r
@@ -283,7 +283,7 @@ function ConfidenceRing({ value }: { value: number }) {
   )
 }
 
-/* ── Threat Card ─────────────────────────────────────────────────── */
+/* -- Threat Card --------------------------------------------------- */
 function ThreatCard({
   entry,
   onConfirm,
@@ -507,7 +507,7 @@ function ThreatCard({
   )
 }
 
-/* ── Source Health Pills ─────────────────────────────────────────── */
+/* -- Source Health Pills ------------------------------------------- */
 const SOURCES_FALLBACK = [
   { name: 'MISP', status: 'live', rate: '847/h' },
   { name: 'RecordedFuture', status: 'live', rate: '234/h' },
@@ -519,10 +519,10 @@ const SOURCES_FALLBACK = [
   { name: 'NVD', status: 'live', rate: '6/h' },
 ]
 
-/* ── Main Page ───────────────────────────────────────────────────── */
+/* -- Main Page ----------------------------------------------------- */
 export default function FeedsPage() {
   // Start EMPTY, not seeded. On a real deployment the IOC store is the source of
-  // truth — an empty store is an honest "no threats yet", never a cue to show
+  // truth - an empty store is an honest "no threats yet", never a cue to show
   // fabricated demo threats. The hardcoded seeds + random simulator are an
   // OFFLINE-only fallback (API unreachable), gated on `demoMode` below.
   const [confirmed, setConfirmed] = useState<ThreatEntry[]>([])
@@ -536,7 +536,7 @@ export default function FeedsPage() {
 
   // liveMode: the API answered (we show its data, even if empty).
   // demoMode: the API was unreachable → show the seed + simulator as an offline
-  // preview. Both start false so nothing renders until the fetch resolves —
+  // preview. Both start false so nothing renders until the fetch resolves -
   // a real deployment therefore NEVER flashes demo data.
   const [liveMode, setLiveMode] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
@@ -567,7 +567,7 @@ export default function FeedsPage() {
     fetchFeeds().then(setApiFeeds).catch(() => {})
     fetchFeedsSummary().then(setFeedsSummary).catch(() => {})
     fetchIocs({ limit: '60', sort: 'last_seen', order: 'desc' }).then(({ items }) => {
-      // The API answered — we are LIVE, even when the store is empty (fresh
+      // The API answered - we are LIVE, even when the store is empty (fresh
       // real-feeds install). Render its real indicators; never fall back to seeds.
       const entries = items.map(iocToEntry)
       setConfirmed(entries.filter(e => e.status === 'confirmed'))
@@ -583,7 +583,7 @@ export default function FeedsPage() {
   }, [iocToEntry])
 
   // Offline-only simulator: fabricate incoming threats. Runs ONLY in the
-  // API-unreachable demo preview — never on a real deployment.
+  // API-unreachable demo preview - never on a real deployment.
   useEffect(() => {
     if (!demoMode) return
     const jitter = () => 8000 + Math.random() * 6000
@@ -708,7 +708,7 @@ export default function FeedsPage() {
             </div>
           ))}
           {apiFeeds.length === 0 && !demoMode && (
-            <span className="text-[10px] text-ink-600">No sources configured yet — add one under <span className="text-violet">Sources</span>.</span>
+            <span className="text-[10px] text-ink-600">No sources configured yet - add one under <span className="text-violet">Sources</span>.</span>
           )}
         </div>
       </div>
@@ -761,7 +761,7 @@ export default function FeedsPage() {
       {/* Split columns */}
       <div className="flex-1 min-h-0 grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/5 overflow-hidden">
 
-        {/* ── Confirmed Threats ── */}
+        {/* -- Confirmed Threats -- */}
         <div className="flex flex-col overflow-hidden">
           {/* Column header */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-safe/[0.03] shrink-0">
@@ -796,7 +796,7 @@ export default function FeedsPage() {
           </div>
         </div>
 
-        {/* ── Unconfirmed Threats ── */}
+        {/* -- Unconfirmed Threats -- */}
         <div className="flex flex-col overflow-hidden">
           {/* Column header */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-amber/[0.03] shrink-0">

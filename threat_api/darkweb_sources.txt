@@ -1,15 +1,15 @@
 # Curated leak / breach RSS feeds (one URL per line; lines starting with # are
-# ignored). This is NOT a Tor/onion crawler — it's a pluggable slot for public
+# ignored). This is NOT a Tor/onion crawler - it's a pluggable slot for public
 # feeds that report data breaches, leaks, dumps, and ransomware activity. The
 # fetcher tags matching items as leak-related (see fetchers/darkweb_osint.py).
 # Most true dark-web monitoring services need a paid subscription; drop their
 # RSS/Atom URL here to extend coverage.
 
-# DataBreaches.net — breach and leak reporting
+# DataBreaches.net - breach and leak reporting
 https://www.databreaches.net/feed/
 
-# KrebsOnSecurity — breaches, data leaks, cybercrime
+# KrebsOnSecurity - breaches, data leaks, cybercrime
 https://krebsonsecurity.com/feed/
 
-# BleepingComputer — ransomware tag
+# BleepingComputer - ransomware tag
 https://www.bleepingcomputer.com/tag/ransomware/feed/

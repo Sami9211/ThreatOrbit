@@ -80,7 +80,7 @@ def test_correlated_alerts_auto_escalate_to_a_case(client, auth):
 
 def test_detection_rule_with_redos_regex_is_rejected(client, auth):
     """A catastrophic-backtracking regex in a detection rule is rejected at
-    authoring (400), never stored — it would otherwise hang the engine."""
+    authoring (400), never stored - it would otherwise hang the engine."""
     body = {
         "name": f"redos-{uuid.uuid4().hex[:6]}", "severity": "high",
         "definition": {"conditions": [{"field": "raw", "op": "regex",
@@ -119,7 +119,7 @@ def test_correlation_survives_high_open_alert_volume(client, auth):
                                 mitre_tech_id="T1071.001")
             conn.execute("UPDATE alerts SET ts=? WHERE id=?", (older, aid))
         # Bury the signal: 250 unrelated open critical alerts at "now", each on
-        # its own host so none of THEM correlate — pure recency noise. Under the
+        # its own host so none of THEM correlate - pure recency noise. Under the
         # old `ORDER BY ts DESC LIMIT 200`, these 250 newer alerts would fill the
         # scan window and the 3 older real ones would be excluded → no case.
         for i in range(250):
@@ -129,7 +129,7 @@ def test_correlation_survives_high_open_alert_volume(client, auth):
         conn.commit()
         created = _maybe_escalate_case(conn)
         conn.commit()
-    assert created >= 1, "correlated pivot lost behind 250 noise alerts — window scan regressed"
+    assert created >= 1, "correlated pivot lost behind 250 noise alerts - window scan regressed"
     with get_conn() as conn:
         row = conn.execute(
             "SELECT alert_count FROM cases WHERE entities LIKE ? "
@@ -142,7 +142,7 @@ def test_correlation_survives_high_open_alert_volume(client, auth):
 def test_case_id_collision_does_not_crash_escalation(client, auth, monkeypatch):
     """One escalation call can open several cases (it scans the whole window), so
     the small 4-digit CASE-id space collides under load. Forcing every 4-digit
-    draw to the SAME value must NOT crash — distinct cases still open via the
+    draw to the SAME value must NOT crash - distinct cases still open via the
     wide-namespace fallback (the old single-retry code threw IntegrityError)."""
     import dashboard_api.engine as eng
     monkeypatch.setattr(eng.random, "randint", lambda a, b: 5000)  # every id collides

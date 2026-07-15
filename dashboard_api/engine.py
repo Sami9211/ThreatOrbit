@@ -34,7 +34,7 @@ from dashboard_api.detections import _insert_alert, _TACTIC  # reuse the alert w
 
 logger = logging.getLogger("dashboard_api.engine")
 
-# ── Realistic value pools ───────────────────────────────────────────────────────
+# -- Realistic value pools -------------------------------------------------------
 _INTERNAL_HOSTS = ["DC-PROD-01", "WEB-LB-01", "PROD-API-04", "JENKINS-CI-01",
                    "DESKTOP-FIN-087", "LAPTOP-EXEC-03", "K8S-NODE-2", "RDS-CUSTOMERS",
                    "MAIL-RELAY-01", "FILE-SRV-02", "VPN-GW-01", "SCADA-HMI-01"]
@@ -82,7 +82,7 @@ def _sha256(rng) -> str:
     return "".join(rng.choice("0123456789abcdef") for _ in range(64))
 
 
-# ── Telemetry scenarios ─────────────────────────────────────────────────────────
+# -- Telemetry scenarios ---------------------------------------------------------
 # Each scenario emits a RAW EVENT (normalised fields) plus any IOCs it carries.
 # Severity / MITRE / titles come from the DETECTION RULES that match the event -
 # exactly like a real SIEM, where the rule defines the detection.
@@ -160,9 +160,9 @@ def _scn_priv_esc(rng):
     }, [])
 
 
-# ── Extended technique coverage (broader ATT&CK: Impact, deeper Credential
+# -- Extended technique coverage (broader ATT&CK: Impact, deeper Credential
 #    Access, Persistence, C2). Each emits a normalised event that the matching
-#    BUILTIN_RULES detection fires on - same contract as the scenarios above. ──
+#    BUILTIN_RULES detection fires on - same contract as the scenarios above. --
 
 def _scn_ransomware(rng):
     host = rng.choice(_INTERNAL_HOSTS); user = rng.choice(_USERS); n = rng.randint(800, 12000)
@@ -261,7 +261,7 @@ def _pick_scenario(rng):
     return _SCENARIOS[0][0]
 
 
-# ── Built-in detection rules (definitions that match the events above) ───────────
+# -- Built-in detection rules (definitions that match the events above) -----------
 # Each maps an event_type to an alert with severity, MITRE, and a title template.
 # These are real rules - they evaluate via rule_engine.evaluate(), exactly like
 # any rule an analyst authors in the editor.
@@ -380,7 +380,7 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
     so the detection stage can later run as a pool of workers without
     double-processing. `worker_id` identifies the claiming worker (single inline
     worker today). `claimed`, when given, is a batch a pool worker has ALREADY
-    leased (see detection_pool) — this function then only processes + completes
+    leased (see detection_pool) - this function then only processes + completes
     it, skipping its own claim. If preview_rule is given, evaluate ONLY that rule
     and return matches without creating alerts (backtest). Returns a summary."""
     import json
@@ -445,7 +445,7 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
             matches = evaluate(rule, events)
         except Exception:
             # Belt-and-suspenders: one malformed rule must never abort detection
-            # for the whole batch — that would silently blind the SIEM for every
+            # for the whole batch - that would silently blind the SIEM for every
             # other rule and event in the tick. Skip it; the rest still run.
             logger.exception("detection rule %s failed to evaluate; skipping",
                              rule.get("id"))
@@ -501,7 +501,7 @@ def run_detection(conn, *, preview_rule: dict | None = None, limit: int = 300,
             "suppressed": suppressed}
 
 
-# ── Dark-web monitoring ──────────────────────────────────────────────────────────
+# -- Dark-web monitoring ----------------------------------------------------------
 _DW_SOURCES = ["BreachForums", "RaidForums mirror", "Telegram: combolist", "Pastebin",
                "Genesis Market", "Russian Market", "LeakBase", "Exploit.in"]
 _DW_CATEGORIES = [
@@ -532,7 +532,7 @@ def _dark_web_finding(rng) -> dict:
     }
 
 
-# ── IOC + case writers ──────────────────────────────────────────────────────────
+# -- IOC + case writers ----------------------------------------------------------
 _SEV_FROM_CONF = lambda c: "critical" if c >= 85 else "high" if c >= 70 else "medium" if c >= 40 else "low"
 
 
@@ -556,7 +556,7 @@ def _write_ioc(conn, ioc: dict, source: str):
 
 # How far back the correlation engine looks. Correlation over stale alerts is
 # meaningless, and a recency window is the natural, safe bound on the working set
-# — replacing the old fixed "200 most-recent alerts" cap, which in a busy SOC
+# - replacing the old fixed "200 most-recent alerts" cap, which in a busy SOC
 # (>200 open critical/high alerts) could silently push genuinely-correlated
 # alerts out of the window so an incident never escalated to a case.
 _CORRELATION_WINDOW_HOURS = int(os.environ.get("DASHBOARD_CORRELATION_WINDOW_HOURS", "48"))
@@ -567,13 +567,13 @@ def _maybe_escalate_case(conn, actor_email="engine") -> int:
     case for any pivot with >= 3 contributing alerts not already cased.
 
     Grouping is done in SQL over a recency window (not a fixed row count) so a
-    high open-alert volume can't drop correlatable alerts from the scan — every
+    high open-alert volume can't drop correlatable alerts from the scan - every
     in-window pivot with >= 3 unresolved critical/high alerts is considered."""
     cutoff = (datetime.now(timezone.utc)
               - timedelta(hours=_CORRELATION_WINDOW_HOURS)).replace(microsecond=0).isoformat()
     created = 0
     # One grouped query per pivot dimension. A single alert with both a hostname
-    # and a username contributes to both pivots — same as the prior bucketing.
+    # and a username contributes to both pivots - same as the prior bucketing.
     for pk, col in (("host", "hostname"), ("user", "username"), ("ip", "src_ip")):
         # `col`/`pk` are fixed literals from this tuple, never user input.
         rows = conn.execute(
@@ -595,7 +595,7 @@ def _maybe_escalate_case(conn, actor_email="engine") -> int:
             sev = "critical" if r["has_crit"] else "high"
             # Collision-proof case id. One call can now open several cases (it
             # scans the whole correlation window), so the small 4-digit space
-            # collides under load — a single retry isn't enough and a duplicate
+            # collides under load - a single retry isn't enough and a duplicate
             # id would throw an unhandled IntegrityError mid-loop. Retry until
             # free, then fall back to a wide namespace.
             cid = None
@@ -628,7 +628,7 @@ def _maybe_escalate_case(conn, actor_email="engine") -> int:
     return created
 
 
-# ── Tick ─────────────────────────────────────────────────────────────────────────
+# -- Tick -------------------------------------------------------------------------
 def process_tick(max_events: int = 6) -> dict:
     """One pass of the live engine: generate telemetry → run detection rules →
     alerts, extract IOCs, monitor dark web, correlate/escalate."""

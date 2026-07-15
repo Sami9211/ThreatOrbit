@@ -26,7 +26,7 @@ CI (see the CHANGELOG); SQLite stays the default and is untouched.
   rolling updates when Postgres is configured). Any replica can serve any
   request.
 - **Per-request connections.** The data layer opens a fresh connection per
-  operation (`db.get_conn()`) and closes it — there is **no long-lived pool to
+  operation (`db.get_conn()`) and closes it - there is **no long-lived pool to
   go stale**. During a failover, in-flight requests may error once; the very next
   request opens a new connection through the HA endpoint and lands on the new
   primary. Recovery is automatic, no app restart.
@@ -41,14 +41,14 @@ CI (see the CHANGELOG); SQLite stays the default and is untouched.
 ## Choose an HA topology
 
 **Managed (recommended).** Use a cloud provider's synchronous multi-AZ Postgres
-— it gives you a single stable endpoint, a synchronous standby in another AZ,
+- it gives you a single stable endpoint, a synchronous standby in another AZ,
 and automatic failover with no app changes:
 
 | Provider | Offering | Notes |
 | --- | --- | --- |
-| AWS | **RDS / Aurora PostgreSQL Multi-AZ** | RDS Multi-AZ (or Multi-AZ DB cluster) — point `DATABASE_URL` at the cluster/instance endpoint |
+| AWS | **RDS / Aurora PostgreSQL Multi-AZ** | RDS Multi-AZ (or Multi-AZ DB cluster) - point `DATABASE_URL` at the cluster/instance endpoint |
 | GCP | **Cloud SQL for PostgreSQL (HA)** | regional (multi-zone) instance; use the instance IP / Auth Proxy |
-| Azure | **Azure Database for PostgreSQL – Flexible Server, zone-redundant HA** | zone-redundant high availability |
+| Azure | **Azure Database for PostgreSQL - Flexible Server, zone-redundant HA** | zone-redundant high availability |
 
 Pick **synchronous** replication so a committed transaction is never lost on
 failover (RPO ≈ 0).
@@ -73,9 +73,9 @@ transaction pooling.)
 ## RPO / RTO with multi-AZ
 
 - **RPO ≈ 0** with a synchronous standby (no acknowledged-commit loss on
-  failover). Asynchronous replication trades RPO for latency — know which you've
+  failover). Asynchronous replication trades RPO for latency - know which you've
   configured.
-- **RTO** = the managed service's failover time (typically ~60–120s) + the few
+- **RTO** = the managed service's failover time (typically ~60-120s) + the few
   seconds for API replicas to reconnect. No app restart is needed.
 - Multi-AZ protects against an instance/AZ failure; it is **not** a substitute
   for backups. Keep the off-box snapshots (`docs/BACKUP_RESTORE.md`) for

@@ -171,7 +171,7 @@ def run_saved_hunt(domain: str, hunt_id: str, actor: str) -> dict | None:
     return {"hunt": row_to_dict(updated), "run": run}
 
 
-# ── Event-stream search language ────────────────────────────────────────────────
+# -- Event-stream search language ------------------------------------------------
 # A real, compact field-operator query over the raw `events` stream - the data a
 # hunter actually searches (not just alerts). Splunk/KQL-flavoured:
 #

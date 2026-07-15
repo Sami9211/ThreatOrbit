@@ -74,7 +74,7 @@ def _jwks() -> dict:
     return _cached("jwks", discovery()["jwks_uri"])
 
 
-# ── CSRF state (stateless, signed with the dashboard JWT secret) ──────────────
+# -- CSRF state (stateless, signed with the dashboard JWT secret) --------------
 
 def _sign_state(payload: dict) -> str:
     body = _b64u_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
@@ -160,7 +160,7 @@ def exchange_code(code: str, code_verifier: str | None = None) -> dict:
 def _rsa_key_for(kid: str | None):
     keys = [k for k in _jwks().get("keys", []) if k.get("kty") == "RSA"]
     if kid:
-        # Require an exact kid match — do NOT silently fall back to another key,
+        # Require an exact kid match - do NOT silently fall back to another key,
         # so a token can only be verified with the key its header points to.
         jwk = next((k for k in keys if k.get("kid") == kid), None)
         if not jwk:

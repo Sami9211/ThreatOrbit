@@ -25,7 +25,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-# ── Notifications centre ─────────────────────────────────────────────────────────
+# -- Notifications centre ---------------------------------------------------------
 
 def notify(conn, *, type: str, title: str, severity: str = "info",
            detail: str | None = None, link: str | None = None):
@@ -81,7 +81,7 @@ def mark_read(body: MarkRead, _: dict = Depends(current_user)):
     return {"ok": True}
 
 
-# ── Global search ────────────────────────────────────────────────────────────────
+# -- Global search ----------------------------------------------------------------
 
 @router.get("/search")
 def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25),
@@ -121,7 +121,7 @@ def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25
     return {"query": q, "results": out}
 
 
-# ── Scheduled reports ────────────────────────────────────────────────────────────
+# -- Scheduled reports ------------------------------------------------------------
 
 class ScheduleCreate(BaseModel):
     kind: str
@@ -253,7 +253,7 @@ def run_due_report_schedules():
             conn.commit()
 
 
-# ── Saved views ──────────────────────────────────────────────────────────────────
+# -- Saved views ------------------------------------------------------------------
 
 class ViewCreate(BaseModel):
     section: str
@@ -302,7 +302,7 @@ def delete_view(view_id: str, user: dict = Depends(current_user)):
     return None
 
 
-# ── Audit & compliance ───────────────────────────────────────────────────────────
+# -- Audit & compliance -----------------------------------------------------------
 
 @router.get("/config/audit-export")
 def audit_export(limit: int = Query(5000, le=50000), _: dict = Depends(require_perm("config.manage"))):
@@ -388,13 +388,13 @@ def enforce_retention(user: dict = Depends(require_perm("config.manage"))):
     return out
 
 
-# ── Platform self-health ─────────────────────────────────────────────────────────
+# -- Platform self-health ---------------------------------------------------------
 
 @router.get("/self-health")
 def self_health(_: dict = Depends(current_user)):
     """The SOC's own vitals in one call: database reachability + latency, schema
     version, detection-queue backpressure, background-work leadership, and
-    process uptime/counters — each with a status, plus an overall verdict
+    process uptime/counters - each with a status, plus an overall verdict
     (ok / degraded / down). Read-only; any authenticated operator may view it
     (same access as /config/leader). Powers the Settings → System health panel."""
     from dashboard_api import self_health as sh

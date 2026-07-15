@@ -9,10 +9,10 @@
  *
  * Reduced motion is handled globally by `<MotionConfig reducedMotion="user">`
  * at the app root (see app/providers.tsx). Per framer's accessibility model
- * that drops the *movement* (transform/layout — the vestibular
+ * that drops the *movement* (transform/layout - the vestibular
  * motion-sickness trigger) while keeping harmless opacity fades, so a user who
  * asks for reduced motion gets a still, non-moving fade rather than sliding
- * content — and individual components don't each need to branch on
+ * content - and individual components don't each need to branch on
  * `useReducedMotion()`.
  */
 import type { Variants, Transition } from 'framer-motion'
@@ -21,7 +21,7 @@ import type { Variants, Transition } from 'framer-motion'
  *  place (reads as "premium/settled", never bouncy or linear). */
 export const EASE = [0.22, 1, 0.36, 1] as const
 
-/** Duration scale (seconds). Keep animations short — motion should feel
+/** Duration scale (seconds). Keep animations short - motion should feel
  *  responsive, not showy. */
 export const DUR = {
   fast: 0.15,   // micro-interactions: hover, press, small toggles
@@ -33,19 +33,19 @@ export const transition = (duration: number = DUR.base): Transition => ({
   duration, ease: EASE,
 })
 
-/** Fade + gentle rise — the default "content appears" animation. */
+/** Fade + gentle rise - the default "content appears" animation. */
 export const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 8 },
   show: { opacity: 1, y: 0, transition: transition() },
 }
 
-/** Plain fade, no movement — for overlays/backdrops. */
+/** Plain fade, no movement - for overlays/backdrops. */
 export const fadeIn: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: transition() },
 }
 
-/** Scale up from slightly small — for popovers, badges, modal cards. */
+/** Scale up from slightly small - for popovers, badges, modal cards. */
 export const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.96 },
   show: { opacity: 1, scale: 1, transition: transition() },

@@ -29,12 +29,12 @@ def test_extract_finds_real_indicators():
 def test_extract_is_fast_on_adversarial_input():
     """A long 'a.a.a.…' run made the old greedy domain pattern backtrack for many
     seconds (8.5s at 20k, >20s at 40k). Bounded input + possessive quantifier
-    keep it well under a second — a strict ceiling that regresses loudly."""
+    keep it well under a second - a strict ceiling that regresses loudly."""
     evil = "a." * 40000          # ~80k chars, no valid trailing label → worst case
     t = time.time()
     _extract_iocs(evil)
     elapsed = time.time() - t
-    assert elapsed < 2.0, f"IOC extraction took {elapsed:.2f}s — ReDoS guard regressed"
+    assert elapsed < 2.0, f"IOC extraction took {elapsed:.2f}s - ReDoS guard regressed"
 
 
 def test_extract_input_is_capped():

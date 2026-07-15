@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { tk } from '@/lib/colors'
 
-/* ── Types ────────────────────────────────────────────────────────── */
+/* -- Types ---------------------------------------------------------- */
 type StepType = 'check' | 'action' | 'decision' | 'notify' | 'human' | 'sub-playbook'
 type StepStatus = 'idle' | 'running' | 'completed' | 'failed' | 'skipped'
 type RunStatus = 'success' | 'failure' | 'running' | 'scheduled' | 'idle'
@@ -47,7 +47,7 @@ type Playbook = {
   steps: PlaybookStep[]
 }
 
-/* ── Constants ────────────────────────────────────────────────────── */
+/* -- Constants ------------------------------------------------------ */
 const STEP_ICON: Record<StepType, React.ComponentType<any>> = {
   check:           Shield,
   action:          Zap,
@@ -100,7 +100,7 @@ const STATUS_LABEL: Record<RunStatus, string> = {
   idle:      'Never run',
 }
 
-/* ── Playbook data ────────────────────────────────────────────────── */
+/* -- Playbook data -------------------------------------------------- */
 const PLAYBOOKS: Playbook[] = [
   {
     id: 'pb-001',
@@ -294,11 +294,11 @@ const PLAYBOOKS: Playbook[] = [
 ]
 
 /* KPI strip values are computed live from the loaded playbooks (this was a
-   hardcoded array — "18 playbooks", "Next: 17:00 UTC" — shown as if live). */
+   hardcoded array - "18 playbooks", "Next: 17:00 UTC" - shown as if live). */
 
 const FILTER_CATS: FilterCat[] = ['All', 'Network', 'Endpoint', 'Cloud', 'Identity', 'Compliance']
 
-/* ── Step detail panel ────────────────────────────────────────────── */
+/* -- Step detail panel ---------------------------------------------- */
 function StepDetailPanel({ pb, onClose, onEdit }: { pb: Playbook; onClose: () => void; onEdit?: () => void }) {
   return (
     <motion.div
@@ -438,7 +438,7 @@ function StepDetailPanel({ pb, onClose, onEdit }: { pb: Playbook; onClose: () =>
   )
 }
 
-/* ── Playbook card ────────────────────────────────────────────────── */
+/* -- Playbook card -------------------------------------------------- */
 function PlaybookCard({
   pb, selected, running, onClick, onToggle, onRun,
 }: {
@@ -593,7 +593,7 @@ function PlaybookCard({
   )
 }
 
-/* ── Main page ────────────────────────────────────────────────────── */
+/* -- Main page ------------------------------------------------------ */
 export default function PlaybooksPage() {
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
@@ -602,7 +602,7 @@ export default function PlaybooksPage() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Empty until the API answers (skeletons meanwhile); the API's list is
-  // authoritative EVEN WHEN EMPTY — the demo PLAYBOOKS are an offline-only
+  // authoritative EVEN WHEN EMPTY - the demo PLAYBOOKS are an offline-only
   // fallback, never a stand-in for a real deployment's empty library.
   const [playbooks, setPlaybooks] = useState<typeof PLAYBOOKS>([])
   const [pbPending, setPbPending] = useState(true)
@@ -704,7 +704,7 @@ export default function PlaybooksPage() {
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* ── Page header ──────────────────────────────────────────── */}
+        {/* -- Page header -------------------------------------------- */}
         <div className="px-6 py-4 border-b border-white/5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between shrink-0">
           <div>
             <h1 className="font-display text-xl font-bold text-white">Playbooks</h1>
@@ -719,7 +719,7 @@ export default function PlaybooksPage() {
           </button>
         </div>
 
-        {/* ── KPI strip — computed from the live playbook list ─────── */}
+        {/* -- KPI strip - computed from the live playbook list ------- */}
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-white/5 shrink-0">
           {([
             { label: 'Total Playbooks', color: 'text-white',
@@ -732,7 +732,7 @@ export default function PlaybooksPage() {
             { label: 'Avg Success Rate', color: 'text-safe',
               value: kpis.avgSuccess !== null
                 ? <><AnimatedNumber value={kpis.avgSuccess} format={(v) => v.toFixed(1)} />%</>
-                : '—',
+                : '-',
               sub: kpis.totalRuns > 0 ? `across ${kpis.totalRuns.toLocaleString()} runs` : 'no runs yet' },
           ] as Array<{ label: string; color: string; value: ReactNode; sub: string }>).map((k, i) => (
             <div key={k.label} className={cn('px-5 py-3 border-r border-white/5 last:border-r-0', i > 1 && 'hidden md:block')}>
@@ -743,7 +743,7 @@ export default function PlaybooksPage() {
           ))}
         </div>
 
-        {/* ── Filter bar ───────────────────────────────────────────── */}
+        {/* -- Filter bar --------------------------------------------- */}
         <div className="px-6 py-3 border-b border-white/5 flex items-center gap-4 shrink-0 overflow-x-auto">
           {/* Search */}
           <div className="relative shrink-0">
@@ -781,7 +781,7 @@ export default function PlaybooksPage() {
           </div>
         </div>
 
-        {/* ── Grid ─────────────────────────────────────────────────── */}
+        {/* -- Grid --------------------------------------------------- */}
         <div className="flex-1 overflow-y-auto p-6">
           {filtered.length === 0 ? (
             pbPending ? (
@@ -814,14 +814,14 @@ export default function PlaybooksPage() {
             </div>
           )}
 
-          {/* ── Run history + approvals (live, per-step audit trail) ── */}
+          {/* -- Run history + approvals (live, per-step audit trail) -- */}
           <div className="mt-6">
             <PlaybookRunsPanel />
           </div>
         </div>
       </div>
 
-      {/* ── Step detail slide-over ────────────────────────────────── */}
+      {/* -- Step detail slide-over ---------------------------------- */}
       <AnimatePresence>
         {selectedPB && (
           <>

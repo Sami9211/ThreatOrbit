@@ -1,7 +1,7 @@
-# ThreatOrbit — Roadmap to enterprise SIEM + SOAR + CTI (and beyond)
+# ThreatOrbit - Roadmap to enterprise SIEM + SOAR + CTI (and beyond)
 
 This is the working roadmap toward feature parity with Splunk/Elastic (SIEM),
-Cortex XSOAR/Splunk Phantom (SOAR), and OpenCTI/Anomali (CTI) — and past them.
+Cortex XSOAR/Splunk Phantom (SOAR), and OpenCTI/Anomali (CTI) - and past them.
 
 **How to use this file:** pick the next unchecked item, implement it fully
 (backend + frontend + tests + docs), check it off / delete it, and append any
@@ -11,43 +11,43 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (move to CHANGELOG section
 
 ---
 
-## Audit (2026-06-22) — verified state + open findings
+## Audit (2026-06-22) - verified state + open findings
 
 A fresh end-to-end audit pass: every backend suite was run on a clean install,
 the prior review (`audit_fixes.md`) was re-verified against the current tree,
 and the finished roadmap entries below were pruned into the CHANGELOG.
 
-**Verified green.** **413 backend tests pass** on a clean checkout — `log_api`
+**Verified green.** **413 backend tests pass** on a clean checkout - `log_api`
 20, `threat_api` 8, `dashboard_api` 385. Static sweeps are clean: no bare
 `except:`, mutable-default args, `eval`/`exec`/`subprocess(shell=True)`,
 `pickle`, `yaml.load`, or `datetime.utcnow()` in service code. The
 security-critical paths re-read and hold up: SSRF send-time IP-pinning
 (`net_guard.safe_request` pins to a validated address, preserves Host/SNI,
 blocks redirects), RBAC capability enforcement, and SAML/OIDC verification.
-Most `audit_fixes.md` findings (A1–A4, B1–B12, C1–C6, D1–D2, E1–E4, F1–F4,
-I1–I2) are genuinely resolved; the live residue is tracked below.
+Most `audit_fixes.md` findings (A1-A4, B1-B12, C1-C6, D1-D2, E1-E4, F1-F4,
+I1-I2) are genuinely resolved; the live residue is tracked below.
 
 ### New findings (open)
 
-- [x] **MSSP: id-addressed sub-resource GETs lack a cross-org guard** — DONE
+- [x] **MSSP: id-addressed sub-resource GETs lack a cross-org guard** - DONE
       (2026-07-03, CHANGELOG): threaded the caller through and 404 on
       `cross_org` for `soar/cases/{id}/related`, `assets/{id}/vulns`,
       `assets/{id}/activity`, `cti/attribution/case/{id}`,
       `cti/iocs/{id}/enrichment`, and the full `intel_reports` set
       (read/misp/patch/delete + scoped list/create). `intel_reports` was also
-      missing from the tenancy migration entirely — added `org_id` (schema v4)
+      missing from the tenancy migration entirely - added `org_id` (schema v4)
       and to `TENANT_TABLES`. Guarded by `test_tenant_e2e.py`.
-- [x] **ReDoS in detection-rule `regex` conditions** — DONE (2026-07-03,
+- [x] **ReDoS in detection-rule `regex` conditions** - DONE (2026-07-03,
       CHANGELOG): a catastrophic-backtracking pattern could hang the detection
       thread (whole-deployment DoS). `rule_engine.is_safe_regex` now rejects
       unsafe patterns at authoring (create/update/backtest → 400) and skips them
       at eval, with input length capped. Guarded by test_pipeline_e2e.py.
-- [x] **RBAC: write endpoints gated only by `current_user`** — DONE (2026-07-03,
+- [x] **RBAC: write endpoints gated only by `current_user`** - DONE (2026-07-03,
       CHANGELOG): 13 mutating endpoints (ingest, detection-rule edit, sources,
       hunts, asset create/recompute, feed manage, integration test) now enforce
       their documented capability; a read-scoped key/viewer gets 403. Guarded by
       test_ingest_authz.py.
-- [x] **Several dashboard widgets render hardcoded demo data as if live** —
+- [x] **Several dashboard widgets render hardcoded demo data as if live** -
       DONE (2026-06-22): see CHANGELOG. Overview Trending CVEs → /assets/vuln-findings;
       CTI Sector Targeting + Threat Briefs → derived from live actors; SOC-metrics
       analyst throughput/leaderboard → new /soar/analysts, playbook effectiveness →
@@ -56,23 +56,23 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       (alert-volume shape, disposition split) are explicitly badged "sample".
       contradicts the repeated "every number is real data" principle.
       Confirmed static, with no API binding:
-      - Overview (`frontend/app/dashboard/page.tsx`) — the **Trending CVEs**
+      - Overview (`frontend/app/dashboard/page.tsx`) - the **Trending CVEs**
         list (`TRENDING_CVES`).
-      - Threat-Intel (`frontend/app/dashboard/cti/page.tsx`) — **Sector
+      - Threat-Intel (`frontend/app/dashboard/cti/page.tsx`) - **Sector
         targeting** (`SECTOR_DATA`) and the **Intelligence briefs** list
         (`BRIEFS`).
-      - SOC Metrics (`frontend/app/dashboard/soar/metrics/page.tsx`) — analyst
+      - SOC Metrics (`frontend/app/dashboard/soar/metrics/page.tsx`) - analyst
         throughput, the **analyst leaderboard** (`ANALYSTS`), and **playbook
         effectiveness** (`PLAYBOOK_EFFECTIVENESS`) are constants; only the KPI
         strip + MITRE coverage are live (the CHANGELOG's 2026-06-18 note already
-        flagged the first two — promote them to a real fix).
-      - SIEM (`frontend/app/dashboard/siem/page.tsx`) — the in-page **Threat
+        flagged the first two - promote them to a real fix).
+      - SIEM (`frontend/app/dashboard/siem/page.tsx`) - the in-page **Threat
         Hunt** tab shows a fixed `HUNT_RESULTS` / `SAVED_HUNTS` set with
         `ran=true`, while a real `/dashboard/siem/hunt` page already drives
         `POST /siem/search`.
       *Fix:* wire each widget to its existing endpoint, or remove/label it as a
-      sample. (The `*_FALLBACK` arrays that overlay live data — `HEATMAP_ROWS`,
-      `BRIEF_ITEMS_FALLBACK`, `HOURLY_FALLBACK` — are acceptable offline
+      sample. (The `*_FALLBACK` arrays that overlay live data - `HEATMAP_ROWS`,
+      `BRIEF_ITEMS_FALLBACK`, `HOURLY_FALLBACK` - are acceptable offline
       fallbacks and are out of scope here.)
 - [x] **SOC Metrics time-range selector is a no-op.** DONE (2026-06-22): the
       no-op 7d/30d/90d control was removed (the backing endpoints aren't windowed),
@@ -98,7 +98,7 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
 
 ### Residual from the prior review (still open)
 
-- [x] **D3 — no hash-pinned Python lockfile.** DONE (2026-06-22): added
+- [x] **D3 - no hash-pinned Python lockfile.** DONE (2026-06-22): added
       `requirements.lock` per service (`pip-compile --generate-hashes`,
       fully hash-pinned incl. transitive deps). The three Dockerfiles now install
       from the lock with `pip install --require-hashes` (reproducible,
@@ -107,7 +107,7 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       `requirements.txt` stays the human-edited input; regenerate the lock with
       `pip-compile --generate-hashes -o <svc>/requirements.lock
       <svc>/requirements.txt` when it changes.
-- [x] **A3 / A4 — Postgres path is a regex dialect translator + a new
+- [x] **A3 / A4 - Postgres path is a regex dialect translator + a new
       connection per call.** DONE (2026-06-22): `to_postgres` now parses each
       statement with **sqlglot** (a real SQL transpiler) and applies AST transforms
       for the app idioms it doesn't map (INTEGER→BIGINT, INSERT OR REPLACE→ON
@@ -117,7 +117,7 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       live Postgres 16 locally (full dashboard suite: 386 passed / 2 SQLite-only
       skipped) and in CI's backend-postgres job; SQLite default unchanged (388
       passed). Postgres extras live in `dashboard_api/requirements-postgres.txt`.
-- [x] **B9 residual — SP-signed SAML AuthnRequest.** DONE (2026-07-02): with
+- [x] **B9 residual - SP-signed SAML AuthnRequest.** DONE (2026-07-02): with
       `SAML_SP_PRIVATE_KEY` set (PEM, RSA or EC) the SP signs its AuthnRequest per
       the HTTP-Redirect binding (Bindings §3.4.4.1 detached SigAlg/Signature over
       the transmitted `SAMLRequest=…&RelayState=…&SigAlg=…` octets) for IdPs that
@@ -128,7 +128,7 @@ I1–I2) are genuinely resolved; the live residue is tracked below.
       migrated the TestClient to its sanctioned successor `httpx2` (Tom Christie /
       Pydantic; Starlette's own deprecation points there). Added as a *test-only*
       dep (`dashboard_api/`+`log_api/requirements-dev.txt`) so production keeps the
-      stable `httpx` — the SSRF guard etc. stay on the audited client, unchanged.
+      stable `httpx` - the SSRF guard etc. stay on the audited client, unchanged.
       Each service's new `pytest.ini` errors on `StarletteDeprecationWarning`, so a
       missing httpx2 fails CI loudly instead of silently regressing to the shim
       (verified both ways: green with httpx2, red without). CI test jobs install the
@@ -168,7 +168,7 @@ item is a large, multi-part feature.
       scroll position; wired into the Settings page.
 - [x] **Theme/colour palette doesn't reach everything.** DONE (2026-07-02):
       the migration onto token-based `lib/colors.ts` (`tk()` / `withAlpha()`) is
-      complete across the whole dashboard — all per-page severity/status maps
+      complete across the whole dashboard - all per-page severity/status maps
       (Overview, SIEM + attack/entities/hunt/rules/sources, CTI + actors/hunt,
       SOAR + metrics/playbooks/integrations, assets + network/vulns, dark web,
       feeds, scanner, config + users/sources), the SVG chart gradients, the
@@ -181,30 +181,30 @@ item is a large, multi-part feature.
       (lavender/orange in CHART_PALETTE), and the marketing site / 3D scenes
       (brand-fixed, outside ThemeScope). Verified: tsc + production build green.
 - [x] **"SOC Metrics" reads thin and has an empty section.** DONE (2026-06-22):
-      both formerly "sample" charts are now live — new GET /overview/alert-analytics
+      both formerly "sample" charts are now live - new GET /overview/alert-analytics
       returns real 7-day alert volume by severity and the disposition breakdown
       (null = untriaged). The "sample" badges are gone and the empty sections carry
       honest empty states.
 - [x] **Reports are consistently lacking vs. mature vuln-assessment tools.**
       DONE (2026-06-22): multi-format + multi-audience reporting.
-      • Formats — new `report_render.py` (stdlib only) renders any report to
+      • Formats - new `report_render.py` (stdlib only) renders any report to
         JSON / CSV / Markdown / self-contained printable HTML (all HTML-escaped);
         `GET /reports/{kind}?format=…` returns it as a file download. PDF stays
         browser print-to-PDF of the HTML.
-      • Audiences — `audience=technical|executive|compliance` reshapes the report:
+      • Audiences - `audience=technical|executive|compliance` reshapes the report:
         Executive (compact: top findings + severity breakdowns + exec framing),
         Technical (full depth, default), Compliance (adds an ISO 27001 / SOC 2
         control-mapping section + evidence framing).
-      • Frontend — ReportButton gains an audience selector (re-renders the preview)
+      • Frontend - ReportButton gains an audience selector (re-renders the preview)
         and CSV/MD/JSON download buttons alongside HTML/PDF; the preview + printable
         HTML render the control-mapping section.
-      • Tests — the dashboard suite covers every format + audience and HTML escaping.
-      Remaining (optional): a heavyweight server-side PDF engine — currently
+      • Tests - the dashboard suite covers every format + audience and HTML escaping.
+      Remaining (optional): a heavyweight server-side PDF engine - currently
       unnecessary (browser print-to-PDF covers it dependency-free).
 
 ---
 
-## Open roadmap (remaining work only — finished items live in the CHANGELOG)
+## Open roadmap (remaining work only - finished items live in the CHANGELOG)
 
 **Shipped & complete** (full detail in the CHANGELOG below): Phase 0
 cross-cutting platform, Phase 1 SIEM depth, Phase 2 SOAR depth, Phase 3 CTI
@@ -214,98 +214,98 @@ backup/restore, observability baseline, deployment hardening, signed
 releases + SBOM + Trivy, custom-role/break-glass RBAC, versioned `/v1` API).
 
 **Positioning today.** Small single-node deployments (≤~50 assets, low EPS):
-a strong beta — the Tier-1 punch list is essentially closed. Mid-size: needs
+a strong beta - the Tier-1 punch list is essentially closed. Mid-size: needs
 the Tier-2 items. Large enterprise / MSSP: needs the Tier-3 re-architecture
 plus external compliance attestations.
 
-### Tier 1 — before any paying deployment
+### Tier 1 - before any paying deployment
 
-- [ ] **Pilot validation with real logs** — deploy against a live environment,
+- [ ] **Pilot validation with real logs** - deploy against a live environment,
       forward real syslog/files, and tune parsers + built-in rules on actual
       data (the generated event stream proves the pipeline, not parser
       coverage).
-- [~] **Security pass** — dependency audits, disclosure policy, and patched
+- [~] **Security pass** - dependency audits, disclosure policy, and patched
       backend pins shipped. Remaining (env-gated / external): a third-party
       pentest before first sale, and re-check `PYSEC-2026-161` when FastAPI's
       Starlette ceiling moves.
 
-### Tier 2 — mid-size deployments
+### Tier 2 - mid-size deployments
 
 - [x] **Published load limits.** DONE (2026-07-08): backpressure, a measured
       SQLite EPS baseline, a now-measured **Postgres** EPS baseline (`bench.py`
       + `docs/LOAD_LIMITS.md`), and per-endpoint UI dataset ceilings all
       shipped. The Postgres measurement corrected a previously-unverified
       assumption in `LOAD_LIMITS.md` that switching to Postgres alone would go
-      "materially higher" — measured, it's markedly *slower* than SQLite for
+      "materially higher" - measured, it's markedly *slower* than SQLite for
       the current pipeline (one round-trip statement per event row, no
       batching), which is now the concretely-scoped remaining item below.
 - [x] **Batch the per-row ingest writes on Postgres.** DONE (2026-07-09):
       `ingest_lines` now collects a batch's rows and issues one
-      `conn.executemany(...)` instead of one `conn.execute(...)` per event —
+      `conn.executemany(...)` instead of one `conn.execute(...)` per event -
       measured ~5.7x faster on Postgres (~670 → ~3,800 EPS, `bench.py` +
       `docs/LOAD_LIMITS.md`). The "detection-claim path" named in the original
       version of this item turned out to already be batched once actually
       read (`event_queue.claim` is one `UPDATE … WHERE id IN (…)`, `.complete`
-      was already `executemany`) — not a real gap, corrected here rather than
+      was already `executemany`) - not a real gap, corrected here rather than
       left inaccurate. Remaining, lower priority: `_insert_alert` (one write
-      per firing match) isn't batched — matches are a small fraction of raw
+      per firing match) isn't batched - matches are a small fraction of raw
       events in a realistic mix, so this matters far less than the ingest path
       did. 4 workers still ≈ 1 worker on the `drain` benchmark (unaffected by
-      this fix, since drain was never bottlenecked on claim/complete) — that's
+      this fix, since drain was never bottlenecked on claim/complete) - that's
       about the detection-processing side, not ingest.
 
-### Tier 3 — large enterprise / MSSP
+### Tier 3 - large enterprise / MSSP
 
-- [~] **Event pipeline at scale** — the queue seam, bounded ingest (HTTP 429 +
+- [~] **Event pipeline at scale** - the queue seam, bounded ingest (HTTP 429 +
       Retry-After), and a concurrency-safe multi-worker detection pool shipped.
       Remaining: flip the engine to **ingest-only** by default, and partition or
       externalise the event store (ClickHouse / OpenSearch behind the same hunt
       API, with predicate push-down).
 - [x] **Finish multi-tenancy for GA.** DONE (2026-07-02): the end-to-end
-      validation pass is in (`tests/test_tenant_e2e.py` — a second workspace with
+      validation pass is in (`tests/test_tenant_e2e.py` - a second workspace with
       its own admin drives create→stamp→list→detail→mutate across SIEM/SOAR/
       assets/CTI, aggregate scoping, per-workspace import dedup) and it caught +
       fixed five real isolation gaps (manual-alert org stamping, alert get/patch
       and asset get cross-org guards, case patch scoping, cross-tenant IOC-import
       dedup oracle). Flipping `DASHBOARD_MULTI_TENANT` on is now purely a
       per-deployment decision for MSSP builds (set it in that environment).
-- [~] **HA / DR / zero-downtime** — Helm chart, DB-backed leader lease,
+- [~] **HA / DR / zero-downtime** - Helm chart, DB-backed leader lease,
       schema-version boot gate, full-stack backup/restore drill, multi-AZ
       Postgres guidance, and (2026-07-02) the **packaged scheduled-backup job**
       shipped: an opt-in compose service (`--profile backup`,
       `scripts/backup_loop.sh`, interval + retention pruning) and a Helm CronJob
-      (`backup.enabled`, dedicated PVC, co-scheduled with the service pods) —
+      (`backup.enabled`, dedicated PVC, co-scheduled with the service pods) -
       both wrapping the same consistent tar.gz snapshot. Remaining: an actual
       **tested** failover drill (needs live multi-AZ infra).
-- [~] **Vendor compliance posture** — DPA template, GDPR data-subject tooling,
+- [~] **Vendor compliance posture** - DPA template, GDPR data-subject tooling,
       data-residency doc, and a SOC 2 / ISO 27001 control self-assessment
       shipped. Remaining (external, can't self-certify): an independent **SOC 2
       Type II** then **ISO 27001** program.
 
 ### Cross-cutting maturity (from the honest gap analysis)
 
-- [ ] **Supply chain** — finish the trailing frontend majors (tailwindcss 3→4,
+- [ ] **Supply chain** - finish the trailing frontend majors (tailwindcss 3→4,
       `@types/node` 20→25); add an in-product "platform updates" upgrade notice;
       sign published **container images** once a registry push pipeline exists.
 - [x] **Detection content.** DONE (2026-07-09): `POST
       /siem/rules/import-sigma-pack` bulk-imports a pasted Sigma rule
       collection (`---`-separated multi-document YAML, the format downloaded
-      rule sets ship as) in one request — each document parsed and inserted
+      rule sets ship as) in one request - each document parsed and inserted
       independently so one bad rule doesn't block the rest, capped at 500
       rules, a structured created/failed report. `SigmaImportButton` routes
       to it automatically on a multi-document paste. See `CHANGELOG.md`.
       Imports land as individual `source='sigma'` rules (not the code-shipped
       `content-pack` versioning system, which is for vetted, code-reviewed
-      content — user-imported rules stay in their own trust tier).
-- [~] **Compliance & data lifecycle** — DONE (2026-07-02): the **PII handling /
+      content - user-imported rules stay in their own trust tier).
+- [~] **Compliance & data lifecycle** - DONE (2026-07-02): the **PII handling /
       redaction policy** (`docs/PII_HANDLING.md` + opt-in `DASHBOARD_LOG_REDACT`
-      redaction at the single ingest seam — email/secret/cc/ssn masked in raw
+      redaction at the single ingest seam - email/secret/cc/ssn masked in raw
       text before persistence, pivots retained) and the **audit-sink persisted
       cursor + replay** (outbox drain over the committed `audit_log` with a
       persisted cursor: at-least-once across restarts/outages, ordered, one
       drainer via the DB lease). Remaining: native syslog / object-lock writers
       for the audit sink.
-- [~] **Platform SRE / self-observability** — Started (2026-07-13):
+- [~] **Platform SRE / self-observability** - Started (2026-07-13):
       `dashboard_api/self_health.py` aggregates the platform's *own* vitals
       (DB reachability + latency, schema version, detection-queue backpressure,
       leader lease, process counters) into one verdict, surfaced at authed
@@ -320,7 +320,7 @@ plus external compliance attestations.
       in CI against login/overview/SIEM/SOAR/Config, and its first run caught
       + fixed 4 real bugs (a sitewide skip-link with no target, 6 unlabeled
       Config form fields, 2 indistinguishable nav landmarks, a missing `<main>`
-      on login) — see `CHANGELOG.md`. Also present already: connector SSRF
+      on login) - see `CHANGELOG.md`. Also present already: connector SSRF
       regressions (`test_net_guard.py`, `test_connector_resilience.py`) and
       retry/backoff webhook delivery (`webhooks.py`) count toward "standing
       SSRF/authz/XSS regressions" and "notification reliability" respectively.
@@ -328,11 +328,11 @@ plus external compliance attestations.
       4.5:1 AA across all 11 themes, checked against every surface level
       (see `CHANGELOG.md`). Remaining: `--ink-600` (480+ usages sitewide)
       still falls short of AA in real-text contexts (e.g. activity-feed
-      timestamps) — naively lightening it collapses it visually onto
+      timestamps) - naively lightening it collapses it visually onto
       `--ink-500`, so this needs per-usage triage, not a token edit: split
       out which of the 480+ usages are genuine informational text (needs a
       lighter, AA-compliant color) vs. WCAG SC 1.4.3-exempt "inactive UI
-      component" text (disabled buttons, placeholder-style hints — legally
+      component" text (disabled buttons, placeholder-style hints - legally
       doesn't need AA contrast at all) and fix only the former, possibly by
       introducing a distinct token for "muted-but-still-informational" text
       rather than reusing `--ink-600` for both purposes. The rest of a full
@@ -346,7 +346,7 @@ plus external compliance attestations.
 
 - [x] **Phase 1+2 (scoring engine, API, and UI panel) shipped.** Requested
       by the project owner (2026-07-09): identify false positives from
-      *strong evidence and findings*, for both SIEM alerts and CTI IOCs —
+      *strong evidence and findings*, for both SIEM alerts and CTI IOCs -
       not the manual-only mechanisms that exist today.
 
 **The gap, precisely.** FP handling today is manual and retroactive, and
@@ -354,64 +354,64 @@ never looks at the specific alert/indicator's own evidence:
 
 - Marking an alert `disposition=false-positive`
   (`dashboard_api/routers/siem.py::update_alert`) bumps its **rule's**
-  `fp_rate` by a flat `+2` (capped at 100) — a blunt per-rule counter, not a
+  `fp_rate` by a flat `+2` (capped at 100) - a blunt per-rule counter, not a
   per-alert judgement, and it carries no reasoning.
 - `dashboard_api/ioc_lifecycle.py::set_known_good` is the IOC-side
-  equivalent — a manual whitelist override (`dashboard_api/routers/cti.py`,
+  equivalent - a manual whitelist override (`dashboard_api/routers/cti.py`,
   `ioc.known_good` audit action), also with no evidence attached.
 
 Neither uses the corroborating context the platform already collects (asset
 criticality, correlation history, VirusTotal enrichment, source trust,
 sighting counts) to help an analyst decide *faster* which alerts/IOCs are
 worth a first look versus probably noise. At real alert volume this is
-exactly where analyst time is wasted — triaging obvious noise with the same
+exactly where analyst time is wasted - triaging obvious noise with the same
 rigor as a real hit.
 
 **What to build.** A transparent, evidence-based false-positive *likelihood*
 score for both alerts and IOCs, built from signals already present in the
-platform (no new external integrations needed for v1) — surfaced to speed up
+platform (no new external integrations needed for v1) - surfaced to speed up
 triage, and **never** silently auto-closing anything without a human
 decision and an audit-trail entry. Same "honest, inspectable" posture as the
 existing transparent asset-risk model and the README's explicit framing of
 the ML layer as "unsupervised outlier ranking for triage, not trained
-ground-truth detection" — this is a scoring/explanation aid, not a
+ground-truth detection" - this is a scoring/explanation aid, not a
 black-box classifier making claims the platform can't back up.
 
-**Evidence signals — alerts** (draws on `dashboard_api/detections.py`,
+**Evidence signals - alerts** (draws on `dashboard_api/detections.py`,
 `engine.py`, the `assets` table, `suppressions`):
-- the firing rule's existing `fp_rate` — today the *only* signal used
+- the firing rule's existing `fp_rate` - today the *only* signal used
   anywhere; becomes one input among several instead of the whole picture;
-- the source asset's criticality/expected role — e.g. a known dev/test box
+- the source asset's criticality/expected role - e.g. a known dev/test box
   vs. a crown-jewel server firing the same rule;
 - a *close-but-not-exact* match against `suppressions`/allow-lists (an
   analyst already told the platform "ignore this pattern" for something
   adjacent, e.g. same rule + same subnet but a different exact IP);
 - correlation context from the engine's own escalation logic
-  (`engine.py::_maybe_escalate_case`) — an isolated, non-correlated single
+  (`engine.py::_maybe_escalate_case`) - an isolated, non-correlated single
   event scores differently than one that's part of a multi-alert pivot;
 - IOC cross-reference: does the alert's src/dest IP or hash match a CTI
   indicator already marked `known_good`, or is it an RFC1918/internal range
   a rule mis-fired on as "external";
-- per-entity FP history (**new** — today only the *rule* remembers, not the
+- per-entity FP history (**new** - today only the *rule* remembers, not the
   entity): this exact user/host/rule combination has been marked FP
   repeatedly before.
 
-**Evidence signals — IOCs** (draws on `threat_api/trust_scoring.py`,
+**Evidence signals - IOCs** (draws on `threat_api/trust_scoring.py`,
 `dashboard_api/ioc_lifecycle.py`, `enrichment.py`):
 - enrichment provider verdicts already cached in `ioc_enrichments`
-  (`enrichment.py`) — zero providers flagging "malicious" against a claimed
+  (`enrichment.py`) - zero providers flagging "malicious" against a claimed
   high-severity label is a strong FP signal, multiple independent
   "malicious" verdicts the opposite;
-- source trust score (`trust_scoring.py`) — a single low-trust feed
+- source trust score (`trust_scoring.py`) - a single low-trust feed
   reporting something no other independent source corroborates;
-- multi-source consensus — the same indicator independently reported by 2+
+- multi-source consensus - the same indicator independently reported by 2+
   feeds is materially stronger evidence than one;
 - a small static reference list of major cloud/CDN ASN/CIDR ranges
-  (AWS/Azure/GCP/Cloudflare) — the classic false-positive pattern for
+  (AWS/Azure/GCP/Cloudflare) - the classic false-positive pattern for
   IP-reputation feeds flagging shared, high-churn infrastructure;
 - sighting history (`ioc_lifecycle.record_sighting`) with **no** correlated
   alert/case ever created from those sightings in this org's own
-  environment, despite a high claimed severity — a mismatch between claimed
+  environment, despite a high claimed severity - a mismatch between claimed
   and observed impact;
 - existing `known_good` overrides used as a reference set: a new IOC
   sharing an ASN/domain/first-seen pattern with a previously-confirmed
@@ -419,10 +419,10 @@ black-box classifier making claims the platform can't back up.
 
 **Implementation plan (phased, each phase independently shippable):**
 
-1. **Scoring engine — shipped.** `dashboard_api/fp_scoring.py`: pure
+1. **Scoring engine - shipped.** `dashboard_api/fp_scoring.py`: pure
    functions `score_alert(conn, alert, org_id) -> {score, band, evidence}` /
    `score_ioc(conn, ioc, org_id) -> {score, band, evidence}`. The evidence
-   list is the whole point — every score is explainable, so an analyst can
+   list is the whole point - every score is explainable, so an analyst can
    see exactly why. Compute-on-read for both (alert evidence is mostly
    static once the alert exists; the IOC store is small enough that a
    background job isn't needed for v1). Six alert signals (rule fp-rate,
@@ -434,9 +434,9 @@ black-box classifier making claims the platform can't back up.
    the testing-discipline case: a correlated multi-alert attack + a
    known-bad IOC match stays in the `likely-real` band even with a weak
    FP-leaning signal (low-criticality asset) also present.
-2. **API + UI surfacing — shipped.** Rather than embedding the assessment
+2. **API + UI surfacing - shipped.** Rather than embedding the assessment
    in every alert/IOC list or detail read (N+1 query cost on list views),
-   it's a dedicated compute-on-demand sub-endpoint — the same pattern as the
+   it's a dedicated compute-on-demand sub-endpoint - the same pattern as the
    existing `GET /cti/iocs/{id}/enrichment`: `GET /siem/alerts/{id}/fp-assessment`
    and `GET /cti/iocs/{id}/fp-assessment`. Advisory only, never mutates the
    alert/IOC. A "FP Likelihood" button in the Power-mode Alert detail drawer
@@ -445,39 +445,39 @@ black-box classifier making claims the platform can't back up.
    Verified live in a browser against the real pipeline: a critical-asset
    match plus an isolated (uncorrelated) alert nets `uncertain · 43` exactly
    as the signed weights predict (50 − 15 + 8).
-3. **Bulk triage view — shipped.** A new Power-mode-only "FP Triage" SIEM
+3. **Bulk triage view - shipped.** A new Power-mode-only "FP Triage" SIEM
    tab: `GET /siem/alerts/fp-triage` scores a bounded working set (the most
-   recent 300 open alerts — an honest cap, since each row costs several
+   recent 300 open alerts - an honest cap, since each row costs several
    `fp_scoring` queries, not one) and returns them filtered by band and
    sorted by score. `POST /siem/alerts/bulk-dismiss` marks a selection
    false-positive/closed in one call (audit-logged per alert, rule fp_rate
    bumped once per rule, not once per alert). The tab renders a
    checkbox-selectable list with a band filter, "select all", and "dismiss
-   selected" — the actual time-saving payoff this phase targeted, not just
+   selected" - the actual time-saving payoff this phase targeted, not just
    a per-alert badge. Verified live in a browser: filtering to `likely-fp`
    isolated the one seeded low-risk alert out of 74 scored, and dismissing
    it removed it from the view.
-4. **Opt-in guarded automation** (off by default, an explicit config flag) —
+4. **Opt-in guarded automation** (off by default, an explicit config flag) -
    only above a high threshold (e.g. ≥90) *and* multiple independent
-   corroborating signals (never one weak signal alone), auto-**suggest** —
-   not auto-execute — bulk dismissal for review, or at most auto-lower
+   corroborating signals (never one weak signal alone), auto-**suggest** -
+   not auto-execute - bulk dismissal for review, or at most auto-lower
    priority. Every such action is audit-logged and reversible, the same
    human-in-the-loop posture as the SOAR playbook `approval`-step gating
    already in `playbook_engine.py`. This system must never silently close a
    real incident.
-5. **Feedback loop** — when an analyst confirms or overrides a suggestion,
+5. **Feedback loop** - when an analyst confirms or overrides a suggestion,
    record it as labelled feedback and let it nudge the per-signal weights
-   over time (simple, transparent rule-based weight adjustment — not a
+   over time (simple, transparent rule-based weight adjustment - not a
    black-box model, keeping the same "explainable, not mysterious" position
    as the rest of the scoring/ML surface in this codebase).
 
 **Testing discipline (non-negotiable before any UI ships).** A wrong
 "likely-fp" call that leads an analyst to skip a real incident is the worst
-possible failure mode here — worse than the feature not existing at all.
+possible failure mode here - worse than the feature not existing at all.
 Before shipping: known real-attack fixtures (e.g. a genuine multi-stage
 brute-force → lateral-movement chain) must score `likely-real` even when
 some superficially-benign-looking signals are also present (e.g. a partial
-suppression match) — one weak signal must never outvote several strong
+suppression match) - one weak signal must never outvote several strong
 ones. Match the rigor already established for `fp_rate`/suppression logic in
 `test_api.py` and the correlation-engine tests.
 
@@ -487,18 +487,18 @@ Two additions to the overall vision, to be upheld on **every** future UI change,
 not one-off tasks:
 
 - [~] **No dead links.** Every link / nav target / button must resolve to a
-      real destination — no `href="#"`, no route that 404s, no anchor to a
+      real destination - no `href="#"`, no route that 404s, no anchor to a
       missing id, no handler-less button, no "coming soon" stub. Enforced in
       CI: `frontend/scripts/check-routes.mjs` (runs in `tests.yml`) now gates
       **both** route links (227 checked) **and** in-page anchors (bare
-      `href="#"` and anchors to a non-existent `id` both fail the build) — so
+      `href="#"` and anchors to a non-existent `id` both fail the build) - so
       a dead link can't land silently. First pass (2026-07-10): audited the
       whole app clean; the only real fix was the stale
       `github.com/Sami9211/ThreatOrbit-V2` URL (worked only via GitHub's
       rename redirect) → canonical `.../ThreatOrbit` in the footer, CTA,
       quick-start clone command. Ongoing: re-run the guard on every UI change.
 - [~] **Smooth animations everywhere.** Foundation shipped (2026-07-10):
-      `lib/motion.ts` — one shared easing curve + a 3-step duration scale +
+      `lib/motion.ts` - one shared easing curve + a 3-step duration scale +
       reusable variants (`fadeInUp`, `fadeIn`, `scaleIn`, `drawerRight`,
       `listContainer`/`listItem`, `pageEnter`), replacing the ad-hoc per-file
       timings that had drifted across 84 framer-motion files; a single
@@ -510,33 +510,33 @@ not one-off tasks:
       Increment 2 (2026-07-10): SIEM **tab-switch transitions** (the tab
       content is a keyed `fadeInUp` wrapper, so every tab change replays a
       smooth enter), **staggered list enter** on the FP-triage list
-      (`listContainer`/`listItem`, keyed on band + item count — children
+      (`listContainer`/`listItem`, keyed on band + item count - children
       mounting into an already-settled parent don't animate, so the remount
       on data arrival is what makes the stagger actually play; caught live,
       not assumed), and `IocLifecyclePanel` migrated onto the shared
       `fadeInUp` variant. All verified in a browser by sampling inline
       opacity during the transitions (wrapper and rows both observed at
       0.000 → 1), zero console errors.
-      Increment 3 (2026-07-10): **number count-ups** — a reusable
+      Increment 3 (2026-07-10): **number count-ups** - a reusable
       `AnimatedNumber` (counts from the previously shown value; honours
       reduced motion explicitly via `useReducedMotion`, since imperative
       `animate()` bypasses MotionConfig) wired into the Overview KPI cards
       (both Power and Normal mode). A one-frame flash of the final value
       before the count started was observed live and fixed (render from the
       previously-committed value, not the target). **Hover/press
-      micro-interactions** — a shared `hoverLift` token (gesture transitions
+      micro-interactions** - a shared `hoverLift` token (gesture transitions
       embedded in the targets so it composes with elements that set their own
       enter transition), applied to the KPI/status cards. Verified live:
       monotonic count-up 0→31 over ~0.8s, reduced-motion jumps instantly,
       zero console errors.
       Increment 4 (2026-07-10): the keyed tab-switch transition extended to
-      every remaining tabbed surface — SOAR main tabs (cases/playbooks/
+      every remaining tabbed surface - SOAR main tabs (cases/playbooks/
       metrics), the SOAR case-detail tabs (overview/warroom/tasks/evidence),
       Config settings tabs, and Config-Users (users/roles, whose plain fades
       also migrated onto the shared `fadeInUp`). Verified live on all three
       pages by watching inline opacity during a switch (each keyed wrapper
       observed animating), zero console errors.
-      Increment 5 (2026-07-10, user-reported): **landing 3D scene fixes** —
+      Increment 5 (2026-07-10, user-reported): **landing 3D scene fixes** -
       (a) square WebGL point sprites read as "box shapes" riding the orbit
       rings (OrbitalScene dots + hero starfield) → drei `PointMaterial`
       (circular mask); (b) on the no-bloom path the hero's flat unlit
@@ -550,37 +550,37 @@ not one-off tasks:
       arcs teleported to their next random curve at opacity 0.12 →
       `0.44·sin(π·t)` envelope fades them fully out before the swap.
       Verified with before/after zoomed screenshots of the rebuilt export.
-      Increment 6 (2026-07-11): **loading skeletons + chart draw-ins** —
+      Increment 6 (2026-07-11): **loading skeletons + chart draw-ins** -
       shared `Skeleton`/`SkeletonRows` (CSS pulse, frozen by the global
       reduce-motion rule); SIEM alert queue no longer flashes "No alerts
       match" during its first fetch (skeleton rows instead), FP-triage list
       ditto while scoring, analytics trend cards skeleton until first
       answer; sparklines draw in via framer `pathLength`. Shipped together
       with the analytics-tab fabrication fix (live `/siem/analytics/trends`
-      endpoint — see CHANGELOG 2026-07-11). Browser-verified with delayed-
+      endpoint - see CHANGELOG 2026-07-11). Browser-verified with delayed-
       request interception: skeletons appear, resolve to live data, demo
       numbers never leak.
       Increment 7 (2026-07-11): first-load skeletons extended to every
-      major list surface — SOAR case board (both modes; Power mode also
+      major list surface - SOAR case board (both modes; Power mode also
       gained a real empty state where it used to render blank), assets
       (table + cards), fleet vulns, both feed columns, dark-web findings.
       Browser-verified on all five pages with request-delay interception.
       Increment 8 (2026-07-11): count-ups (AnimatedNumber) on the SIEM
-      header KPI strip, feeds KPI strip, and SOAR header stats — shipped
+      header KPI strip, feeds KPI strip, and SOAR header stats - shipped
       together with the header/alert-detail honesty fixes (see CHANGELOG:
       computed KPI sub-annotations, real UEBA identity/host tabs).
       Increment 9 (2026-07-11): playbooks KPI strip live + count-ups +
       skeleton (with the 100× success-rate fix, see CHANGELOG).
       Timing audit (2026-07-11): surveyed every remaining ad-hoc
-      `duration:` across dashboard pages/components — all cluster on the
-      token scale (0.12–0.25 fast/base, 0.5–0.9 for chart draw-ins); the
+      `duration:` across dashboard pages/components - all cluster on the
+      token scale (0.12-0.25 fast/base, 0.5-0.9 for chart draw-ins); the
       only >1s cases are the two health-gauge ring draws, which are
       deliberate. Converged: tokens govern the shared surfaces, remaining
-      per-component values are intentional. The goal stays standing —
+      per-component values are intentional. The goal stays standing -
       upheld on every future UI change, new motion uses lib/motion tokens.
-      **Side-find during increment 4 — FIXED (2026-07-10):** the SOAR
+      **Side-find during increment 4 - FIXED (2026-07-10):** the SOAR
       metrics tab rendered a hardcoded "Cases by Type (Last 30 days)" list
-      (Phishing 284, …) as if live — the one fabrication-sweep miss on that
+      (Phishing 284, …) as if live - the one fabrication-sweep miss on that
       tab (the neighbouring Automation Metrics and KPI table were already
       live). Now derived from the same live case list the KPI table uses
       (30-day window honoured, top 7 types, honest empty state when no cases
@@ -589,13 +589,13 @@ not one-off tasks:
 
 ### Frontend polish backlog
 
-- [x] **Asset network map** — pan-shake and scroll-zoom bugs fixed earlier;
+- [x] **Asset network map** - pan-shake and scroll-zoom bugs fixed earlier;
       the eased look shipped 2026-07-11 as motion polish on the existing SVG
       (staggered node entrance, link draw-in, eased button zoom, SMIL gated
       on reduced motion) rather than an R3F rewrite: the 2D map's working
       interactions (drag, pan, pinch, selection, attack-path trace) are the
       product value, and a 3D scene would have put them at risk for looks.
-- [x] **Exported reports** — findings grouped by severity (earlier); shipped
+- [x] **Exported reports** - findings grouped by severity (earlier); shipped
       2026-07-11: per-domain narratives carry an honest prior-window trend
       sentence (never invented when no baseline exists), the printable HTML
       gains a static SVG severity donut beside the KPI tiles, and print
@@ -682,13 +682,13 @@ _Move completed items here with the date so the roadmap stays honest._
   WCAG 2.0/2.1 A+AA ruleset as a permanent CI gate rather than a one-off manual
   pass. It immediately found, and this fixed: a sitewide "Skip to content" link
   whose `#main-content` target didn't exist on the login page or anywhere in
-  the dashboard layout (only marketing pages had it) — keyboard/screen-reader
+  the dashboard layout (only marketing pages had it) - keyboard/screen-reader
   users invoking it landed nowhere; 6 Config-page form inputs with a visible
   `<label>` never programmatically associated with its `<input>` (fixed once at
   the shared `Field` component via `useId()` + `htmlFor`/`id`, covering every
   instance); two unlabeled `<nav>` landmarks on the Config page indistinguishable
   from each other (now `aria-label`ed). `color-contrast` is disabled in the new
-  spec deliberately (not silently) — `--ink-500`/`--threat` measure ~3:1 against
+  spec deliberately (not silently) - `--ink-500`/`--threat` measure ~3:1 against
   their default-theme backgrounds vs. the 4.5:1 AA threshold, but both are
   per-theme tokens (11 themes), so the real fix needs a visually-verified
   lightness pass, not a token edit landed from a headless run; tracked above as
@@ -697,18 +697,18 @@ _Move completed items here with the date so the roadmap stays honest._
 - **2026-07-08 · Measured (not assumed) Postgres EPS baseline; corrected an
   unverified claim in `LOAD_LIMITS.md`.** `bench.py` forced a fresh SQLite temp
   DB unconditionally, so there was never actually a way to run it against
-  Postgres — the "documented Postgres EPS baseline" Tier-2 item stayed
+  Postgres - the "documented Postgres EPS baseline" Tier-2 item stayed
   unmeasured. Fixed by having it respect `DASHBOARD_DB_BACKEND=postgres` +
   `DATABASE_URL` when already set (unchanged default: SQLite temp file), then
   measured against a disposable local Postgres 16 database. Result: Postgres
   is markedly **slower** than SQLite for the current pipeline (~670 EPS
   ingest+detect vs. ~10,800; ~450 vs. ~7,400 single-worker drain), and 4
-  workers don't beat 1 on Postgres either — directly contradicting
+  workers don't beat 1 on Postgres either - directly contradicting
   `LOAD_LIMITS.md`'s prior (unverified) claim that switching to Postgres alone
   would go "materially higher." Root cause, confirmed by reading the code, not
   guessed: `ingest_lines` and the detection worker each issue one
   `conn.execute(...)` round-trip per event row, no `executemany`/`COPY`
-  batching — free on SQLite's in-process file access, but dominant over any
+  batching - free on SQLite's in-process file access, but dominant over any
   network connection, even loopback. `docs/LOAD_LIMITS.md` now carries the
   measured Postgres table and the corrected explanation; the real fix (batch
   the hot ingest/detection-claim writes) is scoped as a new Tier-2 roadmap item
@@ -718,11 +718,11 @@ _Move completed items here with the date so the roadmap stays honest._
 - **2026-07-08 · Connectors: closed an SSRF-via-redirect gap.**
   `connectors._read_capped` fetched custom feed URLs with
   `httpx.stream(..., follow_redirects=True)`, which chases a `Location` header
-  entirely inside httpx — invisible to `net_guard.validate_external_url`. A
+  entirely inside httpx - invisible to `net_guard.validate_external_url`. A
   feed URL that validates fine right now (a public host) could 302 the
   dashboard straight at cloud instance metadata (`169.254.169.254`) or an
   internal/RFC1918 address, and the server would fetch that instead,
-  completely unguarded — a real SSRF primitive gated only on
+  completely unguarded - a real SSRF primitive gated only on
   `connectors.manage`. `webhooks.py` already closed the analogous gap for
   webhook/Slack targets via `net_guard.safe_post` (pin + block redirects); feed
   URLs legitimately need redirects (http→https, CDN), so the fix here follows
@@ -732,7 +732,7 @@ _Move completed items here with the date so the roadmap stays honest._
   cases. Full SQLite suite: 511 passed.
 - **2026-07-08 · Simple vs Power organization mode (nav curation, not RBAC).**
   A small org drowning in a full SOC platform churns; a mature team hobbled by
-  a stripped-down UI churns too — so the org itself now picks its posture
+  a stripped-down UI churns too - so the org itself now picks its posture
   instead of shipping two products. `dashboard_api/modes.py` defines a
   24-feature-area catalogue (mirroring the Sidebar's nav sections) and a
   10-area `simple` subset (Overview, SOC console, SIEM alerts/sources, Cases,
@@ -744,7 +744,7 @@ _Move completed items here with the date so the roadmap stays honest._
   enforcing its real RBAC regardless of mode. The Sidebar now filters its nav
   by the org's feature list (`useOrgFeatures`), and the pre-existing
   client-side Normal/Power "Experience Mode" toggle (Config → General) is now
-  the same control — flipping it persists to the backend and re-curates the
+  the same control - flipping it persists to the backend and re-curates the
   nav, not just card density. Caught and fixed in the same pass: (1) a
   volume-dependent miss in `auto_trigger_playbooks` (same `LIMIT`-on-`ORDER BY
   ts DESC` bug class as the correlation engine, fixed by bounding the scan on
@@ -753,7 +753,7 @@ _Move completed items here with the date so the roadmap stays honest._
   per-object with the checkpoint advancing up to the last good key; (3) an E2E
   regression where treating every `GET /config/mode` response as authoritative
   would have silently flipped every existing install's working Normal-mode
-  default to the backend's Power fallback — fixed via a `has_explicit_mode`
+  default to the backend's Power fallback - fixed via a `has_explicit_mode`
   flag so the backend only overrides the frontend's pre-existing local default
   once an org has actually chosen. Full test coverage: `test_modes.py`,
   extended `test_playbook_engine.py` (auto-trigger volume + idempotency),
@@ -762,15 +762,15 @@ _Move completed items here with the date so the roadmap stays honest._
 - **2026-06-22 · Real Postgres query layer + connection pooling (audit A3/A4).**
   Replaced the brittle regex SQL-dialect rewriter with a real parser: `to_postgres`
   parses each statement with **sqlglot** and applies AST transforms for the SQLite
-  idioms sqlglot doesn't map on its own — `INTEGER`→`BIGINT` (SQLite ints are
+  idioms sqlglot doesn't map on its own - `INTEGER`→`BIGINT` (SQLite ints are
   64-bit), `INSERT OR REPLACE`→`INSERT … ON CONFLICT` (DO UPDATE for multi-col,
-  DO NOTHING for PK-only), `datetime('now')`→`now()` — then renders Postgres. The
+  DO NOTHING for PK-only), `datetime('now')`→`now()` - then renders Postgres. The
   regex rewriter is kept as a best-effort fallback for any statement sqlglot can't
   parse (or when sqlglot isn't installed). Connections now come from a
   **psycopg_pool** pool instead of opening/closing per call. The Postgres extras
   (`psycopg[binary]`, `psycopg-pool`, `sqlglot`) live in
   `dashboard_api/requirements-postgres.txt`. Validated end-to-end against a live
-  Postgres 16 — full dashboard suite **386 passed / 2 SQLite-only skipped** — and
+  Postgres 16 - full dashboard suite **386 passed / 2 SQLite-only skipped** - and
   in CI's backend-postgres job; the SQLite default is unchanged (**388 passed**).
 - **2026-06-22 · De-mocked dashboard widgets + CI gate (audit findings F-1…F-4).**
   Wired the widgets that rendered hardcoded demo data to their live endpoints, or
@@ -795,19 +795,19 @@ _Move completed items here with the date so the roadmap stays honest._
   Tests: `test_soar_analysts.py`; tsc + `check:routes` (227 links) + `next build`
   green; dashboard_api suite green.
 - **2026-06-22 · Roadmap audit + prune.** Ran a full audit pass: all three
-  backend suites green on a clean install (**413 tests** — log_api 20,
+  backend suites green on a clean install (**413 tests** - log_api 20,
   threat_api 8, dashboard_api 385), re-verified `audit_fixes.md` against the
   current tree, and removed every finished `[x]` entry from the active roadmap
-  (Phases 0–5 + the closed Tier-1 hardening) since they are recorded here. The
+  (Phases 0-5 + the closed Tier-1 hardening) since they are recorded here. The
   roadmap above now carries only remaining work plus the new findings surfaced
-  by this pass — chiefly that several dashboard widgets (Overview Trending CVEs,
+  by this pass - chiefly that several dashboard widgets (Overview Trending CVEs,
   CTI sector/briefs, SOC-metrics analyst & playbook panels, the SIEM in-page
   Threat-Hunt tab, the scanner's demo history) still render hardcoded sample
   data rather than their live endpoints, the SOC-metrics time-range selector is
   a no-op, and the CI `pip-audit` gate is `--strict` only for `dashboard_api`.
 - **2026-06-18 · SOAR metrics: live ATT&CK coverage (de-mocked).** The SOAR
   metrics page hardcoded a MITRE ATT&CK coverage grid (fabricated `82/74/61…`
-  percentages) — a violation of the "every number traces to the API" principle.
+  percentages) - a violation of the "every number traces to the API" principle.
   It now derives coverage **live** from `/siem/attack-coverage` (the same real
   endpoint the SOC console + SIEM navigator use): per tactic, the % of techniques
   that have an enabled detection rule, labelled with the ATT&CK tactic id, with
@@ -815,11 +815,11 @@ _Move completed items here with the date so the roadmap stays honest._
   The page already fetched its other metrics live, so this just adds one more
   fetch + derivation and removes the mock constant. Verified with `tsc`, the route
   gate, and a production `npm run build`. (The rest of this metrics page still has
-  some illustrative figures — analyst leaderboard, playbook effectiveness — left
+  some illustrative figures - analyst leaderboard, playbook effectiveness - left
   as a separate frontend-polish item.)
 - **2026-06-18 · Per-device sessions for SSO/SAML logins.** The interactive
   login + self-service register created a listable/revocable per-device session
-  row (JWT `sid`), but the OIDC callback and SAML ACS minted a `sid`-less token —
+  row (JWT `sid`), but the OIDC callback and SAML ACS minted a `sid`-less token -
   so an SSO/SAML device couldn't be seen in "your sessions" or signed out
   individually (only the coarse token-epoch applied). Both now `record_session`
   (with best-effort device metadata from the request) and mint the token with the
@@ -833,7 +833,7 @@ _Move completed items here with the date so the roadmap stays honest._
   of the HA/DR item's Postgres gap. `docs/POSTGRES_HA.md` covers turning on the
   Postgres backend behind a highly-available endpoint, managed (RDS/Aurora
   Multi-AZ, Cloud SQL HA, Azure zone-redundant) vs self-managed (Patroni/repmgr)
-  topologies, and — grounded in the actual architecture — **why failover is clean
+  topologies, and - grounded in the actual architecture - **why failover is clean
   here**: stateless API replicas, per-request connections (no stale pool to
   drain → automatic reconnect through the HA endpoint), and the DB-backed leader
   lease that survives promotion so the background singletons stay single-run.
@@ -844,14 +844,14 @@ _Move completed items here with the date so the roadmap stays honest._
 - **2026-06-18 · UI dataset ceilings (list-endpoint limit caps).** An audit found
   ~12 list endpoints (overview rollups, jobs, audit-log, SOAR run history,
   discovered assets, service IOC pulls) took a **plain `limit: int = N` with no
-  upper bound** — a client could request `?limit=10000000` and force an unbounded
+  upper bound** - a client could request `?limit=10000000` and force an unbounded
   result set (memory/DoS). Each now uses `Query(default, le=cap)` (the same
   pattern the 15 paginated endpoints already used), so an over-cap value is
   rejected with 422 and the cap is the hard ceiling. Published the per-family
   ceilings in `docs/LOAD_LIMITS.md` (alongside the client-side 150-row windowing).
   Tests in `test_dataset_ceilings.py` (5 endpoints: over-cap → 422, cap → 200).
   Full suite green. (Only the live-Postgres EPS baseline remains on the
-  load-limits item — it needs a real PG host to measure.)
+  load-limits item - it needs a real PG host to measure.)
 - **2026-06-18 · Agentless S3 log pull (closes Parser & source breadth).** Logs
   already landing in object storage now flow into the SIEM with no agent or
   forwarder. `dashboard_api/s3_pull.py` tails an S3 (or S3-compatible) bucket
@@ -883,14 +883,14 @@ _Move completed items here with the date so the roadmap stays honest._
 - **2026-06-18 · Org-scoped API keys (per-tenant collectors).** Closes the last
   optional multi-tenancy piece: a non-interactive collector now ingests into the
   right workspace. Added `api_keys.org_id` (migration; `SCHEMA_VERSION` 1→2, which
-  exercises the new boot gate) — `auth._principal_from_api_key` returns the key's
+  exercises the new boot gate) - `auth._principal_from_api_key` returns the key's
   org, so a service principal acts in that workspace and `ingest_lines` stamps its
   events accordingly. `POST /config/api-keys` takes an optional `orgId` (defaults
   to the creator's workspace; a named workspace must exist), and the frontend
   client/type carry it. Tests in `test_api_key_org.py` (3): default-to-creator,
   unknown-workspace 404, and an end-to-end org-scoped-key ingest landing in its
   tenant. Full suite green. With this, **all code pieces for multi-tenant GA are
-  in** — only the default-flip + an end-to-end validation pass remain.
+  in** - only the default-flip + an end-to-end validation pass remain.
 - **2026-06-18 · Multi-tenancy: per-org ingest context.** The last data-path
   isolation gap. Ingested events now carry the **ingesting principal's
   workspace** (`ingest_lines(... org_id=…)` stamps the `events.org_id`; both
@@ -959,7 +959,7 @@ _Move completed items here with the date so the roadmap stays honest._
   On boot `init_db` runs `_schema_version_gate` BEFORE touching data: it **adopts**
   a fresh/pre-versioning DB, **bumps** the marker after a normal additive upgrade,
   and **raises `SchemaVersionError` (refuses to start)** when the DB is newer than
-  the code — an older binary rolled back onto a newer schema — unless
+  the code - an older binary rolled back onto a newer schema - unless
   `DASHBOARD_ALLOW_SCHEMA_DOWNGRADE=1`. Surfaced for ops at `GET /ready`
   (`schema.{code,db}`) and `python -m dashboard_api.ops schema-version` (rc=1 if
   the DB is newer). Fixed a latent bug uncovered en route: `seed(force=True)`
@@ -979,7 +979,7 @@ _Move completed items here with the date so the roadmap stays honest._
   another workspace takes their **granted role AND data scope** there (resolved
   once, so `org_of`/scoping/stamping and `require_perm` all follow consistently);
   asking for a workspace you're not in is a 403. Single-tenant installs ignore the
-  header entirely — byte-for-byte unchanged. Tests in `test_workspace_roles.py`
+  header entirely - byte-for-byte unchanged. Tests in `test_workspace_roles.py`
   (7): grant/list/resolve, acting-org role+scope switch, non-member 403,
   require_perm honouring the acting role, no-priv-escalation, revoke, and the
   single-tenant no-op. Note: the engine/ingest background context is still
@@ -1004,12 +1004,12 @@ _Move completed items here with the date so the roadmap stays honest._
   license.manage only while active + per-use audit, expiry, endpoint lifecycle,
   admin session list. Full suite green.
 - **2026-06-18 · Retention cold-storage: object-storage (S3) writer.** Closed the
-  last open piece of Retention tiering — cold storage no longer has to be a local
+  last open piece of Retention tiering - cold storage no longer has to be a local
   disk. `dashboard_api/archive.py` grew a second, independently-enableable sink:
   alongside the local gzip-NDJSON dir, setting `DASHBOARD_ARCHIVE_S3_BUCKET`
   (+ `_PREFIX`/`_REGION`/`_ENDPOINT`) writes each purged batch as an **immutable
-  gzip object** via an **AWS SigV4-signed `PUT`** — stdlib-only (hmac/hashlib),
-  no boto3 — that works against S3 and S3-compatible stores (MinIO, Cloudflare R2,
+  gzip object** via an **AWS SigV4-signed `PUT`** - stdlib-only (hmac/hashlib),
+  no boto3 - that works against S3 and S3-compatible stores (MinIO, Cloudflare R2,
   Backblaze B2 via the path-style `_ENDPOINT`). Credentials come from the standard
   AWS environment. Both sinks gate the purge: any sink failure raises `OSError`,
   so rows are never deleted unarchived (the existing retention guard, unchanged).
@@ -1040,12 +1040,12 @@ _Move completed items here with the date so the roadmap stays honest._
 - **2026-06-18 · Roadmap honesty pass (stale `[~]` → `[x]`).** Audited the
   in-progress markers against the actual code/CHANGELOG and corrected six whose
   stated "Remaining:" work had already shipped: **Billing** (Stripe self-serve
-  done — `billing.py`/`routers/billing.py`/`test_billing.py`), **Postgres option**
+  done - `billing.py`/`routers/billing.py`/`test_billing.py`), **Postgres option**
   (validated against live PG 16 + a CI service-container job), **E2E suite** and
   **Mobile-responsive** (34 Playwright tests green across desktop-chromium +
   mobile-safari in CI), **SSO** (OIDC + SAML 2.0 + SCIM 2.0 all shipped, incl.
   deprovisioning), and **Detection content library** (content-update channel via
-  `POST /siem/content/apply`). No code change — roadmap accuracy only; genuine
+  `POST /siem/content/apply`). No code change - roadmap accuracy only; genuine
   follow-ups were re-noted on each item.
 - **2026-06-18 · Parser & source breadth: EDR + M365 + firewalls + TLS syslog.**
   The ingest pipeline recognised Windows/Sysmon and the three clouds; this closes
@@ -1060,12 +1060,12 @@ _Move completed items here with the date so the roadmap stays honest._
   `malware_detected`, ConnectionSuccess → `network_connect`), the **Office 365 /
   M365 unified audit log** (`Operation`: UserLoginFailed → `failed_login`,
   New-InboxRule → `mailbox_rule`, Consent-to-application → `app_consent`,
-  Disable-Strong-Auth → `mfa_disabled`), and **firewalls** — **Palo Alto PAN-OS**
+  Disable-Strong-Auth → `mfa_disabled`), and **firewalls** - **Palo Alto PAN-OS**
   (TRAFFIC/THREAT, subtype → `ips_alert`/`malware_detected`/`firewall_deny`) and
   **Fortinet FortiGate** (JSON *and* its native key=value syslog, with quoted-value
   support added to `_parse_kv`). Discriminators are tight (each requires a
   vendor-distinctive companion field) so arbitrary JSON still falls through to the
-  ECS/heuristic path — proven by "not hijacked" cases. Auth failures from **every**
+  ECS/heuristic path - proven by "not hijacked" cases. Auth failures from **every**
   source now land as `failed_login`, so the brute-force/spray detection fires
   uniformly. **TLS syslog (RFC 5425)** also lands: `log_listeners.deframe_syslog`
   is a unit-tested octet-counting + newline deframer (carries frames that span TCP
@@ -1077,7 +1077,7 @@ _Move completed items here with the date so the roadmap stays honest._
   ingest-endpoint round-trip, and deframer framing); full suite green. Still
   ahead: agentless S3/blob pull and CEF/LEEF decoding.
 - **2026-06-18 · Background-service HA (leader election).** The engine tick,
-  connector/report scheduler and file-watcher were single-instance — two app
+  connector/report scheduler and file-watcher were single-instance - two app
   replicas would double-generate telemetry, double-import connectors,
   double-deliver scheduled reports and double-ingest a shared watch dir. Added
   `dashboard_api/leader.py`, a DB-backed lease (`leader_lease` table, integer
@@ -1093,7 +1093,7 @@ _Move completed items here with the date so the roadmap stays honest._
   `test_leader.py` (single-holder contention, renew, post-expiry takeover,
   release, endpoint) pass on **both** backends.
 - **2026-06-18 · Collector ecosystem + API-key authentication.** Two gaps
-  closed together. **(1) API-key auth** — issued keys (`to_sk_live_…` etc.) were
+  closed together. **(1) API-key auth** - issued keys (`to_sk_live_…` etc.) were
   minted and stored but nothing actually *accepted* them on requests, so no
   non-interactive client could authenticate. `auth.current_user` now resolves a
   presented API key (Bearer **or** `X-API-Key`) into a synthetic service
@@ -1101,7 +1101,7 @@ _Move completed items here with the date so the roadmap stays honest._
   last_used-stamped); scope maps onto the role matrix (read→viewer,
   write→analyst, admin→admin) so every `require_perm` gate works unchanged.
   Tests in `test_api_key_auth.py` (both headers, scope→permission, revocation,
-  forged-key rejection). **(2) Collector ecosystem** — a single-file stdlib
+  forged-key rejection). **(2) Collector ecosystem** - a single-file stdlib
   agent `collector/threatorbit_collector.py` that tails files, **checkpoints
   read offsets** (atomic state file → restart never re-ships or drops a line),
   handles rotation/truncation, batches, and honours ingest backpressure (429 +
@@ -1118,7 +1118,7 @@ _Move completed items here with the date so the roadmap stays honest._
   operational surface. New backend endpoint **`GET /siem/triage`** returns the
   open-alert queue rolled up by severity, the unassigned load, the status
   breakdown, the oldest-open age, and **SLA breaches classified ack-vs-resolve**
-  — ages computed from real alert timestamps, thresholds admin-tunable via
+  - ages computed from real alert timestamps, thresholds admin-tunable via
   `sla_ack_<sev>_mins` / `sla_resolve_<sev>_mins` settings (sane per-severity
   defaults). The page composes that with the existing `/siem/kpis` (MTTA/MTTR/
   EPS), `/config/engine` queue backpressure (depth/in-flight/lag, load-shedding
@@ -1131,7 +1131,7 @@ _Move completed items here with the date so the roadmap stays honest._
   `href`/`href:`/`link:`/`router.push` target in `app|components|lib`; all 222
   resolve to a real route (the only leading-slash literals that *aren't* routes
   are the `path:` keys documenting backend REST endpoints on the docs page,
-  which are correctly excluded). Added `frontend/scripts/check-routes.mjs` — it
+  which are correctly excluded). Added `frontend/scripts/check-routes.mjs` - it
   discovers the route set by walking the App Router tree (handling route groups
   and `@slots`), validates template-literal links on their literal prefix, and
   fails the build on any link to a non-existent route; wired into the frontend
@@ -1162,7 +1162,7 @@ _Move completed items here with the date so the roadmap stays honest._
   "Project status", OSINT/ML framing), MIT LICENSE, untracked `.pyc`, language
   bar. **Also caught a real Postgres deadlock + claim-overlap in the multi-worker
   detection pool** (invisible on SQLite) that had been failing the backend-postgres
-  CI job — fixed via fired-rules-only / sorted `last_fired` updates and a
+  CI job - fixed via fired-rules-only / sorted `last_fired` updates and a
   `FOR UPDATE SKIP LOCKED` claim; the Tests workflow is green again.
 
 - **2026-06-15 · Measured load baseline (`bench.py` + `docs/LOAD_LIMITS.md`).**
@@ -1171,32 +1171,32 @@ _Move completed items here with the date so the roadmap stays honest._
   sustains **~10k EPS ingest+detect** and **~7k EPS pure detection** (single
   worker). The benchmark surfaced an **honest, valuable finding**: the detection
   worker pool is *slightly slower* with more workers on SQLite (single-writer
-  contention) — so the pool is for correctness + Postgres scaling, not SQLite
+  contention) - so the pool is for correctness + Postgres scaling, not SQLite
   throughput, and the doc says so plainly and points to Postgres / a columnar
   store for higher EPS. `test_bench.py` runs the benchmark in an isolated
   subprocess as a smoke check.
 
 - **2026-06-15 · Multi-worker detection pool (event-pipeline increment 3).** The
   queue seam (increment 1) and bounded ingest (increment 2) were in, but detection
-  was still a single inline worker — the documented P0 scale ceiling.
+  was still a single inline worker - the documented P0 scale ceiling.
   `detection_pool.py` adds the concurrency-safe pool: each worker claims a batch
   under a **write-locked transaction** (SQLite `BEGIN IMMEDIATE` on an autocommit
-  connection — the lock is taken *before* the SELECT, so a concurrent claim blocks
+  connection - the lock is taken *before* the SELECT, so a concurrent claim blocks
   then sees the rows already taken), then processes it through the unchanged
   `run_detection` path (now accepting a pre-claimed `claimed=` batch). At-least-once
   via the existing lease/`requeue_stale`. `POST /siem/detection/drain?workers=N`
   exposes a pooled backlog drain (`DASHBOARD_DETECTION_WORKERS`). The **inline
   engine tick is deliberately untouched** (worker engine-0), so the default path
   is byte-for-byte unchanged. `test_detection_pool.py` proves the decisive
-  invariant — a 6-worker drain yields exactly the same alerts as a 1-worker drain
-  of identical input (no event claimed/alerted twice, none missed) — plus the
+  invariant - a 6-worker drain yields exactly the same alerts as a 1-worker drain
+  of identical input (no event claimed/alerted twice, none missed) - plus the
   drain endpoint. Full suite green (268).
 
 - **2026-06-15 · DPA template (GDPR Art. 28).** Enterprise procurement asks for a
   Data Processing Agreement before a PoC ends; there wasn't one. `docs/DPA_TEMPLATE.md`
-  is a complete, realistic template — roles, Art. 28(3) processor obligations,
+  is a complete, realistic template - roles, Art. 28(3) processor obligations,
   sub-processor change/objection, data-subject assistance, breach notice, audit,
-  deletion/return, international transfers — with four annexes (processing
+  deletion/return, international transfers - with four annexes (processing
   details, **TOMs grounded in the controls the product actually implements**,
   the real optional sub-processors, SCCs). Honest throughout: it foregrounds the
   **self-hosted vs managed** distinction (self-hosted = vendor isn't the
@@ -1217,7 +1217,7 @@ _Move completed items here with the date so the roadmap stays honest._
   warns on missing required secrets and the multi-replica-needs-jwtSecret pitfall;
   a chart README documents build/install/HA/ingress. Validated structurally
   (brace/control balance + every manifest's YAML skeleton parses to the right
-  kinds); pure additive (`deploy/helm/**` only — no app code touched).
+  kinds); pure additive (`deploy/helm/**` only - no app code touched).
 
 - **2026-06-15 · Per-rule noise ratings.** Completes the detection-content item.
   A fresh pack rule's observed `fp_rate` is 0 (no fires yet), so analysts had no
@@ -1336,8 +1336,8 @@ _Move completed items here with the date so the roadmap stays honest._
   the URL could forge events). Each webhook now has a `whsec_` signing secret
   (shown once at create, rotatable via `POST /config/webhooks/{id}/rotate-secret`,
   never re-listed); every delivery is signed **`X-ThreatOrbit-Signature:
-  t=<unix>,v1=<hmac>`** — HMAC-SHA256 over `"<t>.<body>"`, the exact bytes sent,
-  the same scheme as the inbound Stripe verifier — and carries an
+  t=<unix>,v1=<hmac>`** - HMAC-SHA256 over `"<t>.<body>"`, the exact bytes sent,
+  the same scheme as the inbound Stripe verifier - and carries an
   **`X-ThreatOrbit-Delivery`** uuid so consumers dedupe retries plus an
   `X-ThreatOrbit-Event` header. `verify_signature()` is shipped as the reference
   verifier (and the UI banner documents the scheme). Frontend: the API/webhooks
@@ -1347,7 +1347,7 @@ _Move completed items here with the date so the roadmap stays honest._
   the old secret); full suite, tsc and build green.
 
 - **2026-06-15 · Idle timeout (sliding inactivity sign-out).** The "Session
-  Timeout (minutes)" setting was decorative — stored, shown, never enforced.
+  Timeout (minutes)" setting was decorative - stored, shown, never enforced.
   It's now a real **idle window**: `current_user` reads it (per-device
   `last_seen` already tracked) and signs out a session left inactive longer than
   the window, even though the JWT's 12h hard expiry hasn't fired. Defaults to the
@@ -1358,16 +1358,16 @@ _Move completed items here with the date so the roadmap stays honest._
   works; full suite, tsc and build green.
 
 - **2026-06-15 · Password screening (NIST SP 800-63B aligned).** Every
-  set-password path only enforced an 8-char floor — `password`, `12345678`,
+  set-password path only enforced an 8-char floor - `password`, `12345678`,
   `qwerty123` all sailed through. New `password_policy.validate_password`
   screens length (8…256, the ceiling caps a PBKDF2 DoS lever), an offline
-  **common/breached-password list** (exact, case-insensitive — so strong
+  **common/breached-password list** (exact, case-insensitive - so strong
   passphrases that merely contain a word still pass), and trivial
   self-references (the password being your own name/email). Wired into
   **register**, **admin create-user**, and **change-password** (400 with the
   specific reason). Also fixed the frontend `api()` error extractor to read the
-  `{"error": …}` envelope (it only read `{"detail": …}`), so these messages —
-  and every other API error — now surface to the user instead of a generic
+  `{"error": …}` envelope (it only read `{"detail": …}`), so these messages -
+  and every other API error - now surface to the user instead of a generic
   fallback; the change-password form shows the exact reason.
   `test_password_policy.py` (helper + all three endpoints); full suite, tsc and
   build green.
@@ -1377,11 +1377,11 @@ _Move completed items here with the date so the roadmap stays honest._
   devices were logged in or drop a single suspicious one. Each login (and
   self-service register) now writes a **per-device `sessions` row** and the JWT
   carries its id as a `sid` claim. `current_user` checks the row isn't revoked
-  (sid-less tokens — older sessions, SSO/SAML — fall through on the epoch check,
+  (sid-less tokens - older sessions, SSO/SAML - fall through on the epoch check,
   so it's fully backward compatible) and advances a throttled `last_seen`.
   New: `GET /auth/sessions` (your devices, the current one flagged, with
   parsed device + IP + last-active) and `POST /auth/sessions/{id}/revoke` (sign
-  out one device — 404 if it isn't yours). The `revoked` flag stays consistent
+  out one device - 404 if it isn't yours). The `revoked` flag stays consistent
   with the coarse mechanism: change-password keeps the current device and drops
   the rest, revoke-all and admin-revoke clear the list. Frontend: an **Active
   Sessions** panel in Settings → Security (per-row Sign out + "Sign out other
@@ -1569,7 +1569,7 @@ _Move completed items here with the date so the roadmap stays honest._
 
 - **2026-06-15 · Detection content: built-in rule pack 7 → 15 across 8 ATT&CK
   tactics.** The first chunk of the curated detection-content gap (a SIEM's core
-  value). Added 8 high-fidelity rules with full MITRE mapping — ransomware mass
+  value). Added 8 high-fidelity rules with full MITRE mapping - ransomware mass
   encryption (T1486) + shadow-copy deletion (T1490) bringing the **Impact**
   tactic in for the first time, kerberoasting (T1558.003) + password spraying
   (T1110.003) deepening **Credential Access**, cloud access-key creation
@@ -1813,7 +1813,7 @@ _Move completed items here with the date so the roadmap stays honest._
   findings from every area, and a single de-duplicated priority action list
   (patch KEV first, reset leaked creds, triage criticals…). Backend-only
   (`reports.py`); the generic renderer needed no change. 161 tests green.
-- **2026-06-13 · Security hardening pass (audit-driven)** — a full defensive
+- **2026-06-13 · Security hardening pass (audit-driven)** - a full defensive
   audit (SQLi/LFI/SSRF/XSS/IDOR/authz/crypto/DoS) found and fixed real gaps,
   choosing fixes that harden production without breaking the local/demo start.
   (a) **SSRF guard** (`net_guard.py`) on every user-supplied outbound URL -
@@ -1842,17 +1842,17 @@ _Move completed items here with the date so the roadmap stays honest._
   inline `--magenta` RGB-triplet override; **UI scale** 90-110% and
   **Comfortable / Compact density** both applied through the document's rem
   baseline by `ThemeScope` (a genuine zoom / density change, not a cosmetic
-  flag — restored on leaving the dashboard); and a **Reduced-motion** toggle
+  flag - restored on leaving the dashboard); and a **Reduced-motion** toggle
   that stops animations/transitions. All four prefs persist per-browser
   (`to-dashboard-prefs`) and sync across open tabs, scoped to the dashboard
   so the marketing site is untouched. Retired the old decorative no-op
   toggles (Dark Mode / Compact View / Animated Effects / Auto-refresh) now
-  that real controls exist. (b) **Monochrome contrast** — solid accent
+  that real controls exist. (b) **Monochrome contrast** - solid accent
   buttons forced dark text (white-on-white fixed); faint tints untouched.
-  (c) **Hero/orbit scroll flicker** — the 3D scenes mounted the `<Canvas>`
+  (c) **Hero/orbit scroll flicker** - the 3D scenes mounted the `<Canvas>`
   conditionally, so a sudden scroll tore down and rebuilt the WebGL context
   (a blank frame); they now mount once and stay alive, pausing the render
-  loop (`frameloop: demand`) off-screen. (d) **Logo** — flat hex replaced
+  loop (`frameloop: demand`) off-screen. (d) **Logo** - flat hex replaced
   with a faceted, beveled 3D gem (lit/shaded half-faces, specular crown,
   cast shadow, glow bloom behind the core). Frontend builds + type-checks
   clean.
@@ -1873,36 +1873,36 @@ _Move completed items here with the date so the roadmap stays honest._
   frontend + backend app code. Tests cover the assistant's basic mode, the
   secrets-never-leak guarantee, and the agentic tool-loop (147 backend tests
   green; frontend build clean).
-- **2026-06-13 · Fix combined-install conflict (build)** — the security-pass
+- **2026-06-13 · Fix combined-install conflict (build)** - the security-pass
   backend bump (fastapi 0.118+/python-multipart 0.0.27+) left `log_api`
   pinned to the old `fastapi==0.115.0` / `python-multipart==0.0.9`. The
   Windows bats (`windows-start.bat`, `windows-test.bat`) install all three
   services' requirements in one `pip install`, so the divergence produced a
   hard `ResolutionImpossible` and both bats died at the install step before
   any test/app ran. Aligned `log_api`'s shared pins with `dashboard_api`
-  (same FastAPI/uvicorn/python-multipart stack, same upload-DoS fix — its
+  (same FastAPI/uvicorn/python-multipart stack, same upload-DoS fix - its
   tests already pass on the new versions). Combined install now resolves;
   all three suites green (143 + 1 + 1); frontend builds + type-checks clean.
 - **2026-06-12 · Security pass: audits in CI + patched deps + disclosure
-  (Tier 1)** — `.github/workflows/security.yml` runs pip-audit (strict) and
+  (Tier 1)** - `.github/workflows/security.yml` runs pip-audit (strict) and
   a frontend audit gate on every change plus weekly. The npm gate
   (`frontend/scripts/audit-gate.mjs`) implements triage-with-expiry: any
   untriaged high/critical fails, and so does any allowlist entry past its
-  expiry — the 14 Next.js *server* advisories are consciously accepted until
+  expiry - the 14 Next.js *server* advisories are consciously accepted until
   2026-09-30 because production deploys the static export (no Next server);
   the real fix is the tracked next@16 major. Running the audit for real
   found and fixed backend exposure: python-multipart 0.0.9 → ≥0.0.27 (upload
-  parsing DoS — this API accepts uploads), fastapi 0.115 → 0.129 +
+  parsing DoS - this API accepts uploads), fastapi 0.115 → 0.129 +
   starlette 0.52, cryptography ≥46.0.7, with the full 143-test suite green
   on the new set; starlette's PYSEC-2026-161 (fix needs starlette 1.x, no
   FastAPI supports it yet) is triaged in-workflow with the mitigation
   documented. SECURITY.md ships the disclosure policy + honest triage table,
   explicitly stating the pentest has NOT happened yet.
-- **2026-06-12 · Deployment hardening (Tier 1)** — a
+- **2026-06-12 · Deployment hardening (Tier 1)** - a
   SecurityHeadersMiddleware stamps nosniff / DENY-framing / no-referrer /
   no-store on every API response including errors (tested); the API
   Dockerfile drops to an unprivileged `app` user (uid 10001) with only the
-  `/data` volume writable (registry rate-limits block a local build-verify —
+  `/data` volume writable (registry rate-limits block a local build-verify -
   standard pattern, verify at deploy); and `docs/DEPLOYMENT.md` ships the
   topology (TLS at the proxy, app ports internal-only), nginx and Caddy
   reference configs (HSTS, frontend CSP for the static export, SSE-safe
@@ -1910,7 +1910,7 @@ _Move completed items here with the date so the roadmap stays honest._
   when unset, compose hardening, digest pinning, and an honest "what the
   platform refuses to pretend about" section (no app-level TLS, /metrics
   gating, plain-UDP syslog until Tier-2 RFC 5425).
-- **2026-06-12 · Observability baseline (Tier 1)** —
+- **2026-06-12 · Observability baseline (Tier 1)** -
   `dashboard_api/observability.py`, stdlib-only: a pure-ASGI middleware
   records every request under its resolved route TEMPLATE (so
   `/siem/alerts/{alert_id}` is one series, ids never leak into label
@@ -1923,7 +1923,7 @@ _Move completed items here with the date so the roadmap stays honest._
   isn't. Documented in docs/OPERATIONS.md; tests cover the exposition
   content, template aggregation, token gating, and the JSON formatter
   (142 passed).
-- **2026-06-12 · Backup/restore/upgrade (Tier 1)** — `dashboard_api/ops.py`
+- **2026-06-12 · Backup/restore/upgrade (Tier 1)** - `dashboard_api/ops.py`
   takes transactionally consistent SQLite snapshots with the online-backup
   API (never a raw file copy under WAL) and integrity-verifies them
   (PRAGMA integrity_check + core-table counts). `GET /config/backup`
@@ -1931,10 +1931,10 @@ _Move completed items here with the date so the roadmap stays honest._
   (`python -m dashboard_api.ops backup|verify`) is cron-able; Postgres
   deployments are pointed at pg_dump and the endpoint refuses there.
   `docs/OPERATIONS.md` documents the offline restore drill, the
-  additive-only upgrade/rollback contract, and key management — including
+  additive-only upgrade/rollback contract, and key management - including
   that backups carry `enc:v1:` credentials and are only complete together
   with `DASHBOARD_ENCRYPTION_KEY`. 141 passed.
-- **2026-06-12 · Real TOTP MFA (Tier 1)** — `dashboard_api/mfa.py` implements
+- **2026-06-12 · Real TOTP MFA (Tier 1)** - `dashboard_api/mfa.py` implements
   RFC 6238 with the stdlib (proven against the RFC's SHA-1 test vectors).
   Flow: `/auth/mfa/enroll` generates a 160-bit secret (returned once with
   the otpauth:// URI; stored Fernet-encrypted), `/auth/mfa/verify` proves
@@ -1943,12 +1943,12 @@ _Move completed items here with the date so the roadmap stays honest._
   count against the login throttle; ±1-step skew window), and
   `/auth/mfa/disable` demands a valid current code so a hijacked session
   can't strip the factor. Admins can only reset MFA off (clears the secret)
-  — never enable it for someone. The login page gains the step-up code
+  - never enable it for someone. The login page gains the step-up code
   field; Config → Security gains an enrol/verify/disable panel; the dead
   "Enforce MFA" toggle and the backend-less OIDC/SAML dropdown options are
   removed per the data-honesty rule. The login response also stops leaking
   slack_webhook/mfa_secret via `_public`. 140 passed.
-- **2026-06-12 · Secrets at rest (Tier 1)** — `dashboard_api/secretstore.py`
+- **2026-06-12 · Secrets at rest (Tier 1)** - `dashboard_api/secretstore.py`
   Fernet-encrypts every DB-stored credential (connectors.api_key,
   integrations.api_key, users.slack_webhook) as `enc:v1:<token>` under
   `DASHBOARD_ENCRYPTION_KEY` (falls back to the JWT secret; the
@@ -1961,7 +1961,7 @@ _Move completed items here with the date so the roadmap stays honest._
   round-trip/idempotence/legacy passthrough, encrypted-at-rest assertions
   for all three stores, plaintext at the choke points, the boot migration,
   and the rotated-key degrade path (139 passed).
-- **2026-06-12 · Frontend virtualisation (Phase 5)** — a dependency-free
+- **2026-06-12 · Frontend virtualisation (Phase 5)** - a dependency-free
   `useWindowedRows` hook (rAF-coalesced scroll tracking, overscan, spacer
   padding) windows long uniform tables; wired into the SIEM alert queue with
   a 150-row activation threshold so huge queues scroll smoothly while small
@@ -1969,7 +1969,7 @@ _Move completed items here with the date so the roadmap stays honest._
   when windowed). Remaining Phase 5 items are environment-gated and
   documented as such: Stripe self-serve purchase (needs a processor
   account), live-Postgres validation, and the CI-executed E2E/mobile runs.
-- **2026-06-12 · Attack-surface panel (Phase 4 closed)** — the assets page
+- **2026-06-12 · Attack-surface panel (Phase 4 closed)** - the assets page
   gains an AttackSurfacePanel over the live `/assets/exposure` +
   `/assets/discovered` APIs: the internet-facing inventory with per-asset
   exposure bands and contributing factors (hover for weights) and summary
@@ -1977,33 +1977,33 @@ _Move completed items here with the date so the roadmap stays honest._
   hosts (events/alerts/last-seen from real telemetry) with one-click
   promotion into the managed inventory (refreshing the asset list). Active
   probing is documented as deliberately out of scope (passive only).
-- **2026-06-12 · NVD catalogue sync (Phase 4)** — the NVD connector now feeds
+- **2026-06-12 · NVD catalogue sync (Phase 4)** - the NVD connector now feeds
   the vulnerability scanner: `nvd_to_catalogue` parses NVD 2.0
   `configurations` CPE matches (versionStart/End incl/excl + exact-version
   CPEs; applications only; unbounded rows skipped as unscannable) into a new
   `cve_catalogue` table (upsert keyed cve+product), and `scan_asset` merges
   the synced rows with the built-in catalogue (per-product lists concatenate)
-  — so live NVD imports flow straight into asset scanning. The scanner gains
+  - so live NVD imports flow straight into asset scanning. The scanner gains
   a `bounds` matcher for NVD's inclusive/exclusive range semantics. Also
   corrected the module docstring, which previously claimed an IOC-store
   augmentation that was never wired. End-to-end test: connector run → synced
   row → affected version flags CVE-2026-12345, fixed version doesn't.
-- **2026-06-12 · Intel report authoring panel (Phase 3 closed)** — the CTI
+- **2026-06-12 · Intel report authoring panel (Phase 3 closed)** - the CTI
   hub gains an IntelReportsPanel over the existing `/cti/reports` store:
   draft authoring (title, TLP marking, executive summary, full body, tags),
   status filtering, one-click publish/unpublish, expandable reading view
   with author/actor/IOC metadata, per-report MISP-event download (new
   `exportIntelReportMisp` client), and delete with optimistic rollback.
-- **2026-06-12 · Live enrichment providers (Phase 3)** — with an API key in
+- **2026-06-12 · Live enrichment providers (Phase 3)** - with an API key in
   the environment, the external enrichers now perform the real lookup:
   VirusTotal v3 (`last_analysis_stats` → X/N engines verdict, URL ids
   base64url-encoded), GreyNoise community (scanner classification), Shodan
   host (open ports + known vulns ⇒ suspicious), and WHOIS (registration age;
   <30 days ⇒ suspicious). Type gating is honest (GreyNoise/Shodan IPs only,
   WHOIS domains only), 404s map to "not seen", and any network/HTTP failure
-  reports `available:false, lookup failed` — never a fabricated verdict.
+  reports `available:false, lookup failed` - never a fabricated verdict.
   Unit-proven against canned provider payloads and a connection-error path.
-- **2026-06-12 · Integration credential entry (Phase 2 closed)** — new
+- **2026-06-12 · Integration credential entry (Phase 2 closed)** - new
   `PATCH /soar/integrations/{id}` sets/clears the vendor base URL + API key
   (write-only; every payload exposes only `credentialed`) and persists the
   enable toggle. The integrations page gains a per-tool credentials form
@@ -2011,18 +2011,18 @@ _Move completed items here with the date so the roadmap stays honest._
   a previously local-only enable toggle that now persists (optimistic with
   rollback), and optional base URL/key fields on Connect Tool. Also fixed a
   real credential leak: the test-connection endpoint returned the raw row
-  including `api_key` — now sanitised.
-- **2026-06-12 · Search joins across sources (Phase 1 fully closed)** — the
+  including `api_key` - now sanitised.
+- **2026-06-12 · Search joins across sources (Phase 1 fully closed)** - the
   hunt language gains `| join <field> <subquery>`: keep left-side rows whose
   field value also appears in the subquery's matches over the same window
-  (e.g. `event_type=login_success | join src_ip event_type=failed_login` —
+  (e.g. `event_type=login_success | join src_ip event_type=failed_login` -
   successful logins from IPs that also brute-forced). Pipes compose (join
   first, then `| stats count by`), ECS aliases work as the join field, and
   the response's `interpreted.join` reports rightHits/keyCount so the UI can
   show what the correlation did. Example added to the search panel.
-- **2026-06-12 · Time-boxed suppression windows (Phase 1 closed)** —
+- **2026-06-12 · Time-boxed suppression windows (Phase 1 closed)** -
   suppressions can now carry an absolute expiry (`expires_hours` → stamped
-  `expires_at`) and/or a recurring daily HH:MM–HH:MM UTC window (overnight
+  `expires_at`) and/or a recurring daily HH:MM-HH:MM UTC window (overnight
   wrap supported). The engine only honours currently-active entries
   (`rule_engine.suppression_active`); creation retro-closes open alerts only
   when the rule applies right now; the list endpoint computes `active` and
@@ -2030,9 +2030,9 @@ _Move completed items here with the date so the roadmap stays honest._
   badge. Tests cover the pure window/expiry math and the end-to-end
   behaviour: an out-of-window suppression doesn't drop a brute-force alert,
   an in-window time-boxed one does.
-- **2026-06-12 · ECS ingest-time normalization (Phase 1 closed)** — the JSON
-  ingest parser now resolves Elastic Common Schema documents — nested Beats
-  style (`{"source": {"ip": …}}`) and dotted keys (`"source.ip"`) — into the
+- **2026-06-12 · ECS ingest-time normalization (Phase 1 closed)** - the JSON
+  ingest parser now resolves Elastic Common Schema documents - nested Beats
+  style (`{"source": {"ip": …}}`) and dotted keys (`"source.ip"`) - into the
   native event columns through the same alias map the query layer uses, so
   ECS logs land fully normalised at write time. Precedence is explicit flat
   keys > ECS fields > raw-line regex heuristics (ECS is authoritative over
@@ -2040,31 +2040,31 @@ _Move completed items here with the date so the roadmap stays honest._
   Also hardened the flat-key mapper to scalars so nested objects can't bind
   as SQL params. Test ingests nested + dotted ECS docs and asserts the
   stored row (src_ip, hostname, dest_port, username, country, action).
-- **2026-06-12 · Signed evidence bundles (Phase 0 closed)** — the audit
+- **2026-06-12 · Signed evidence bundles (Phase 0 closed)** - the audit
   pack's last piece: `GET /soar/cases/{id}/evidence-bundle` exports the
   case's full investigation record (case + evidence with per-item SHA-256
   chain-of-custody + war room + tasks + the case's audit-log slice) as
   canonical JSON signed with HMAC-SHA256 (key pinnable via
   `DASHBOARD_EVIDENCE_SECRET`); `POST /soar/evidence/verify` honestly
-  re-verifies — one edited byte fails. Case drawer gains "Export signed
+  re-verifies - one edited byte fails. Case drawer gains "Export signed
   bundle" (downloads the JSON) and the previously dead "Add evidence" button
   now works; live evidence rows show real ts/addedBy/sha256 instead of
   undefined seed-only fields. Exports are audited.
-- **2026-06-12 · Per-user Slack routing (Phase 0 closed)** — each user can
+- **2026-06-12 · Per-user Slack routing (Phase 0 closed)** - each user can
   register a personal Slack incoming-webhook URL with a minimum-severity
   floor (GET/PUT `/auth/me/slack` + an honest `/test` send; panel in Config →
   Notifications). Every platform notification at/above the floor is mirrored
   to the user's Slack on the webhook engine's fire-and-forget thread. The URL
-  is treated as a quasi-secret — scrubbed from `/auth/me` and all user
+  is treated as a quasi-secret - scrubbed from `/auth/me` and all user
   payloads, visible only to its owner via the dedicated endpoint. Tests cover
   the round-trip, threshold filtering, clearing, and the no-leak guarantee.
-- **2026-06-12 · Saved views in the page UIs (Phase 0 closed)** — a shared
+- **2026-06-12 · Saved views in the page UIs (Phase 0 closed)** - a shared
   `SavedViewsButton` component (list / save-current-filters / apply / delete,
   backed by the per-user `/saved-views` API) now sits in the SIEM queue
   header (q + severity + status + tactic), assets (q + type + criticality),
   dark web (q + category) and feeds (severity). Defaults are stripped before
   saving; applying a view restores the page's filter state.
-- **2026-06-12 · RBAC: capability checks everywhere (Phase 0 closed)** — the
+- **2026-06-12 · RBAC: capability checks everywhere (Phase 0 closed)** - the
   last `require_role` call sites are gone: config → `config.manage`,
   connectors → `connectors.manage`, services → `services.run`, report
   schedules → `reports.manage`, audit export + retention → `config.manage`,
@@ -2073,7 +2073,7 @@ _Move completed items here with the date so the roadmap stays honest._
   `license.manage` capability (managers keep config but not license keys).
   Authorisation is now a single matrix in permissions.py; tests assert the
   new admin/manager split and that analysts are denied connectors + license.
-- **2026-06-12 · Real SOAR trends (data honesty)** — `/soar/metrics` no longer
+- **2026-06-12 · Real SOAR trends (data honesty)** - `/soar/metrics` no longer
   returns fabricated "↓ 12% / ↑ 8%" trend strings: `mttrTrendPct` is the real
   week-over-week movement of average response latency and
   `automationTrendPp` the percentage-point change in playbook-driven closure
@@ -2081,8 +2081,8 @@ _Move completed items here with the date so the roadmap stays honest._
   renders the real numbers (or "no prior-week baseline"), and the invented
   "≈ $127K analyst time" sub was replaced with the actual run count behind
   the time-saved figure.
-- **2026-06-12 · Tenant scoping on aggregates — multi-tenancy complete
-  (Phase 0)** — the last seam: every overview rollup (KPIs, threat vectors,
+- **2026-06-12 · Tenant scoping on aggregates - multi-tenancy complete
+  (Phase 0)** - the last seam: every overview rollup (KPIs, threat vectors,
   hourly volume, MITRE heatmap, recent alerts/incidents, top actors, geo,
   live feed) and every section summary (SIEM KPIs, SOAR metrics, CTI summary,
   assets summary + risk distribution, dark web summary, feeds summary) now
@@ -2090,7 +2090,7 @@ _Move completed items here with the date so the roadmap stays honest._
   isolation test proves flag-on KPI totals exclude exactly the foreign-org
   rows. With reads, writes and aggregates wired, the multi-tenancy roadmap
   item is closed (131-test suite green, flag off by default).
-- **2026-06-12 · Tenant write stamping (Phase 0)** — every user-driven create
+- **2026-06-12 · Tenant write stamping (Phase 0)** - every user-driven create
   endpoint now stamps `org_of(user)` so new rows land in the creator's
   workspace: IOC import + MISP import, scans, cases (create + split),
   playbooks, assets (create + promote), detection rules (create + Sigma
@@ -2101,7 +2101,7 @@ _Move completed items here with the date so the roadmap stays honest._
   foreign workspace imports an IOC + opens a case, the rows land in their org,
   and with the flag on the default-workspace admin can't see them while the
   author can (131-test suite green).
-- **2026-06-12 · Tenant read isolation: all TENANT_TABLES (Phase 0)** — the
+- **2026-06-12 · Tenant read isolation: all TENANT_TABLES (Phase 0)** - the
   rollout completes the read side: defaulted `org_id` migrations on the 13
   remaining tables (events, threat_actors, log_sources, feeds, connectors,
   playbooks, playbook_runs, saved_hunts, scans, suppressions, notifications,
@@ -2110,14 +2110,14 @@ _Move completed items here with the date so the roadmap stays honest._
   connectors/platform). The isolation test adds playbooks as the secondary-
   store representative; tenancy.py docs updated from "staged" to "wired, off
   by default". Defaults unchanged (130-test suite green with the flag off).
-- **2026-06-12 · Tenant isolation: assets + dark web + rules (Phase 0)** — the
+- **2026-06-12 · Tenant isolation: assets + dark web + rules (Phase 0)** - the
   rollout reaches all six primary stores: defaulted `org_id` migrations on
   `assets`, `dark_web_findings` and `detection_rules`, and the 3-line
   `tenancy.enforced()` workspace clause on `GET /assets`,
   `GET /darkweb/findings` and `GET /siem/rules`. The isolation test now also
   inserts two-workspace assets and proves they vanish/reappear with the flag;
   defaults remain byte-for-byte unchanged (130-test suite green).
-- **2026-06-12 · Tenant isolation: cases + iocs (Phase 0)** — the alerts
+- **2026-06-12 · Tenant isolation: cases + iocs (Phase 0)** - the alerts
   reference pattern applied to the next two primary stores: defaulted
   `org_id` migrations on `cases` and `iocs`, and the 3-line
   `tenancy.enforced()` workspace clause on `GET /soar/cases` and
@@ -2126,7 +2126,7 @@ _Move completed items here with the date so the roadmap stays honest._
   all disappear from the caller's views; with it off (default), behaviour is
   byte-for-byte unchanged (full 130-test suite green).
 
-- **2026-06-12 · Tenant isolation reference pattern (Phase 0)** — the breaking
+- **2026-06-12 · Tenant isolation reference pattern (Phase 0)** - the breaking
   half of multi-tenancy now exists, demonstrated end-to-end on the alerts
   table without touching default behaviour: `alerts.org_id` (migrated,
   `DEFAULT 'org-default'` so every existing/seeded/engine row stays visible in
@@ -2139,7 +2139,7 @@ _Move completed items here with the date so the roadmap stays honest._
   migration + 3-line read clause + write-path stamp), listed in
   `tenancy.TENANT_TABLES`.
 
-- **2026-06-12 · Postgres adapter (Phase 5)** — the staged flip is now
+- **2026-06-12 · Postgres adapter (Phase 5)** - the staged flip is now
   implemented, still opt-in and zero-impact by default. `PgConnection` adapts
   psycopg to the sqlite3-ish interface every call site already uses: `execute`/
   `executemany` translate each statement through the tested `to_postgres`
@@ -2147,21 +2147,21 @@ _Move completed items here with the date so the roadmap stays honest._
   string-literal-safely, and `PgRow` supports BOTH `row["col"]` and `row[0]`
   access so `row_to_dict`/positional reads work unchanged. `_apply_migrations`
   is backend-aware (`information_schema.columns` instead of PRAGMA on
-  Postgres). The SQLite default path is byte-for-byte untouched — the full
+  Postgres). The SQLite default path is byte-for-byte untouched - the full
   129-test suite proves it. Honest remaining step: validation against a live
   Postgres server (unreachable from this environment) before any cutover.
 
-- **2026-06-10 · UEBA learned baselines (Phase 1)** — entity risk gains
+- **2026-06-10 · UEBA learned baselines (Phase 1)** - entity risk gains
   deviation-from-self anomaly scoring: `_entity_baseline` computes each entity's
   own daily-alert-volume norm (mean + population stddev over its prior days) and
   the latest day's z-score, flagging `deviating` at z≥2 with a confidence band
-  from the history length — real behavioural-baseline anomaly detection, not
+  from the history length - real behavioural-baseline anomaly detection, not
   just raw volume. Surfaced in the Entity Risk drawer (today vs norm, z-score,
   deviating/normal badge). Tested: insufficient-history guard, a spike over a
   steady baseline flags deviating, a normal day does not.
 
 - **2026-06-10 · Syslog UDP listener + file/dir watcher (Phase 1, closes log
-  ingestion)** — `log_listeners.py`: a long-running syslog UDP listener
+  ingestion)** - `log_listeners.py`: a long-running syslog UDP listener
   (`DASHBOARD_SYSLOG_PORT`) that ingests datagrams, and a file/directory
   watcher (`DASHBOARD_LOG_WATCH_DIR`) that tails only new appends from a
   per-file byte offset (handles rotation/truncation), both feeding the same
@@ -2173,10 +2173,10 @@ _Move completed items here with the date so the roadmap stays honest._
   duplication (offset respected), and ingests only appended lines; missing dir
   is a safe no-op.
 
-- **2026-06-10 · SMTP email delivery channel (Phase 0)** — scheduled reports can
+- **2026-06-10 · SMTP email delivery channel (Phase 0)** - scheduled reports can
   now be emailed, not just webhooked. `mailer.py` sends a real MIME multipart
   email via SMTP when the deployment provides settings (SMTP_HOST/PORT/USER/
-  PASSWORD/FROM/TLS), and honestly reports `not-configured` otherwise — never
+  PASSWORD/FROM/TLS), and honestly reports `not-configured` otherwise - never
   raises (a mail failure can't break a request or the engine tick). Report
   schedules gained an `email` target (`run` delivers the report's summary +
   findings as HTML); `GET /config/email` shows readiness and
@@ -2185,7 +2185,7 @@ _Move completed items here with the date so the roadmap stays honest._
   send (mocked smtplib asserts host/recipient/body), report-schedule email
   delivery, RBAC.
 
-- **2026-06-10 · Scheduled hunts → alerts (Phase 1)** — a saved hunt becomes a
+- **2026-06-10 · Scheduled hunts → alerts (Phase 1)** - a saved hunt becomes a
   detection over time. `POST /siem/hunts/{id}/schedule` sets an interval
   (+ auto_alert); `run_due_scheduled_hunts` (engine tick + `POST
   /siem/hunts/run-scheduled`) runs each due hunt's query through the
@@ -2196,7 +2196,7 @@ _Move completed items here with the date so the roadmap stays honest._
   alert raised, throttle (second immediate run does nothing), off, range
   validation, 404, viewer-blocked.
 
-- **2026-06-10 · TAXII 2.1 write/push (Phase 3, closes STIX/TAXII)** — the TAXII
+- **2026-06-10 · TAXII 2.1 write/push (Phase 3, closes STIX/TAXII)** - the TAXII
   server now accepts pushed intel, not just serves it: `POST
   /taxii2/api/collections/indicators/objects/` takes a STIX envelope and
   ingests its `indicator` SDOs into the IOC store (deduped, source "TAXII
@@ -2209,7 +2209,7 @@ _Move completed items here with the date so the roadmap stays honest._
   failed), read-only-collection 403, empty 422, unknown 404, unauth 401.
 
 - **2026-06-10 · Case management depth: evidence custody, link, merge/split
-  (Phase 2, closes case depth)** — `POST /soar/cases/{id}/evidence` attaches an
+  (Phase 2, closes case depth)** - `POST /soar/cases/{id}/evidence` attaches an
   evidence item with **tamper-evident chain-of-custody** (SHA-256 of the
   content + a custody log of who collected it, when). `…/link` relates two
   cases (related|duplicate, recorded on both sides). `…/merge` folds a source
@@ -2220,13 +2220,13 @@ _Move completed items here with the date so the roadmap stays honest._
   Tested: evidence sha256 + custody, two-sided link, split parent/child links,
   merge (entities combined, alerts summed, source closed, note), 400/404/RBAC.
 
-- **2026-06-10 · Real SOAR action integrations + action trail (Phase 2)** —
+- **2026-06-10 · Real SOAR action integrations + action trail (Phase 2)** -
   response actions actually call vendor APIs. `integration_actions.py` builds
   the real request per category (EDR→CrowdStrike `devices-actions` contain,
   firewall→`/api/blocklist` deny, identity→IdP suspend, ticketing→Jira issue,
   else generic webhook POST) and, when the integration has a `base_url` +
   `api_key` configured, performs the live outbound httpx call (short timeout,
-  failures recorded never crash) — otherwise records a `not-configured` action
+  failures recorded never crash) - otherwise records a `not-configured` action
   honestly. Every attempt (live or not) is written to the `integration_actions`
   audit trail: action, target, status, mode (live/simulated), detail, actor.
   Integrations gained `base_url`/`api_key` columns; the **credential is never
@@ -2238,9 +2238,9 @@ _Move completed items here with the date so the roadmap stays honest._
   not-configured path, the trail (no key leakage), a network-failure record,
   and viewer-blocked.
 
-- **2026-06-10 · Visual playbook builder + versioning (Phase 2)** — a real
+- **2026-06-10 · Visual playbook builder + versioning (Phase 2)** - a real
   authoring canvas over the (already-real) execution engine. `PlaybookBuilder`:
-  a step-kind palette (`GET /soar/step-kinds` — the 11 executable kinds with
+  a step-kind palette (`GET /soar/step-kinds` - the 11 executable kinds with
   display type + which run-context params each reads), an ordered, drag-to-
   reorder list of step cards with inline name + per-step parameter editing, a
   live **dry-run** preview (no side effects), and save through the real
@@ -2253,7 +2253,7 @@ _Move completed items here with the date so the roadmap stays honest._
   step-kind catalogue, version history (create→v1, edit→v2, revert→v3 with the
   restored definition), 404/RBAC.
 
-- **2026-06-10 · E2E suite + responsive contract (Phase 5)** — a real Playwright
+- **2026-06-10 · E2E suite + responsive contract (Phase 5)** - a real Playwright
   suite (`frontend/e2e/`): auth (bad creds rejected, valid login reaches the
   dashboard, protected-route redirect), the critical workflow per section
   (overview KPIs, SIEM queue → alert detail, rules, SOAR playbooks + run
@@ -2268,24 +2268,24 @@ _Move completed items here with the date so the roadmap stays honest._
   execution happens in CI where the stack + browsers are provisioned. The Next
   build excludes `e2e/` so the app bundle is unaffected.
 
-- **2026-06-10 · Postgres backend foundation (Phase 5)** — the seam to scale
+- **2026-06-10 · Postgres backend foundation (Phase 5)** - the seam to scale
   past single-file SQLite, shipped non-breaking. `db_backend.py`: backend
   selection (`DASHBOARD_DB_BACKEND`, default `sqlite`; `DATABASE_URL`), a guarded
   Postgres connection path (lazy psycopg import with a clear error; only taken
-  when explicitly selected — SQLite installs are byte-for-byte unchanged), and
+  when explicitly selected - SQLite installs are byte-for-byte unchanged), and
   a **pure, unit-tested SQLite→Postgres dialect translator** (`to_postgres`):
   `?`→`%s` placeholders (string-literal-aware), `INSERT OR REPLACE`→
   `INSERT … ON CONFLICT … DO UPDATE` (rewritten after the VALUES list),
   `AUTOINCREMENT`→`BIGSERIAL`, `datetime('now')`→`now()`, `PRAGMA` stripped.
   `GET /config/database` reports the active backend + psycopg readiness. The
   breaking flip (wiring the translator into every execute + a row-dict factory)
-  is staged behind the flag so it lands reviewably on its own — `main` stays
+  is staged behind the flag so it lands reviewably on its own - `main` stays
   green. Frontend: a Storage card on Config → General. Tested: translation
   units (placeholders/idioms/upsert) + the backend endpoint + RBAC.
 
-- **2026-06-10 · Data-layer performance (Phase 5)** — hot-path indexes for the
+- **2026-06-10 · Data-layer performance (Phase 5)** - hot-path indexes for the
   queries every dashboard refresh runs: alerts (ts, severity+status, hostname,
-  src_ip, username), iocs (value — the per-event TI match, status, actor),
+  src_ip, username), iocs (value - the per-event TI match, status, actor),
   playbook_runs (alert_id, playbook+ts), vuln_findings (asset_id), dark-web
   (url dedupe, category), sightings/enrichments, audit action, events
   hostname. Verified with EXPLAIN QUERY PLAN that SQLite actually uses them
@@ -2293,7 +2293,7 @@ _Move completed items here with the date so the roadmap stays honest._
   migrations → schema again, so indexes on migrated columns apply cleanly to
   old databases (covered by an upgrade-path smoke test on a pre-migration DB).
 
-- **2026-06-10 · Licensing & plan limits (Phase 5)** — the pricing tiers become
+- **2026-06-10 · Licensing & plan limits (Phase 5)** - the pricing tiers become
   real. `licensing.py`: license keys are base64url JSON payloads (plan, seats,
   connectors, expires, org) **HMAC-SHA256-signed** with
   `DASHBOARD_LICENSE_SECRET`, so they can't be forged or tampered with;
@@ -2303,15 +2303,15 @@ _Move completed items here with the date so the roadmap stays honest._
   server-side: adding a user or connector beyond the active plan's limit fails
   with **402** naming the limit. Endpoints: `GET /config/license` (plan,
   limits, live usage), `POST /config/license/activate`,
-  `POST /config/license/issue` (vendor side — a self-hosted operator mints
+  `POST /config/license/issue` (vendor side - a self-hosted operator mints
   keys for their tenants; admin-only), `DELETE /config/license`. Frontend:
   License card on Config → General (plan, seat/connector usage bars, key
   activation). Tested: sign/verify/tamper/expiry units + the full
   activate→402-block→clear→restore flow + RBAC.
 
-- **2026-06-10 · Onboarding wizard (Phase 5)** — `GET /config/onboarding`
+- **2026-06-10 · Onboarding wizard (Phase 5)** - `GET /config/onboarding`
   computes the first-run checklist from REAL platform state (a step is done
-  only when the thing actually exists — org named, bootstrap admin password
+  only when the thing actually exists - org named, bootstrap admin password
   rotated (verified against the hash), 2+ users, an enabled connector, a log
   source with events flowing, enabled detection rules, a delivery webhook, a
   generated report), so the wizard can never drift from reality;
@@ -2320,9 +2320,9 @@ _Move completed items here with the date so the roadmap stays honest._
   complete or dismissed. Tested: state-derived steps, the report step flipping
   after a real generation, dismiss persistence.
 
-- **2026-06-10 · Dark-web depth (Phase 4, closes Phase 4)** —
+- **2026-06-10 · Dark-web depth (Phase 4, closes Phase 4)** -
   `darkweb_logic.py` + connector/router wiring. (1) **Credential matching**:
-  credential-leak findings are checked against the *real* user directory —
+  credential-leak findings are checked against the *real* user directory -
   exact email or org-domain match stamps `matched_user`, escalates to critical
   and raises a force-reset notification; runs on engine ticks, on feed import,
   and on demand (`POST /darkweb/match-credentials`). (2) **Takedown workflow**:
@@ -2331,33 +2331,33 @@ _Move completed items here with the date so the roadmap stays honest._
   external takedown/ticketing services; new status in the lifecycle + a
   Request-takedown button in the finding drawer; summary gains
   workforceMatches/takedownsRequested. (3) **Real source connectors**: new
-  `darkweb-json` connector kind — any leak-DB / paste-site / breach-monitor
+  `darkweb-json` connector kind - any leak-DB / paste-site / breach-monitor
   API returning JSON maps (field-mapped) into findings, deduped by URL, with
   credential matching on the way in; darkweb mutations now require
   darkweb.write. Tested: directory match + escalation + notification, takedown
   flow + 404/403, feed connector import/dedupe/workforce-match.
   **Phase 4 (Asset, Vuln & Dark Web depth) is now complete.**
 
-- **2026-06-10 · Asset ↔ alert ↔ case linkage (Phase 4)** — one click from a
+- **2026-06-10 · Asset ↔ alert ↔ case linkage (Phase 4)** - one click from a
   host to all its activity. `GET /assets/{id}/activity` joins everything tied
   to the asset's name/value: its alerts (with MITRE + status), the cases whose
   entities reference it, recent raw events, open CVE findings, and the playbook
-  runs that responded — with a summary rollup. The asset drawer gained a
+  runs that responded - with a summary rollup. The asset drawer gained a
   “Linked activity” section (CVE findings with CVSS, alerts deep-linking into
   the SIEM queue, cases linking to SOAR). Also replaced the assets page's fake
   random “Re-scan” simulator with the real vulnerability scanner
   (scan → reload real risk/findings; restores status honestly on API failure).
   Tested: ingest + scan + case → all linked through one call, 404 guard.
 
-- **2026-06-10 · Attack-surface discovery (Phase 4)** — `attack_surface.py`.
+- **2026-06-10 · Attack-surface discovery (Phase 4)** - `attack_surface.py`.
   **Passive discovery**: hosts emitting telemetry that are NOT in the asset
   inventory (shadow IT) surface as vetted candidates with their observed
   activity (event/alert counts, first/last seen, sample line);
   `POST /assets/discovered/promote` registers one into the inventory (tagged
   `discovered`, 409 on duplicates, assets.write). **Exposure scoring**: a
-  transparent, factor-weighted score per asset — public IP/domain,
+  transparent, factor-weighted score per asset - public IP/domain,
   internet-facing tag, risky listening ports (RDP/Telnet/SMB/databases/
-  plaintext HTTP), and open critical/high CVEs on the exposed surface — with
+  plaintext HTTP), and open critical/high CVEs on the exposed surface - with
   the factors returned alongside the score so it's explainable;
   `GET /assets/exposure` ranks the fleet and summarises (internet-facing
   count, critical exposure, top factor). Frontend clients shipped. Tested:
@@ -2365,7 +2365,7 @@ _Move completed items here with the date so the roadmap stays honest._
   discover→promote lifecycle (telemetry host found, promoted, vanishes from
   candidates, 409/400/403 guards).
 
-- **2026-06-10 · Real vulnerability scanning (Phase 4)** — assets carry CVE
+- **2026-06-10 · Real vulnerability scanning (Phase 4)** - assets carry CVE
   *findings*, not fabricated counts. `vuln_scanner.py` matches each asset's
   software inventory (`[{product,version}]`) against a catalogue of real CVEs
   (Log4Shell CVE-2021-44228, Heartbleed, regreSSHion, Baron Samedit, Apache
@@ -2378,11 +2378,11 @@ _Move completed items here with the date so the roadmap stays honest._
   shipped. Tested: version-match units + scan→findings→risk, idempotent
   re-scan, scan-all, 404s, viewer-blocked.
 
-- **2026-06-10 · Actor attribution scoring (Phase 3, closes Phase 3)** —
+- **2026-06-10 · Actor attribution scoring (Phase 3, closes Phase 3)** -
   `attribution.py` scores which tracked actor observed activity maps to, with
-  transparent weighted evidence: IOC overlap (strongest — an indicator already
+  transparent weighted evidence: IOC overlap (strongest - an indicator already
   attributed to the actor), then malware, ATT&CK technique (base-id matched so
-  T1059==T1059.001), targeted sector, and origin. Scores normalise 0–100
+  T1059==T1059.001), targeted sector, and origin. Scores normalise 0-100
   against the top candidate; confidence bands reflect corroboration across
   independent signal types. `POST /cti/attribution` (techniques/iocs/malware/
   sectors/origin) and `GET /cti/attribution/case/{id}` (pulls a case's linked
@@ -2391,11 +2391,11 @@ _Move completed items here with the date so the roadmap stays honest._
   the API (decisive IOC match → 100/high, technique evidence, case
   attribution, 400/404 guards). **Phase 3 (CTI depth) is now complete.**
 
-- **2026-06-10 · Campaign & report management + MISP interop (Phase 3)** —
+- **2026-06-10 · Campaign & report management + MISP interop (Phase 3)** -
   analyst-authored CTI reports and community sharing. New `intel_reports` store
   + `/cti/reports` CRUD (title, TLP, draft→published, actor/IOC references,
   tags; cti.write-gated). `misp.py` does real MISP **Event** interop: export
-  the IOC store, a single report's indicators, or import an Event —
+  the IOC store, a single report's indicators, or import an Event -
   `to_misp_event` maps each indicator to the correct MISP attribute type +
   category (ip-dst, domain, md5/sha1/sha256, vulnerability…) with a TLP tag and
   `to_ids` from severity; `parse_misp_event` maps attributes back to indicators
@@ -2405,7 +2405,7 @@ _Move completed items here with the date so the roadmap stays honest._
   + MISP import/export). Tested: MISP round-trip units + report CRUD + export +
   import tally + viewer-blocked.
 
-- **2026-06-10 · IOC enrichment pipeline (Phase 3)** — pluggable enrichers with
+- **2026-06-10 · IOC enrichment pipeline (Phase 3)** - pluggable enrichers with
   caching + per-IOC history. `enrichment.py` runs real **offline** built-ins:
   `internal` cross-references the live platform (prior sightings, related
   alerts, attributed actor, dark-web mentions, lifecycle → verdict) and
@@ -2422,7 +2422,7 @@ _Move completed items here with the date so the roadmap stays honest._
   malicious verdict, cache hit on re-run, history, honest external
   unavailability, viewer-blocked).
 
-- **2026-06-10 · CTI relationship graph at scale (Phase 3)** — the intelligence
+- **2026-06-10 · CTI relationship graph at scale (Phase 3)** - the intelligence
   graph went from an actor→IOC star to a navigable multi-entity graph.
   `cti_graph.py` builds actors ↔ malware ↔ techniques ↔ IOCs ↔ sectors from the
   live stores, with shared malware/technique/sector nodes as connective tissue
@@ -2435,22 +2435,22 @@ _Move completed items here with the date so the roadmap stays honest._
   multi-group graph integrity, pivot, focus-narrowing, path-find + no-path, and
   the pure adjacency/BFS units.
 
-- **2026-06-10 · Multi-tenancy foundation (Phase 0)** — the org/workspace model,
+- **2026-06-10 · Multi-tenancy foundation (Phase 0)** - the org/workspace model,
   shipped non-breaking. New `orgs` table + `users.org_id` (migrated); a
   bootstrapped default workspace that every existing/seeded user joins, so
   single-tenant installs are unchanged. The authenticated principal carries
   `org_id` (defaulted when unset); `/orgs/current` shows the caller's workspace
   (+ member count + isolation status), `/orgs` CRUD lets an admin stand up
-  tenants (config.manage). The *breaking* half — isolating every data table by
-  org_id — is **staged, not enforced**: `dashboard_api/tenancy.py` holds the
+  tenants (config.manage). The *breaking* half - isolating every data table by
+  org_id - is **staged, not enforced**: `dashboard_api/tenancy.py` holds the
   pure, unit-tested seam (`scope_sql`, `org_of`, `TENANT_TABLES` checklist)
   gated behind `DASHBOARD_MULTI_TENANT` (default off), so it can be wired into
-  queries table-by-table later without touching this foundation — `main` stays
+  queries table-by-table later without touching this foundation - `main` stays
   green. Frontend: a Workspace card on Config → General. Tested: workspace
   lifecycle, membership inheritance, viewer can't manage the directory, and the
   scope helper no-ops off / scopes on.
 
-- **2026-06-10 · RBAC depth (Phase 0)** — authorization is now a capability
+- **2026-06-10 · RBAC depth (Phase 0)** - authorization is now a capability
   matrix, not scattered role lists. `permissions.py` maps the four roles to
   named per-section/per-action capabilities (siem.write, soar.write, cti.write,
   config.manage, users.manage/delete, …); `require_perm(*caps)` enforces them
@@ -2461,11 +2461,11 @@ _Move completed items here with the date so the roadmap stays honest._
   rule, 403 on user/api-key management). `GET /auth/permissions` returns the
   caller's effective set and `GET /config/roles` the full matrix; sensitive
   reads (API-key list) are access-audited. Frontend `usePermissions` hook
-  (`can('siem.write')`) gates write controls — e.g. the Rules page hides New
+  (`can('siem.write')`) gates write controls - e.g. the Rules page hides New
   Rule / Import Sigma for viewers. Tested: matrix introspection + viewer-blocked
   / analyst-allowed across SIEM/SOAR/CTI with audited denials.
 
-- **2026-06-10 · Real-time push / SSE (Phase 0)** — the dashboard updates
+- **2026-06-10 · Real-time push / SSE (Phase 0)** - the dashboard updates
   live instead of polling. `events_stream.py` is a dependency-free, thread-safe
   pub/sub broker (bounded per-client queues; a backed-up browser is dropped,
   never back-pressures the engine). `routers/stream.py` serves `GET /stream`
@@ -2479,7 +2479,7 @@ _Move completed items here with the date so the roadmap stays honest._
   Tested: broker fan-out/bounded-drop units + the SSE auth guard + live publish
   on the engine path.
 
-- **2026-06-10 · STIX 2.1 / TAXII 2.1 server (Phase 3)** — ThreatOrbit is now a
+- **2026-06-10 · STIX 2.1 / TAXII 2.1 server (Phase 3)** - ThreatOrbit is now a
   real CTI hub other tools can pull from. `stix.py` serializes the live stores
   to STIX 2.1: IOCs → `indicator` SDOs with correct patterns per type
   (`[ipv4-addr:value=…]`, `[domain-name:value=…]`, `[file:hashes.'SHA-256'=…]`,
@@ -2496,7 +2496,7 @@ _Move completed items here with the date so the roadmap stays honest._
   units + the full TAXII flow (discovery, collections, objects, filtering,
   API-key auth, bundle).
 
-- **2026-06-10 · IOC lifecycle (Phase 3)** — threat indicators now age like real
+- **2026-06-10 · IOC lifecycle (Phase 3)** - threat indicators now age like real
   intel. `ioc_lifecycle.py`: per-type confidence **decay** (half-life: IPs 14d,
   domains 45d, hashes 180d, CVEs 365d) so `effective_confidence` falls off from
   the asserted value with age since last seen; **expiry** below a confidence
@@ -2517,11 +2517,11 @@ _Move completed items here with the date so the roadmap stays honest._
   model units + the full API lifecycle (sighting → reactivate, whitelist stops
   TI matching, decay maintenance).
 
-- **2026-06-10 · Sigma rule import/export (Phase 1 close-out)** — community
+- **2026-06-10 · Sigma rule import/export (Phase 1 close-out)** - community
   detection content ports in: `POST /siem/rules/import-sigma` parses Sigma
   YAML (selections + field modifiers |contains/|re/|cidr/|gt…/|startswith,
   lists → `in`, and/or conditions, `count() by` aggregation → threshold rule,
-  level → severity, attack.* tags → MITRE) into a live, evaluable rule —
+  level → severity, attack.* tags → MITRE) into a live, evaluable rule -
   field names resolve through a Sigma map + the ECS alias layer, unmappable
   fields degrade to raw-contains with explicit import notes; unsupported
   grammar (`not`/`1 of`/grouping) is rejected with a clear error, never
@@ -2531,13 +2531,13 @@ _Move completed items here with the date so the roadmap stays honest._
   download in the rule panel. Tested incl. detection firing on live ingest.
 
 - **2026-06-10 · Case depth: SLA tracking, linked evidence, post-incident
-  reports (Phase 2)** — every case read now carries computed SLA state
+  reports (Phase 2)** - every case read now carries computed SLA state
   (deadline, % elapsed, within / at-risk / breached for open, met / breached
   for closed; `slaBreached` in SOAR metrics). `/soar/cases/{id}/related` links
   the case to its real evidence through its entities: matching alerts, IOC
   records, and the playbook runs that responded, plus a MITRE-mapped merged
   timeline (war room + alert + response activity) and a technique frequency
-  list — shown as a “Linked evidence” section in the case drawer with deep
+  list - shown as a “Linked evidence” section in the case drawer with deep
   links into the SIEM. Post-incident reporting: `GET /reports/incident?case_id`
   assembles the full report (severity/alerts/actions/SLA-verdict headline,
   narrative, severity + technique breakdowns, chronological findings,
@@ -2545,9 +2545,9 @@ _Move completed items here with the date so the roadmap stays honest._
   print/PDF report viewer via a “Report” button on the case (period selector
   hidden for case-scoped reports).
 
-- **2026-06-10 · SOAR playbook execution engine (Phase 2)** — playbooks now
+- **2026-06-10 · SOAR playbook execution engine (Phase 2)** - playbooks now
   actually run. `playbook_engine.py`: 11 executable step kinds that act on the
-  real stores — enrich (IOC + alert history), condition gate, block_ip (IOC
+  real stores - enrich (IOC + alert history), condition gate, block_ip (IOC
   blocklist + firewall-integration action), isolate_host (asset tag + EDR
   action), disable_user (IdP action), create_case (real SOAR case, feeds the
   automation rate), add_note, close_alerts (resolve triggering/same-entity
@@ -2556,15 +2556,15 @@ _Move completed items here with the date so the roadmap stays honest._
   to `playbook_runs` with a per-step status/detail audit trail; dry-run
   previews all steps with zero writes. Playbook CRUD validates step kinds;
   **automation triggers**: auto playbooks with `trigger_match`
-  (severities/techniques/rule) run on matching fresh alerts — once per alert,
-  throttled per tick — wired into the live engine. The 8 canonical playbooks
+  (severities/techniques/rule) run on matching fresh alerts - once per alert,
+  throttled per tick - wired into the live engine. The 8 canonical playbooks
   (shared demo/live) carry real step definitions. Frontend: Run history panel
   on SOAR → Playbooks (live, expandable per-step results, approve/reject
   inline), enable-toggle persisted, run button reports real outcomes. New
   webhook events `playbook.completed`/`playbook.action`. Verified: live boot →
   20 ticks → 40 auto-runs, 41 alerts auto-contained, 33 playbook-opened cases.
 
-- **2026-06-10 · ECS field normalization (Phase 1)** — detection rules and event
+- **2026-06-10 · ECS field normalization (Phase 1)** - detection rules and event
   searches are now vendor-neutral. `rule_engine.ECS_ALIASES` + `canonical_field`
   resolve Elastic Common Schema names (source.ip → src_ip, user.name → username,
   destination.port → dest_port, event.action → action, threat.technique.id →
@@ -2574,7 +2574,7 @@ _Move completed items here with the date so the roadmap stays honest._
   native column) and `/siem/rule-schema` advertises the alias map. Tested:
   alias resolution, ECS-authored conditions/searches, and the schema endpoint.
 
-- **2026-06-10 · Event-stream search language (Phase 1)** — a real, compact
+- **2026-06-10 · Event-stream search language (Phase 1)** - a real, compact
   field-operator query language over the raw `events` stream (what hunting
   actually searches, not just alerts). `POST /siem/search` parses
   `field=value`, `!= > < >= <=`, `~regex`, `:contains`, `field in a,b,c`, bare
@@ -2584,7 +2584,7 @@ _Move completed items here with the date so the roadmap stays honest._
   Hunt page (interpreted-as chips, raw-event rows, or grouped-count bars).
   Tested: parser units + the live search/agg/validation path.
 
-- **2026-06-10 · Alert tuning workflow (Phase 1)** — the false-positive feedback
+- **2026-06-10 · Alert tuning workflow (Phase 1)** - the false-positive feedback
   loop. Marking an alert false-positive now bumps its detection rule's FP rate
   (a real tuning signal surfaced on the Rules page). New `suppressions` store +
   `/siem/suppressions` CRUD: a suppression matches an entity (src_ip / username /
@@ -2599,14 +2599,14 @@ _Move completed items here with the date so the roadmap stays honest._
   (create → retro-close → future-drop + hit bump → delete → re-fire) and the
   FP-rate feedback.
 
-- **2026-06-10 · UEBA entity risk (Phase 1)** — `/siem/entities` ranks
+- **2026-06-10 · UEBA entity risk (Phase 1)** - `/siem/entities` ranks
   users/hosts/IPs by behavioural risk (severity-weighted alert volume +
   ATT&CK technique diversity, banded normal→critical); `/siem/entities/detail`
   gives a per-entity risk timeline, top techniques, and contributing alerts.
   New Entity Risk page under SIEM with ranking bars + a drill-down panel and
   deep-link into the alert queue. Auto-refreshes.
 
-- **2026-06-10 · Phase 0 platform bundle** — `routers/platform.py` +
+- **2026-06-10 · Phase 0 platform bundle** - `routers/platform.py` +
   `db.py` tables. (1) Notifications centre: live bell fed by real events
   (critical alerts, auto-escalated cases, credential leaks, scheduled reports),
   mark-read, click-to-navigate. (2) Global search: `/search` across alerts/
@@ -2618,17 +2618,17 @@ _Move completed items here with the date so the roadmap stays honest._
   queue honours `?q=`. DEFERRED as own units: real-time SSE push, per-action
   RBAC, multi-tenancy.
 
-- **2026-06-10 · Log ingestion + ATT&CK navigator + TI matching (Phase 1)** —
+- **2026-06-10 · Log ingestion + ATT&CK navigator + TI matching (Phase 1)** -
   native log collector (`ingest.py`, `POST /siem/ingest`): parses syslog,
   Apache/Nginx, JSON, and key=value lines into events (content-signature
-  inference for event_type/MITRE), then runs the detection rules on them — so
+  inference for event_type/MITRE), then runs the detection rules on them - so
   production logs stream in (a Log Collector panel on SIEM → Sources lets you
   paste/forward lines). Threat-intel matching: any event IP matching a
   critical/high IOC raises an enriched R-TIMATCH alert. ATT&CK Navigator
   (`/siem/attack-coverage` + new page): coverage matrix by tactic, per-technique
   rule/alert counts, gaps highlighted, drill-down to alerts/rules/MITRE.
 
-- **2026-06-10 · Detection rule engine + editor (Phase 1)** — the SIEM now
+- **2026-06-10 · Detection rule engine + editor (Phase 1)** - the SIEM now
   works like a real SIEM: the live engine emits raw telemetry into an `events`
   table, and enabled detection rules evaluate that stream to fire alerts.
   `rule_engine.py` supports field conditions (equals/contains/in/gt/lt/regex/
@@ -2639,14 +2639,14 @@ _Move completed items here with the date so the roadmap stays honest._
   operators. Rules carry MITRE mapping; alerts are produced by the matching
   rule, so triage/KPIs/correlation all flow from real detections.
 
-- **2026-06-10 · Reporting engine** — structured, sectioned reports
+- **2026-06-10 · Reporting engine** - structured, sectioned reports
   (`dashboard_api/reports.py` + `/reports/*`): executive + SIEM + SOAR + CTI +
   assets + dark-web, each with an executive summary, headline KPIs, severity/
   category breakdowns, detailed findings, and recommendations. Daily / weekly /
   monthly / custom ranges. Frontend `ReportButton` on every section header
   opens a paginated, print-to-PDF + HTML-download viewer (Nessus/Acunetix
   style, not a CSV dump). Tested across all kinds.
-- **2026-06-10 · Universal drill-down** — `DetailDrawer` (window-event based,
+- **2026-06-10 · Universal drill-down** - `DetailDrawer` (window-event based,
   mounted in the dashboard layout) makes previously dead "clickable" overview
   items open a real detail view with rows + deep-link actions; wired recent
   alerts, incidents, and the live threat feed. Also wired the dead SIEM

@@ -9,7 +9,7 @@ import * as THREE from 'three'
 import { usePerfProfile, useInViewport } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
-/* ── Orbit definitions: a planet circled by rings of dots ── */
+/* -- Orbit definitions: a planet circled by rings of dots -- */
 type OrbitDef = {
   radius: number
   count:  number
@@ -27,7 +27,7 @@ const ORBITS: OrbitDef[] = [
   { radius: 2.35, count: 88, tilt: [Math.PI * 0.46, Math.PI * 0.35,  Math.PI * 0.1], color: '#2DD4BF', speed: -0.18, dot: 0.018, moon: true },
 ]
 
-/* ── A ring of dots orbiting in its own tilted plane ── */
+/* -- A ring of dots orbiting in its own tilted plane -- */
 function DotOrbit({ radius, count, tilt, color, speed, dot, moon, animate }: OrbitDef & { animate: boolean }) {
   const spinRef = useRef<THREE.Group>(null)
 
@@ -55,7 +55,7 @@ function DotOrbit({ radius, count, tilt, color, speed, dot, moon, animate }: Orb
         <meshBasicMaterial color={color} transparent opacity={0.22} toneMapped={false} />
       </mesh>
 
-      {/* the orbiting dots — PointMaterial masks each point to a circle;
+      {/* the orbiting dots - PointMaterial masks each point to a circle;
          raw pointsMaterial renders gl.POINTS as squares, which read as
          little boxes riding the orbit ring */}
       <group ref={spinRef}>
@@ -78,7 +78,7 @@ function DotOrbit({ radius, count, tilt, color, speed, dot, moon, animate }: Orb
   )
 }
 
-/* ── The central planet ── */
+/* -- The central planet -- */
 function Planet({ animate, bright }: { animate: boolean; bright: boolean }) {
   const shellRef = useRef<THREE.Mesh>(null)
   const coreRef  = useRef<THREE.Mesh>(null)
@@ -96,7 +96,7 @@ function Planet({ animate, bright }: { animate: boolean; bright: boolean }) {
 
   return (
     <group>
-      {/* glowing core — without bloom, a hot emissive saturates every pixel
+      {/* glowing core - without bloom, a hot emissive saturates every pixel
          and the sphere flattens into a featureless disc; keep the emissive
          moderate and let the directional light (added when bloom is off)
          shade the limb so it still reads as a sphere */}
@@ -190,7 +190,7 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
           frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0.8, camZ], fov: 46 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          // Phone sharpness: cap dpr at 1.75–2 (was 1.25–1.5, visibly pixelated
+          // Phone sharpness: cap dpr at 1.75-2 (was 1.25-1.5, visibly pixelated
           // on dpr≈3 phones); AdaptiveDpr still lowers it under real load.
           dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}

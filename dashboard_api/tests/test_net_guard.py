@@ -50,8 +50,8 @@ def test_override_permits_private():
         "http://127.0.0.1:9000/sink"
 
 
-# ── Send-time SSRF defences (audit B1): pin the resolved IP, re-validate at the
-#    moment of sending, and never follow redirects. ────────────────────────────
+# -- Send-time SSRF defences (audit B1): pin the resolved IP, re-validate at the
+#    moment of sending, and never follow redirects. ----------------------------
 
 def test_safe_post_blocks_dns_rebinding(monkeypatch):
     """A public-looking name that resolves to the cloud-metadata IP at SEND time

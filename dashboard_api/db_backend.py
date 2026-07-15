@@ -35,7 +35,7 @@ def is_postgres() -> bool:
     return BACKEND in ("postgres", "postgresql", "pg")
 
 
-# ── SQLite → Postgres statement translation ───────────────────────────────────
+# -- SQLite → Postgres statement translation -----------------------------------
 
 _PRAGMA_ONLY = re.compile(r"^\s*PRAGMA\b", re.IGNORECASE)
 
@@ -119,12 +119,12 @@ def to_postgres(sql: str) -> str:
             return _to_postgres_regex(sql)
         return _pg_transform(tree, exp).sql(dialect="postgres")
     except Exception:
-        # Parser couldn't handle this statement — best-effort regex rewrite keeps
+        # Parser couldn't handle this statement - best-effort regex rewrite keeps
         # the path working (and surfaces in the live-Postgres CI run if wrong).
         return _to_postgres_regex(sql)
 
 
-# ── Regex rewriter (fallback for statements sqlglot can't parse) ──────────────
+# -- Regex rewriter (fallback for statements sqlglot can't parse) --------------
 
 _INSERT_OR_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\s+INTO\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)",
                                 re.IGNORECASE)
@@ -293,7 +293,7 @@ def table_columns_sql() -> str:
             "WHERE table_name = %s")
 
 
-# ── Connection pool (psycopg_pool) ────────────────────────────────────────────
+# -- Connection pool (psycopg_pool) --------------------------------------------
 
 _pool = None
 

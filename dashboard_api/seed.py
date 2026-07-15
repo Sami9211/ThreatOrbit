@@ -522,8 +522,8 @@ def seed(force: bool = False):
 def bootstrap_live():
     """Live-mode bootstrap: create the admin user and default settings, seed the
     real threat-actor *reference* library (public CTI knowledge base, like the
-    ATT&CK matrix — not fabricated activity), and NOTHING else. No demo alerts,
-    cases, assets, integrations, IOCs, or feeds — those arrive only from real
+    ATT&CK matrix - not fabricated activity), and NOTHING else. No demo alerts,
+    cases, assets, integrations, IOCs, or feeds - those arrive only from real
     ingestion and connectors. Idempotent (the admin/settings block runs once)."""
     from dashboard_api.auth import hash_password
     from dashboard_api.threat_actor_library import seed_actor_library, recompute_actor_activity
@@ -535,7 +535,7 @@ def bootstrap_live():
                 "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
                 "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 # mfa_enabled=0: no TOTP secret exists yet, so the flag says so
-                # honestly — the admin enrols via Config → Security → 2FA.
+                # honestly - the admin enrols via Config → Security → 2FA.
                 (str(uuid.uuid4()), SEED_ADMIN_EMAIL, "Admin Operator", "admin", "active",
                  ph, salt, "#FF2E97", 0, None, _iso(_now())),
             )

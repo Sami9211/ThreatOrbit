@@ -2,9 +2,9 @@
 # SQLite (the default) needs none of these. Install alongside the base deps:
 #   pip install -r requirements.txt -r requirements-postgres.txt
 #
-# psycopg       — the Postgres driver (binary build, no system libpq needed)
-# psycopg-pool  — connection pool (db_backend pools instead of per-call connect)
-# sqlglot       — real SQL parser/transpiler for the SQLite→Postgres dialect layer
+# psycopg       - the Postgres driver (binary build, no system libpq needed)
+# psycopg-pool  - connection pool (db_backend pools instead of per-call connect)
+# sqlglot       - real SQL parser/transpiler for the SQLite→Postgres dialect layer
 psycopg[binary]>=3.2,<4
 psycopg-pool>=3.2,<4
 sqlglot>=25,<31

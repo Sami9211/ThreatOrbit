@@ -22,14 +22,14 @@ images:
 # or point existingSecret at a Secret you manage with the same keys.
 secrets:
   existingSecret: ""
-  # REQUIRED — threat_api and log_api refuse to start without it.
+  # REQUIRED - threat_api and log_api refuse to start without it.
   appApiKey: ""
   adminApiKey: ""
-  # REQUIRED for a real deployment — a long random value. Empty falls back to a
+  # REQUIRED for a real deployment - a long random value. Empty falls back to a
   # per-install generated secret inside dashboard_api (fine for a single replica).
   jwtSecret: ""
   adminEmail: "admin@threatorbit.space"
-  # REQUIRED — set a strong bootstrap password (changed on first login).
+  # REQUIRED - set a strong bootstrap password (changed on first login).
   adminPassword: ""
   otxApiKey: ""
   virustotalApiKey: ""
@@ -96,7 +96,7 @@ dashboardApi:
   replicas: 1                 # keep at 1 unless postgres.enabled (SQLite is single-writer)
   resources: {}
 frontend:
-  replicas: 2                 # stateless static server — safe to scale
+  replicas: 2                 # stateless static server - safe to scale
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 250m, memory: 256Mi }

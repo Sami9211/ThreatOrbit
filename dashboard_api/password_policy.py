@@ -1,7 +1,7 @@
 """Password screening (NIST SP 800-63B aligned).
 
 Modern guidance (NIST 800-63B §5.1.1) is *not* composition rules (forced
-upper/lower/digit/symbol) — those push users to predictable patterns. It is:
+upper/lower/digit/symbol) - those push users to predictable patterns. It is:
 a length floor, a generous length ceiling, and **screening against known-bad
 passwords** (common/breached strings and context-specific words). That's what
 this module does, with a bundled offline list (no network dependency at
@@ -9,7 +9,7 @@ sign-up time).
 
 `validate_password` raises `ValueError(reason)` with a user-facing message; the
 callers turn that into an HTTP 400. The bundled list catches the genuinely
-common exact strings — operators wanting full breach-corpus screening can grow
+common exact strings - operators wanting full breach-corpus screening can grow
 `COMMON_PASSWORDS` or wire a k-anonymity HIBP check behind the same function.
 """
 
@@ -20,7 +20,7 @@ MAX_LENGTH = 256
 
 # The most common passwords seen across public breach-frequency corpora
 # (rockyou / SecLists top entries). Compared case-insensitively as *exact*
-# strings — screening, not a substring blocklist, so strong passphrases that
+# strings - screening, not a substring blocklist, so strong passphrases that
 # merely contain a common word still pass.
 COMMON_PASSWORDS = frozenset({
     "password", "123456", "123456789", "12345678", "12345", "1234567",
@@ -59,7 +59,7 @@ def validate_password(password: str, *, email: str | None = None,
         raise ValueError(f"Password must be {MAX_LENGTH} characters or fewer")
     low = pw.lower()
     if low in COMMON_PASSWORDS:
-        raise ValueError("This password is too common — choose something less guessable")
+        raise ValueError("This password is too common - choose something less guessable")
     # Context-specific screening: the password must not simply *be* the account
     # identity (a frequent, trivially-guessable choice).
     refs = set()

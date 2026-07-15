@@ -4,7 +4,7 @@
 > controls ThreatOrbit *actually implements* to SOC 2 Trust Services Criteria
 > and ISO/IEC 27001:2022 Annex A, with evidence in this repository, to speed a
 > buyer's security review. A SOC 2 report or ISO certification requires an
-> **independent auditor** — items below marked *planned* (including a
+> **independent auditor** - items below marked *planned* (including a
 > third-party penetration test and a formal audit) are **not yet in place** and
 > are listed honestly rather than omitted.
 
@@ -18,7 +18,7 @@ auto-fill.
 |---|---|---|---|
 | MFA (TOTP) | CC6.1, CC6.6 | A.8.5 | `mfa.py` |
 | RBAC, least privilege | CC6.1, CC6.3 | A.5.15, A.8.2 | `permissions.py` (audited denials) |
-| SSO — OIDC + SAML 2.0 | CC6.1 | A.8.5 | `oidc.py`, `saml.py` (signature-verified) |
+| SSO - OIDC + SAML 2.0 | CC6.1 | A.8.5 | `oidc.py`, `saml.py` (signature-verified) |
 | Provisioning + **deprovisioning** (SCIM) | CC6.2, CC6.3 | A.5.16, A.5.18 | `scim.py` |
 | Password storage + throttling | CC6.1 | A.8.5 | `auth.py` (PBKDF2 600k) |
 | Secrets encrypted at rest | CC6.7 | A.8.24 | `secretstore.py` (Fernet) |
@@ -29,7 +29,7 @@ auto-fill.
 | HTTP security headers | CC6.6 | A.8.23 | `observability.py` |
 | Tamper-evident evidence bundles | CC7.3 | A.5.28 | `evidence.py` (HMAC-signed) |
 | Data-subject rights (GDPR export + erasure) | P5.1, P4.2 | A.5.34 | `privacy.py` (`/privacy` export + anonymising erase) |
-| Data Processing Agreement (Art. 28) | P-series | A.5.34 | `docs/DPA_TEMPLATE.md` (template — adapt + get legal review) |
+| Data Processing Agreement (Art. 28) | P-series | A.5.34 | `docs/DPA_TEMPLATE.md` (template - adapt + get legal review) |
 | Secure SDLC / supply chain | CC8.1 | A.8.28, A.8.30 | `supply-chain.yml`, `release.yml` (SBOM, signed + SLSA) |
 | Vulnerability/dependency mgmt | CC7.1 | A.8.8 | `security.yml`, `dependabot.yml` |
 | Backup + tested restore | A1.2 | A.8.13 | `backup.py`, `docs/BACKUP_RESTORE.md` (CI restore drill) |
@@ -38,7 +38,7 @@ auto-fill.
 
 | Control | Why partial |
 |---|---|
-| TLS in transit (CC6.7 / A.8.24) | Terminated at the deployment's reverse proxy — see `docs/DEPLOYMENT.md` |
+| TLS in transit (CC6.7 / A.8.24) | Terminated at the deployment's reverse proxy - see `docs/DEPLOYMENT.md` |
 | Capacity / backpressure (A1.1 / A.8.6) | Bounded ingest (429) + lag metrics shipped; still single-node |
 
 ## Planned (honest gaps)

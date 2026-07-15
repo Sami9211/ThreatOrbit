@@ -13,7 +13,7 @@ import { useExperienceMode } from '@/lib/useExperienceMode'
 import EventSearchPanel from '@/components/dashboard/EventSearchPanel'
 import { tk } from '@/lib/colors'
 
-/* ─── Types ─────────────────────────────────────────────────────────── */
+/* --- Types ----------------------------------------------------------- */
 type TimeRange = '1h' | '6h' | '24h' | '7d'
 
 interface SavedHunt {
@@ -48,7 +48,7 @@ interface HuntRun {
   results:  HuntResult[]
 }
 
-/* ─── Seed: Saved hunts ──────────────────────────────────────────────── */
+/* --- Seed: Saved hunts ------------------------------------------------ */
 const SAVED_HUNTS: SavedHunt[] = [
   {
     id: 'sh-001',
@@ -155,11 +155,11 @@ const SAVED_HUNTS: SavedHunt[] = [
   },
 ]
 
-/* ─── Seed: Beaconing hunt results ───────────────────────────────────── */
-/* ─── Default query (beaconing hunt pre-loaded) ─────────────────────── */
+/* --- Seed: Beaconing hunt results ------------------------------------- */
+/* --- Default query (beaconing hunt pre-loaded) ----------------------- */
 const DEFAULT_QUERY = SAVED_HUNTS[0].query
 
-/* ─── Helpers ────────────────────────────────────────────────────────── */
+/* --- Helpers ---------------------------------------------------------- */
 function fmtBytes(b: number): string {
   if (b < 1024) return `${b} B`
   return `${(b / 1024).toFixed(1)} KB`
@@ -202,7 +202,7 @@ function exportResults(run: HuntRun) {
   URL.revokeObjectURL(url)
 }
 
-/* ─── Components ─────────────────────────────────────────────────────── */
+/* --- Components ------------------------------------------------------- */
 function MetricCard({
   label, value, icon: Icon, color, sub,
 }: {
@@ -228,7 +228,7 @@ function MetricCard({
   )
 }
 
-/* ─── Main Page ─────────────────────────────────────────────────────── */
+/* --- Main Page ------------------------------------------------------- */
 export default function ThreatHuntPage() {
   useExperienceMode()
 
@@ -236,7 +236,7 @@ export default function ThreatHuntPage() {
   const [query,     setQuery]     = useState(DEFAULT_QUERY)   // starter template only
   const [timeRange, setTimeRange] = useState<TimeRange>('6h')
   const [running,   setRunning]   = useState(false)
-  // No pre-populated results — the "Run a query to see results" empty state
+  // No pre-populated results - the "Run a query to see results" empty state
   // shows until the analyst actually runs a hunt (never fabricated beacon hits).
   const [runResult, setRunResult] = useState<HuntRun | null>(null)
   const [runError, setRunError] = useState(false)
@@ -301,7 +301,7 @@ export default function ThreatHuntPage() {
         })
       })
       .catch(() => {
-        // Honest failure — never fabricate hits. Surface an error state instead.
+        // Honest failure - never fabricate hits. Surface an error state instead.
         setRunResult(null)
         setRunError(true)
       })
@@ -348,7 +348,7 @@ export default function ThreatHuntPage() {
   return (
     <div className="p-6 space-y-6 min-h-screen">
 
-      {/* ── Page header ── */}
+      {/* -- Page header -- */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -388,26 +388,26 @@ export default function ThreatHuntPage() {
         </div>
       </motion.div>
 
-      {/* ── Hunt metrics strip ── */}
+      {/* -- Hunt metrics strip -- */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-4"
       >
-        {/* Derived from the real saved-hunt store (+ the last run) — no fabricated stats. */}
+        {/* Derived from the real saved-hunt store (+ the last run) - no fabricated stats. */}
         <MetricCard label="Saved Hunts"        value={savedHunts.length} icon={BookOpen}     color={tk('violet')} sub="in this workspace" />
         <MetricCard label="Findings (saved)"   value={savedHunts.reduce((s, h) => s + (h.hitCount || 0), 0)} icon={AlertTriangle} color={tk('threat')} sub="across saved hunts" />
         <MetricCard label="Techniques Covered" value={new Set(savedHunts.map((h) => h.technique).filter((t) => t && t !== '-')).size} icon={Search} color={tk('safe')} sub="distinct ATT&CK IDs" />
-        <MetricCard label="Last Run Hits"      value={runResult ? runResult.hits : '—'} icon={Zap} color={tk('magenta')} sub={runResult ? 'from your last query' : 'run a query'} />
+        <MetricCard label="Last Run Hits"      value={runResult ? runResult.hits : '-'} icon={Zap} color={tk('magenta')} sub={runResult ? 'from your last query' : 'run a query'} />
       </motion.div>
 
-      {/* ── Event-stream search (real field-operator language over raw events) ── */}
+      {/* -- Event-stream search (real field-operator language over raw events) -- */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
         <EventSearchPanel />
       </motion.div>
 
-      {/* ── Main workspace: [Saved sidebar] + [Editor + Results] ── */}
+      {/* -- Main workspace: [Saved sidebar] + [Editor + Results] -- */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -415,7 +415,7 @@ export default function ThreatHuntPage() {
         className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5"
       >
 
-        {/* ── Saved Hunts sidebar ── */}
+        {/* -- Saved Hunts sidebar -- */}
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setSavedOpen((v) => !v)}
@@ -441,7 +441,7 @@ export default function ThreatHuntPage() {
                 <div className="space-y-2">
                   {savedHunts.length === 0 && (
                     <p className="text-[11px] text-ink-600 px-1 py-2">
-                      No saved hunts yet — write a query and Save Hunt to keep it here.
+                      No saved hunts yet - write a query and Save Hunt to keep it here.
                     </p>
                   )}
                   {savedHunts.map((hunt) => {
@@ -507,7 +507,7 @@ export default function ThreatHuntPage() {
           </div>
         </div>
 
-        {/* ── Editor + Results column ── */}
+        {/* -- Editor + Results column -- */}
         <div className="flex flex-col gap-5 min-w-0">
 
           {/* Query editor */}
@@ -597,7 +597,7 @@ export default function ThreatHuntPage() {
             </div>
           </div>
 
-          {/* ── Query results ── */}
+          {/* -- Query results -- */}
           <div className="bg-surface-2/40 rounded-xl border border-white/8 overflow-hidden">
 
             {/* Results header */}
@@ -655,7 +655,7 @@ export default function ThreatHuntPage() {
               </div>
             )}
 
-            {/* Error state — the query could not run (never fabricated hits) */}
+            {/* Error state - the query could not run (never fabricated hits) */}
             {!running && runError && (
               <div className="flex flex-col items-center justify-center py-14 gap-2 text-ink-500">
                 <AlertTriangle className="w-7 h-7 text-amber opacity-70" />

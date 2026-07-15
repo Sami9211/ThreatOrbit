@@ -2,7 +2,7 @@ name: Release
 
 # Signed, provenance-backed releases. Fires only on a version tag (v*), so the
 # workflow is dormant during normal development. For each release it produces:
-#   - CycloneDX SBOMs (backend + frontend) — the procurement artifact;
+#   - CycloneDX SBOMs (backend + frontend) - the procurement artifact;
 #   - a reproducible source archive (git archive of the tagged tree);
 #   - a SHA256SUMS manifest covering all of the above;
 #   - cosign *keyless* signatures (Sigstore Fulcio cert + Rekor transparency-log
@@ -10,7 +10,7 @@ name: Release
 #   - SLSA build provenance (in-toto attestation) via the official generator,
 #     so a consumer can verify the artifacts were built by THIS workflow.
 #
-# Verify a signed artifact (no key needed — identity is the GitHub workflow):
+# Verify a signed artifact (no key needed - identity is the GitHub workflow):
 #   cosign verify-blob \
 #     --bundle backend.cdx.json.cosign.bundle \
 #     --certificate-identity-regexp '^https://github.com/[^/]+/[^/]+/\.github/workflows/release\.yml@' \

@@ -125,7 +125,7 @@ def test_auto_trigger_survives_high_open_alert_volume():
     host = f"PB-VOL-{tag}"
     with get_conn() as conn:
         # 150 unrelated open critical alerts, each on its own host, so none of
-        # THEM match any trigger — pure volume noise past the old 100-row cap.
+        # THEM match any trigger - pure volume noise past the old 100-row cap.
         for i in range(150):
             _insert_alert(conn, title=f"noise {i}", severity="critical", risk=90,
                          rule_name="R-NOISE", hostname=f"NOISE-{uuid.uuid4().hex[:8]}",

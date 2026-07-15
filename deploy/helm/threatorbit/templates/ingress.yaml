@@ -38,7 +38,7 @@ spec:
                 port: { number: 80 }
     {{- if .Values.ingress.apiHost }}
     # Dashboard API on a dedicated host (its routes live at the root, e.g. /auth,
-    # /siem) — point the frontend's build-time NEXT_PUBLIC_API_URL here.
+    # /siem) - point the frontend's build-time NEXT_PUBLIC_API_URL here.
     - host: {{ .Values.ingress.apiHost | quote }}
       http:
         paths:

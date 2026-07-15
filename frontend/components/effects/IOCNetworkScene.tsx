@@ -146,9 +146,9 @@ function SceneGroup({ nodeCount, animate }: { nodeCount: number; animate: boolea
 export default function IOCNetworkScene() {
   const { prefersReducedMotion, isLowPower } = usePerfProfile()
   // Mount the GL context well before the viewport, then KEEP it mounted (the
-  // `mounted` latch — same fix as HeroScene/OrbitalScene). Unmounting on
+  // `mounted` latch - same fix as HeroScene/OrbitalScene). Unmounting on
   // scroll-away tore down the WebGL context, so scrolling back showed the
-  // placeholder for seconds while it rebuilt — the "graph disappears when I
+  // placeholder for seconds while it rebuilt - the "graph disappears when I
   // scroll" bug. The render loop still pauses off-screen (frameloop demand),
   // so the kept context costs zero GPU while hidden.
   const { ref, visible } = useInViewport<HTMLDivElement>('800px')
@@ -167,8 +167,8 @@ export default function IOCNetworkScene() {
           frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 1, 8], fov: 52 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          // Phones are dpr≈3: capping at 1.25–1.5 read as visibly pixelated.
-          // Cap at 1.75–2 for sharpness; AdaptiveDpr (smooth, not nearest-
+          // Phones are dpr≈3: capping at 1.25-1.5 read as visibly pixelated.
+          // Cap at 1.75-2 for sharpness; AdaptiveDpr (smooth, not nearest-
           // neighbour) still lowers resolution under real GPU load.
           dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}

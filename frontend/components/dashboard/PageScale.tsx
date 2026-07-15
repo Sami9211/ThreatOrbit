@@ -17,7 +17,7 @@ import { pageEnter } from '@/lib/motion'
  * It also hosts the per-route page transition: keying the motion element on the
  * pathname remounts it on every navigation, so the `pageEnter` variant replays
  * as a smooth fade-up. Keyed remount (rather than AnimatePresence exit) is the
- * robust App-Router pattern — no exit flash. Reduced-motion users get a still
+ * robust App-Router pattern - no exit flash. Reduced-motion users get a still
  * fade with no upward slide (the app-root MotionConfig drops the transform,
  * keeps the opacity), verified in a browser under emulated reduce-motion.
  */

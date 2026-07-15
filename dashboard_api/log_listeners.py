@@ -76,7 +76,7 @@ def deframe_syslog(buf: bytes) -> tuple[list[str], bytes]:
         if 0 < i < len(buf) and buf[i] == 0x20:
             length = int(buf[:i])
             if length > MAX_SYSLOG_MSG:
-                # A frame we could never safely buffer — the framing is
+                # A frame we could never safely buffer - the framing is
                 # untrustworthy, so reject the whole stream.
                 raise ValueError(f"syslog frame declares {length} bytes (> {MAX_SYSLOG_MSG})")
             start, end = i + 1, i + 1 + length

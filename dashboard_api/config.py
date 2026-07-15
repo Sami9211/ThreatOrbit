@@ -254,15 +254,15 @@ CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", 
 ENGINE_TICK_SECONDS = int(os.environ.get("DASHBOARD_ENGINE_TICK_SECONDS", "20"))
 ENGINE_EVENTS_PER_TICK = int(os.environ.get("DASHBOARD_ENGINE_EVENTS_PER_TICK", "6"))
 
-# Synthetic-telemetry switch — THE knob for real-data deployments.
+# Synthetic-telemetry switch - THE knob for real-data deployments.
 #   "on"  (default) → live mode generates representative environment telemetry
 #                     continuously so the console is alive before any log
 #                     forwarding exists (evaluation / demo liveliness).
 #   "off"           → REAL DATA ONLY: no first-boot prime, and the engine
 #                     boots paused on every start (the UI toggle can still
 #                     resume it deliberately for a demo burst; the next boot
-#                     re-pauses). Real ingestion — log uploads, the collector,
-#                     syslog/file listeners, connectors, TAXII push — is
+#                     re-pauses). Real ingestion - log uploads, the collector,
+#                     syslog/file listeners, connectors, TAXII push - is
 #                     unaffected. See docs/GOING_LIVE.md.
 ENGINE_MODE = os.environ.get("DASHBOARD_ENGINE", "on").strip().lower()
 
@@ -273,7 +273,7 @@ ENGINE_MODE = os.environ.get("DASHBOARD_ENGINE", "on").strip().lower()
 INGEST_MAX_BACKLOG = int(os.environ.get("DASHBOARD_INGEST_MAX_BACKLOG", "100000"))
 
 # Max HTTP request body accepted, in bytes (DoS guard). Rejected with 413 at the
-# ASGI edge BEFORE the app buffers it — the ingest line-count cap only applies
+# ASGI edge BEFORE the app buffers it - the ingest line-count cap only applies
 # after the whole body is read, so this bounds memory against a huge POST (or one
 # enormous line). 25 MB comfortably fits a 5000-line log batch; 0 disables it.
 MAX_BODY_BYTES = int(os.environ.get("DASHBOARD_MAX_BODY_BYTES", str(25 * 1024 * 1024)))

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: threatorbit
-description: ThreatOrbit SIEM+SOAR+CTI platform — dashboard API, ingestion (threat)
+description: ThreatOrbit SIEM+SOAR+CTI platform - dashboard API, ingestion (threat)
   API, log-analysis API, and the web frontend. Mirrors docker-compose.yml for
   Kubernetes (HA-capable when the dashboard is backed by Postgres).
 type: application

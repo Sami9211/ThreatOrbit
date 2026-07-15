@@ -19,7 +19,7 @@ def _e(**kw) -> ParsedLogEntry:
     return ParsedLogEntry(**kw)
 
 
-# ── Pattern detector (signature-based, deterministic) ───────────────────────
+# -- Pattern detector (signature-based, deterministic) -----------------------
 def test_pattern_flags_sql_injection_as_t1190():
     entries = [_e(source_ip="1.2.3.4",
                   http_path="/p?id=1 UNION SELECT password FROM users")]
@@ -47,7 +47,7 @@ def test_pattern_quiet_on_benign_requests():
     assert run_pattern_detector(entries) == []
 
 
-# ── Statistical detector ────────────────────────────────────────────────────
+# -- Statistical detector ----------------------------------------------------
 def test_statistical_flags_request_rate_spike_as_t1110():
     # 130 requests from one IP inside a single minute (>= RATE_SPIKE_RPM_THRESHOLD=120).
     entries = [_e(source_ip="7.7.7.7", timestamp=_BASE + timedelta(seconds=i % 60),
@@ -74,7 +74,7 @@ def test_statistical_quiet_on_steady_traffic():
     assert run_statistical_detector(entries) == []
 
 
-# ── Temporal detector ───────────────────────────────────────────────────────
+# -- Temporal detector -------------------------------------------------------
 def test_temporal_flags_off_hours_auth_as_t1078():
     entries = [_e(source_ip="3.3.3.3", process="sshd", message="accepted password",
                   timestamp=_OFF_HOURS + timedelta(minutes=i)) for i in range(3)]
