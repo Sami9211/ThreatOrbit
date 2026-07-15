@@ -609,11 +609,13 @@ CREATE TABLE IF NOT EXISTS events (
     severity_hint TEXT,
     mitre_tech_id TEXT,
     raw          TEXT,
+    source       TEXT,            -- ingest source name (collector|syslog-udp|…); 'engine' for synthetic
     processed    INTEGER NOT NULL DEFAULT 0   -- 0 until the detection pass evaluates it
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_events_proc ON events(processed);
 CREATE INDEX IF NOT EXISTS idx_events_host ON events(hostname);
+CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 
 CREATE TABLE IF NOT EXISTS dark_web_findings (
     id        TEXT PRIMARY KEY,
@@ -810,6 +812,9 @@ _MIGRATIONS = [
     ("assets", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("dark_web_findings", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("detection_rules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    # Event→source attribution: lets the sources page compute a LIVE per-source
+    # events/24h instead of the registration-time total_events_24h snapshot.
+    ("events", "source", "TEXT"),
     # …and the secondary stores (completes tenancy.TENANT_TABLES coverage).
     ("events", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("threat_actors", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
@@ -885,20 +890,35 @@ def _apply_migrations(conn: sqlite3.Connection):
 
 def _safe_schema(conn: sqlite3.Connection):
     """Apply the schema, tolerating index statements that reference columns a
-    migration hasn't added yet (re-applied after migrations below)."""
+    migration hasn't added yet (re-applied after migrations below).
+
+    Backend note: the tolerant path must catch the *backend's* error type (a
+    psycopg UndefinedColumn is not a sqlite3.OperationalError), and on Postgres
+    a failed statement aborts the whole transaction — so the fallback commits
+    each successful statement and rolls back after each failure, otherwise every
+    statement after the first bad index would fail with InFailedSqlTransaction
+    and an existing deployment could not boot across this upgrade."""
+    def _rollback():
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
     try:
         conn.executescript(SCHEMA)
-    except sqlite3.OperationalError:
+    except Exception:
         # An index on a migrated column against a pre-migration table - run the
         # statements individually so everything else still applies.
+        _rollback()
         for stmt in SCHEMA.split(";"):
             s = stmt.strip()
             if not s:
                 continue
             try:
                 conn.execute(s)
-            except sqlite3.OperationalError:
-                pass
+                conn.commit()
+            except Exception:
+                _rollback()
 
 
 def _schema_version_gate(conn):

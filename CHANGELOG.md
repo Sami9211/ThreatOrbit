@@ -9,6 +9,29 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 — SIEM sources "Events (24h)": live per-source flow, not a frozen snapshot
+- `log_sources.total_events_24h` was written once at seed/registration and
+  never updated — the sources page showed a number that never moved. Events
+  now carry their ingest **source** name (new `events.source` column +
+  `idx_events_source`, additive migration): `ingest_lines` stamps the caller's
+  `source` string (the built-in listeners pass `syslog-udp`/`syslog-tls`/
+  `file-watch`), and engine telemetry is stamped `'engine'` — honestly labeled
+  synthetic. `GET /siem/sources` now overrides `total_events_24h` (and
+  `last_event`) with a live windowed count for any source whose **name**
+  appears in the event flow; a wired-up source that goes quiet shows a
+  truthful 0, while never-wired rows (seeded demo sources) keep their stored
+  sample values. GOING_LIVE documents the name-matching contract.
+- **Upgrade-safety fix found en route:** `_safe_schema`'s tolerant path only
+  caught `sqlite3.OperationalError`, and on Postgres a failed statement aborts
+  the whole transaction — so an *existing Postgres deployment* upgrading across
+  any index-on-migrated-column change (like this one) would fail to boot
+  (psycopg `UndefinedColumn` → `InFailedSqlTransaction` cascade). The fallback
+  now catches the backend's error type and commits/rolls back per statement;
+  `PgConnection` gains `rollback()`. Verified against a real pre-upgrade
+  Postgres DB and an old-schema SQLite file; regression fence
+  (`test_zz_init_db_upgrades_pre_source_schema`) drops the column+index and
+  proves `init_db` boots and restores both — on SQLite **and** Postgres.
+
 ### 2026-07-13 — SIEM rule "Hits (24h)" / "Fired (7d)" were frozen at seed value
 - `detection_rules.hits_24h` and `fired_last_7d` are written once at seed /
   detection-pack-import time and **never updated** — the engine stamps

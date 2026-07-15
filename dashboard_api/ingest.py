@@ -1053,13 +1053,13 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
                         ev.get("src_ip"), ev.get("dest_ip"), ev.get("dest_port"), ev.get("username"),
                         ev.get("hostname"), ev.get("process_name"), ev.get("action"),
                         ev.get("bytes_out", 0), ev.get("country"), ev.get("severity_hint"),
-                        ev.get("mitre_tech_id"), ev.get("raw"), org_id))
+                        ev.get("mitre_tech_id"), ev.get("raw"), source, org_id))
             parsed += 1
         if rows:
             conn.executemany(
                 "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
                 "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,"
-                "processed,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
+                "source,processed,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
                 rows)
         det = run_detection(conn)
         # threat-intel matching over the just-ingested events

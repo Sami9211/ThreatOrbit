@@ -276,6 +276,9 @@ class PgConnection:  # pragma: no cover - exercised only against a live Postgres
     def commit(self):
         self._raw.commit()
 
+    def rollback(self):
+        self._raw.rollback()
+
     def close(self):
         if self._pool is not None:
             self._pool.putconn(self._raw)   # return to the pool (reset on return)

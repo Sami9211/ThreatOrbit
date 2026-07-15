@@ -643,8 +643,8 @@ def process_tick(max_events: int = 6) -> dict:
             event, scn_iocs = scn(rng)
             conn.execute(
                 "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
-                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,processed) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,"
+                "source,processed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'engine',0)",
                 (str(_uuid.uuid4()), _now(), event.get("category"), event.get("event_type"),
                  event.get("src_ip"), event.get("dest_ip"), event.get("dest_port"),
                  event.get("username"), event.get("hostname"), event.get("process_name"),

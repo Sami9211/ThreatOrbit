@@ -1185,10 +1185,30 @@ def list_sources(user: dict = Depends(current_user)):
     from dashboard_api import tenancy
     if tenancy.enforced():
         where, params = "WHERE org_id=?", [tenancy.org_of(user)]
+    cut24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    escope, eparams = "", []
+    if tenancy.enforced():
+        escope, eparams = " AND org_id=?", [tenancy.org_of(user)]
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT * FROM log_sources {where} ORDER BY eps_avg DESC", params).fetchall()
-    return rows_to_dicts(rows)
+        # Live per-source flow: events now carry the ingest `source` name, so a
+        # wired-up source gets a REAL events/24h + last-event instead of the
+        # registration-time total_events_24h snapshot (which is never updated).
+        # Sources whose name has never appeared in the event flow keep their
+        # stored values — seeded demo sources stay sample-data by contract.
+        flow = {r["source"]: r for r in conn.execute(
+            "SELECT source, COUNT(*) AS ever, "
+            "SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS h24, MAX(ts) AS last_ts "
+            f"FROM events WHERE source IS NOT NULL{escope} GROUP BY source",
+            [cut24] + eparams).fetchall()}
+    out = rows_to_dicts(rows)
+    for s in out:
+        f = flow.get(s["name"])
+        if f and (f["ever"] or 0) > 0:
+            s["total_events_24h"] = int(f["h24"] or 0)  # 0 is truthful for a quiet source
+            s["last_event"] = f["last_ts"] or s["last_event"]
+    return out
 
 
 @router.post("/sources", status_code=201)
