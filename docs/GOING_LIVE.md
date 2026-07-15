@@ -226,12 +226,14 @@ Work down this list; each line has a place to look:
 1. `GET /health` on :8000/:8001/:8002 → `ok` (or container healthchecks green).
 2. **Feeds → Sources**: last-sync timestamps moving; CTI indicator count > 0.
 3. **SIEM → Sources**: your collector/syslog/S3 sources listed with event
-   counts. The per-source *Events (24h)* figure is computed live from events
-   whose ingest `source` name matches the registered source's **name** — so
-   register each source (SIEM → Sources → Add) under the same name your
+   counts. Sources are **auto-discovered on first ingest** — the name your
    collector passes in `?source=` (the built-in listeners use `syslog-udp`,
-   `syslog-tls`, and `file-watch`). A wired-up source that goes quiet shows a
-   truthful 0.
+   `syslog-tls`, and `file-watch`) appears as a source row tagged
+   `auto-discovered`, no manual registration needed. The per-source
+   *Events (24h)* figure is computed live from events carrying that source
+   name; a wired-up source that goes quiet shows a truthful 0. You can still
+   pre-register a source (SIEM → Sources → Add) under the collector's name to
+   set its type/host metadata ahead of time.
 4. **Config → General → Live Processing Engine**: *paused*, alertsProduced 0 —
    any alert you see is a real detection on your data.
 5. **Overview**: KPIs non-zero only where you actually fed data; empty panels

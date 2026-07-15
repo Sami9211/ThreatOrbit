@@ -86,6 +86,24 @@ def test_ingest_stamps_source_on_events(client, auth):
     assert n == 1
 
 
+def test_ingest_auto_registers_unknown_source(client, auth):
+    """A collector ingesting under a name with no log_sources row must appear
+    on SIEM → Sources automatically (zero-setup discovery), with the live
+    Events(24h) count attached — and repeat ingests must not duplicate it."""
+    src = f"pytest-auto-{uuid.uuid4().hex[:8]}"
+    line = '{"event_type": "connection", "src_ip": "203.0.113.20"}'
+    for _ in range(2):  # two batches: first registers, second must not duplicate
+        r = client.post("/siem/ingest", headers=auth,
+                        json={"lines": [line], "format": "json", "source": src})
+        assert r.status_code == 200 and r.json()["parsed"] == 1
+
+    rows = [s for s in client.get("/siem/sources", headers=auth).json()
+            if s["name"] == src]
+    assert len(rows) == 1                      # discovered exactly once
+    assert rows[0]["total_events_24h"] == 2    # live count covers both batches
+    assert "auto-discovered" in rows[0]["tags"]
+
+
 def test_zz_init_db_upgrades_pre_source_schema(client):
     """Upgrade fence: a deployment whose events table predates the `source`
     column must boot cleanly across this change. The subtle failure mode is

@@ -1061,6 +1061,20 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
                 "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,"
                 "source,processed,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
                 rows)
+            # Auto-discover the source: a collector whose name has no log_sources
+            # row is invisible on SIEM → Sources. Register it on first ingest so
+            # the page reflects the real flow with zero setup — the live
+            # Events(24h) count attaches by name. One existence check per batch;
+            # a rare concurrent first-ingest can duplicate the row (no unique
+            # constraint on name), which is cosmetic and operator-fixable.
+            if not conn.execute("SELECT 1 FROM log_sources WHERE name=? AND org_id=?",
+                                (source, org_id)).fetchone():
+                conn.execute(
+                    "INSERT INTO log_sources (id,name,type,host,status,eps_avg,eps_peak,"
+                    "last_event,total_events_24h,latency_ms,parse_success,format,tags,org_id) "
+                    "VALUES (?,?,'Ingest',NULL,'healthy',0,0,NULL,0,0,100,?,"
+                    "'[\"auto-discovered\"]',?)",
+                    (str(uuid.uuid4()), source, fmt, org_id))
         det = run_detection(conn)
         # threat-intel matching over the just-ingested events
         ti = match_threat_intel(conn)

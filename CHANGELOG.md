@@ -9,6 +9,18 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 — Ingest sources are auto-discovered (zero-setup SIEM → Sources)
+- A collector ingesting under a source name with no `log_sources` row was
+  invisible on SIEM → Sources until the operator manually registered a
+  matching name. `ingest_lines` now registers unknown source names on first
+  successful ingest (org-scoped, tagged `auto-discovered`, one existence
+  check per batch), so every real collector — including the built-in
+  `syslog-udp`/`syslog-tls`/`file-watch` listeners — appears automatically
+  with its live Events(24h) count. Pre-registering under the collector's name
+  still works for setting type/host metadata ahead of time; GOING_LIVE
+  updated. Fence in `test_source_flow.py`: unknown source appears exactly
+  once across repeat ingests, with the live count — SQLite + Postgres.
+
 ### 2026-07-15 — SIEM sources "Events (24h)": live per-source flow, not a frozen snapshot
 - `log_sources.total_events_24h` was written once at seed/registration and
   never updated — the sources page showed a number that never moved. Events
