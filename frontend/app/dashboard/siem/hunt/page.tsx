@@ -260,7 +260,6 @@ export default function ThreatHuntPage() {
     fetchSiemHunts()
       .then((data) => setSavedHunts(data.map(mapApiHunt)))   // applied even when empty
       .catch(() => setSavedHunts(SAVED_HUNTS))               // offline preview only
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /* Saved panel visibility (mobile) */

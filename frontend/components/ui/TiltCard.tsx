@@ -30,6 +30,12 @@ export default function TiltCard({
   const glareX  = useTransform(rawX, [-0.5, 0.5], ['5%',  '95%'])
   const glareY  = useTransform(rawY, [-0.5, 0.5], ['5%',  '95%'])
 
+  const glareBg = useTransform(
+    [glareX, glareY],
+    ([x, y]) =>
+      `radial-gradient(circle at ${x} ${y}, rgba(255,255,255,0.09) 0%, transparent 55%)`,
+  )
+
   const track = useCallback((nx: number, ny: number) => { rawX.set(nx); rawY.set(ny) }, [rawX, rawY])
   const reset = useCallback(() => { rawX.set(0); rawY.set(0); scale.set(1) }, [rawX, rawY, scale])
 
@@ -92,13 +98,7 @@ export default function TiltCard({
       {glare && (
         <motion.div
           className="absolute inset-0 pointer-events-none rounded-[inherit]"
-          style={{
-            background: useTransform(
-              [glareX, glareY],
-              ([x, y]) =>
-                `radial-gradient(circle at ${x} ${y}, rgba(255,255,255,0.09) 0%, transparent 55%)`,
-            ),
-          }}
+          style={{ background: glareBg }}
         />
       )}
     </motion.div>

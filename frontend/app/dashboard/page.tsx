@@ -730,7 +730,7 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-white">Security Status</h1>
-          <p className="text-sm text-ink-400 mt-1">Your organization's security at a glance</p>
+          <p className="text-sm text-ink-400 mt-1">Your organization’s security at a glance</p>
         </div>
         <div className="flex items-center gap-2">
           <ReportButton kind="executive" label="Overall Report" />

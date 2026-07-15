@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Minus, ArrowUpRight } from 'lucide-react'
 import Logo from '@/components/ui/Logo'
@@ -90,13 +91,13 @@ export default function MegaMenu({ open, onClose }: { open: boolean; onClose: ()
           <div className="relative site-container py-6">
             {/* Top bar */}
             <div className="flex items-center justify-between mb-12">
-              <a href="/" onClick={onClose} className="flex items-center gap-2.5">
+              <Link href="/" onClick={onClose} className="flex items-center gap-2.5">
                 <Logo size={30} />
                 <span className="font-display font-semibold text-lg">
                   <span className="text-white">Threat</span>
                   <span className="text-gradient-magenta">Orbit</span>
                 </span>
-              </a>
+              </Link>
               <button
                 onClick={onClose}
                 className="p-2.5 rounded-lg border border-white/10 text-ink-300 hover:text-white hover:border-magenta/30 transition-colors"

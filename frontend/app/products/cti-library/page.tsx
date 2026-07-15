@@ -78,7 +78,7 @@ export default function CTILibraryPage() {
             <br />threat intelligence
           </h1>
           <p className="text-lg text-ink-400 leading-relaxed">
-            ThreatOrbit's CTI Library is the open-core tier: a self-hosted threat intelligence
+            ThreatOrbit’s CTI Library is the open-core tier: a self-hosted threat intelligence
             aggregator that pulls from five OSINT sources, enriches every indicator against
             VirusTotal, and exports clean STIX 2.1 JSON. No cloud dependency, no per-indicator
             billing, no SaaS lock-in - just a WAL-mode SQLite database that lives on your

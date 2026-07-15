@@ -711,13 +711,13 @@ export default function RulesEnginePage() {
       )
     }
     return true
-  }), [search, filterSev, filterCat, filterStat, statuses])
+  }), [rulesData, search, filterSev, filterCat, filterStat, statuses])
 
   /* KPIs */
   const totalRules = rulesData.length
   const active     = rulesData.filter((r) => statuses[r.id] === 'enabled').length
   const suppressed = rulesData.filter((r) => statuses[r.id] === 'suppressed').length
-  const custom     = rulesData.filter((r) => r.id.startsWith('CLO') || r.id.startsWith('TI')).length + 4 // simulate 44
+  const custom     = rulesData.filter((r) => r.id.startsWith('CLO') || r.id.startsWith('TI')).length
 
   /* Merged rule with live status */
   function mergedRule(r: DetectionRule): DetectionRule {

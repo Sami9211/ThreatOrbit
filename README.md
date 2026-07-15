@@ -71,7 +71,7 @@ ThreatOrbit is made of three backend services and a Next.js frontend (marketing 
   Parses logs (Apache, Syslog, Windows Event, Generic), detects anomalies via four engines (Pattern, Statistical, an unsupervised ML outlier-_ranking_ layer, Temporal), generates HTML reports, and exports STIX 2.1 from findings.
 * **Dashboard API** (`dashboard_api`, FastAPI, port 8002)
   The unified backend powering the operator dashboard: JWT auth (login + self-service registration with brute-force throttling) and role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR), a correlation engine and a live hunt-query engine, SOAR case lifecycle (create, war-room notes, task workflow), CTI actors/IOCs with lookup + bulk import + scanner history, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, webhooks, a full audit trail - and a **service bridge** that proxies the Threat API and Log API server-side so the browser never handles their API keys. See [`dashboard_api/README.md`](dashboard_api/README.md).
-* **Frontend** (`frontend`, Next.js 14 + TypeScript)
+* **Frontend** (`frontend`, Next.js 16 + TypeScript)
   Marketing site **and** the operator dashboard (`/dashboard/**`, 26 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Deployable on Vercel (static export) or any Node host.
 
 All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion APIs use an async job model and a two-tier API key scheme; the Dashboard API uses JWT bearer auth.
@@ -210,7 +210,7 @@ ThreatOrbit-V2/
 │   │                            #   saml, scim, sso
 │   └-- tests/                   # behaviour tests (pytest + TestClient)
 │
-└-- frontend/                    # Next.js 14 - marketing site + operator dashboard
+└-- frontend/                    # Next.js 16 - marketing site + operator dashboard
     ├-- app/
     │   ├-- page.tsx             # marketing landing
     │   └-- dashboard/           # operator dashboard (26 pages, all API-wired):

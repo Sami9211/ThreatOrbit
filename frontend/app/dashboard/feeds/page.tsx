@@ -604,7 +604,7 @@ export default function FeedsPage() {
     }
     schedule()
     return () => clearTimeout(timer)
-  }, [liveMode])
+  }, [demoMode])
 
   function handleConfirm(id: string) {
     const entry = unconfirmed.find(e => e.id === id)

@@ -1,14 +1,14 @@
 # ThreatOrbit Frontend
 
 Marketing site **and operator dashboard** for the ThreatOrbit
-threat-intelligence platform. Built with Next.js 14 (App Router), TypeScript,
+threat-intelligence platform. Built with Next.js 16 (App Router), TypeScript,
 Tailwind, Framer Motion, and a React-Three-Fiber 3D layer.
 
 ## Stack
 
 | Concern        | Choice |
 |----------------|--------|
-| Framework      | Next.js 14 App Router, **static export** (`output: 'export'`) |
+| Framework      | Next.js 16 App Router, **static export** (`output: 'export'`) |
 | Styling        | Tailwind CSS + a small `globals.css` design layer |
 | Animation      | Framer Motion (scroll, springs, layout) |
 | 3D / WebGL     | `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing` |
@@ -32,6 +32,8 @@ npx serve out      # preview the production build locally
 
 ```bash
 npx tsc --noEmit         # typecheck (CI-enforced)
+npm run lint             # eslint, errors CI-enforced (flat config,
+                         #   eslint-config-next core-web-vitals + typescript)
 npm run check:routes     # no dead internal links/anchors (CI-enforced)
 npx playwright test      # e2e: auth, workflows, data-honesty fences,
                          #   axe-core a11y, responsive, self-health card

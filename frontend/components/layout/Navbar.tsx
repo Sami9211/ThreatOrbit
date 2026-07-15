@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Menu, ChevronRight, LayoutDashboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -57,13 +58,13 @@ export default function Navbar() {
         )}
       >
         <div className="site-container flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 group">
             <Logo size={30} className="transition-transform duration-500 group-hover:scale-110" />
             <span className="font-display font-semibold text-lg tracking-tight">
               <span className="text-white">Threat</span>
               <span className="text-gradient-magenta">Orbit</span>
             </span>
-          </a>
+          </Link>
 
           <nav className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map((link) => {

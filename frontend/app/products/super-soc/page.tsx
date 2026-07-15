@@ -78,7 +78,7 @@ export default function SuperSOCPage() {
             <br />three disciplines
           </h1>
           <p className="text-lg text-ink-400 leading-relaxed">
-            ThreatOrbit's Super SOC collapses CTI, SIEM, and SOAR into a single deployable unit. No
+            ThreatOrbit’s Super SOC collapses CTI, SIEM, and SOAR into a single deployable unit. No
             stitching vendor APIs together, no alert fatigue from disconnected toolchains. A unified
             async pipeline carries every raw signal from open-source intel feeds all the way to an
             actionable STIX 2.1 bundle in your OpenCTI instance - automatically.

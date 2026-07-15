@@ -9,6 +9,32 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - ESLint wired into CI + real bugs it caught; Node 22
+- `npm run lint` works again: `next lint` was removed in Next 16, leaving the
+  script dead and the `eslint` devDependency unused. New `eslint.config.mjs`
+  (flat config, `eslint-config-next` core-web-vitals + typescript presets);
+  the react-hooks v7 React-Compiler-era rules (`purity`, `refs`,
+  `set-state-in-effect`, `immutability`) and `no-explicit-any` are downgraded
+  to warnings (the flagged patterns are deliberate: ssr:false randomised WebGL
+  scenes, mount-time environment probes, live-data `Date.now()` cutoffs);
+  everything else gates CI (`Tests` workflow frontend job).
+- Real bugs the first lint pass caught, now fixed:
+  - `TiltCard` called `useTransform` conditionally inside `{glare && ...}`
+    JSX - toggling the `glare` prop would crash with a hook-order error.
+  - The feeds page offline demo simulator effect gated on `demoMode` but
+    depended on `[liveMode]`, which never changes when the API is
+    unreachable - the demo ticker could never start.
+  - SIEM rules page: the filtered-rows memo omitted `rulesData`, rendering a
+    stale table frame after API load / rule deletion (masked by an accidental
+    side-channel via `statuses`), and the "custom rules" KPI fabricated its
+    value with a hardcoded `+ 4` - removed (data honesty).
+  - Navbar + MegaMenu logo links were plain `<a href="/">` (full page reload)
+    - now `next/link` client navigation.
+- Runtime alignment: CI workflows move Node 20 (EOL April 2026) -> Node 22 to
+  match the frontend Dockerfile (`node:22-alpine`); `@types/node` ^20 -> ^22.
+- Docs: READMEs said "Next.js 14" - the platform has been on Next 16 since
+  2026-06-14; corrected, and the lint gate documented.
+
 ### 2026-07-15 - Live-mode route crawler (`npm run check:live`)
 - New QA tool `frontend/scripts/crawl-live.mjs`: logs into a **running** stack
   (`./linux-start.sh`), visits all 27 dashboard routes in a real browser and

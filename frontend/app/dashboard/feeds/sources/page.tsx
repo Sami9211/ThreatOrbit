@@ -92,6 +92,7 @@ export default function FeedSourcesPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [feeds, setFeeds] = useState<FeedSource[]>(FEEDS)
   const [showAdd, setShowAdd] = useState(false)
+  const [summary, setSummary] = useState<FeedsSummary | null>(null)
 
   async function handleAddFeed(values: Record<string, string>) {
     const created = await createFeed({
@@ -132,7 +133,6 @@ export default function FeedSourcesPage() {
 
   const selectedFeed = feeds.find(f => f.id === selected) ?? null
 
-  const [summary, setSummary] = useState<FeedsSummary | null>(null)
   const activeFeeds = feeds.filter(f => f.enabled).length
   // Real "IOCs today" from the summary endpoint (indicators first seen since
   // midnight UTC) - not a sum of per-feed nominal daily rates.

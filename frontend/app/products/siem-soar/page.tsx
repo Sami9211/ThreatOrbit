@@ -79,7 +79,7 @@ export default function SIEMSOARPage() {
             <span className="text-gradient-magenta">automatically</span>
           </h1>
           <p className="text-lg text-ink-400 leading-relaxed">
-            ThreatOrbit's SIEM+SOAR layer runs four complementary detection engines over any log
+            ThreatOrbit’s SIEM+SOAR layer runs four complementary detection engines over any log
             format in a single async job. Pattern matching catches known IOCs, statistical analysis
             spots baseline deviations, ML IsolationForest surfaces behavioural outliers, and
             temporal correlation detects coordinated multi-event attacks - all without manual rule

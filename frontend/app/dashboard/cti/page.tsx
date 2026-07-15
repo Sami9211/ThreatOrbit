@@ -550,7 +550,7 @@ function NormalCTI() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-xl font-bold text-white">Threat Brief</h1>
-          <p className="text-xs text-ink-500 mt-0.5">Today's top threats - what's happening and what to do</p>
+          <p className="text-xs text-ink-500 mt-0.5">Today’s top threats - what’s happening and what to do</p>
         </div>
         <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-full border border-safe/25 bg-safe/10 text-safe font-medium">
           <Eye className="w-3 h-3" /> Normal mode
@@ -607,7 +607,7 @@ function NormalCTI() {
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <p className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">What's Happening</p>
+                <p className="text-[10px] uppercase tracking-widest text-ink-600 font-semibold">What’s Happening</p>
                 <p className="text-sm text-ink-300 leading-relaxed">{b.description || 'No description on record for this actor.'}</p>
               </div>
               <div className="p-3.5 rounded-xl border border-violet/15 bg-violet/5 space-y-2">
