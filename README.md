@@ -1,7 +1,5 @@
 # ThreatOrbit
 
-# Project Name
-
 **Important**: This project is public for viewing purposes only. All rights are reserved. See [LICENSE](LICENSE) for full terms. No use, modification, or distribution without explicit permission.
 
 
@@ -117,14 +115,25 @@ ThreatOrbit-V2/
 ├-- Makefile                     # make up / down / test / dev-* shortcuts (Mac/Linux)
 ├-- windows-start.bat            # double-click: full local start on Windows
 ├-- windows-test.bat             # double-click: run every test suite on Windows
+├-- linux-start.sh               # one command: live real-data start on Linux/Mac
+├-- linux-test.sh                # one command: run every test suite on Linux/Mac
 ├-- .gitignore
 ├-- .env.example                 # copy to .env, fill in keys
 ├-- docker-compose.yml           # full stack: 3 APIs + frontend, healthchecked
+├-- docker-compose.prod.yml      # production preset: live mode, real data only
 │
-├-- docs/
-│   ├-- architecture.md
-│   ├-- opencti_integration.md
-│   └-- api_examples.md
+├-- docs/                        # 16 operational references - architecture,
+│   │                            #   DEPLOYMENT, OPERATIONS, GOING_LIVE,
+│   │                            #   LOAD_LIMITS, SUPPORTED_SOURCES, COMPLIANCE,
+│   │                            #   API_VERSIONING, ... (index below the tree)
+│   └-- api/                     # versioned API path snapshot (v1-paths.json)
+│
+├-- deploy/
+│   ├-- helm/                    # Kubernetes chart (probes pre-wired)
+│   └-- prometheus/              # alert rules for the platform's own health
+│
+├-- scripts/                     # backup/restore, SBOM, static-site server
+├-- collector/                   # stdlib log-forwarding agent for endpoints
 │
 ├-- threat_api/                  # Flask threat-intel service (:8000)
 │   ├-- Dockerfile
@@ -175,6 +184,9 @@ ThreatOrbit-V2/
 │   ├-- tenancy.py               # optional multi-tenant org scoping
 │   ├-- secretstore.py           # Fernet encryption-at-rest for secrets
 │   ├-- observability.py         # Prometheus /metrics, JSON logs, security headers
+│   ├-- self_health.py           # the SOC's own vitals: one ok/degraded/down verdict
+│   ├-- leader.py / event_queue.py / detection_pool.py  # HA lease + worker pool
+│   ├-- fp_scoring.py            # false-positive likelihood scoring + bulk triage
 │   ├-- ops.py                   # SQLite online-backup endpoint
 │   ├-- config.py / db.py        # env config; WAL SQLite, schema, migrations, audit
 │   ├-- db_backend.py            # SQLite default + staged Postgres backend
@@ -190,10 +202,12 @@ ThreatOrbit-V2/
 │   ├-- licensing.py / webhooks.py / mailer.py / enrichment.py
 │   ├-- log_listeners.py / events_stream.py / ingest.py   # log intake + SSE
 │   ├-- seed.py                  # deterministic, internally-consistent demo data
-│   ├-- routers/                 # 18 routers, 200+ routes: auth, users, orgs,
+│   ├-- routers/                 # 26 routers, 220+ routes: auth, users, orgs,
 │   │                            #   overview, siem, soar, cti, assets, feeds,
 │   │                            #   connectors, darkweb, platform, reports,
-│   │                            #   services, stream, taxii, assistant, config
+│   │                            #   services, stream, taxii, assistant, config,
+│   │                            #   billing, compliance, privacy, roles,
+│   │                            #   saml, scim, sso
 │   └-- tests/                   # behaviour tests (pytest + TestClient)
 │
 └-- frontend/                    # Next.js 14 - marketing site + operator dashboard
@@ -449,7 +463,8 @@ export), and **Appearance**. See the admin task recipes below.
 
 | I want to… | Where | Notes |
 | --- | --- | --- |
-| Feed real logs in | SIEM → Sources → Log Collector (or `POST :8001/analyse`) | Apache/syslog/Windows/generic; also syslog listener + file-watcher |
+| Feed real logs in | SIEM → Sources → Log Collector (or `POST :8001/analyse`) | Apache/syslog/Windows/generic; also syslog listener + file-watcher. Sources **auto-register on first ingest** and show a live Events (24h) count |
+| Check the platform's own health | Settings → General → System Health | Live DB/schema/queue/leader verdict; alerts on degrade/recover; Prometheus rules in `deploy/prometheus/` |
 | Sync external intel | Feeds → Sources → Sync now | OSINT + NVD need internet; custom connectors are pluggable |
 | Bulk-import IOCs | Feeds → Import | CSV/line-delimited; deduped + trust-scored on ingest |
 | Turn an alert into a case | SIEM → open alert → Create Case | Or let correlation auto-escalate (≥3 critical/high on a pivot) |
@@ -737,7 +752,7 @@ The simplest production split:
 | Platform   | Easiest way                                                  |
 | ---------- | ------------------------------------------------------------ |
 | Windows    | double-click **`windows-test.bat`**                          |
-| Mac/Linux  | `make test`                                                   |
+| Linux/Mac  | **`./linux-test.sh`** (or `make test`)                       |
 | Any        | `python -m pytest dashboard_api/tests -q` (and the same in `threat_api/`, `log_api/`) |
 
 Tests need **no `.env`, no Docker, and no running services** - each suite
@@ -819,7 +834,7 @@ Feed source files (one URL per line): `threat_api/rss_feeds.txt`, `threat_api/da
 
 ---
 
-## 6. Health checks
+## 6. Health checks and self-observability
 
 ```bash
 curl http://127.0.0.1:8000/health
@@ -829,6 +844,24 @@ curl http://127.0.0.1:8000/ready
 curl http://127.0.0.1:8001/ready
 curl http://127.0.0.1:8002/ready
 ```
+
+The two probes have different jobs (wire them to the matching Kubernetes/LB
+slots): `/health` is **liveness** - always 200 while the process is up;
+`/ready` is **readiness** - it runs a real database check and returns
+**HTTP 503** when the DB is unreachable, so an orchestrator pulls the
+instance out of rotation instead of routing traffic it cannot serve.
+
+Beyond the probes, the platform watches its own vitals:
+
+* **`GET /self-health`** (authenticated) aggregates database latency, schema
+  version, detection-queue backpressure, leader lease, and process counters
+  into one ok/degraded/down verdict - rendered live in the dashboard at
+  **Settings → General → System Health**, with a notification raised on every
+  verdict transition (degrade/recover).
+* **`GET /metrics`** serves Prometheus metrics, and
+  [`deploy/prometheus/`](deploy/prometheus/) ships ready-to-use alert rules
+  over them (target down, readiness failing, error rate, detection backlog).
+  Details: [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ---
 

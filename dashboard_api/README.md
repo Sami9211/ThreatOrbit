@@ -50,7 +50,14 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Platform  | `/notifications` (GET + read), `/search` (global), `/report-schedules` (CRUD + run), `/saved-views` (CRUD), `/config/audit-export` (CSV), `POST /config/retention/enforce` |
 | Reports   | `/reports/kinds`, `GET /reports/{kind}?period=daily\|weekly\|monthly\|custom&from=&to=` - structured reports (executive / siem / soar / cti / assets / darkweb) with summary, breakdowns, findings, recommendations |
 | Services  | `/services/status`, `/services/threat/source-health`, `/services/threat/iocs`, `POST /services/threat/fetch`, `/services/threat/jobs/{id}`, `/services/threat/opencti-status`, `POST /services/threat/sync-iocs`, `POST /services/logs/analyse` (multipart), `/services/logs/results/{id}`, `/services/logs/trends` |
-| Meta      | `/health`, `/ready` |
+| Triage    | `/siem/fp-triage` (bulk false-positive scoring queue), `POST /siem/rules/import-sigma` + community-pack bulk import |
+| Interchange | `/taxii/*` (TAXII 2.1 server), STIX/MISP import-export, `/stream` (SSE live updates, ticket-authenticated) |
+| Tenancy/Enterprise | `/orgs/*` (workspaces + quotas), `/roles/*` (custom roles), `/billing/*`, `/compliance/*`, `/privacy/*`, SSO (`/sso`, `/saml`, `/scim`) |
+| Meta      | `/health` (liveness, always 200), `/ready` (readiness - real DB check, **503 when the DB is unreachable**), `/self-health` (authed: DB/schema/queue/leader/process verdict, powers Settings → System Health), `/metrics` (Prometheus), `/config/leader` (HA lease) |
+
+The full, versioned path inventory (220+ routes) lives in
+[`docs/api/v1-paths.json`](../docs/api/v1-paths.json); CI fails if a
+documented path disappears without an API version bump.
 
 List endpoints accept whitelisted `sort`/`order` parameters plus rich filters
 (e.g. `/siem/alerts?sort=severity&tactic=Exfiltration`,
@@ -95,8 +102,11 @@ runs persist `last_run`, `hit_count`, `status`, `progress`.
 ## Tests
 
 ```bash
-python -m pytest dashboard_api/tests -q   # 57 tests
+python -m pytest dashboard_api/tests -q   # 570+ tests, no services or .env needed
 ```
+
+The suite also runs against a live Postgres in CI (`DASHBOARD_DB_BACKEND=postgres`
++ `DATABASE_URL`) - both backends must stay green.
 
 ### Live processing engine
 
@@ -106,7 +116,11 @@ detect → correlate → escalate stages, producing SIEM alerts, CTI indicators,
 auto-escalated SOAR cases, and dark-web findings continuously. It's the
 self-contained live data source (no external dependency); pause/seed it via
 `POST /config/engine`. Real log uploads and connectors write into the same
-stores, so the source is fully swappable.
+stores, so the source is fully swappable. For a **real-data-only** install set
+`DASHBOARD_ENGINE=off`: the synthetic engine is disabled completely and the
+only events you ever see are your forwarded logs and connector intel. Ingested
+events carry their `source` name; unknown sources **auto-register** on first
+ingest so SIEM → Sources reflects the real flow with a live Events (24h) count.
 
 ### Webhooks
 
@@ -145,3 +159,13 @@ python -m dashboard_api.seed   # force-rebuilds every table
 | `SERVICES_ADMIN_KEY` | `$ADMIN_API_KEY` | Admin key for `/fetch` upstream |
 | `DASHBOARD_AUTO_SEED` | `true` | Seed on first boot |
 | `DASHBOARD_SEED` | `1337` | Deterministic data seed |
+| `DASHBOARD_ENGINE` | `on` | `off` = real-data-only: synthetic telemetry fully disabled |
+| `DASHBOARD_DB_BACKEND` / `DATABASE_URL` | sqlite | `postgres` + a DSN switches the storage backend |
+| `DASHBOARD_MULTI_TENANT` | off | Per-workspace (org) isolation for MSSP installs |
+| `DASHBOARD_REQUIRE_SECRETS` | `false` | Refuse to boot on default secrets (production posture) |
+| `DASHBOARD_METRICS_TOKEN` | unset | Require `Authorization: Bearer` on `GET /metrics` |
+| `DASHBOARD_LOG_FORMAT` | human | `json` = one-line structured logs for shipping |
+| `DASHBOARD_LOG_REDACT` | off | PII/secret redaction of raw log lines before persisting |
+| `DASHBOARD_HEALTH_LAG_SECONDS` / `_QUEUE_DEPTH` | `300` / `10000` | Self-health degradation thresholds |
+| `DASHBOARD_HEALTH_MONITOR_SECONDS` | `60` | Self-health alert cadence (live mode; `0` disables) |
+| `DASHBOARD_ALLOW_PRIVATE_URLS` | `false` | Permit private targets for user-added webhooks/connectors (the bundled companion at `THREAT_API_URL` is always allowed) |

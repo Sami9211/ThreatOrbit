@@ -16,6 +16,11 @@ matching on them.
 Both require an **API key** and enforce the same validation, **backpressure**
 (HTTP 429 + `Retry-After` when the detection backlog is full), and audit trail.
 
+The `source` name you send is how the platform attributes flow: on first
+ingest an unknown source **auto-registers** under SIEM → Sources (tagged
+`auto-discovered`) and shows a live *Events (24h)* count from that point on -
+no manual registration step. Give each collector a distinct, stable name.
+
 ## 1. First-party agent (`threatorbit_collector.py`)
 
 A single stdlib-only file (Python 3.8+, no `pip`). It tails files, **checkpoints

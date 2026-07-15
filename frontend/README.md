@@ -28,6 +28,20 @@ npm run build      # static export → out/
 npx serve out      # preview the production build locally
 ```
 
+## Test
+
+```bash
+npx tsc --noEmit         # typecheck (CI-enforced)
+npm run check:routes     # no dead internal links/anchors (CI-enforced)
+npx playwright test      # e2e: auth, workflows, data-honesty fences,
+                         #   axe-core a11y, responsive, self-health card
+```
+
+The e2e suite runs against a production build plus the dashboard API - CI
+boots both (see `.github/workflows/e2e.yml`); locally set `E2E_BASE_URL` to
+point at an already-running instance, or let the `webServer` hook serve
+`out/` for you.
+
 > Note: a `next dev` server can occasionally serve a nested route unstyled
 > after a `.next` wipe + restart (a dev-only CSS-injection quirk). The
 > production build in `out/` is always correct - verify with `npx serve out`.
@@ -58,10 +72,12 @@ lib/
 
 ### Operator dashboard (`app/dashboard/**`)
 
-23 pages - overview, SIEM (queue/analytics/rules/sources/hunt), SOAR
-(cases/playbooks/integrations/metrics), CTI (overview/actors/hunt), assets
-(inventory/network/vulns), feeds (overview/sources/import), the IntelScope
-scanner, and config (general/API keys/users/data sources). Every page fetches
+27 pages - overview, the SOC command view, SIEM (queue/analytics/rules/
+sources/hunt/entities/ATT&CK coverage), SOAR (cases/playbooks/integrations/
+metrics), CTI (overview/actors/hunt), assets (inventory/network/vulns),
+dark-web monitoring, feeds (overview/sources/import), the IntelScope scanner,
+and config (general incl. the live System Health card/API keys/users/data
+sources). Every page fetches
 live data from the Dashboard API (`:8002`) on mount and falls back to built-in
 deterministic demo data when the API is unreachable, so the static export
 remains fully browsable standalone. Mutations (alert triage, rule toggles,

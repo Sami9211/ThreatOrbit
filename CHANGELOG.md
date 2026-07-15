@@ -9,6 +9,38 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - README audit: all six README files brought current
+- **Main README**: removed a stale "# Project Name" scaffold heading; §6
+  became "Health checks and self-observability" documenting the
+  liveness-vs-readiness contract (`/ready` returns 503 on a failed DB check),
+  `GET /self-health`, the Settings → System Health card, and the
+  `deploy/prometheus/` alert rules; the §2 structure tree gained the Linux
+  launcher/test scripts, `docker-compose.prod.yml`, `deploy/` (helm +
+  prometheus), `scripts/`, `collector/`, `self_health.py`,
+  leader/event-queue/detection-pool and fp_scoring entries, an honest docs/
+  summary (16 references, api/ snapshot) and the corrected router count
+  (26 routers incl. billing/compliance/privacy/roles/saml/scim/sso); the
+  task-recipe table now covers source auto-discovery and the System Health
+  card; the testing table lists `./linux-test.sh`.
+- **dashboard_api/README**: endpoint map extended (FP triage, Sigma import,
+  TAXII/STIX/SSE, orgs/roles/billing/compliance/privacy/SSO, the full Meta row
+  with the 503 readiness contract and `/self-health`), a pointer to the
+  CI-enforced `docs/api/v1-paths.json` inventory, test count corrected
+  (57 → 570+, both backends), the live-engine section now documents
+  `DASHBOARD_ENGINE=off` and source auto-discovery, and the env table gained
+  the modern variables (engine, Postgres backend, multi-tenant,
+  require-secrets, metrics token, log format/redaction, health thresholds,
+  private-URL policy).
+- **frontend/README**: page count corrected (23 → 27, incl. SOC view, UEBA
+  entities, ATT&CK coverage, dark web, System Health) and a Test section
+  added (tsc, `check:routes`, the Playwright e2e suites).
+- **collector/README**: documents that a source name auto-registers on first
+  ingest with a live Events (24h) count.
+- **helm README**: probes-and-monitoring section (the 503 readiness contract,
+  Prometheus rules cross-reference).
+- Verified: anchor + relative-link integrity across all 25 tracked markdown
+  files, no long dashes reintroduced, `npm run check:routes` green.
+
 ### 2026-07-15 - Fix: the bundled OSINT connector was blocked by our own SSRF guard
 - On every default live install (Windows/Linux launcher AND Docker), the
   built-in "ThreatOrbit OSINT Engine" connector could **never sync**: its URL

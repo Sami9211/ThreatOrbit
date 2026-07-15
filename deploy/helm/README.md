@@ -64,6 +64,16 @@ ingress:
 The frontend calls the API at the URL **baked into its image** at build time
 (`NEXT_PUBLIC_API_URL`), so set that build-arg to `https://<apiHost>`.
 
+## Probes and monitoring
+
+The chart wires `livenessProbe` to `/health` (always 200 while the process is
+up) and `readinessProbe` to `/ready`, which performs a real database check and
+returns **503** when the DB is unreachable - so Kubernetes pulls a broken pod
+out of rotation instead of routing traffic to it. For alerting on the
+platform's own health, scrape `GET /metrics` and load the ready-made rules in
+[`../prometheus/`](../prometheus/) (a `PrometheusRule` wrapper for the
+prometheus-operator is documented there).
+
 ## Validate before installing
 
 ```bash
