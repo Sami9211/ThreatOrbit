@@ -31,7 +31,7 @@ export default function Preloader() {
     <AnimatePresence>
       {show && (
         <motion.div
-          className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-bg"
+          className="fixed inset-0 z-200 flex flex-col items-center justify-center bg-bg"
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.6, ease: 'easeInOut' }}
@@ -58,7 +58,7 @@ export default function Preloader() {
             initial={{ scaleX: 0 }}
             animate={{ scaleX: 1 }}
             transition={{ delay: 0.3, duration: 1.1, ease: 'easeInOut' }}
-            className="mt-5 h-px w-32 origin-left bg-gradient-to-r from-magenta via-violet to-amber"
+            className="mt-5 h-px w-32 origin-left bg-linear-to-r from-magenta via-violet to-amber"
           />
         </motion.div>
       )}

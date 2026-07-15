@@ -93,7 +93,7 @@ export default function LoginPage() {
         </p>
       </header>
 
-      <main id="main-content" tabIndex={-1} className="relative z-10 flex-1 flex items-center justify-center px-5 py-10 focus:outline-none">
+      <main id="main-content" tabIndex={-1} className="relative z-10 flex-1 flex items-center justify-center px-5 py-10 focus:outline-hidden">
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
           className="w-full max-w-md">
@@ -109,7 +109,7 @@ export default function LoginPage() {
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="jane@company.com"
-                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600" />
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600" />
                 </div>
               </div>
 
@@ -124,7 +124,7 @@ export default function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
                   <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600" />
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600" />
                   <button type="button" onClick={() => setShowPw((s) => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 hover:text-white transition-colors"
                     aria-label={showPw ? 'Hide password' : 'Show password'}>
@@ -143,7 +143,7 @@ export default function LoginPage() {
                     <input value={mfaCode} autoFocus inputMode="numeric" maxLength={6}
                       onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
                       placeholder="6-digit code"
-                      className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-2 border border-safe/25 text-sm font-mono tracking-[0.3em] text-ink-100 focus:outline-none focus:border-safe/50 focus:ring-1 focus:ring-safe/15 transition-colors placeholder-ink-600" />
+                      className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-2 border border-safe/25 text-sm font-mono tracking-[0.3em] text-ink-100 focus:outline-hidden focus:border-safe/50 focus:ring-1 focus:ring-safe/15 transition-colors placeholder-ink-600" />
                   </div>
                   <p className="text-[10px] text-ink-600 mt-1">
                     This account has two-factor authentication - enter the code from your authenticator app.
@@ -153,7 +153,7 @@ export default function LoginPage() {
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
-                  className="w-4 h-4 rounded accent-magenta" />
+                  className="w-4 h-4 rounded-sm accent-magenta" />
                 <span className="text-xs text-ink-400">Keep me signed in</span>
               </label>
 

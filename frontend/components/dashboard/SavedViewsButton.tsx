@@ -107,7 +107,7 @@ export default function SavedViewsButton({ section, filters, onApply }: {
                 onKeyDown={(e) => e.key === 'Enter' && saveCurrent()}
                 placeholder={hasFilters ? 'Name this view…' : 'No active filters to save'}
                 disabled={!hasFilters}
-                className="flex-1 px-2 py-1.5 rounded-lg bg-surface-2 border border-white/10 text-xs text-white placeholder:text-ink-600 outline-none focus:border-violet/40 disabled:opacity-50"
+                className="flex-1 px-2 py-1.5 rounded-lg bg-surface-2 border border-white/10 text-xs text-white placeholder:text-ink-600 outline-hidden focus:border-violet/40 disabled:opacity-50"
               />
               <button
                 onClick={saveCurrent}
@@ -141,7 +141,7 @@ export default function SavedViewsButton({ section, filters, onApply }: {
                     </button>
                     <button
                       onClick={() => remove(v.id)}
-                      className="p-1 rounded text-ink-700 opacity-0 group-hover:opacity-100 hover:text-magenta transition-all"
+                      className="p-1 rounded-sm text-ink-700 opacity-0 group-hover:opacity-100 hover:text-magenta transition-all"
                       title="Delete this view">
                       <Trash2 className="w-3 h-3" />
                     </button>

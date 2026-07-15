@@ -421,12 +421,12 @@ export default function VulnsPage() {
           <Search className="w-3 h-3 text-ink-500 shrink-0" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search CVE ID or title…"
-            className="flex-1 bg-transparent text-xs text-white placeholder-ink-600 outline-none" />
+            className="flex-1 bg-transparent text-xs text-white placeholder-ink-600 outline-hidden" />
           {search && <button onClick={() => setSearch('')}><X className="w-3 h-3 text-ink-500" /></button>}
         </div>
 
         <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value as Severity | 'all')}
-          className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/10 bg-white/5 text-ink-400 outline-none cursor-pointer">
+          className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/10 bg-white/5 text-ink-400 outline-hidden cursor-pointer">
           <option value="all" className="bg-surface">All Severities</option>
           {(['critical', 'high', 'medium', 'low'] as Severity[]).map((s) => (
             <option key={s} value={s} className="bg-surface">{SEVERITY_META[s].label}</option>
@@ -434,7 +434,7 @@ export default function VulnsPage() {
         </select>
 
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as VulnStatus | 'all')}
-          className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/10 bg-white/5 text-ink-400 outline-none cursor-pointer">
+          className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/10 bg-white/5 text-ink-400 outline-hidden cursor-pointer">
           <option value="all" className="bg-surface">All Statuses</option>
           {(['open', 'in-progress', 'patched', 'accepted'] as VulnStatus[]).map((s) => (
             <option key={s} value={s} className="bg-surface">{STATUS_META[s].label}</option>
@@ -475,7 +475,7 @@ export default function VulnsPage() {
                   onClick={() => setSelectedId(isSel ? null : v.id)}
                   className={cn('border-b border-white/4 cursor-pointer transition-colors',
                     isSel ? 'bg-magenta/5 border-l-2 border-l-magenta/50' : 'hover:bg-white/3',
-                    i % 2 !== 0 && !isSel && 'bg-white/[0.01]')}>
+                    i % 2 !== 0 && !isSel && 'bg-white/1')}>
                   <td className="px-4 py-3 font-mono text-ink-100 whitespace-nowrap">{v.id}</td>
                   <td className="px-4 py-3"><CvssPill score={v.cvss} /></td>
                   <td className="px-4 py-3 text-ink-300 max-w-[260px] truncate">{v.title}</td>
@@ -515,11 +515,11 @@ export default function VulnsPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setSelectedId(null)}
-              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs" />
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-              className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-md bg-surface border-l border-white/10 shadow-2xl overflow-y-auto">
+              className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-md bg-surface border-l border-white/10 shadow-2xl overflow-y-auto">
               {(() => {
                 const v = selected
                 return (
@@ -566,7 +566,7 @@ export default function VulnsPage() {
                       <p className="font-mono text-[10px] text-violet bg-violet/5 border border-violet/15 rounded-lg px-2.5 py-1.5 mb-2 break-all">{v.cvssVector}</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {v.vectorBreakdown.map((b) => (
-                          <div key={b.label} className="flex items-center justify-between text-[10px] py-1 px-2 rounded bg-white/3">
+                          <div key={b.label} className="flex items-center justify-between text-[10px] py-1 px-2 rounded-sm bg-white/3">
                             <span className="text-ink-500">{b.label}</span>
                             <span className="text-ink-200 font-medium">{b.value}</span>
                           </div>

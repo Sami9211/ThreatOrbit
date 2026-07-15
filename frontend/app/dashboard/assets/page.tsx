@@ -158,7 +158,7 @@ function CveBadges({ cves }: { cves: Asset['cves'] }) {
   return (
     <div className="flex items-center gap-1">
       {items.map(({ label, count, color }) => count > 0 ? (
-        <span key={label} className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+        <span key={label} className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
           style={{ color, background: color + '20', border: `1px solid ${color}35` }}>
           {label}:{count}
         </span>
@@ -380,13 +380,13 @@ export default function AssetsPage() {
             <Search className="w-3 h-3 text-ink-500 shrink-0" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search assets…"
-              className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-600 focus:outline-none" />
+              className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-600 focus:outline-hidden" />
             {search && <button onClick={() => setSearch('')}><X className="w-3 h-3 text-ink-500" /></button>}
           </div>
 
           {/* Type filter */}
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as AssetType | 'all')}
-            className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/8 bg-surface-2 text-ink-400 focus:outline-none cursor-pointer">
+            className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/8 bg-surface-2 text-ink-400 focus:outline-hidden cursor-pointer">
             <option value="all">All Types</option>
             {(Object.keys(TYPE_META) as AssetType[]).map((t) => (
               <option key={t} value={t} className="bg-[#100A1C]">{TYPE_META[t].label}</option>
@@ -395,7 +395,7 @@ export default function AssetsPage() {
 
           {/* Criticality filter */}
           <select value={critFilter} onChange={(e) => setCritFilter(e.target.value as Criticality | 'all')}
-            className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/8 bg-surface-2 text-ink-400 focus:outline-none cursor-pointer">
+            className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/8 bg-surface-2 text-ink-400 focus:outline-hidden cursor-pointer">
             <option value="all">All Criticality</option>
             {(['critical', 'high', 'medium', 'low'] as Criticality[]).map((c) => (
               <option key={c} value={c} className="bg-[#100A1C] capitalize">{c.charAt(0).toUpperCase() + c.slice(1)}</option>
@@ -404,7 +404,7 @@ export default function AssetsPage() {
 
           {/* Sort */}
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/8 bg-surface-2 text-ink-400 focus:outline-none cursor-pointer">
+            className="appearance-none px-3 py-1.5 rounded-lg text-xs border border-white/8 bg-surface-2 text-ink-400 focus:outline-hidden cursor-pointer">
             <option value="risk">Sort: Risk Score</option>
             <option value="alerts">Sort: Alerts</option>
             <option value="cves">Sort: CVE Count</option>
@@ -465,7 +465,7 @@ export default function AssetsPage() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <p className="text-xs font-medium text-ink-100 truncate">{a.name}</p>
-                            <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0"
+                            <span className="text-[9px] px-1 py-0.5 rounded-sm font-semibold shrink-0"
                               style={{ color: CRIT_COLOR[a.criticality], background: CRIT_COLOR[a.criticality] + '18' }}>
                               {a.criticality.toUpperCase()}
                             </span>
@@ -584,7 +584,7 @@ export default function AssetsPage() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase"
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-sm font-bold uppercase"
                           style={{ color: CRIT_COLOR[a.criticality], background: CRIT_COLOR[a.criticality] + '18' }}>
                           {a.criticality}
                         </span>
@@ -688,7 +688,7 @@ export default function AssetsPage() {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setSelectedId(null)}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm xl:hidden"
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs xl:hidden"
           />
         )}
       </AnimatePresence>
@@ -701,7 +701,7 @@ export default function AssetsPage() {
         className={cn(
           'border-l border-white/5 flex flex-col overflow-hidden bg-surface',
           'xl:static xl:z-auto xl:w-72 xl:max-w-none xl:translate-x-0 xl:shadow-none',
-          'fixed right-0 top-0 bottom-0 z-[60] w-full max-w-sm shadow-2xl transition-transform duration-300 ease-in-out',
+          'fixed right-0 top-0 bottom-0 z-60 w-full max-w-sm shadow-2xl transition-transform duration-300 ease-in-out',
           selectedAsset ? 'translate-x-0' : 'translate-x-full',
         )}
       >
@@ -830,7 +830,7 @@ export default function AssetsPage() {
                       <div className="space-y-1">
                         {activity.vulnFindings.slice(0, 3).map((v) => (
                           <div key={v.cve} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase shrink-0"
                               style={{ color: v.severity === 'critical' ? tk('magenta') : tk('threat'),
                                        background: v.severity === 'critical' ? withAlpha(tk('magenta'), 0.09) : withAlpha(tk('threat'), 0.09) }}>
                               {v.cvss.toFixed(1)}
@@ -959,7 +959,7 @@ export default function AssetsPage() {
         {showAdd && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
             onClick={() => setShowAdd(false)}
           >
             <motion.div
@@ -973,7 +973,7 @@ export default function AssetsPage() {
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                   <Plus className="w-4 h-4 text-magenta" /> Add Asset to Monitor
                 </h3>
-                <button onClick={() => setShowAdd(false)} className="p-1 rounded text-ink-500 hover:text-white">
+                <button onClick={() => setShowAdd(false)} className="p-1 rounded-sm text-ink-500 hover:text-white">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1008,14 +1008,14 @@ export default function AssetsPage() {
               <label className="block text-[11px] font-medium text-ink-400 mb-1.5">Display Name</label>
               <input value={name} onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Corporate Website"
-                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 mb-3 focus:outline-none focus:border-magenta/40" />
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 mb-3 focus:outline-hidden focus:border-magenta/40" />
 
               <label className="block text-[11px] font-medium text-ink-400 mb-1.5">
                 {formType === 'domain' ? 'Domain' : formType === 'ip' ? 'IP Address' : formType === 'cloud' ? 'Cloud ID' : 'Hostname / Address'}
               </label>
               <input value={formValue} onChange={(e) => setFormValue(e.target.value)}
                 placeholder={formType === 'domain' ? 'example.com' : formType === 'ip' ? '203.0.113.10' : 'hostname'}
-                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 font-mono mb-5 focus:outline-none focus:border-magenta/40" />
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 font-mono mb-5 focus:outline-hidden focus:border-magenta/40" />
 
               <div className="flex items-center gap-2">
                 <button onClick={addAsset} disabled={!name.trim() || !formValue.trim()}

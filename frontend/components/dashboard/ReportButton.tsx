@@ -124,7 +124,7 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8" onClick={onClose}>
+      className="fixed inset-0 z-80 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 sm:p-8" onClick={onClose}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.97, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-3xl h-full max-h-[90vh] rounded-2xl border border-white/10 bg-surface flex flex-col overflow-hidden">
@@ -137,7 +137,7 @@ function ReportViewer({ kind, label, caseId, onClose }: { kind: string; label?: 
           <div className="flex items-center gap-0.5 rounded-md bg-surface-2 border border-white/8 p-0.5" title="Report audience">
             {(['technical', 'executive', 'compliance'] as ReportAudience[]).map((a) => (
               <button key={a} onClick={() => setAudience(a)}
-                className={cn('px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors',
+                className={cn('px-2 py-0.5 rounded-sm text-[10px] font-medium capitalize transition-colors',
                   audience === a ? 'bg-magenta/20 text-magenta' : 'text-ink-500 hover:text-ink-200')}>
                 {a}
               </button>
@@ -234,8 +234,8 @@ function ReportBody({ report }: { report: ReportData }) {
               return (
                 <div key={di} className="flex items-center gap-2">
                   <span className="text-[11px] text-ink-400 w-32 truncate capitalize">{d.severity ?? d.label}</span>
-                  <div className="flex-1 h-3 rounded bg-white/5 overflow-hidden">
-                    <div className="h-full rounded" style={{ width: `${(d.count / maxBar) * 100}%`, background: color }} />
+                  <div className="flex-1 h-3 rounded-sm bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-sm" style={{ width: `${(d.count / maxBar) * 100}%`, background: color }} />
                   </div>
                   <span className="text-[11px] font-mono text-ink-300 w-8 text-right">{d.count}</span>
                 </div>
@@ -263,7 +263,7 @@ function ReportBody({ report }: { report: ReportData }) {
               {items.map((f, i) => (
                 <div key={i} className="rounded-lg border border-white/8 bg-surface-2/40 p-3">
                   <div className="flex items-start gap-2">
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 mt-0.5"
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase shrink-0 mt-0.5"
                       style={{ color: SEV_COLOR[f.severity] ?? '#7A3CFF', background: `${SEV_COLOR[f.severity] ?? '#7A3CFF'}18` }}>
                       {f.severity}
                     </span>

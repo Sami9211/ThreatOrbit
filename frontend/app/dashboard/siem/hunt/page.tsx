@@ -370,7 +370,7 @@ export default function ThreatHuntPage() {
               onChange={(e) => setSaveName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') saveQuery(); if (e.key === 'Escape') setSavePanelOpen(false) }}
               placeholder="Hunt name…"
-              className="px-3 py-2 rounded-xl bg-surface-2 border border-magenta/30 text-xs text-ink-100 placeholder-ink-600 focus:outline-none w-44"
+              className="px-3 py-2 rounded-xl bg-surface-2 border border-magenta/30 text-xs text-ink-100 placeholder-ink-600 focus:outline-hidden w-44"
             />
           )}
           <button
@@ -461,7 +461,7 @@ export default function ThreatHuntPage() {
                             {hunt.name}
                           </p>
                           <span className={cn(
-                            'shrink-0 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border',
+                            'shrink-0 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded-sm border',
                             isActive
                               ? 'text-violet border-violet/40 bg-violet/15'
                               : 'text-ink-600 border-white/8 bg-transparent',
@@ -526,7 +526,7 @@ export default function ThreatHuntPage() {
                   <select
                     value={timeRange}
                     onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-                    className="appearance-none bg-transparent text-[11px] text-ink-300 focus:outline-none cursor-pointer pr-4"
+                    className="appearance-none bg-transparent text-[11px] text-ink-300 focus:outline-hidden cursor-pointer pr-4"
                   >
                     {(Object.keys(TIME_RANGE_LABELS) as TimeRange[]).map((t) => (
                       <option key={t} value={t} className="bg-[#100A1C]">{TIME_RANGE_LABELS[t]}</option>
@@ -574,7 +574,7 @@ export default function ThreatHuntPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 spellCheck={false}
-                className="flex-1 py-4 px-4 bg-transparent text-[11px] font-mono text-ink-100 leading-[1.65] focus:outline-none resize-none placeholder-ink-800"
+                className="flex-1 py-4 px-4 bg-transparent text-[11px] font-mono text-ink-100 leading-[1.65] focus:outline-hidden resize-none placeholder-ink-800"
                 style={{ minHeight: '220px', maxHeight: '340px', tabSize: 2 }}
                 placeholder="Enter KQL query…"
               />

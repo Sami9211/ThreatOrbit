@@ -79,7 +79,7 @@ export default function SigmaImportButton({ onImported }: { onImported?: () => v
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-80 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4"
             onClick={() => setOpen(false)}>
             <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.97, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
@@ -93,7 +93,7 @@ export default function SigmaImportButton({ onImported }: { onImported?: () => v
               <div className="p-4 space-y-3">
                 <textarea value={text} onChange={(e) => setText(e.target.value)} rows={12}
                   placeholder="Paste a Sigma rule, or a whole collection of them (--- separated)…"
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#080614] border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-violet/40 placeholder-ink-700 resize-none" />
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#080614] border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-hidden focus:border-violet/40 placeholder-ink-700 resize-none" />
                 <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={doImport} disabled={busy || !text.trim()}
                     className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all',

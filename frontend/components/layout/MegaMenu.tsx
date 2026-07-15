@@ -82,7 +82,7 @@ export default function MegaMenu({ open, onClose }: { open: boolean; onClose: ()
           initial="hidden"
           animate="show"
           exit="exit"
-          className="fixed inset-0 z-[70] overflow-y-auto bg-[#0A0612]/95 backdrop-blur-2xl"
+          className="fixed inset-0 z-70 overflow-y-auto bg-[#0A0612]/95 backdrop-blur-2xl"
         >
           {/* Plasma ambience */}
           <div className="absolute inset-0 plasma-mesh opacity-60 pointer-events-none" />

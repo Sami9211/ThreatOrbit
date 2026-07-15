@@ -276,7 +276,7 @@ export default function ImportIocsPage() {
                   onChange={e => setRawText(e.target.value)}
                   placeholder={'185.220.101.45\nhxxps://malicious[.]example[.]com/payload\n44d88612fea8a8f36de82e1278abb02f\nCVE-2024-3094\nevil-c2[.]net'}
                   spellCheck={false}
-                  className="w-full h-80 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-ink-100 placeholder-ink-600 outline-none focus:border-magenta/30 resize-none leading-relaxed"
+                  className="w-full h-80 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-ink-100 placeholder-ink-600 outline-hidden focus:border-magenta/30 resize-none leading-relaxed"
                 />
                 <p className="text-[10px] text-ink-600 mt-1.5">
                   Live parsing detects and de-duplicates indicators as you type. Defanged input (hxxp, 1.1.1[.]1) is normalized when Refang is on.
@@ -298,7 +298,7 @@ export default function ImportIocsPage() {
                     <div className="flex items-center gap-2">
                       <FileCheck className="w-4 h-4 text-safe" />
                       <span className="text-sm text-ink-100 font-mono">{fileName}</span>
-                      <button onClick={() => setFileName(null)} className="p-1 rounded hover:bg-white/8 text-ink-500">
+                      <button onClick={() => setFileName(null)} className="p-1 rounded-sm hover:bg-white/8 text-ink-500">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -377,7 +377,7 @@ export default function ImportIocsPage() {
                 onChange={e => setTagDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
                 placeholder="Add tag + Enter"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-ink-600 outline-none focus:border-magenta/30"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-ink-600 outline-hidden focus:border-magenta/30"
               />
             </div>
 
@@ -442,7 +442,7 @@ export default function ImportIocsPage() {
                   <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-600">No imports yet - import indicators above to populate this log.</td></tr>
                 )}
                 {history.map((h, i) => (
-                  <tr key={h.id} className={cn('border-b border-white/4', i % 2 !== 0 && 'bg-white/[0.01]')}>
+                  <tr key={h.id} className={cn('border-b border-white/4', i % 2 !== 0 && 'bg-white/1')}>
                     <td className="px-4 py-3 font-mono text-ink-200">{h.source}<span className="ml-2 text-[9px] uppercase text-ink-600">{h.method}</span></td>
                     <td className="px-4 py-3 font-mono text-violet text-right">{h.imported.toLocaleString()}</td>
                     <td className="px-4 py-3 font-mono text-ink-500 whitespace-nowrap">{relDay(h.ts)}</td>

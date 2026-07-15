@@ -307,7 +307,7 @@ function StepDetailPanel({ pb, onClose, onEdit }: { pb: Playbook; onClose: () =>
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 290, damping: 28 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-md flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-md flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Panel header */}
       <div className="p-4 border-b border-white/8 shrink-0">
@@ -411,7 +411,7 @@ function StepDetailPanel({ pb, onClose, onEdit }: { pb: Playbook; onClose: () =>
                   </p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span
-                      className="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide"
+                      className="text-[9px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide"
                       style={{ background: color + '18', color }}
                     >
                       {step.type}
@@ -468,7 +468,7 @@ function PlaybookCard({
     >
       {/* Running shimmer */}
       {pb.lastRunStatus === 'running' && (
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet/5 to-transparent animate-gradient-x pointer-events-none" />
+        <div className="absolute inset-0 bg-linear-to-r from-transparent via-violet/5 to-transparent animate-gradient-x pointer-events-none" />
       )}
 
       {/* Card body */}
@@ -482,7 +482,7 @@ function PlaybookCard({
             <div className="flex items-center gap-2 justify-between">
               <p className="text-[13px] font-semibold text-white truncate leading-snug">{pb.name}</p>
               <span className={cn(
-                'shrink-0 text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wide',
+                'shrink-0 text-[9px] px-1.5 py-0.5 rounded-sm border font-bold uppercase tracking-wide',
                 CAT_COLOR[pb.category] || 'border-white/10 text-ink-500',
               )}>
                 {pb.category}
@@ -502,7 +502,7 @@ function PlaybookCard({
             <Clock className="w-3 h-3" />
             ~{pb.estimatedRuntime}
           </span>
-          <span className={cn('px-1.5 py-0.5 rounded text-[9px] border',
+          <span className={cn('px-1.5 py-0.5 rounded-sm text-[9px] border',
             pb.triggerType === 'auto'
               ? 'border-violet/25 bg-violet/8 text-violet'
               : 'border-amber/25 bg-amber/8 text-amber',
@@ -752,7 +752,7 @@ export default function PlaybooksPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search playbooks…"
-              className="pl-8 pr-3 py-1.5 bg-surface-2/60 border border-white/8 rounded-lg text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-white/20 w-44"
+              className="pl-8 pr-3 py-1.5 bg-surface-2/60 border border-white/8 rounded-lg text-xs text-ink-200 placeholder-ink-600 focus:outline-hidden focus:border-white/20 w-44"
             />
           </div>
 
@@ -829,7 +829,7 @@ export default function PlaybooksPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
               onClick={() => setSelectedId(null)}
             />
             <StepDetailPanel

@@ -350,7 +350,7 @@ function SophMeter({ level, color = tk('magenta') }: { level: number; color?: st
       {[1, 2, 3, 4, 5].map((n) => (
         <span
           key={n}
-          className="w-1.5 rounded-sm"
+          className="w-1.5 rounded-xs"
           style={{
             height: `${6 + n * 2}px`,
             background: n <= level ? color : 'rgba(255,255,255,0.10)',
@@ -435,7 +435,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-[600px] flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-[600px] flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Header */}
       <div className="p-5 border-b border-white/8 shrink-0">
@@ -454,7 +454,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
             <p className="text-[10px] text-ink-500 mt-1">{actor.origin} · {actor.type} · since {actor.firstSeen}</p>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {actor.aliases.map((a) => (
-                <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-ink-500 font-mono">{a}</span>
+                <span key={a} className="text-[10px] px-1.5 py-0.5 rounded-sm bg-surface-3 text-ink-500 font-mono">{a}</span>
               ))}
             </div>
           </div>
@@ -508,7 +508,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
                 href={`https://attack.mitre.org/techniques/${t.replace('.', '/')}/`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] px-2 py-0.5 rounded bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 transition-colors"
+                className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 transition-colors"
               >
                 {t}
               </a>
@@ -520,7 +520,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           <SectionHead icon={Bug} title="Tools &amp; Malware" />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {actor.malware.map((m) => (
-              <span key={m} className="text-[10px] px-2 py-0.5 rounded bg-threat/10 text-threat border border-threat/20">{m}</span>
+              <span key={m} className="text-[10px] px-2 py-0.5 rounded-sm bg-threat/10 text-threat border border-threat/20">{m}</span>
             ))}
           </div>
         </section>
@@ -539,7 +539,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           <div className="mt-3 space-y-3 relative before:absolute before:left-[5px] before:top-1 before:bottom-1 before:w-px before:bg-white/8">
             {actor.campaigns.map((c) => (
               <div key={c.name} className="flex items-start gap-3 pl-5 relative">
-                <span className="absolute left-[1px] top-1 w-2.5 h-2.5 rounded-full border border-white/20" style={{ background: threat.color }} />
+                <span className="absolute left-px top-1 w-2.5 h-2.5 rounded-full border border-white/20" style={{ background: threat.color }} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-magenta">{c.year}</span>
@@ -556,7 +556,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           <SectionHead icon={Crosshair} title="Associated IOCs" />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {actor.iocs.map((ioc) => (
-              <span key={ioc} className="text-[10px] px-2 py-0.5 rounded bg-magenta/10 text-magenta font-mono border border-magenta/20">{ioc}</span>
+              <span key={ioc} className="text-[10px] px-2 py-0.5 rounded-sm bg-magenta/10 text-magenta font-mono border border-magenta/20">{ioc}</span>
             ))}
           </div>
         </section>
@@ -597,7 +597,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none bg-transparent text-xs text-ink-300 focus:outline-none cursor-pointer pr-3"
+        className="appearance-none bg-transparent text-xs text-ink-300 focus:outline-hidden cursor-pointer pr-3"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value} className="bg-[#100A1C]">{o.label}</option>
@@ -738,7 +738,7 @@ export default function ActorProfilesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search actors, aliases, malware…"
-              className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-700 focus:outline-none"
+              className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-700 focus:outline-hidden"
             />
             {search && (
               <button onClick={() => setSearch('')} className="text-ink-600 hover:text-ink-300">

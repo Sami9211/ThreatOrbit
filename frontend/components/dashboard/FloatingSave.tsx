@@ -27,7 +27,7 @@ export default function FloatingSave({
       aria-label={label}
       title={label}
       className={cn(
-        'group fixed top-[4.5rem] right-5 z-40 flex items-center gap-0 hover:gap-2 focus-visible:gap-2',
+        'group fixed top-18 right-5 z-40 flex items-center gap-0 hover:gap-2 focus-visible:gap-2',
         'rounded-full p-3 hover:pr-4 focus-visible:pr-4 shadow-xl transition-all duration-200',
         saved ? 'bg-safe/20 text-safe border border-safe/30' : 'bg-plasma text-white hover:shadow-magenta-sm',
         show ? 'opacity-100' : 'pointer-events-none translate-y-[-8px] opacity-0',

@@ -116,7 +116,7 @@ export default function Chatbot() {
         transition={{ delay: 1, type: 'spring', stiffness: 200, damping: 18 }}
         whileHover={{ scale: 1.06 }}
         whileTap={{ scale: 0.94 }}
-        className="fixed bottom-6 right-6 z-[80] w-14 h-14 rounded-full bg-plasma shadow-magenta-md flex items-center justify-center text-white"
+        className="fixed bottom-6 right-6 z-80 w-14 h-14 rounded-full bg-plasma shadow-magenta-md flex items-center justify-center text-white"
         aria-label="Open assistant"
       >
         <AnimatePresence mode="wait">
@@ -140,7 +140,7 @@ export default function Chatbot() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-24 right-6 z-[80] w-[min(92vw,380px)] h-[540px] max-h-[75vh] rounded-3xl overflow-hidden glass border border-white/10 flex flex-col shadow-2xl"
+            className="fixed bottom-24 right-6 z-80 w-[min(92vw,380px)] h-[540px] max-h-[75vh] rounded-3xl overflow-hidden glass border border-white/10 flex flex-col shadow-2xl"
           >
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/8 bg-white/3">
@@ -213,7 +213,7 @@ export default function Chatbot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about ThreatOrbit..."
-                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3.5 py-2.5 text-sm text-white placeholder:text-ink-600 focus:border-magenta/40 focus:outline-none transition-colors"
+                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3.5 py-2.5 text-sm text-white placeholder:text-ink-600 focus:border-magenta/40 focus:outline-hidden transition-colors"
               />
               <button
                 type="submit"

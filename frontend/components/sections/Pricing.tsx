@@ -92,7 +92,7 @@ export default function Pricing() {
             {tier.highlighted && (
               <div className="absolute -inset-px rounded-3xl overflow-hidden pointer-events-none">
                 <div
-                  className="absolute -inset-[40%] animate-spin-slow"
+                  className="absolute inset-[-40%] animate-spin-slow"
                   style={{
                     background: 'conic-gradient(from 0deg, transparent 0deg, #FFB23E 60deg, #FF2E97 120deg, transparent 200deg, #7A3CFF 300deg, transparent 360deg)',
                     opacity: 0.5,

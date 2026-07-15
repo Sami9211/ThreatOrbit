@@ -93,7 +93,7 @@ export default function ChangelogPage() {
             <ul className="space-y-2">
               {release.changes.map((c, i) => (
                 <li key={i} className="flex items-start gap-2.5">
-                  <span className={`shrink-0 mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border ${TYPE_STYLES[c.type]}`}>
+                  <span className={`shrink-0 mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-sm border ${TYPE_STYLES[c.type]}`}>
                     {c.type}
                   </span>
                   <span className="text-sm text-ink-300">{c.text}</span>

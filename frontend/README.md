@@ -9,7 +9,7 @@ Tailwind, Framer Motion, and a React-Three-Fiber 3D layer.
 | Concern        | Choice |
 |----------------|--------|
 | Framework      | Next.js 16 App Router, **static export** (`output: 'export'`) |
-| Styling        | Tailwind CSS + a small `globals.css` design layer |
+| Styling        | Tailwind CSS 4 (CSS-first `@theme` in `globals.css`) + a small design layer |
 | Animation      | Framer Motion (scroll, springs, layout) |
 | 3D / WebGL     | `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing` |
 | Icons          | `lucide-react` |

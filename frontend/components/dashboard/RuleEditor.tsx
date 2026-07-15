@@ -68,11 +68,11 @@ export default function RuleEditor({ onClose, onCreated }: {
       .catch(() => { setError('Could not save the rule.'); setSaving(false) })
   }
 
-  const fld = 'px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-magenta/40'
+  const fld = 'px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-hidden focus:border-magenta/40'
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-8" onClick={onClose}>
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 sm:p-8" onClick={onClose}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.97, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-2xl max-h-[90vh] rounded-2xl border border-white/10 bg-surface flex flex-col overflow-hidden">
@@ -111,7 +111,7 @@ export default function RuleEditor({ onClose, onCreated }: {
                 <span className="text-ink-600">Match</span>
                 {(['and', 'or'] as const).map((l) => (
                   <button key={l} onClick={() => setLogic(l)}
-                    className={cn('px-2 py-0.5 rounded uppercase font-semibold',
+                    className={cn('px-2 py-0.5 rounded-sm uppercase font-semibold',
                       logic === l ? 'bg-magenta/15 text-magenta' : 'text-ink-500 hover:text-ink-300')}>
                     {l === 'and' ? 'ALL' : 'ANY'}
                   </button>

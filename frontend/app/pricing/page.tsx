@@ -306,7 +306,7 @@ function ModuleChip({
       whileTap={!isAlwaysOn ? { scale: 0.98 } : undefined}
       className={cn(
         'relative flex flex-col gap-2.5 p-4 rounded-xl border text-left transition-all duration-300 group',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-magenta/60',
+        'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-magenta/60',
         isAlwaysOn
           ? 'cursor-default border-safe/25 bg-safe/5'
           : selected
@@ -862,8 +862,8 @@ export default function PricingPage() {
                 }}
                 className={cn(
                   'grid grid-cols-[200px_1fr_1fr_1fr_1fr] gap-px',
-                  i % 2 === 0 ? 'bg-white/[0.015]' : 'bg-transparent',
-                  'hover:bg-white/[0.03] transition-colors duration-150',
+                  i % 2 === 0 ? 'bg-white/1.5' : 'bg-transparent',
+                  'hover:bg-white/3 transition-colors duration-150',
                 )}
               >
                 {/* Feature name */}

@@ -87,7 +87,7 @@ export default function LogAnalysisSection() {
                       initial={{ opacity: 0 }}
                       animate={inView ? { opacity: 1 } : {}}
                       transition={{ delay: 0.1 + i * 0.07 }}
-                      className="flex items-start gap-2 rounded px-1 -mx-1 transition-colors duration-200"
+                      className="flex items-start gap-2 rounded-sm px-1 -mx-1 transition-colors duration-200"
                       style={{
                         backgroundColor: active ? 'rgba(122,60,255,0.16)' : 'transparent',
                       }}
@@ -184,7 +184,7 @@ export default function LogAnalysisSection() {
                 { title: 'Enriched anomaly reports', desc: 'Each finding includes detector name, severity, matched pattern, and line reference.' },
               ].map((item) => (
                 <div key={item.title} className="flex gap-4">
-                  <div className="w-1 rounded-full bg-gradient-to-b from-violet to-magenta shrink-0" />
+                  <div className="w-1 rounded-full bg-linear-to-b from-violet to-magenta shrink-0" />
                   <div>
                     <h4 className="text-sm font-semibold text-white mb-1">{item.title}</h4>
                     <p className="text-sm text-ink-400 leading-relaxed">{item.desc}</p>

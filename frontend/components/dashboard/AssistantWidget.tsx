@@ -89,7 +89,7 @@ export default function AssistantWidget() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="fixed bottom-5 right-5 z-50 w-[min(420px,calc(100vw-2.5rem))] h-[min(600px,calc(100vh-2.5rem))] flex flex-col rounded-2xl border border-white/10 bg-[#0B0712]/98 backdrop-blur-xl shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/8 shrink-0 bg-gradient-to-r from-magenta/10 to-violet/10">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/8 shrink-0 bg-linear-to-r from-magenta/10 to-violet/10">
               <div className="p-1.5 rounded-lg bg-plasma/20 border border-magenta/25">
                 <Sparkles className="w-4 h-4 text-magenta" />
               </div>
@@ -173,7 +173,7 @@ export default function AssistantWidget() {
                   rows={1}
                   maxLength={2000}
                   placeholder="Ask about your security data…"
-                  className="flex-1 resize-none max-h-24 px-3 py-2 rounded-xl bg-surface-2 border border-white/10 text-xs text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40" />
+                  className="flex-1 resize-none max-h-24 px-3 py-2 rounded-xl bg-surface-2 border border-white/10 text-xs text-ink-100 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40" />
                 <button onClick={send} disabled={!input.trim() || busy}
                   className="p-2.5 rounded-xl bg-plasma text-white disabled:opacity-40 hover:shadow-magenta-sm transition-all shrink-0">
                   <Send className="w-3.5 h-3.5" />

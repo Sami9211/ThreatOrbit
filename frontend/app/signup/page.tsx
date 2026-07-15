@@ -229,7 +229,7 @@ export default function SignUpPage() {
                         value={form.password}
                         onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                         placeholder="At least 8 characters"
-                        className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600"
                       />
                       <button type="button" onClick={() => setShowPw((s) => !s)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 hover:text-white transition-colors"
@@ -253,7 +253,7 @@ export default function SignUpPage() {
                   {/* Terms */}
                   <label className="flex items-start gap-2.5 cursor-pointer pt-1">
                     <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded accent-magenta shrink-0" />
+                      className="mt-0.5 w-4 h-4 rounded-sm accent-magenta shrink-0" />
                     <span className="text-[11px] text-ink-400 leading-relaxed">
                       I agree to the <Link href="/terms" className="text-magenta hover:underline">Terms of Service</Link> and{' '}
                       <Link href="/privacy" className="text-magenta hover:underline">Privacy Policy</Link>.
@@ -324,7 +324,7 @@ function Input({ icon: Icon, label, value, onChange, placeholder, type = 'text',
         <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
         <input type={type} value={value} placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className={cn('w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-2 border text-sm text-ink-100 focus:outline-none focus:ring-1 transition-colors placeholder-ink-600',
+          className={cn('w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-2 border text-sm text-ink-100 focus:outline-hidden focus:ring-1 transition-colors placeholder-ink-600',
             valid === false ? 'border-threat/40 focus:border-threat/60 focus:ring-threat/15' : 'border-white/8 focus:border-magenta/40 focus:ring-magenta/15')} />
         {valid === true && <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-safe" />}
       </div>

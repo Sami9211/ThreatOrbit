@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - Tailwind CSS 3 -> 4 (last trailing frontend major)
+- Migrated with the official `@tailwindcss/upgrade` tool and hand-verified:
+  `tailwind.config.ts` is replaced by a CSS-first `@theme` block in
+  `globals.css` (all Plasma-Noir tokens still resolve through the runtime
+  `--*` channel variables, so the 12 dashboard themes keep working), custom
+  utility classes moved from `@layer utilities` to `@utility` (they now
+  compose with variants), 67 template files had renamed utilities rewritten
+  (`z-[80]` -> `z-80`, `focus:outline-none` -> `focus:outline-hidden`, ...),
+  PostCSS now runs `@tailwindcss/postcss` (autoprefixer dropped - built in),
+  and a compatibility layer preserves the v3 default border colour.
+- `tailwind-merge` 2 -> 3 alongside (v3 targets Tailwind 4 class names; our
+  only use is the vanilla `cn()` helper).
+- Verified: tsc, eslint, check:routes, production build, desktop-chromium
+  e2e suite, and before/after screenshot diffs of landing/pricing/dashboard
+  pages (pixel-identical outside animation phase).
+
 ### 2026-07-15 - ESLint wired into CI + real bugs it caught; Node 22
 - `npm run lint` works again: `next lint` was removed in Next 16, leaving the
   script dead and the `eslint` devDependency unused. New `eslint.config.mjs`

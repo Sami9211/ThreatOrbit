@@ -76,7 +76,7 @@ export default function OpenCTISection() {
               {/* Animated connection with a traveling STIX packet */}
               <div className="flex flex-col items-center gap-1 flex-1 max-w-[220px]">
                 <div className="relative w-full h-6 flex items-center">
-                  <div className="absolute inset-x-0 h-px bg-gradient-to-r from-magenta/30 via-white/15 to-violet/30" />
+                  <div className="absolute inset-x-0 h-px bg-linear-to-r from-magenta/30 via-white/15 to-violet/30" />
                   {animateFlow && (
                     <motion.div
                       className="absolute w-7 h-7 -mt-px rounded-lg bg-magenta/15 border border-magenta/40 flex items-center justify-center"

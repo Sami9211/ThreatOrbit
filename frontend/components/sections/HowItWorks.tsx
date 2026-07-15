@@ -92,7 +92,7 @@ export default function HowItWorks() {
         </Reveal>
 
         <div className="relative">
-          <div className="hidden lg:block absolute top-12 left-[calc(12.5%+1rem)] right-[calc(12.5%+1rem)] h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+          <div className="hidden lg:block absolute top-12 left-[calc(12.5%+1rem)] right-[calc(12.5%+1rem)] h-px bg-linear-to-r from-transparent via-white/8 to-transparent" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {STEPS.map((step, i) => (
               <Step key={step.num} step={step} index={i} />

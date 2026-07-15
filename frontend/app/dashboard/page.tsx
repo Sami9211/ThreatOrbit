@@ -442,7 +442,7 @@ function AssetRiskDrivers({ dist }: { dist: RiskDistribution | null }) {
       {/* Band summary */}
       <div className="flex items-center gap-2 mb-4">
         {([['critical', tk('magenta')], ['at-risk', tk('amber')], ['clean', tk('safe')]] as const).map(([band, color]) => (
-          <div key={band} className="flex-1 rounded-lg border border-white/6 bg-white/[0.02] px-2 py-1.5 text-center">
+          <div key={band} className="flex-1 rounded-lg border border-white/6 bg-white/2 px-2 py-1.5 text-center">
             <p className="text-base font-bold" style={{ color }}>{dist.bands[band] ?? 0}</p>
             <p className="text-[9px] text-ink-600 capitalize">{band}</p>
           </div>
@@ -498,7 +498,7 @@ function EventTimeline({ hourly }: { hourly: number[] }) {
             initial={{ height: 0 }}
             animate={{ height: `${(v / max) * 100}%` }}
             transition={{ delay: i * 0.02, duration: 0.6, ease: 'easeOut' }}
-            className="flex-1 rounded-sm min-w-0"
+            className="flex-1 rounded-xs min-w-0"
             style={{
               background: v > 50 ? tk('magenta') : v > 35 ? tk('amber') : withAlpha(tk('violet'), 0.5),
             }}
@@ -552,7 +552,7 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
         <div className="flex items-center gap-1.5 text-[9px] text-ink-600">
           {[['Low',tk('violet')],['Med',tk('amber')],['High',tk('threat')],['Crit',tk('magenta')]].map(([l,c]) => (
             <span key={l} className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-sm" style={{ background: c }} />{l}
+              <span className="w-2 h-2 rounded-xs" style={{ background: c }} />{l}
             </span>
           ))}
         </div>
@@ -570,7 +570,7 @@ function ThreatHeatmap({ rows }: { rows: Array<{ label: string; vals: number[] }
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: (ri * cols.length + ci) * 0.008 }}
-              className="h-6 rounded-sm cursor-pointer hover:opacity-80 transition-opacity"
+              className="h-6 rounded-xs cursor-pointer hover:opacity-80 transition-opacity"
               style={{ background: heatColor(v) }}
               title={`${row.label}: ${v}`}
             />
@@ -637,7 +637,7 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             aria-label="Filter by region"
-            className="bg-surface-2 border border-white/8 rounded-md text-[10px] text-ink-300 px-1.5 py-1 focus:outline-none focus:border-magenta/40"
+            className="bg-surface-2 border border-white/8 rounded-md text-[10px] text-ink-300 px-1.5 py-1 focus:outline-hidden focus:border-magenta/40"
           >
             {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
@@ -645,7 +645,7 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
             value={sev}
             onChange={(e) => setSev(e.target.value)}
             aria-label="Filter by severity"
-            className="bg-surface-2 border border-white/8 rounded-md text-[10px] text-ink-300 px-1.5 py-1 capitalize focus:outline-none focus:border-magenta/40"
+            className="bg-surface-2 border border-white/8 rounded-md text-[10px] text-ink-300 px-1.5 py-1 capitalize focus:outline-hidden focus:border-magenta/40"
           >
             {SEVS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>

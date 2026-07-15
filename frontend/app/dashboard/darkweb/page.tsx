@@ -101,7 +101,7 @@ export default function DarkWebPage() {
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-600" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search entity or title…"
-              className="w-56 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40" />
+              className="w-56 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40" />
           </div>
           <SavedViewsButton
             section="darkweb"
@@ -172,7 +172,7 @@ export default function DarkWebPage() {
       <AnimatePresence>
         {selected && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={() => setSelected(null)}>
+            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs" onClick={() => setSelected(null)}>
             <motion.div initial={{ x: 440 }} animate={{ x: 0 }} exit={{ x: 440 }} transition={{ type: 'tween', duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-md h-full bg-surface border-l border-white/8 overflow-y-auto">
@@ -189,7 +189,7 @@ export default function DarkWebPage() {
                           <p className="text-[10px] text-ink-500">{selected.source} · {relTime(selected.ts)}</p>
                         </div>
                       </div>
-                      <button onClick={() => setSelected(null)} className="p-1 rounded text-ink-500 hover:text-white shrink-0"><X className="w-4 h-4" /></button>
+                      <button onClick={() => setSelected(null)} className="p-1 rounded-sm text-ink-500 hover:text-white shrink-0"><X className="w-4 h-4" /></button>
                     </div>
 
                     <div>

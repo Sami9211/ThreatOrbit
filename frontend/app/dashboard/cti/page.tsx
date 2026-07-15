@@ -218,7 +218,7 @@ function ActorDetail({ actor }: { actor: Actor }) {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {actor.aliases.map((a) => (
-              <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-ink-500 font-mono">{a}</span>
+              <span key={a} className="text-[10px] px-1.5 py-0.5 rounded-sm bg-surface-3 text-ink-500 font-mono">{a}</span>
             ))}
           </div>
         </div>
@@ -265,7 +265,7 @@ function ActorDetail({ actor }: { actor: Actor }) {
           <p className="text-[10px] text-ink-600 uppercase tracking-wide mb-2">Key TTPs</p>
           <div className="flex flex-wrap gap-1">
             {actor.ttps.map((t) => (
-              <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-violet/15 text-violet font-mono border border-violet/20">{t}</span>
+              <span key={t} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20">{t}</span>
             ))}
           </div>
         </div>
@@ -498,7 +498,7 @@ function SectorTargeting({ actors }: { actors: Actor[] }) {
               <div className="flex items-center gap-2">
                 <div className="flex gap-1">
                   {actors.map((a) => (
-                    <span key={a} className="text-[8px] px-1 py-px rounded bg-magenta/10 text-magenta font-mono border border-magenta/15">{a.split(' ')[0]}</span>
+                    <span key={a} className="text-[8px] px-1 py-px rounded-sm bg-magenta/10 text-magenta font-mono border border-magenta/15">{a.split(' ')[0]}</span>
                   ))}
                 </div>
                 <span className="text-[10px] font-mono text-ink-400 w-6">{score}</span>
@@ -617,7 +617,7 @@ function NormalCTI() {
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {b.ttps.slice(0, 6).map((t) => (
-                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-violet/15 text-violet font-mono border border-violet/20">{t}</span>
+                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20">{t}</span>
                   ))}
                   {b.ttps.length === 0 && <span className="text-[10px] text-ink-600">No TTPs recorded</span>}
                 </div>
@@ -817,7 +817,7 @@ export default function CTIPage() {
                   { label: '< 40%', color: tk('violet') },
                 ].map(({ label, color }) => (
                   <div key={label} className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded" style={{ background: color }} />
+                    <span className="w-2 h-2 rounded-sm" style={{ background: color }} />
                     {label}
                   </div>
                 ))}
@@ -835,7 +835,7 @@ export default function CTIPage() {
                       <div
                         key={tech}
                         title={`${tech} · ${heat}%`}
-                        className="h-6 rounded text-center text-[7px] font-mono leading-6 truncate px-0.5 cursor-pointer hover:opacity-80 transition-opacity"
+                        className="h-6 rounded-sm text-center text-[7px] font-mono leading-6 truncate px-0.5 cursor-pointer hover:opacity-80 transition-opacity"
                         style={{
                           background: heat ? heatColor(heat) : 'rgba(255,255,255,0.04)',
                           color: heat ? 'rgba(255,255,255,0.9)' : 'transparent',

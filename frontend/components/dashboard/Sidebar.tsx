@@ -243,7 +243,7 @@ export default function Sidebar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-xs md:hidden"
             onClick={() => setMobileOpen(false)}
           />
         )}

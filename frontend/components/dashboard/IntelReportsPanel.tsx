@@ -126,23 +126,23 @@ export default function IntelReportsPanel() {
               <div className="flex items-center gap-2 flex-wrap">
                 <input value={title} onChange={(e) => setTitle(e.target.value)}
                   placeholder="Report title - e.g. Q2 LockBit affiliate campaign against fintech"
-                  className="flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 focus:outline-none focus:border-violet/40 placeholder-ink-600" />
+                  className="flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 focus:outline-hidden focus:border-violet/40 placeholder-ink-600" />
                 <select value={tlp} onChange={(e) => setTlp(e.target.value)}
                   title="Traffic Light Protocol marking"
-                  className="px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-violet/40">
+                  className="px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-violet/40">
                   {TLP.map((t) => <option key={t} value={t}>TLP:{t.toUpperCase()}</option>)}
                 </select>
               </div>
               <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={2}
                 placeholder="Executive summary"
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-violet/40 placeholder-ink-600 resize-y" />
+                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-violet/40 placeholder-ink-600 resize-y" />
               <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4}
                 placeholder="Full analysis (markdown welcome): victimology, TTPs, infrastructure, recommendations…"
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-violet/40 placeholder-ink-600 resize-y" />
+                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-hidden focus:border-violet/40 placeholder-ink-600 resize-y" />
               <div className="flex items-center gap-2 flex-wrap">
                 <input value={tags} onChange={(e) => setTags(e.target.value)}
                   placeholder="tags, comma, separated"
-                  className="flex-1 min-w-[180px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-violet/40 placeholder-ink-600" />
+                  className="flex-1 min-w-[180px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-violet/40 placeholder-ink-600" />
                 <button onClick={create} disabled={busy || !title.trim()}
                   className={cn('flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all',
                     title.trim() && !busy ? 'bg-violet/20 border border-violet/35 text-violet hover:bg-violet/30'

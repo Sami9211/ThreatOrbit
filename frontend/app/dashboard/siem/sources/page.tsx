@@ -135,7 +135,7 @@ export default function SiemSourcesPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search sources..."
-          className="flex-1 max-w-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-ink-600 outline-none focus:border-magenta/30"
+          className="flex-1 max-w-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-ink-600 outline-hidden focus:border-magenta/30"
         />
         {(['all', 'healthy', 'degraded', 'offline', 'paused'] as const).map(s => (
           <button
@@ -178,7 +178,7 @@ export default function SiemSourcesPage() {
                   className={cn(
                     'border-b border-white/4 cursor-pointer transition-colors',
                     selected === src.id ? 'bg-magenta/5 border-l-2 border-l-magenta/50' : 'hover:bg-white/3',
-                    i % 2 !== 0 && selected !== src.id && 'bg-white/[0.01]',
+                    i % 2 !== 0 && selected !== src.id && 'bg-white/1',
                   )}
                 >
                   <td className="px-4 py-3 font-medium text-ink-100">{src.name}</td>
@@ -203,7 +203,7 @@ export default function SiemSourcesPage() {
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {src.tags.slice(0, 2).map(t => (
-                        <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-ink-500 border border-white/8">{t}</span>
+                        <span key={t} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-white/5 text-ink-500 border border-white/8">{t}</span>
                       ))}
                     </div>
                   </td>

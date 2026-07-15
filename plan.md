@@ -284,9 +284,14 @@ plus external compliance attestations.
 
 ### Cross-cutting maturity (from the honest gap analysis)
 
-- [ ] **Supply chain** - finish the trailing frontend majors (tailwindcss 3→4,
-      `@types/node` 20→25); add an in-product "platform updates" upgrade notice;
-      sign published **container images** once a registry push pipeline exists.
+- [~] **Supply chain** - DONE (2026-07-15): the trailing frontend majors are
+      cleared - tailwindcss 3→4 (CSS-first `@theme`, official upgrade tool,
+      screenshot-verified), tailwind-merge 2→3, `@types/node` 20→22 (pinned to
+      the runtime actually targeted: CI and the frontend Dockerfile are both
+      Node 22 now that Node 20 is EOL), and ESLint works again post-Next-16
+      (`next lint` removal) with an errors-only gate in CI. Remaining: an
+      in-product "platform updates" upgrade notice, and signing published
+      **container images** once a registry push pipeline exists.
 - [x] **Detection content.** DONE (2026-07-09): `POST
       /siem/rules/import-sigma-pack` bulk-imports a pasted Sigma rule
       collection (`---`-separated multi-document YAML, the format downloaded

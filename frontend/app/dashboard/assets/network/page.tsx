@@ -449,7 +449,7 @@ export default function NetworkMapPage() {
               onChange={(e) => { setSearch(e.target.value) }}
               onKeyDown={(e) => { if (e.key === 'Enter' && searchMatch) { setSelectedId(searchMatch.id); setSearch('') } }}
               placeholder="Find host or IP…"
-              className="w-44 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40"
+              className="w-44 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40"
             />
           </div>
           <div className="flex items-center gap-1.5">
@@ -650,7 +650,7 @@ export default function NetworkMapPage() {
         </svg>
 
         {/* Zoom controls */}
-        <div className="absolute top-4 left-4 flex flex-col gap-1 rounded-xl border border-white/10 bg-surface/90 backdrop-blur-sm p-1">
+        <div className="absolute top-4 left-4 flex flex-col gap-1 rounded-xl border border-white/10 bg-surface/90 backdrop-blur-xs p-1">
           <button onClick={() => smoothZoom(0.8)} title="Zoom in"
             className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/8 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
           <button onClick={() => smoothZoom(1.25)} title="Zoom out"
@@ -660,7 +660,7 @@ export default function NetworkMapPage() {
         </div>
 
         {/* Legend */}
-        <div className="absolute bottom-4 left-4 rounded-xl border border-white/8 bg-surface/90 backdrop-blur-sm px-3 py-2.5 space-y-2">
+        <div className="absolute bottom-4 left-4 rounded-xl border border-white/8 bg-surface/90 backdrop-blur-xs px-3 py-2.5 space-y-2">
           <div>
             <p className="text-[9px] text-ink-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Layers className="w-2.5 h-2.5" /> Ring = zone</p>
             <div className="flex flex-col gap-1">
@@ -725,7 +725,7 @@ export default function NetworkMapPage() {
                           <p className="text-[10px] text-ink-500">{TYPE_LABEL[n.type]}{n.live ? ' · live inventory' : ''}</p>
                         </div>
                       </div>
-                      <button onClick={() => { setSelectedId(null); setTracePath(false) }} className="p-1 rounded text-ink-500 hover:text-white shrink-0">
+                      <button onClick={() => { setSelectedId(null); setTracePath(false) }} className="p-1 rounded-sm text-ink-500 hover:text-white shrink-0">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -772,7 +772,7 @@ export default function NetworkMapPage() {
                       {n.ports.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {n.ports.map((p) => (
-                            <span key={p} className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/8 text-ink-300">{p}</span>
+                            <span key={p} className="font-mono text-[10px] px-2 py-0.5 rounded-sm bg-white/5 border border-white/8 text-ink-300">{p}</span>
                           ))}
                         </div>
                       ) : <p className="text-[10px] text-ink-600">No exposed ports</p>}

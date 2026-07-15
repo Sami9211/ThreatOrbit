@@ -53,12 +53,12 @@ export default function CreateModal({ title, icon: Icon, accent = tk('magenta'),
     }
   }
 
-  const inputCls = 'w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600'
+  const inputCls = 'w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600'
 
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6"
       onClick={onClose}
     >
       <motion.div

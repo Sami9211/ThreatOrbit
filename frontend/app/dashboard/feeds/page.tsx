@@ -368,7 +368,7 @@ function ThreatCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2 flex-wrap">
             {entry.cve && (
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-violet/15 text-violet border border-violet/20 shrink-0">
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet border border-violet/20 shrink-0">
                 {entry.cve}
               </span>
             )}
@@ -395,12 +395,12 @@ function ThreatCard({
           {/* Feed sources */}
           <div className="flex items-center gap-1 mt-1.5 flex-wrap">
             {entry.feedSources.map(src => (
-              <span key={src} className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-ink-500 border border-white/8">
+              <span key={src} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-white/5 text-ink-500 border border-white/8">
                 {src}
               </span>
             ))}
             {entry.correlated > 0 && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet/10 text-violet border border-violet/15">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/15">
                 {entry.correlated} correlated
               </span>
             )}
@@ -436,7 +436,7 @@ function ThreatCard({
                   <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-1.5">Extracted IOCs</p>
                   <div className="flex flex-wrap gap-1.5">
                     {entry.iocs.map(ioc => (
-                      <span key={ioc} className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/30 text-ink-300 border border-white/8">
+                      <span key={ioc} className="text-[10px] font-mono px-2 py-0.5 rounded-sm bg-black/30 text-ink-300 border border-white/8">
                         {ioc}
                       </span>
                     ))}
@@ -454,7 +454,7 @@ function ThreatCard({
                         href={`https://attack.mitre.org/techniques/${t.replace('T', 'T').replace('.', '/')}/`}
                         target="_blank" rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet/10 text-violet border border-violet/20 hover:bg-violet/20 transition-colors"
+                        className="text-[10px] font-mono px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 hover:bg-violet/20 transition-colors"
                       >
                         {t}
                       </a>
@@ -691,7 +691,7 @@ export default function FeedsPage() {
       </div>
 
       {/* Source health strip */}
-      <div className="px-6 py-2.5 border-b border-white/4 bg-white/[0.01] shrink-0 overflow-x-auto">
+      <div className="px-6 py-2.5 border-b border-white/4 bg-white/1 shrink-0 overflow-x-auto">
         <div className="flex items-center gap-2 min-w-max">
           <span className="text-[10px] text-ink-600 uppercase tracking-widest mr-1">Sources</span>
           {(apiFeeds.length > 0
@@ -764,7 +764,7 @@ export default function FeedsPage() {
         {/* -- Confirmed Threats -- */}
         <div className="flex flex-col overflow-hidden">
           {/* Column header */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-safe/[0.03] shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-safe/3 shrink-0">
             <CheckCircle2 className="w-4 h-4 text-safe" />
             <span className="text-xs font-semibold text-safe">Confirmed Threats</span>
             <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-safe/15 text-safe border border-safe/25 font-mono">
@@ -799,7 +799,7 @@ export default function FeedsPage() {
         {/* -- Unconfirmed Threats -- */}
         <div className="flex flex-col overflow-hidden">
           {/* Column header */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-amber/[0.03] shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-amber/3 shrink-0">
             <HelpCircle className={cn('w-4 h-4 text-amber', pulse && 'animate-bounce')} />
             <span className="text-xs font-semibold text-amber">Unconfirmed / Under Analysis</span>
             <div className="ml-auto flex items-center gap-2">

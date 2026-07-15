@@ -157,7 +157,7 @@ function InviteModal({ onClose, onInvite }: {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6"
       onClick={onClose}
     >
       <motion.div
@@ -179,18 +179,18 @@ function InviteModal({ onClose, onInvite }: {
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Full name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Analyst"
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600" />
           </div>
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Work email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com"
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600" />
           </div>
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Role</label>
             <div className="relative">
               <select value={role} onChange={(e) => setRole(e.target.value as RoleName)}
-                className="w-full appearance-none px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 pr-9">
+                className="w-full appearance-none px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 pr-9">
                 {ROLES.map((r) => <option key={r.name}>{r.name}</option>)}
               </select>
               <ChevronDown className="w-4 h-4 text-ink-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -199,7 +199,7 @@ function InviteModal({ onClose, onInvite }: {
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Temporary password</label>
             <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters"
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 font-mono focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 font-mono focus:outline-hidden focus:border-magenta/40 placeholder-ink-600" />
             <p className="text-[10px] text-ink-600 mt-1">Share this with the user - they can change it after first sign-in.</p>
           </div>
 
@@ -253,7 +253,7 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs"
       onClick={onClose}
     >
       <motion.div
@@ -291,7 +291,7 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
               <select
                 value={user.role}
                 onChange={(e) => onRoleChange(e.target.value as RoleName)}
-                className="w-full appearance-none px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 pr-9"
+                className="w-full appearance-none px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 pr-9"
               >
                 {ROLES.map((r) => <option key={r.name}>{r.name}</option>)}
               </select>

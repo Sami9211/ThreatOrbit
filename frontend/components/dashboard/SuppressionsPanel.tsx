@@ -90,13 +90,13 @@ export default function SuppressionsPanel() {
       <div className="p-4 border-b border-white/5 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
           <select value={field} onChange={(e) => setField(e.target.value)}
-            className="px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-amber/40">
+            className="px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-amber/40">
             {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
           <input value={value} onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}
             placeholder="value to match (e.g. 45.9.1.2)"
-            className="flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+            className="flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-hidden focus:border-amber/40 placeholder-ink-600" />
           <div className="flex items-center rounded-lg border border-white/8 overflow-hidden">
             {(['suppress', 'allow'] as const).map((m) => (
               <button key={m} onClick={() => setMode(m)}
@@ -114,19 +114,19 @@ export default function SuppressionsPanel() {
           <input value={reason} onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}
             placeholder="reason (optional) - e.g. known vuln scanner"
-            className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+            className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-amber/40 placeholder-ink-600" />
           {/* Time-boxing: expiry in hours and/or a daily UTC window */}
           <input value={expiresHours} onChange={(e) => setExpiresHours(e.target.value.replace(/\D/g, ''))}
             placeholder="expires (h)" title="Auto-expire after this many hours (blank = permanent)"
-            className="w-20 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+            className="w-20 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-hidden focus:border-amber/40 placeholder-ink-600" />
           <div className="flex items-center gap-1" title="Recurring daily window (UTC) in which this rule applies - e.g. a 02:00-04:00 maintenance window">
             <input value={windowStart} onChange={(e) => setWindowStart(e.target.value)}
               placeholder="HH:MM"
-              className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+              className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-hidden focus:border-amber/40 placeholder-ink-600" />
             <span className="text-[10px] text-ink-600">-</span>
             <input value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)}
               placeholder="HH:MM"
-              className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-600" />
+              className="w-16 px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-200 focus:outline-hidden focus:border-amber/40 placeholder-ink-600" />
           </div>
           <button onClick={add} disabled={busy || !value.trim()}
             className={cn('flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all',
@@ -164,7 +164,7 @@ export default function SuppressionsPanel() {
                   <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full uppercase font-semibold',
                     s.mode === 'allow' ? 'text-safe bg-safe/12' : 'text-magenta bg-magenta/12')}>{s.mode}</span>
                   {s.ruleId && s.ruleId !== '*' && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet/10 text-violet font-mono">{s.ruleId}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/10 text-violet font-mono">{s.ruleId}</span>
                   )}
                   {/* time-boxed entries show whether they apply right now */}
                   {(s.expiresAt || s.windowStart) && (

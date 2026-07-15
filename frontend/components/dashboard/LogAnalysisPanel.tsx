@@ -83,7 +83,7 @@ export default function LogAnalysisPanel() {
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-magenta/40"
+            className="px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-hidden focus:border-magenta/40"
           >
             {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
@@ -163,7 +163,7 @@ export default function LogAnalysisPanel() {
                 <div className="space-y-1.5 max-h-72 overflow-y-auto">
                   {findings.map((f, i) => (
                     <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-2/40 border border-white/5">
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 mt-0.5"
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase shrink-0 mt-0.5"
                         style={{ color: SEV_COLOR[f.severity ?? 'LOW'] ?? tk('teal'), background: withAlpha(SEV_COLOR[f.severity ?? 'LOW'] ?? tk('teal'), 0.09) }}>
                         {f.severity ?? 'LOW'}
                       </span>

@@ -116,7 +116,7 @@ export default function EntityRiskPage() {
       <AnimatePresence>
         {selected && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={() => setSelected(null)}>
+            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs" onClick={() => setSelected(null)}>
             <motion.div initial={{ x: 460 }} animate={{ x: 0 }} exit={{ x: 460 }} transition={{ type: 'tween', duration: 0.2 }}
               onClick={(e) => e.stopPropagation()} className="w-full max-w-md h-full bg-surface border-l border-white/8 overflow-y-auto p-5 space-y-5">
               <div className="flex items-start justify-between">
@@ -177,7 +177,7 @@ export default function EntityRiskPage() {
                   <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-2">Top techniques</p>
                   <div className="flex flex-wrap gap-1.5">
                     {selected.topTechniques.map((t) => (
-                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded bg-violet/10 text-violet border border-violet/20 font-mono">{t.technique} ×{t.count}</span>
+                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 font-mono">{t.technique} ×{t.count}</span>
                     ))}
                   </div>
                 </div>

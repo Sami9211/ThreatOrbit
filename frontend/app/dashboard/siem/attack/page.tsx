@@ -46,7 +46,7 @@ export default function AttackNavigatorPage() {
         </div>
         <div className="flex items-center gap-3 text-[9px] text-ink-500">
           {[['Gap', 'rgba(255,255,255,0.12)'], ['Covered', tk('safe')], ['Active', tk('amber')], ['Hot', tk('magenta')]].map(([l, c]) => (
-            <div key={l} className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ background: c as string }} />{l}</div>
+            <div key={l} className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: c as string }} />{l}</div>
           ))}
         </div>
       </div>
@@ -90,7 +90,7 @@ export default function AttackNavigatorPage() {
       <AnimatePresence>
         {selected && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={() => setSelected(null)}>
+            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs" onClick={() => setSelected(null)}>
             <motion.div initial={{ x: 420 }} animate={{ x: 0 }} exit={{ x: 420 }} transition={{ type: 'tween', duration: 0.2 }}
               onClick={(e) => e.stopPropagation()} className="w-full max-w-sm h-full bg-surface border-l border-white/8 overflow-y-auto p-5 space-y-4">
               <div className="flex items-start justify-between">

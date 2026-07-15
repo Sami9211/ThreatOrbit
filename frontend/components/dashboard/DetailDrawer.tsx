@@ -48,7 +48,7 @@ export default function DetailDrawer() {
     <AnimatePresence>
       {payload && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[75] flex justify-end bg-black/50 backdrop-blur-sm" onClick={() => setPayload(null)}>
+          className="fixed inset-0 z-75 flex justify-end bg-black/50 backdrop-blur-xs" onClick={() => setPayload(null)}>
           <motion.div initial={{ x: 460 }} animate={{ x: 0 }} exit={{ x: 460 }}
             transition={{ type: 'tween', duration: 0.2 }} onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md h-full bg-surface border-l border-white/8 overflow-y-auto">
@@ -56,7 +56,7 @@ export default function DetailDrawer() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   {payload.severity && (
-                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mb-1.5 inline-block"
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-sm mb-1.5 inline-block"
                       style={{ color: accent, background: withAlpha(accent, 0.1) }}>{payload.severity}</span>
                   )}
                   <h2 className="text-sm font-semibold text-white leading-snug">{payload.title}</h2>

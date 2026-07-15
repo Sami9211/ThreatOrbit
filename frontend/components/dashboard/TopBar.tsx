@@ -124,7 +124,7 @@ export default function TopBar() {
   const visible = notifs
 
   return (
-    <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/60 backdrop-blur-sm sticky top-0 z-30">
+    <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/60 backdrop-blur-xs sticky top-0 z-30">
       <div className="flex items-center gap-2 text-sm min-w-0">
         {/* Mobile hamburger - dispatches event to Sidebar */}
         <button
@@ -152,7 +152,7 @@ export default function TopBar() {
         >
           <Search className="w-3 h-3" />
           <span>Jump to…</span>
-          <kbd className="flex items-center gap-0.5 ml-1 text-[9px] px-1 py-0.5 rounded bg-white/5 border border-white/10">
+          <kbd className="flex items-center gap-0.5 ml-1 text-[9px] px-1 py-0.5 rounded-sm bg-white/5 border border-white/10">
             <Command className="w-2.5 h-2.5" />K
           </kbd>
         </button>

@@ -48,7 +48,7 @@ export default function LandingSidebar() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-xs"
               onMouseEnter={() => setOpen(false)}
             />
 
@@ -101,7 +101,7 @@ export default function LandingSidebar() {
               </nav>
 
               {/* Tab handle (visible hint) */}
-              <div className="absolute -right-0 top-1/2 -translate-y-1/2 w-1 h-16 rounded-r-full bg-magenta/40" />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-16 rounded-r-full bg-magenta/40" />
             </motion.aside>
           </>
         )}

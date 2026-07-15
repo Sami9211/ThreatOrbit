@@ -249,7 +249,7 @@ export default function Hero() {
         className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
       >
         <span className="text-[10px] text-ink-500 tracking-widest uppercase">Scroll</span>
-        <div className="w-px h-8 bg-gradient-to-b from-magenta/50 to-transparent animate-pulse" />
+        <div className="w-px h-8 bg-linear-to-b from-magenta/50 to-transparent animate-pulse" />
       </motion.div>
     </section>
   )

@@ -128,7 +128,7 @@ function MyMfaPanel() {
           <input value={code} inputMode="numeric" maxLength={6}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             placeholder="6-digit code"
-            className="w-32 px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs font-mono tracking-[0.25em] text-ink-100 focus:outline-none focus:border-safe/40 placeholder-ink-600" />
+            className="w-32 px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs font-mono tracking-[0.25em] text-ink-100 focus:outline-hidden focus:border-safe/40 placeholder-ink-600" />
           {enrolment ? (
             <button onClick={verify} disabled={busy || code.length < 6}
               className="px-3 py-2 rounded-lg text-xs font-medium bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 disabled:opacity-50 transition-colors">
@@ -151,7 +151,7 @@ function MyMfaPanel() {
           </p>
           <div className="grid grid-cols-2 gap-1.5 mb-2">
             {recoveryCodes.map((c) => (
-              <code key={c} className="text-[11px] font-mono text-ink-100 bg-surface-2 border border-white/8 rounded px-2 py-1 text-center tracking-wider">{c}</code>
+              <code key={c} className="text-[11px] font-mono text-ink-100 bg-surface-2 border border-white/8 rounded-sm px-2 py-1 text-center tracking-wider">{c}</code>
             ))}
           </div>
           <div className="flex items-center gap-2">
@@ -217,12 +217,12 @@ function MySlackRouting() {
           <label className="block text-[10px] font-medium text-ink-400 mb-1">Incoming webhook URL</label>
           <input value={url} onChange={(e) => setUrl(e.target.value)}
             placeholder="https://hooks.slack.com/services/…"
-            className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-violet/40 placeholder-ink-600" />
+            className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-hidden focus:border-violet/40 placeholder-ink-600" />
         </div>
         <div>
           <label className="block text-[10px] font-medium text-ink-400 mb-1">Minimum severity</label>
           <select value={minSev} onChange={(e) => setMinSev(e.target.value)}
-            className="w-full px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-violet/40">
+            className="w-full px-2 py-2 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-hidden focus:border-violet/40">
             {['info', 'low', 'medium', 'high', 'critical'].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -254,7 +254,7 @@ function Field({ label, value, type = 'text', hint, onChange, placeholder }: {
         type={type}
         placeholder={placeholder}
         {...(onChange ? { value, onChange: (e) => onChange(e.target.value) } : { defaultValue: value })}
-        className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600"
+        className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600"
       />
       {hint && <p className="text-[10px] text-ink-600 mt-1">{hint}</p>}
     </div>
@@ -388,7 +388,7 @@ function LiveApiKeys() {
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40"
             >
               <option value="read">Read Only</option>
               <option value="write">Read + Write</option>
@@ -414,7 +414,7 @@ function LiveApiKeys() {
               <span className="font-mono text-[11px] text-safe flex-1 truncate">{generated}</span>
               <button
                 onClick={() => { navigator.clipboard?.writeText(generated); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                className="p-1 rounded text-ink-400 hover:text-white transition-colors shrink-0"
+                className="p-1 rounded-sm text-ink-400 hover:text-white transition-colors shrink-0"
                 aria-label="Copy key"
               >
                 {copied ? <CheckCircle className="w-3.5 h-3.5 text-safe" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1314,7 +1314,7 @@ function LicenseCard() {
           <div className="flex items-center gap-2">
             <input value={key} onChange={(e) => setKey(e.target.value)}
               placeholder="Paste a license key (TOL-…)"
-              className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-white/10 text-[11px] font-mono text-ink-200 focus:outline-none focus:border-amber/40 placeholder-ink-700" />
+              className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-white/10 text-[11px] font-mono text-ink-200 focus:outline-hidden focus:border-amber/40 placeholder-ink-700" />
             <button onClick={activate} disabled={!key.trim()}
               className="px-4 py-2 rounded-lg text-xs font-semibold bg-amber/15 border border-amber/30 text-amber hover:bg-amber/25 transition-colors disabled:opacity-40">
               Activate
@@ -1782,7 +1782,7 @@ export default function ConfigPage() {
                   <select
                     value={settings.auth_method ?? 'jwt'}
                     onChange={(e) => setSetting('auth_method')(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                    className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
                     <option value="jwt">Email + Password (JWT, default)</option>
                     {/* SSO (OIDC/SAML) is on the roadmap (Tier 2) - options appear here when implemented */}
                   </select>

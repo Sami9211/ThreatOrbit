@@ -184,7 +184,7 @@ export default function FeedSourcesPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search feeds..."
-          className="flex-1 max-w-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-ink-600 outline-none focus:border-magenta/30"
+          className="flex-1 max-w-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-ink-600 outline-hidden focus:border-magenta/30"
         />
         {(['all', 'OSINT', 'Commercial', 'Government', 'Community'] as const).map(t => (
           <button
@@ -225,7 +225,7 @@ export default function FeedSourcesPage() {
                 className={cn(
                   'border-b border-white/4 cursor-pointer transition-colors',
                   selected === feed.id ? 'bg-magenta/5 border-l-2 border-l-magenta/50' : 'hover:bg-white/3',
-                  i % 2 !== 0 && selected !== feed.id && 'bg-white/[0.01]',
+                  i % 2 !== 0 && selected !== feed.id && 'bg-white/1',
                   !feed.enabled && 'opacity-50',
                 )}
               >

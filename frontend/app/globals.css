@@ -1,8 +1,329 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-surface-2: rgb(var(--surface-2));
+  --color-surface-3: rgb(var(--surface-3));
+
+  --color-magenta-50: rgb(var(--magenta) / 0.05);
+  --color-magenta-100: rgb(var(--magenta) / 0.1);
+  --color-magenta-200: rgb(var(--magenta) / 0.2);
+  --color-magenta-400: rgb(var(--magenta) / 0.4);
+  --color-magenta: rgb(var(--magenta));
+
+  --color-violet-50: rgb(var(--violet) / 0.05);
+  --color-violet-100: rgb(var(--violet) / 0.1);
+  --color-violet-200: rgb(var(--violet) / 0.2);
+  --color-violet-400: rgb(var(--violet) / 0.4);
+  --color-violet: rgb(var(--violet));
+
+  --color-amber-100: rgb(var(--amber) / 0.1);
+  --color-amber-200: rgb(var(--amber) / 0.2);
+  --color-amber: rgb(var(--amber));
+
+  --color-teal-100: rgb(var(--teal) / 0.1);
+  --color-teal: rgb(var(--teal));
+
+  --color-threat: rgb(var(--threat));
+  --color-safe: rgb(var(--safe));
+
+  --color-ink-100: rgb(var(--ink-100));
+  --color-ink-200: rgb(var(--ink-200));
+  --color-ink-300: rgb(var(--ink-300));
+  --color-ink-400: rgb(var(--ink-400));
+  --color-ink-500: rgb(var(--ink-500));
+  --color-ink-600: rgb(var(--ink-600));
+  --color-ink-700: rgb(var(--ink-700));
+  --color-ink-800: rgb(var(--ink-800));
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+
+  --animate-fade-up: fadeUp 0.7s ease-out forwards;
+  --animate-fade-in: fadeIn 0.8s ease-out forwards;
+  --animate-glow-pulse: glowPulse 3s ease-in-out infinite;
+  --animate-border-flow: borderFlow 5s linear infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-delayed: float 7s ease-in-out 3.5s infinite;
+  --animate-scan: scan 5s ease-in-out infinite;
+  --animate-ticker: ticker 24s linear infinite;
+  --animate-gradient-x: gradientX 6s ease infinite;
+  --animate-spin-slow: spin 28s linear infinite;
+  --animate-spin-reverse: spinReverse 22s linear infinite;
+  --animate-ping-slow: ping 3s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-drift: drift 18s ease-in-out infinite;
+
+  --background-image-grid-dim: url("data:image/svg+xml,%3Csvg width='52' height='52' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52 0 L52 52 M0 52 L52 52' stroke='%23ffffff' stroke-width='0.4' stroke-opacity='0.04' fill='none'/%3E%3C/svg%3E");
+  --background-image-radial-magenta: radial-gradient(
+    ellipse 60% 40% at 50% 0%,
+    rgb(var(--magenta) / 0.14),
+    transparent
+  );
+  --background-image-radial-violet: radial-gradient(
+    ellipse 60% 50% at 50% 100%,
+    rgb(var(--violet) / 0.12),
+    transparent
+  );
+  --background-image-plasma: linear-gradient(
+    135deg,
+    rgb(var(--magenta)) 0%,
+    rgb(var(--violet)) 55%,
+    rgb(var(--amber)) 100%
+  );
+
+  --shadow-magenta-sm: 0 0 16px rgba(255, 46, 151, 0.3);
+  --shadow-magenta-md:
+    0 0 32px rgba(255, 46, 151, 0.4), 0 0 64px rgba(255, 46, 151, 0.12);
+  --shadow-magenta-lg:
+    0 0 50px rgba(255, 46, 151, 0.45), 0 0 110px rgba(255, 46, 151, 0.18);
+  --shadow-violet-sm: 0 0 16px rgba(122, 60, 255, 0.35);
+  --shadow-violet-md: 0 0 32px rgba(122, 60, 255, 0.45);
+  --shadow-card:
+    0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-card-hover:
+    0 0 0 1px rgba(255, 46, 151, 0.25), 0 12px 48px rgba(0, 0, 0, 0.6),
+    0 0 36px rgba(122, 60, 255, 0.12);
+
+  @keyframes fadeUp {
+    0% {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes glowPulse {
+    0%,
+    100% {
+      opacity: 0.5;
+      filter: blur(22px);
+    }
+    50% {
+      opacity: 1;
+      filter: blur(12px);
+    }
+  }
+  @keyframes borderFlow {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    33% {
+      transform: translateY(-14px) rotate(1deg);
+    }
+    66% {
+      transform: translateY(-7px) rotate(-1deg);
+    }
+  }
+  @keyframes scan {
+    0% {
+      top: -5%;
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      top: 105%;
+      opacity: 0;
+    }
+  }
+  @keyframes ticker {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes gradientX {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+  @keyframes spinReverse {
+    0% {
+      transform: rotate(360deg);
+    }
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+  @keyframes drift {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(4%, -3%) scale(1.08);
+    }
+  }
+}
 
 /*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility text-gradient-plasma {
+  /* Gradient text */
+  background: linear-gradient(120deg, #ff2e97 0%, #7a3cff 55%, #ffb23e 110%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility text-gradient-magenta {
+  background: linear-gradient(135deg, #ff2e97 0%, #7a3cff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility text-gradient-threat {
+  background: linear-gradient(135deg, #ff4d6d 0%, #ff2e97 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility text-gradient-animate {
+  background: linear-gradient(120deg, #ff2e97, #7a3cff, #ffb23e, #ff2e97);
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientX 6s linear infinite;
+}
+
+@utility glass {
+  /* Glass morphism */
+  background: rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+@utility glass-magenta {
+  background: rgba(255, 46, 151, 0.04);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 46, 151, 0.12);
+}
+
+@utility border-glow-magenta {
+  /* Glow borders */
+  border: 1px solid rgba(255, 46, 151, 0.3);
+  box-shadow:
+    0 0 22px rgba(255, 46, 151, 0.12),
+    inset 0 0 22px rgba(255, 46, 151, 0.03);
+}
+
+@utility border-glow-violet {
+  border: 1px solid rgba(122, 60, 255, 0.3);
+  box-shadow: 0 0 22px rgba(122, 60, 255, 0.12);
+}
+
+@utility border-animated {
+  /* Animated gradient border (mask trick) */
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(120deg, #ff2e97, #7a3cff, #ffb23e, #ff2e97);
+    background-size: 300% 300%;
+    animation: borderFlow 5s linear infinite;
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    z-index: -1;
+  }
+}
+
+@utility dot-grid {
+  /* Dot grid pattern */
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 30px 30px;
+}
+
+@utility plasma-mesh {
+  /* Plasma mesh blobs background */
+  background:
+    radial-gradient(
+      40% 50% at 15% 20%,
+      rgba(255, 46, 151, 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      45% 55% at 85% 30%,
+      rgba(122, 60, 255, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      40% 45% at 50% 90%,
+      rgba(255, 178, 62, 0.07),
+      transparent 60%
+    );
+}
+
+@utility perspective {
+  perspective: 1400px;
+}
+
+@layer utilities {
+  /*
  * Themeable design tokens. Values are space-separated RGB *channels* so that
  * Tailwind's `<alpha-value>` opacity modifiers (e.g. bg-magenta/20) work via
  * `rgb(var(--token) / <alpha-value>)`. The :root values are the default
@@ -10,293 +331,296 @@
  * them for the alternate colour schemes. Only the dashboard wrapper carries a
  * data-theme attribute, so the public site always uses the :root defaults.
  */
-:root {
-  /* surfaces */
-  --bg: 10 6 18;          /* #0A0612 */
-  --surface: 16 10 28;    /* #100A1C */
-  --surface-2: 22 14 40;  /* #160E28 */
-  --surface-3: 30 19 54;  /* #1E1336 */
-  /* accents */
-  --magenta: 255 46 151;  /* #FF2E97 */
-  --violet: 122 60 255;   /* #7A3CFF */
-  --amber: 255 178 62;    /* #FFB23E */
-  --teal: 45 212 191;     /* #2DD4BF */
-  --threat: 255 77 109;   /* #FF4D6D */
-  --safe: 52 245 197;     /* #34F5C5 */
-  /* ink (text) ramp */
-  --ink-100: 245 240 250; /* #F5F0FA */
-  --ink-200: 217 208 230; /* #D9D0E6 */
-  --ink-300: 180 168 200; /* #B4A8C8 */
-  --ink-400: 138 125 163; /* #8A7DA3 */
-  --ink-500: 135 124 160; /* lightened from #665B7D: as low as 2.79:1 against --surface-2 fell short of WCAG AA's 4.5:1 for text (checked against all 4 surface levels, not just --bg) */
-  --ink-600: 71 63 92;    /* #473F5C */
-  --ink-700: 52 46 68;    /* #342E44 */
-  --ink-800: 36 31 48;    /* #241F30 */
-  /* Render native form controls, scrollbars, etc. in dark mode so inputs
+  :root {
+    /* surfaces */
+    --bg: 10 6 18; /* #0A0612 */
+    --surface: 16 10 28; /* #100A1C */
+    --surface-2: 22 14 40; /* #160E28 */
+    --surface-3: 30 19 54; /* #1E1336 */
+    /* accents */
+    --magenta: 255 46 151; /* #FF2E97 */
+    --violet: 122 60 255; /* #7A3CFF */
+    --amber: 255 178 62; /* #FFB23E */
+    --teal: 45 212 191; /* #2DD4BF */
+    --threat: 255 77 109; /* #FF4D6D */
+    --safe: 52 245 197; /* #34F5C5 */
+    /* ink (text) ramp */
+    --ink-100: 245 240 250; /* #F5F0FA */
+    --ink-200: 217 208 230; /* #D9D0E6 */
+    --ink-300: 180 168 200; /* #B4A8C8 */
+    --ink-400: 138 125 163; /* #8A7DA3 */
+    --ink-500: 135 124 160; /* lightened from #665B7D: as low as 2.79:1 against --surface-2 fell short of WCAG AA's 4.5:1 for text (checked against all 4 surface levels, not just --bg) */
+    --ink-600: 71 63 92; /* #473F5C */
+    --ink-700: 52 46 68; /* #342E44 */
+    --ink-800: 36 31 48; /* #241F30 */
+    /* Render native form controls, scrollbars, etc. in dark mode so inputs
      don't fall back to a white UA background. */
-  color-scheme: dark;
-}
+    color-scheme: dark;
+  }
 
-/* -- Monochrome - "black & white" graphite --------------------------- */
-[data-theme='mono'] {
-  --bg: 10 10 11;
-  --surface: 19 19 21;
-  --surface-2: 27 27 30;
-  --surface-3: 38 38 43;
-  --magenta: 250 250 250;
-  --violet: 184 184 192;
-  --amber: 212 212 216;
-  --teal: 156 163 175;
-  --threat: 244 244 245;
-  --safe: 161 161 170;
-  --ink-100: 250 250 250;
-  --ink-200: 228 228 231;
-  --ink-300: 212 212 216;
-  --ink-400: 161 161 170;
-  --ink-500: 140 140 148;
-  --ink-600: 82 82 91;
-  --ink-700: 63 63 70;
-  --ink-800: 39 39 42;
-}
+  /* -- Monochrome - "black & white" graphite --------------------------- */
+  [data-theme='mono'] {
+    --bg: 10 10 11;
+    --surface: 19 19 21;
+    --surface-2: 27 27 30;
+    --surface-3: 38 38 43;
+    --magenta: 250 250 250;
+    --violet: 184 184 192;
+    --amber: 212 212 216;
+    --teal: 156 163 175;
+    --threat: 244 244 245;
+    --safe: 161 161 170;
+    --ink-100: 250 250 250;
+    --ink-200: 228 228 231;
+    --ink-300: 212 212 216;
+    --ink-400: 161 161 170;
+    --ink-500: 140 140 148;
+    --ink-600: 82 82 91;
+    --ink-700: 63 63 70;
+    --ink-800: 39 39 42;
+  }
 
-/* Monochrome accent fills are near-white, so white text on them is invisible.
+  /* Monochrome accent fills are near-white, so white text on them is invisible.
    Force dark text on any filled accent surface (and white text nested inside
    one). Faint tints like `bg-magenta/10` keep their light text - the selector
    only matches the solid utilities, not the `/opacity` variants. */
-[data-theme='mono'] :is(.bg-plasma, .bg-magenta, .bg-violet, .bg-amber, .bg-threat),
-[data-theme='mono'] :is(.bg-plasma, .bg-magenta, .bg-violet, .bg-amber, .bg-threat) :is(.text-white, .text-ink-100) {
-  color: #0a0a0b !important;
-}
+  [data-theme='mono']
+    :is(.bg-plasma, .bg-magenta, .bg-violet, .bg-amber, .bg-threat),
+  [data-theme='mono']
+    :is(.bg-plasma, .bg-magenta, .bg-violet, .bg-amber, .bg-threat)
+    :is(.text-white, .text-ink-100) {
+    color: #0a0a0b !important;
+  }
 
-/* -- Arctic - cool sky/indigo on deep navy --------------------------- */
-[data-theme='arctic'] {
-  --bg: 6 11 18;
-  --surface: 10 17 28;
-  --surface-2: 14 23 38;
-  --surface-3: 20 33 54;
-  --magenta: 56 189 248;
-  --violet: 99 102 241;
-  --amber: 34 211 238;
-  --teal: 45 212 191;
-  --threat: 251 113 133;
-  --safe: 52 211 153;
-  --ink-100: 241 245 249;
-  --ink-200: 226 232 240;
-  --ink-300: 203 213 225;
-  --ink-400: 148 163 184;
-  --ink-500: 121 137 159;
-  --ink-600: 71 85 105;
-  --ink-700: 51 65 85;
-  --ink-800: 30 41 59;
-}
+  /* -- Arctic - cool sky/indigo on deep navy --------------------------- */
+  [data-theme='arctic'] {
+    --bg: 6 11 18;
+    --surface: 10 17 28;
+    --surface-2: 14 23 38;
+    --surface-3: 20 33 54;
+    --magenta: 56 189 248;
+    --violet: 99 102 241;
+    --amber: 34 211 238;
+    --teal: 45 212 191;
+    --threat: 251 113 133;
+    --safe: 52 211 153;
+    --ink-100: 241 245 249;
+    --ink-200: 226 232 240;
+    --ink-300: 203 213 225;
+    --ink-400: 148 163 184;
+    --ink-500: 121 137 159;
+    --ink-600: 71 85 105;
+    --ink-700: 51 65 85;
+    --ink-800: 30 41 59;
+  }
 
-/* -- Matrix - terminal green on near-black --------------------------- */
-[data-theme='matrix'] {
-  --bg: 5 10 5;
-  --surface: 8 17 8;
-  --surface-2: 12 24 12;
-  --surface-3: 18 34 18;
-  --magenta: 52 208 88;
-  --violet: 22 163 74;
-  --amber: 163 230 53;
-  --teal: 45 212 191;
-  --threat: 239 68 68;
-  --safe: 74 222 128;
-  --ink-100: 227 242 227;
-  --ink-200: 190 220 190;
-  --ink-300: 147 179 147;
-  --ink-400: 107 138 107;
-  --ink-500: 108 142 108;
-  --ink-600: 53 69 53;
-  --ink-700: 40 51 40;
-  --ink-800: 26 34 26;
-}
+  /* -- Matrix - terminal green on near-black --------------------------- */
+  [data-theme='matrix'] {
+    --bg: 5 10 5;
+    --surface: 8 17 8;
+    --surface-2: 12 24 12;
+    --surface-3: 18 34 18;
+    --magenta: 52 208 88;
+    --violet: 22 163 74;
+    --amber: 163 230 53;
+    --teal: 45 212 191;
+    --threat: 239 68 68;
+    --safe: 74 222 128;
+    --ink-100: 227 242 227;
+    --ink-200: 190 220 190;
+    --ink-300: 147 179 147;
+    --ink-400: 107 138 107;
+    --ink-500: 108 142 108;
+    --ink-600: 53 69 53;
+    --ink-700: 40 51 40;
+    --ink-800: 26 34 26;
+  }
 
-/* -- Solar Flare - amber/orange on warm dark ------------------------- */
-[data-theme='solar'] {
-  --bg: 18 11 5;
-  --surface: 26 16 8;
-  --surface-2: 35 23 11;
-  --surface-3: 47 31 18;
-  --magenta: 251 146 60;
-  --violet: 245 158 11;
-  --amber: 251 191 36;
-  --teal: 252 211 77;
-  --threat: 239 68 68;
-  --safe: 132 204 22;
-  --ink-100: 250 245 239;
-  --ink-200: 231 221 208;
-  --ink-300: 201 185 166;
-  --ink-400: 156 139 120;
-  --ink-500: 155 134 111;
-  --ink-600: 77 65 51;
-  --ink-700: 57 47 36;
-  --ink-800: 38 31 24;
-}
+  /* -- Solar Flare - amber/orange on warm dark ------------------------- */
+  [data-theme='solar'] {
+    --bg: 18 11 5;
+    --surface: 26 16 8;
+    --surface-2: 35 23 11;
+    --surface-3: 47 31 18;
+    --magenta: 251 146 60;
+    --violet: 245 158 11;
+    --amber: 251 191 36;
+    --teal: 252 211 77;
+    --threat: 239 68 68;
+    --safe: 132 204 22;
+    --ink-100: 250 245 239;
+    --ink-200: 231 221 208;
+    --ink-300: 201 185 166;
+    --ink-400: 156 139 120;
+    --ink-500: 155 134 111;
+    --ink-600: 77 65 51;
+    --ink-700: 57 47 36;
+    --ink-800: 38 31 24;
+  }
 
-/* -- Crimson - rose/red threat aesthetic ----------------------------- */
-[data-theme='crimson'] {
-  --bg: 15 6 8;
-  --surface: 23 10 13;
-  --surface-2: 32 14 18;
-  --surface-3: 45 20 26;
-  --magenta: 244 63 94;
-  --violet: 220 38 38;
-  --amber: 251 113 133;
-  --teal: 248 113 113;
-  --threat: 239 68 68;
-  --safe: 52 211 153;
-  --ink-100: 251 238 240;
-  --ink-200: 236 212 216;
-  --ink-300: 208 168 176;
-  --ink-400: 166 120 127;
-  --ink-500: 162 120 132;
-  --ink-600: 78 53 60;
-  --ink-700: 58 39 45;
-  --ink-800: 39 26 30;
-}
+  /* -- Crimson - rose/red threat aesthetic ----------------------------- */
+  [data-theme='crimson'] {
+    --bg: 15 6 8;
+    --surface: 23 10 13;
+    --surface-2: 32 14 18;
+    --surface-3: 45 20 26;
+    --magenta: 244 63 94;
+    --violet: 220 38 38;
+    --amber: 251 113 133;
+    --teal: 248 113 113;
+    --threat: 239 68 68;
+    --safe: 52 211 153;
+    --ink-100: 251 238 240;
+    --ink-200: 236 212 216;
+    --ink-300: 208 168 176;
+    --ink-400: 166 120 127;
+    --ink-500: 162 120 132;
+    --ink-600: 78 53 60;
+    --ink-700: 58 39 45;
+    --ink-800: 39 26 30;
+  }
 
-/* -- Nebula - violet/fuchsia/cyan on deep indigo --------------------- */
-[data-theme='nebula'] {
-  --bg: 11 8 24;
-  --surface: 18 13 36;
-  --surface-2: 26 18 50;
-  --surface-3: 38 26 70;
-  --magenta: 192 132 252;
-  --violet: 129 140 248;
-  --amber: 34 211 238;
-  --teal: 45 212 191;
-  --threat: 244 114 182;
-  --safe: 110 231 183;
-  --ink-100: 243 240 255;
-  --ink-200: 221 214 245;
-  --ink-300: 190 180 224;
-  --ink-400: 148 138 184;
-  --ink-500: 140 132 170;
-  --ink-600: 78 70 105;
-  --ink-700: 56 50 78;
-  --ink-800: 38 33 56;
-}
+  /* -- Nebula - violet/fuchsia/cyan on deep indigo --------------------- */
+  [data-theme='nebula'] {
+    --bg: 11 8 24;
+    --surface: 18 13 36;
+    --surface-2: 26 18 50;
+    --surface-3: 38 26 70;
+    --magenta: 192 132 252;
+    --violet: 129 140 248;
+    --amber: 34 211 238;
+    --teal: 45 212 191;
+    --threat: 244 114 182;
+    --safe: 110 231 183;
+    --ink-100: 243 240 255;
+    --ink-200: 221 214 245;
+    --ink-300: 190 180 224;
+    --ink-400: 148 138 184;
+    --ink-500: 140 132 170;
+    --ink-600: 78 70 105;
+    --ink-700: 56 50 78;
+    --ink-800: 38 33 56;
+  }
 
-/* -- Oceanic - cyan/aqua/blue on deep teal-navy ---------------------- */
-[data-theme='oceanic'] {
-  --bg: 5 14 20;
-  --surface: 8 22 31;
-  --surface-2: 12 32 44;
-  --surface-3: 18 46 62;
-  --magenta: 34 211 238;
-  --violet: 56 189 248;
-  --amber: 45 212 191;
-  --teal: 94 234 212;
-  --threat: 251 113 133;
-  --safe: 52 211 153;
-  --ink-100: 236 250 252;
-  --ink-200: 205 232 238;
-  --ink-300: 168 205 214;
-  --ink-400: 124 158 168;
-  --ink-500: 122 151 162;
-  --ink-600: 60 82 92;
-  --ink-700: 44 60 68;
-  --ink-800: 28 40 48;
-}
+  /* -- Oceanic - cyan/aqua/blue on deep teal-navy ---------------------- */
+  [data-theme='oceanic'] {
+    --bg: 5 14 20;
+    --surface: 8 22 31;
+    --surface-2: 12 32 44;
+    --surface-3: 18 46 62;
+    --magenta: 34 211 238;
+    --violet: 56 189 248;
+    --amber: 45 212 191;
+    --teal: 94 234 212;
+    --threat: 251 113 133;
+    --safe: 52 211 153;
+    --ink-100: 236 250 252;
+    --ink-200: 205 232 238;
+    --ink-300: 168 205 214;
+    --ink-400: 124 158 168;
+    --ink-500: 122 151 162;
+    --ink-600: 60 82 92;
+    --ink-700: 44 60 68;
+    --ink-800: 28 40 48;
+  }
 
-/* -- Cyberpunk - neon cyan/magenta/lime on pure black ---------------- */
-[data-theme='cyber'] {
-  --bg: 6 6 10;
-  --surface: 12 12 18;
-  --surface-2: 18 18 26;
-  --surface-3: 28 28 40;
-  --magenta: 0 245 212;
-  --violet: 255 0 153;
-  --amber: 190 242 100;
-  --teal: 0 245 212;
-  --threat: 255 64 129;
-  --safe: 0 230 180;
-  --ink-100: 235 245 248;
-  --ink-200: 206 222 228;
-  --ink-300: 168 188 196;
-  --ink-400: 126 146 156;
-  --ink-500: 116 135 147;
-  --ink-600: 64 76 86;
-  --ink-700: 46 56 64;
-  --ink-800: 28 36 44;
-}
+  /* -- Cyberpunk - neon cyan/magenta/lime on pure black ---------------- */
+  [data-theme='cyber'] {
+    --bg: 6 6 10;
+    --surface: 12 12 18;
+    --surface-2: 18 18 26;
+    --surface-3: 28 28 40;
+    --magenta: 0 245 212;
+    --violet: 255 0 153;
+    --amber: 190 242 100;
+    --teal: 0 245 212;
+    --threat: 255 64 129;
+    --safe: 0 230 180;
+    --ink-100: 235 245 248;
+    --ink-200: 206 222 228;
+    --ink-300: 168 188 196;
+    --ink-400: 126 146 156;
+    --ink-500: 116 135 147;
+    --ink-600: 64 76 86;
+    --ink-700: 46 56 64;
+    --ink-800: 28 36 44;
+  }
 
-/* -- Slate - cool professional blue-grey ----------------------------- */
-[data-theme='slate'] {
-  --bg: 9 12 18;
-  --surface: 15 20 30;
-  --surface-2: 22 29 42;
-  --surface-3: 32 42 60;
-  --magenta: 96 165 250;
-  --violet: 129 140 248;
-  --amber: 148 163 184;
-  --teal: 45 212 191;
-  --threat: 248 113 113;
-  --safe: 52 211 153;
-  --ink-100: 241 245 252;
-  --ink-200: 218 226 240;
-  --ink-300: 186 198 218;
-  --ink-400: 142 156 180;
-  --ink-500: 133 145 166;
-  --ink-600: 72 84 105;
-  --ink-700: 52 62 80;
-  --ink-800: 34 42 58;
-}
+  /* -- Slate - cool professional blue-grey ----------------------------- */
+  [data-theme='slate'] {
+    --bg: 9 12 18;
+    --surface: 15 20 30;
+    --surface-2: 22 29 42;
+    --surface-3: 32 42 60;
+    --magenta: 96 165 250;
+    --violet: 129 140 248;
+    --amber: 148 163 184;
+    --teal: 45 212 191;
+    --threat: 248 113 113;
+    --safe: 52 211 153;
+    --ink-100: 241 245 252;
+    --ink-200: 218 226 240;
+    --ink-300: 186 198 218;
+    --ink-400: 142 156 180;
+    --ink-500: 133 145 166;
+    --ink-600: 72 84 105;
+    --ink-700: 52 62 80;
+    --ink-800: 34 42 58;
+  }
 
-/* -- Ember - warm rose/gold on charcoal ------------------------------ */
-[data-theme='ember'] {
-  --bg: 14 10 9;
-  --surface: 22 16 14;
-  --surface-2: 32 23 20;
-  --surface-3: 46 33 28;
-  --magenta: 251 146 60;
-  --violet: 244 114 182;
-  --amber: 250 204 21;
-  --teal: 251 191 36;
-  --threat: 248 113 113;
-  --safe: 132 204 22;
-  --ink-100: 252 244 238;
-  --ink-200: 238 220 210;
-  --ink-300: 212 186 172;
-  --ink-400: 170 142 128;
-  --ink-500: 158 134 123;
-  --ink-600: 84 68 60;
-  --ink-700: 60 48 42;
-  --ink-800: 40 32 28;
-}
+  /* -- Ember - warm rose/gold on charcoal ------------------------------ */
+  [data-theme='ember'] {
+    --bg: 14 10 9;
+    --surface: 22 16 14;
+    --surface-2: 32 23 20;
+    --surface-3: 46 33 28;
+    --magenta: 251 146 60;
+    --violet: 244 114 182;
+    --amber: 250 204 21;
+    --teal: 251 191 36;
+    --threat: 248 113 113;
+    --safe: 132 204 22;
+    --ink-100: 252 244 238;
+    --ink-200: 238 220 210;
+    --ink-300: 212 186 172;
+    --ink-400: 170 142 128;
+    --ink-500: 158 134 123;
+    --ink-600: 84 68 60;
+    --ink-700: 60 48 42;
+    --ink-800: 40 32 28;
+  }
 
-/* -- Customization knobs (layered on top of the active theme) ----------
+  /* -- Customization knobs (layered on top of the active theme) ----------
    Reduced motion is enforced here. UI scale and compact density act on the
    document's rem baseline (set by ThemeScope), and the custom accent is
    applied inline (--magenta override) by ThemeScope. */
-[data-motion='reduced'] *,
-[data-motion='reduced'] *::before,
-[data-motion='reduced'] *::after {
-  animation-duration: 0.001ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.001ms !important;
-  scroll-behavior: auto !important;
-}
+  [data-motion='reduced'] *,
+  [data-motion='reduced'] *::before,
+  [data-motion='reduced'] *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 
-* {
-  box-sizing: border-box;
-}
+  * {
+    box-sizing: border-box;
+  }
 
-html {
-  scroll-behavior: auto; /* Lenis handles smooth scroll */
-}
+  html {
+    scroll-behavior: auto; /* Lenis handles smooth scroll */
+  }
 
-body {
-  background-color: rgb(var(--bg));
-  color: #F5F0FA;
-  font-family: var(--font-inter), system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-}
+  body {
+    background-color: rgb(var(--bg));
+    color: #f5f0fa;
+    font-family: var(--font-inter), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
 
-/* -- Fluid page container --------------------------------------------
+  /* -- Fluid page container --------------------------------------------
  * Single source of truth for the marketing/site content width. The old
  * fixed `max-w-7xl` (80rem) left large empty gutters on wide / ultrawide
  * displays. Instead the width now tracks the viewport: it stays at the
@@ -304,159 +628,88 @@ body {
  * then grows with the screen up to a readable 130rem cap, and the side
  * padding scales too. One class so every section flexes consistently
  * across phone → laptop → desktop → ultrawide. */
-.site-container {
-  width: 100%;
-  margin-inline: auto;
-  max-width: clamp(80rem, 88vw, 130rem);
-  padding-inline: clamp(1.5rem, 0.75rem + 1vw, 3.5rem);
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: #0A0612; }
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(255,46,151,0.5), rgba(122,60,255,0.5));
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover { background: rgba(255,46,151,0.7); }
-
-/* Selection */
-::selection { background: rgba(255,46,151,0.25); color: #fff; }
-
-/* Keyboard focus - visible ring only for keyboard users */
-:focus-visible {
-  outline: 2px solid rgba(255,46,151,0.7);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-:focus:not(:focus-visible) { outline: none; }
-
-/* Skip-to-content link (visible only when focused) */
-.skip-link {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -120%);
-  z-index: 300;
-  padding: 0.6rem 1.2rem;
-  border-radius: 0 0 0.6rem 0.6rem;
-  background: #FF2E97;
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 600;
-  transition: transform 0.2s ease;
-}
-.skip-link:focus { transform: translate(-50%, 0); }
-
-/* Film-grain overlay - adds subtle texture, zero GPU cost */
-.grain-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.04;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* Respect reduced-motion for CSS-driven animations site-wide */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-@layer utilities {
-  /* Gradient text */
-  .text-gradient-plasma {
-    background: linear-gradient(120deg, #FF2E97 0%, #7A3CFF 55%, #FFB23E 110%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .text-gradient-magenta {
-    background: linear-gradient(135deg, #FF2E97 0%, #7A3CFF 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .text-gradient-threat {
-    background: linear-gradient(135deg, #FF4D6D 0%, #FF2E97 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .text-gradient-animate {
-    background: linear-gradient(120deg, #FF2E97, #7A3CFF, #FFB23E, #FF2E97);
-    background-size: 250% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientX 6s linear infinite;
+  .site-container {
+    width: 100%;
+    margin-inline: auto;
+    max-width: clamp(80rem, 88vw, 130rem);
+    padding-inline: clamp(1.5rem, 0.75rem + 1vw, 3.5rem);
   }
 
-  /* Glass morphism */
-  .glass {
-    background: rgba(255,255,255,0.025);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255,255,255,0.07);
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
   }
-  .glass-magenta {
-    background: rgba(255,46,151,0.04);
-    backdrop-filter: blur(14px);
-    border: 1px solid rgba(255,46,151,0.12);
+  ::-webkit-scrollbar-track {
+    background: #0a0612;
   }
-
-  /* Glow borders */
-  .border-glow-magenta {
-    border: 1px solid rgba(255,46,151,0.3);
-    box-shadow: 0 0 22px rgba(255,46,151,0.12), inset 0 0 22px rgba(255,46,151,0.03);
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 46, 151, 0.5),
+      rgba(122, 60, 255, 0.5)
+    );
+    border-radius: 3px;
   }
-  .border-glow-violet {
-    border: 1px solid rgba(122,60,255,0.3);
-    box-shadow: 0 0 22px rgba(122,60,255,0.12);
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 46, 151, 0.7);
   }
 
-  /* Animated gradient border (mask trick) */
-  .border-animated {
-    position: relative;
-    isolation: isolate;
-  }
-  .border-animated::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(120deg, #FF2E97, #7A3CFF, #FFB23E, #FF2E97);
-    background-size: 300% 300%;
-    animation: borderFlow 5s linear infinite;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    z-index: -1;
+  /* Selection */
+  ::selection {
+    background: rgba(255, 46, 151, 0.25);
+    color: #fff;
   }
 
-  /* Dot grid pattern */
-  .dot-grid {
-    background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
-    background-size: 30px 30px;
+  /* Keyboard focus - visible ring only for keyboard users */
+  :focus-visible {
+    outline: 2px solid rgba(255, 46, 151, 0.7);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
   }
 
-  /* Plasma mesh blobs background */
-  .plasma-mesh {
-    background:
-      radial-gradient(40% 50% at 15% 20%, rgba(255,46,151,0.12), transparent 60%),
-      radial-gradient(45% 55% at 85% 30%, rgba(122,60,255,0.14), transparent 60%),
-      radial-gradient(40% 45% at 50% 90%, rgba(255,178,62,0.07), transparent 60%);
+  /* Skip-to-content link (visible only when focused) */
+  .skip-link {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -120%);
+    z-index: 300;
+    padding: 0.6rem 1.2rem;
+    border-radius: 0 0 0.6rem 0.6rem;
+    background: #ff2e97;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: transform 0.2s ease;
+  }
+  .skip-link:focus {
+    transform: translate(-50%, 0);
   }
 
-  .perspective {
-    perspective: 1400px;
+  /* Film-grain overlay - adds subtle texture, zero GPU cost */
+  .grain-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Respect reduced-motion for CSS-driven animations site-wide */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

@@ -94,7 +94,7 @@ export default function CommandPalette() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-100 bg-black/60 backdrop-blur-xs"
               onClick={close}
             />
 
@@ -104,7 +104,7 @@ export default function CommandPalette() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: -12 }}
               transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed left-1/2 top-[20%] -translate-x-1/2 z-[101] w-full max-w-lg"
+              className="fixed left-1/2 top-[20%] -translate-x-1/2 z-101 w-full max-w-lg"
             >
               <div className="bg-[#100A1C] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
                 {/* Input */}
@@ -116,9 +116,9 @@ export default function CommandPalette() {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Search pages and actions…"
-                    className="flex-1 bg-transparent text-sm text-ink-100 placeholder-ink-600 focus:outline-none"
+                    className="flex-1 bg-transparent text-sm text-ink-100 placeholder-ink-600 focus:outline-hidden"
                   />
-                  <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-ink-500">ESC</kbd>
+                  <kbd className="text-[9px] px-1.5 py-0.5 rounded-sm bg-white/5 border border-white/10 text-ink-500">ESC</kbd>
                 </div>
 
                 {/* Results */}
@@ -130,7 +130,7 @@ export default function CommandPalette() {
                       {results.map((r, i) => (
                         <a key={`${r.kind}-${i}`} href={r.link} onClick={close}
                           className="flex items-center gap-3 mx-2 px-3 py-2 rounded-xl hover:bg-white/4 transition-colors">
-                          <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-violet/15 text-violet shrink-0 w-16 text-center">{r.kind}</span>
+                          <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet shrink-0 w-16 text-center">{r.kind}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-ink-100 truncate">{r.label}</p>
                             {r.sub && <p className="text-[10px] text-ink-600 truncate font-mono">{r.sub}</p>}
@@ -170,9 +170,9 @@ export default function CommandPalette() {
                 </div>
 
                 <div className="px-4 py-2.5 border-t border-white/5 flex items-center gap-4 text-[9px] text-ink-700">
-                  <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10">↑↓</kbd> navigate</span>
-                  <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10">↵</kbd> go</span>
-                  <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10">ESC</kbd> close</span>
+                  <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded-sm bg-white/5 border border-white/10">↑↓</kbd> navigate</span>
+                  <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded-sm bg-white/5 border border-white/10">↵</kbd> go</span>
+                  <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded-sm bg-white/5 border border-white/10">ESC</kbd> close</span>
                 </div>
               </div>
             </motion.div>

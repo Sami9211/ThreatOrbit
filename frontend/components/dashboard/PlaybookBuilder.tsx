@@ -111,14 +111,14 @@ export default function PlaybookBuilder({ playbook, onClose, onSaved }: {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      className="fixed inset-0 z-80 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4" onClick={onClose}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-4xl h-full max-h-[88vh] rounded-2xl border border-white/10 bg-surface flex flex-col overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/8 shrink-0">
           <GitBranch className="w-4 h-4 text-magenta" />
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Playbook name…"
-            className="flex-1 bg-transparent text-sm font-semibold text-white focus:outline-none placeholder-ink-600" />
+            className="flex-1 bg-transparent text-sm font-semibold text-white focus:outline-hidden placeholder-ink-600" />
           {editing && (
             <button onClick={() => setShowVersions((v) => !v)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-ink-400 hover:text-white border border-white/10">
@@ -184,16 +184,16 @@ export default function PlaybookBuilder({ playbook, onClose, onSaved }: {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-[9px] px-1.5 py-0.5 rounded uppercase font-semibold" style={{ color, background: `${color}18` }}>{m?.type ?? 'action'}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-sm uppercase font-semibold" style={{ color, background: `${color}18` }}>{m?.type ?? 'action'}</span>
                             <input value={s.name} onChange={(e) => setSteps((st) => st.map((x) => x._id === s._id ? { ...x, name: e.target.value } : x))}
-                              className="flex-1 bg-transparent text-[12px] text-white focus:outline-none border-b border-transparent focus:border-white/15" />
+                              className="flex-1 bg-transparent text-[12px] text-white focus:outline-hidden border-b border-transparent focus:border-white/15" />
                           </div>
                           {(m?.params ?? []).length > 0 && (
                             <div className="grid grid-cols-2 gap-1.5 mt-2">
                               {m!.params.map((p) => (
                                 <input key={p} value={String(s.params?.[p] ?? '')} onChange={(e) => setParam(s._id, p, e.target.value)}
                                   placeholder={p}
-                                  className="px-2 py-1 rounded bg-surface-3/60 border border-white/8 text-[10px] font-mono text-ink-200 focus:outline-none focus:border-magenta/40 placeholder-ink-700" />
+                                  className="px-2 py-1 rounded-sm bg-surface-3/60 border border-white/8 text-[10px] font-mono text-ink-200 focus:outline-hidden focus:border-magenta/40 placeholder-ink-700" />
                               ))}
                             </div>
                           )}

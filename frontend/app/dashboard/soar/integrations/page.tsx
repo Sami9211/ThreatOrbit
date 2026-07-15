@@ -127,10 +127,10 @@ function CredentialsForm({ integration, onSaved }: {
       <div className="grid sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
         <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
           placeholder="https://api.vendor.example"
-          className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-safe/40 placeholder-ink-600" />
+          className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-hidden focus:border-safe/40 placeholder-ink-600" />
         <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password"
           placeholder={integration.credentialed ? 'API key (leave blank to keep current)' : 'API key'}
-          className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-safe/40 placeholder-ink-600" />
+          className="px-3 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-hidden focus:border-safe/40 placeholder-ink-600" />
         <button onClick={() => save(false)} disabled={busy || !baseUrl.trim()}
           className="px-3 py-2 rounded-lg text-xs font-medium bg-safe/15 border border-safe/30 text-safe hover:bg-safe/20 disabled:opacity-50 transition-colors">
           Save

@@ -586,12 +586,12 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-xl flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-xl flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Header */}
       <div className="p-4 border-b border-white/8">
         <div className="flex items-start gap-3">
-          <div className={cn('mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0', s.bg, s.text, `border ${s.border}`)}>
+          <div className={cn('mt-0.5 px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase shrink-0', s.bg, s.text, `border ${s.border}`)}>
             {alert.severity}
           </div>
           <div className="flex-1 min-w-0">
@@ -700,7 +700,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <select
               value={alert.status}
               onChange={(e) => { onUpdate(alert.id, { status: e.target.value as AlertStatus }); flash(`Status → ${STATUS_LABEL[e.target.value as AlertStatus].label}`) }}
-              className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 focus:outline-none focus:border-magenta/40 cursor-pointer"
+              className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 focus:outline-hidden focus:border-magenta/40 cursor-pointer"
             >
               {(['new','assigned','in-progress','pending','resolved','closed'] as AlertStatus[]).map((s) => (
                 <option key={s} value={s} className="bg-[#100A1C]">{STATUS_LABEL[s].label}</option>
@@ -712,7 +712,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <select
               value={alert.disposition}
               onChange={(e) => { onUpdate(alert.id, { disposition: e.target.value as Disposition }); flash('Disposition recorded') }}
-              className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 capitalize focus:outline-none focus:border-magenta/40 cursor-pointer"
+              className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 capitalize focus:outline-hidden focus:border-magenta/40 cursor-pointer"
             >
               {(['undetermined','true-positive','false-positive','benign','duplicate'] as Disposition[]).map((d) => (
                 <option key={d} value={d} className="bg-[#100A1C]">{d.replace('-', ' ')}</option>
@@ -1009,8 +1009,8 @@ function MitreCoverageMatrix() {
           <p className="text-[10px] text-ink-600 mt-0.5">Detection rule coverage across MITRE ATT&CK Enterprise - hover a technique cell for detail</p>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-ink-400">
-          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded bg-safe/20 border border-safe/50" />Covered</span>
-          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded bg-threat/15 border border-threat/40" />Gap</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-safe/20 border border-safe/50" />Covered</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-threat/15 border border-threat/40" />Gap</span>
           <span className="text-safe font-semibold">{totalCovered}/{allTechs.length} covered</span>
         </div>
       </div>
@@ -1037,7 +1037,7 @@ function MitreCoverageMatrix() {
                       className="relative"
                     >
                       <div className={cn(
-                        'px-2 py-1 rounded text-[9px] font-mono border cursor-default select-none transition-all',
+                        'px-2 py-1 rounded-sm text-[9px] font-mono border cursor-default select-none transition-all',
                         isCovered
                           ? 'bg-safe/10 border-safe/35 text-safe hover:bg-safe/20'
                           : 'bg-threat/5 border-threat/20 text-threat/60 hover:bg-threat/15',
@@ -1564,7 +1564,7 @@ export default function SIEMPage() {
                   <Search className="w-3 h-3 text-ink-500 shrink-0" />
                   <input value={search} onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search alerts, IPs, rules…"
-                    className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-600 focus:outline-none" />
+                    className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-600 focus:outline-hidden" />
                   {search && <button onClick={() => setSearch('')}><X className="w-3 h-3 text-ink-500" /></button>}
                 </div>
                 <MiniFilter label="Severity" value={filterSev}
@@ -1676,8 +1676,8 @@ export default function SIEMPage() {
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/3 transition-colors cursor-pointer">
                     <input type="checkbox" checked={fpSelected.has(a.id)}
                       onChange={() => toggleFpSelected(a.id)}
-                      className="w-3.5 h-3.5 rounded accent-magenta shrink-0" />
-                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0', SEV[a.severity].bg, SEV[a.severity].text)}>
+                      className="w-3.5 h-3.5 rounded-sm accent-magenta shrink-0" />
+                    <span className={cn('px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase shrink-0', SEV[a.severity].bg, SEV[a.severity].text)}>
                       {a.severity}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1769,7 +1769,7 @@ export default function SIEMPage() {
                       const PivotIcon = c.pivot === 'src_ip' ? Network : c.pivot === 'hostname' ? Server : User
                       const sev = SEV[c.severity]
                       return (
-                        <div key={`${c.pivot}:${c.value}`} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                        <div key={`${c.pivot}:${c.value}`} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/2 border border-white/5">
                           <div className="p-1.5 rounded-lg shrink-0" style={{ background: `${sev.dot}18` }}>
                             <PivotIcon className="w-3.5 h-3.5" style={{ color: sev.dot }} />
                           </div>
@@ -1892,7 +1892,7 @@ export default function SIEMPage() {
                   <Search className="w-3 h-3 text-ink-500 shrink-0" />
                   <input value={ruleSearch} onChange={(e) => setRuleSearch(e.target.value)}
                     placeholder="Search rules…"
-                    className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-600 focus:outline-none" />
+                    className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-600 focus:outline-hidden" />
                 </div>
                 <span className="text-[10px] text-ink-600 ml-auto">{filteredRules.length} rules</span>
               </div>
@@ -1925,7 +1925,7 @@ export default function SIEMPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 justify-between">
                         <p className="text-xs font-medium text-white">{src.name}</p>
-                        <span className={cn('text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase',
+                        <span className={cn('text-[9px] px-1.5 py-0.5 rounded-sm font-semibold uppercase',
                           src.status === 'healthy' ? 'bg-safe/10 text-safe' : src.status === 'degraded' ? 'bg-amber/10 text-amber' : 'bg-threat/10 text-threat')}>
                           {src.status}
                         </span>
@@ -1954,7 +1954,7 @@ export default function SIEMPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
               onClick={() => setSelectedId(null)}
             />
             <AlertDetail alert={selectedAlert} onClose={() => setSelectedId(null)} simplified={isNormal} onUpdate={updateAlert} />
@@ -1993,7 +1993,7 @@ function AlertRow({ alert, idx, selected, onClick }: {
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] font-mono text-ink-700">{alert.ruleId}</span>
           {alert.tiHits > 0 && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-threat/10 text-threat border border-threat/20 font-semibold">
+            <span className="text-[9px] px-1 py-0.5 rounded-sm bg-threat/10 text-threat border border-threat/20 font-semibold">
               {alert.tiHits} TI
             </span>
           )}
@@ -2065,7 +2065,7 @@ function MiniFilter({ label, value, options, onChange }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
-          'appearance-none px-3 py-1.5 pr-6 rounded-lg text-xs border bg-surface-2 focus:outline-none cursor-pointer transition-colors',
+          'appearance-none px-3 py-1.5 pr-6 rounded-lg text-xs border bg-surface-2 focus:outline-hidden cursor-pointer transition-colors',
           value !== 'all' && value !== 'All'
             ? 'border-magenta/30 text-magenta bg-magenta/5'
             : 'border-white/8 text-ink-400 hover:text-ink-200 hover:border-white/15',

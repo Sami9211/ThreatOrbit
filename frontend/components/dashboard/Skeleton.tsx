@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
  *  global prefers-reduced-motion rule already freezes - no JS needed.
  *  Size it with width/height utility classes at the call site. */
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn('animate-pulse rounded-md bg-white/[0.06]', className)} />
+  return <div aria-hidden className={cn('animate-pulse rounded-md bg-white/6', className)} />
 }
 
 /** A column of row-shaped skeletons for list/table surfaces that are still

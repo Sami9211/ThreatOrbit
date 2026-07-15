@@ -508,7 +508,7 @@ export default function ScannerPage() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleScan()}
                   placeholder={SCAN_TYPES.find((s) => s.key === scanType)?.placeholder}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/20 transition-colors"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40 focus:ring-1 focus:ring-magenta/20 transition-colors"
                 />
               </div>
               <button
@@ -608,7 +608,7 @@ export default function ScannerPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-ink-200 truncate">{s.target}</p>
                   </div>
-                  <span className="text-[9px] text-ink-600 font-mono uppercase bg-surface-3 px-1.5 py-0.5 rounded">{s.type}</span>
+                  <span className="text-[9px] text-ink-600 font-mono uppercase bg-surface-3 px-1.5 py-0.5 rounded-sm">{s.type}</span>
                   <span className="text-[10px] text-ink-500 font-mono w-14 text-right">{s.engines}</span>
                   <span className={cn(
                     'text-[10px] font-semibold w-16 text-right uppercase',
@@ -744,7 +744,7 @@ export default function ScannerPage() {
                     <div className="space-y-2">
                       {result.mitre.map((t) => (
                         <div key={t} className="flex items-center gap-2 text-xs">
-                          <span className="px-1.5 py-0.5 rounded bg-violet/15 text-violet font-mono text-[9px]">
+                          <span className="px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono text-[9px]">
                             {t.split(' - ')[0]}
                           </span>
                           <span className="text-ink-300">{t.split(' - ')[1]}</span>

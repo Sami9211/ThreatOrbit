@@ -48,7 +48,7 @@ export default function LogCollectorPanel() {
           <p className="text-[10px] text-ink-500">Paste raw logs → parsed → rules + threat-intel fire → real alerts</p>
         </div>
         <select value={format} onChange={(e) => setFormat(e.target.value)}
-          className="ml-auto px-2.5 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-none focus:border-magenta/40">
+          className="ml-auto px-2.5 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-magenta/40">
           {['auto', 'syslog', 'apache', 'json', 'kv'].map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
       </div>
@@ -59,7 +59,7 @@ export default function LogCollectorPanel() {
           onChange={(e) => setText(e.target.value)}
           rows={5}
           placeholder="Paste log lines here (syslog, Apache/Nginx, JSON, or key=value)…"
-          className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600 resize-none"
+          className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-[11px] font-mono text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600 resize-none"
         />
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={send} disabled={busy || !text.trim()}

@@ -157,7 +157,7 @@ export default function IocLifecyclePanel() {
           return (
             <button key={i.id} onClick={() => open(i.id)}
               className="w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-white/3 transition-colors">
-              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/5 text-ink-400 shrink-0 w-12 text-center">{i.type}</span>
+              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-white/5 text-ink-400 shrink-0 w-12 text-center">{i.type}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono text-white truncate">{i.value}</span>
@@ -188,7 +188,7 @@ export default function IocLifecyclePanel() {
       <AnimatePresence>
         {detail && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={() => setDetail(null)}>
+            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs" onClick={() => setDetail(null)}>
             <motion.div initial={{ x: 440 }} animate={{ x: 0 }} exit={{ x: 440 }} transition={{ type: 'tween', duration: 0.2 }}
               onClick={(e) => e.stopPropagation()} className="w-full max-w-md h-full bg-surface border-l border-white/8 overflow-y-auto p-5 space-y-5">
               <div className="flex items-start justify-between gap-3">

@@ -75,7 +75,7 @@ export default function RestApiPage() {
           <div className="space-y-2">
             {routes.map((r) => (
               <div key={r.path} className="rounded-xl border border-white/6 bg-white/2 p-4 flex flex-wrap gap-3 items-start">
-                <span className={`shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded border ${METHOD_STYLES[r.method] ?? ''}`}>
+                <span className={`shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded-sm border ${METHOD_STYLES[r.method] ?? ''}`}>
                   {r.method}
                 </span>
                 <code className="flex-1 min-w-0 text-sm text-ink-200 font-mono">{r.path}</code>

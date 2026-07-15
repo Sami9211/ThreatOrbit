@@ -71,7 +71,7 @@ function ScoreBadge({ score }: { score: number }) {
       ? 'text-amber bg-amber/10 border-amber/20'
       : 'text-safe bg-safe/10 border-safe/20'
   return (
-    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${color}`}>
+    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm border ${color}`}>
       {score}
     </span>
   )
@@ -208,7 +208,7 @@ export default function ThreatIntelSection() {
                       <div className="text-xs font-mono text-ink-200 truncate">{ioc.value}</div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {ioc.tags.map((t) => (
-                          <span key={t} className="text-[9px] text-ink-500 bg-white/5 px-1.5 py-0.5 rounded">
+                          <span key={t} className="text-[9px] text-ink-500 bg-white/5 px-1.5 py-0.5 rounded-sm">
                             {t}
                           </span>
                         ))}

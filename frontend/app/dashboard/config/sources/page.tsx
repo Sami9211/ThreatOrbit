@@ -136,7 +136,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs"
       onClick={onClose}
     >
       <motion.div
@@ -169,7 +169,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
               placeholder="https://api.vendor.com/v1/logs"
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-ink-100 focus:outline-none focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600 font-mono text-xs"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-ink-100 focus:outline-hidden focus:border-magenta/40 focus:ring-1 focus:ring-magenta/15 transition-colors placeholder-ink-600 font-mono text-xs"
             />
           </div>
 
@@ -178,7 +178,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
             <select
               value={authMethod}
               onChange={(e) => setAuthMethod(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
               <option>API Key</option>
               <option>OAuth 2.0 (Client Credentials)</option>
               <option>Bearer Token</option>
@@ -191,7 +191,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
             <select
               value={interval}
               onChange={(e) => setIntervalSel(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
               <option>Every 1 minute</option>
               <option>Every 5 minutes</option>
               <option>Every 15 minutes</option>
@@ -211,12 +211,12 @@ function ConfigPanel({ connector, onClose, onConnected }: {
                 <div key={m.src} className="flex items-center gap-2">
                   <input
                     defaultValue={m.src}
-                    className="flex-1 px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 font-mono focus:outline-none focus:border-magenta/40"
+                    className="flex-1 px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 font-mono focus:outline-hidden focus:border-magenta/40"
                   />
                   <span className="text-ink-600 text-xs">&rarr;</span>
                   <input
                     defaultValue={m.dst}
-                    className="flex-1 px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-safe font-mono focus:outline-none focus:border-magenta/40"
+                    className="flex-1 px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-safe font-mono focus:outline-hidden focus:border-magenta/40"
                   />
                 </div>
               ))}

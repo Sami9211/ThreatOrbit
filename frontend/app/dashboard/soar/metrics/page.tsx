@@ -117,7 +117,7 @@ function AlertVolumeChart({ data }: { data: AlertVolumeDay[] }) {
       <div className="flex items-center gap-4 mb-4 flex-wrap">
         {Object.entries(COLORS).map(([k, c]) => (
           <span key={k} className="flex items-center gap-1.5 text-[10px] text-ink-500">
-            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: c }} />
+            <span className="w-2.5 h-2.5 rounded-xs inline-block" style={{ background: c }} />
             {k.charAt(0).toUpperCase() + k.slice(1)}
           </span>
         ))}
@@ -218,12 +218,12 @@ function AnalystThroughputChart({ data }: { data: ThroughputRow[] }) {
           className="flex items-center gap-3"
         >
           <span className="text-[11px] text-ink-400 font-mono w-24 shrink-0">{a.name}</span>
-          <div className="flex-1 h-5 bg-white/5 rounded overflow-hidden relative">
+          <div className="flex-1 h-5 bg-white/5 rounded-sm overflow-hidden relative">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${(a.closed / max) * 100}%` }}
               transition={{ duration: 0.6, delay: i * 0.07, ease: 'easeOut' }}
-              className="absolute inset-y-0 left-0 rounded"
+              className="absolute inset-y-0 left-0 rounded-sm"
               style={{ background: `linear-gradient(90deg, ${a.color}80, ${a.color})` }}
             />
             <span className="absolute right-2 top-0 bottom-0 flex items-center text-[10px] font-mono text-ink-400">
@@ -368,7 +368,7 @@ export default function SOCMetricsPage() {
 
   return (
     <div className="overflow-y-auto h-full">
-      <div className="px-6 py-5 space-y-6 max-w-screen-2xl mx-auto pb-12">
+      <div className="px-6 py-5 space-y-6 max-w-(--breakpoint-2xl) mx-auto pb-12">
 
         {/* -- Page header -------------------------------------------- */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -485,7 +485,7 @@ export default function SOCMetricsPage() {
                 { label: '<40%',  color: tk('threat') },
               ].map((l) => (
                 <span key={l.label} className="flex items-center gap-1 text-ink-500">
-                  <span className="w-2 h-2 rounded-sm" style={{ background: l.color }} />
+                  <span className="w-2 h-2 rounded-xs" style={{ background: l.color }} />
                   {l.label}
                 </span>
               ))}
@@ -733,7 +733,7 @@ export default function SOCMetricsPage() {
                     initial={{ width: 0 }}
                     animate={{ width: `${(pb.runs / maxRuns) * 100}%` }}
                     transition={{ duration: 0.6, delay: i * 0.07, ease: 'easeOut' }}
-                    className="h-full rounded-full bg-gradient-to-r from-violet to-magenta"
+                    className="h-full rounded-full bg-linear-to-r from-violet to-magenta"
                   />
                 </div>
               </motion.div>

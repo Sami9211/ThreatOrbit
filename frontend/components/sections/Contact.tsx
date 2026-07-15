@@ -134,7 +134,7 @@ export default function Contact() {
                       onChange={(e) => setForm({ ...form, message: e.target.value })}
                       rows={4}
                       placeholder="What are you trying to solve?"
-                      className="w-full rounded-xl bg-white/3 border border-white/10 px-3.5 py-2.5 text-sm text-white placeholder:text-ink-600 focus:border-magenta/40 focus:outline-none transition-colors resize-none"
+                      className="w-full rounded-xl bg-white/3 border border-white/10 px-3.5 py-2.5 text-sm text-white placeholder:text-ink-600 focus:border-magenta/40 focus:outline-hidden transition-colors resize-none"
                     />
                   </div>
 
@@ -191,7 +191,7 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`w-full rounded-xl bg-white/3 border px-3.5 py-2.5 pr-9 text-sm text-white placeholder:text-ink-600 focus:outline-none transition-colors ${
+          className={`w-full rounded-xl bg-white/3 border px-3.5 py-2.5 pr-9 text-sm text-white placeholder:text-ink-600 focus:outline-hidden transition-colors ${
             invalid
               ? 'border-threat/50 focus:border-threat/60'
               : 'border-white/10 focus:border-magenta/40'

@@ -213,11 +213,11 @@ function AddConnectorModal({ kinds, onClose, onAdd }: {
     }
   }
 
-  const input = 'w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600'
+  const input = 'w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600'
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6" onClick={onClose}>
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6" onClick={onClose}>
       <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-lg rounded-2xl border border-white/10 bg-surface p-6 max-h-[85vh] overflow-y-auto">
@@ -270,7 +270,7 @@ function AddConnectorModal({ kinds, onClose, onAdd }: {
                 {[['value', 'Indicator value *'], ['type', 'Type'], ['threat_type', 'Threat type'], ['confidence', 'Confidence'], ['severity', 'Severity'], ['tags', 'Tags']].map(([k, label]) => (
                   <div key={k}>
                     <label className="block text-[10px] text-ink-500 mb-1">{label}</label>
-                    <input value={values[`fm_${k}`] ?? ''} onChange={(e) => set(`fm_${k}`)(e.target.value)} placeholder={k} className="w-full px-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 font-mono focus:outline-none focus:border-magenta/40 placeholder-ink-700" />
+                    <input value={values[`fm_${k}`] ?? ''} onChange={(e) => set(`fm_${k}`)(e.target.value)} placeholder={k} className="w-full px-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 font-mono focus:outline-hidden focus:border-magenta/40 placeholder-ink-700" />
                   </div>
                 ))}
               </div>

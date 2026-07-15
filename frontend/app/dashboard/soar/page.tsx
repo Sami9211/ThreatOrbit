@@ -451,12 +451,12 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-xl flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-xl flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Header */}
       <div className="p-4 border-b border-white/8">
         <div className="flex items-start gap-3">
-          <span className={cn('mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shrink-0', SEV_STYLE[c.severity])}>
+          <span className={cn('mt-0.5 px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase border shrink-0', SEV_STYLE[c.severity])}>
             {c.severity}
           </span>
           <div className="flex-1 min-w-0">
@@ -552,7 +552,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                 {related.techniques.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {related.techniques.slice(0, 6).map((t) => (
-                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded bg-violet/10 text-violet border border-violet/20 font-mono">
+                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 font-mono">
                         {t.technique} ×{t.count}
                       </span>
                     ))}
@@ -611,7 +611,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                 onChange={(e) => setNote(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addNote() }}
                 placeholder="Add investigation note…"
-                className="flex-1 bg-surface-2 border border-white/8 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-white/20"
+                className="flex-1 bg-surface-2 border border-white/8 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-hidden focus:border-white/20"
               />
               <button onClick={addNote}
                 className="px-3 py-2 rounded-lg text-xs bg-magenta/15 border border-magenta/30 text-magenta hover:bg-magenta/25 transition-colors shrink-0">
@@ -862,7 +862,7 @@ function NewCaseModal({ onClose, onCreate }: {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6"
       onClick={onClose}
     >
       <motion.div
@@ -884,13 +884,13 @@ function NewCaseModal({ onClose, onCreate }: {
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Title</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Suspicious lateral movement from jump host"
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Severity</label>
               <select value={severity} onChange={(e) => setSeverity(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
                 <option value="critical">Critical</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -900,7 +900,7 @@ function NewCaseModal({ onClose, onCreate }: {
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Type</label>
               <select value={caseType} onChange={(e) => setCaseType(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
                 {['Investigation', 'Phishing', 'Malware', 'Ransomware', 'Account Compromise',
                   'Data Exfiltration', 'Insider Threat', 'Web Attack', 'Misconfiguration'].map((t) => (
                   <option key={t}>{t}</option>
@@ -912,7 +912,7 @@ function NewCaseModal({ onClose, onCreate }: {
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Description (optional)</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
               placeholder="What happened, which assets are affected…"
-              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600 resize-none" />
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600 resize-none" />
           </div>
 
           {error && <p className="px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert">{error}</p>}
@@ -1195,7 +1195,7 @@ export default function SOARPage() {
                                 step.status === 'running'   ? 'text-white' :
                                 'text-ink-600')}>{step.name}</p>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: color + '20', color }}>
+                                <span className="text-[9px] px-1 py-0.5 rounded-sm" style={{ background: color + '20', color }}>
                                   {step.type}
                                 </span>
                                 {step.duration && (
@@ -1327,7 +1327,7 @@ export default function SOARPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
               onClick={() => setSelectedCase(null)}
             />
             <CaseDetail key={selectedCase.id} c={selectedCase} onClose={() => setSelectedCase(null)} simplified={isNormal} />
@@ -1424,7 +1424,7 @@ function PlaybookCard({ pb, selected, onClick, onRun }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 justify-between">
             <p className="text-xs font-semibold text-white truncate">{pb.name}</p>
-            <span className={cn('text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase shrink-0',
+            <span className={cn('text-[9px] px-1.5 py-0.5 rounded-sm font-semibold uppercase shrink-0',
               pb.status === 'running' ? 'bg-violet/15 text-violet' :
               pb.status === 'failed'  ? 'bg-threat/15 text-threat' :
               pb.status === 'idle'    ? 'bg-white/5 text-ink-500' :

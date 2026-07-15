@@ -125,7 +125,7 @@ export default function DashboardPreview() {
                       initial={inView ? { scaleY: 0 } : false}
                       animate={{ scaleY: 1, height: `${h}%` }}
                       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                      className="flex-1 rounded-sm"
+                      className="flex-1 rounded-xs"
                       style={{
                         height: `${h}%`,
                         background:

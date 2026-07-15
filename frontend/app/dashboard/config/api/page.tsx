@@ -138,7 +138,7 @@ function GenerateModal({ onCreate, onClose }: {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6"
       onClick={onClose}
     >
       <motion.div
@@ -165,12 +165,12 @@ function GenerateModal({ onCreate, onClose }: {
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Key name</label>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CI pipeline"
-                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40 placeholder-ink-600" />
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600" />
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Scope</label>
               <select value={scope} onChange={(e) => setScope(e.target.value as Scope)}
-                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-none focus:border-magenta/40">
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
                 <option value="read">Read only</option>
                 <option value="write">Read + write</option>
                 <option value="admin">Full admin</option>
@@ -448,12 +448,12 @@ export default function ApiKeysPage() {
               onChange={(e) => setNewHookUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addWebhook()}
               placeholder="https://hooks.yourcompany.com/threatorbit"
-              className="flex-1 min-w-[240px] px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs font-mono text-ink-100 placeholder-ink-600 focus:outline-none focus:border-magenta/40"
+              className="flex-1 min-w-[240px] px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs font-mono text-ink-100 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40"
             />
             <select
               value={newHookEvent}
               onChange={(e) => setNewHookEvent(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-none focus:border-magenta/40"
+              className="px-3 py-2 rounded-xl bg-surface-2 border border-white/8 text-xs text-ink-100 focus:outline-hidden focus:border-magenta/40"
             >
               {['alert.created', 'incident.resolved', 'ioc.confirmed', 'case.created', 'playbook.failed'].map((e) => (
                 <option key={e} value={e}>{e}</option>
@@ -484,7 +484,7 @@ export default function ApiKeysPage() {
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-3 border border-white/8">
                 <code className="flex-1 font-mono text-xs text-safe break-all">{newSecret.secret}</code>
                 <button onClick={() => navigator.clipboard?.writeText(newSecret.secret)}
-                  className="p-1 rounded text-ink-400 hover:text-white transition-colors" title="Copy">
+                  className="p-1 rounded-sm text-ink-400 hover:text-white transition-colors" title="Copy">
                   <Copy className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => setNewSecret(null)}

@@ -191,9 +191,9 @@ export default function WorldMap() {
           )}
 
           {/* Legend */}
-          <div className="absolute left-3 bottom-3 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface/70 border border-white/8 backdrop-blur-sm">
+          <div className="absolute left-3 bottom-3 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface/70 border border-white/8 backdrop-blur-xs">
             <span className="text-[9px] text-ink-500">fewer</span>
-            {SCALE.map((c) => <span key={c} className="w-3.5 h-2.5 rounded-sm" style={{ background: c }} />)}
+            {SCALE.map((c) => <span key={c} className="w-3.5 h-2.5 rounded-xs" style={{ background: c }} />)}
             <span className="text-[9px] text-ink-500">more</span>
           </div>
         </div>

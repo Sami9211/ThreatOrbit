@@ -390,7 +390,7 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
       title={enabled ? 'Disable rule' : 'Enable rule'}
     >
       <span className={cn(
-        'absolute top-0.5 w-3 h-3 rounded-full transition-transform duration-200 shadow-sm',
+        'absolute top-0.5 w-3 h-3 rounded-full transition-transform duration-200 shadow-xs',
         enabled ? 'translate-x-4 bg-safe' : 'translate-x-0.5 bg-ink-600',
       )} />
     </button>
@@ -428,7 +428,7 @@ function RulePanel({ rule, onClose, onToggle }: {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-[600px] flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
+      className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-[600px] flex flex-col bg-surface border-l border-white/8 shadow-2xl overflow-hidden"
     >
       {/* Panel header */}
       <div className="p-5 border-b border-white/8 shrink-0">
@@ -441,7 +441,7 @@ function RulePanel({ rule, onClose, onToggle }: {
               <span className="text-[10px] font-mono text-ink-500">{rule.id}</span>
               <SeverityPill severity={overrideSev ?? rule.severity} />
               {overrideSev && (
-                <span className="text-[9px] text-amber border border-amber/30 bg-amber/10 rounded px-1.5 py-0.5">override active</span>
+                <span className="text-[9px] text-amber border border-amber/30 bg-amber/10 rounded-sm px-1.5 py-0.5">override active</span>
               )}
             </div>
             <h2 className="text-sm font-semibold text-white mt-1 leading-snug">{rule.name}</h2>
@@ -542,7 +542,7 @@ function RulePanel({ rule, onClose, onToggle }: {
                 type="text"
                 value={suppressionWin}
                 onChange={(e) => setSuppressionWin(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-surface-2 border border-white/10 rounded-lg text-ink-200 focus:outline-none focus:border-violet/40 transition-colors"
+                className="w-full px-3 py-2 text-xs font-mono bg-surface-2 border border-white/10 rounded-lg text-ink-200 focus:outline-hidden focus:border-violet/40 transition-colors"
               />
             </div>
             <div>
@@ -806,7 +806,7 @@ export default function RulesEnginePage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search rules, IDs, techniques…"
-            className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-700 focus:outline-none"
+            className="flex-1 bg-transparent text-xs text-ink-200 placeholder-ink-700 focus:outline-hidden"
           />
           {search && (
             <button onClick={() => setSearch('')} className="text-ink-600 hover:text-ink-300">
@@ -1061,7 +1061,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none bg-transparent text-xs text-ink-300 focus:outline-none cursor-pointer pr-4"
+        className="appearance-none bg-transparent text-xs text-ink-300 focus:outline-hidden cursor-pointer pr-4"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value} className="bg-[#100A1C]">{o.label}</option>

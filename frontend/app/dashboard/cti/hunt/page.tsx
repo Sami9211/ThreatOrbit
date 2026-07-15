@@ -289,7 +289,7 @@ function HypothesisRow({ hyp }: { hyp: Hypothesis }) {
               </p>
               <div className="flex flex-wrap gap-1">
                 {hyp.dataSources.map((d) => (
-                  <span key={d} className="text-[9px] px-1.5 py-0.5 rounded bg-violet/10 text-violet border border-violet/20">{d}</span>
+                  <span key={d} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20">{d}</span>
                 ))}
               </div>
             </div>
@@ -300,7 +300,7 @@ function HypothesisRow({ hyp }: { hyp: Hypothesis }) {
               {hyp.relatedIOCs.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {hyp.relatedIOCs.map((ioc) => (
-                    <span key={ioc} className="text-[9px] px-1.5 py-0.5 rounded bg-magenta/10 text-magenta font-mono border border-magenta/20">{ioc}</span>
+                    <span key={ioc} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-magenta/10 text-magenta font-mono border border-magenta/20">{ioc}</span>
                   ))}
                 </div>
               ) : (
@@ -374,7 +374,7 @@ function HuntCard({ hunt, expanded, onToggle, onRun }: {
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               title={`${t.id} · ${t.name} (${t.tactic})`}
-              className="text-[9px] px-1.5 py-0.5 rounded bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 transition-colors"
+              className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 transition-colors"
             >
               {t.id}
             </a>
@@ -490,7 +490,7 @@ function CoverageMatrix({ hunts }: { hunts: Hunt[] }) {
             { label: 'none', color: 'rgba(255,255,255,0.08)' },
           ].map(({ label, color }) => (
             <div key={label} className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded" style={{ background: color }} />
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: color }} />
               {label}
             </div>
           ))}

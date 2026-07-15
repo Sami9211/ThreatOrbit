@@ -160,7 +160,7 @@ export default function SocConsolePage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-medium text-white truncate">{b.title}</span>
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase shrink-0"
                                 style={{ background: withAlpha(b.slaType === 'ack' ? SEV_COLOR.high : SEV_COLOR.medium, 0.13),
                                          color: b.slaType === 'ack' ? SEV_COLOR.high : SEV_COLOR.medium }}>
                                 {b.slaType === 'ack' ? 'Unacked' : 'Overdue'}
