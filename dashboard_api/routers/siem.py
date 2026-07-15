@@ -606,58 +606,100 @@ _ENTITY_FIELD = {"user": "username", "host": "hostname", "ip": "src_ip"}
 
 @router.get("/entities")
 def list_entities(type: str = Query("all", pattern="^(all|user|host|ip)$"),
-                  limit: int = Query(25, le=100)):
+                  limit: int = Query(25, le=100),
+                  user: dict = Depends(current_user)):
     """UEBA: rank users/hosts/IPs by behavioural risk derived from their alert
-    history - severity-weighted volume plus ATT&CK technique diversity."""
+    history - severity-weighted volume plus ATT&CK technique diversity.
+
+    Aggregates in SQL (GROUP BY entity), not Python: the previous version
+    fetched every alert with a non-null user/host/ip — three near-full table
+    scans into Python per request, ~2.6s at 200k alerts. One grouped row per
+    entity is orders of magnitude less data. Sample technique names are then
+    resolved with a second query bounded to just the returned top-N."""
     types = [type] if type != "all" else ["user", "host", "ip"]
-    out = []
+    # Workspace clause: this endpoint aggregated across ALL tenants before.
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    # Severity→weight CASE built from the same dict the old Python loop used —
+    # one source of truth, and the keys are code constants (not user input).
+    weight_case = ("CASE severity " +
+                   " ".join(f"WHEN '{s}' THEN {w}" for s, w in _SEV_WEIGHT.items()) +
+                   " ELSE 1 END")
+    sev_cases = ", ".join(
+        f"SUM(CASE WHEN severity='{s}' THEN 1 ELSE 0 END) AS sev_{s}"
+        for s in _SEV_WEIGHT)
+    import heapq
+    tracked = high_risk = seq = 0
+    candidates: list[tuple] = []  # (risk, -seq, etype, grouped_row)
     with get_conn() as conn:
         for etype in types:
             field = _ENTITY_FIELD[etype]
             rows = conn.execute(
-                f"SELECT {field} AS entity, severity, mitre_tech_id, ts, status "
-                f"FROM alerts WHERE {field} IS NOT NULL AND {field} != ''"
-            ).fetchall()
-            agg: dict[str, dict] = {}
+                f"SELECT {field} AS entity, COUNT(*) AS alerts, "
+                f"SUM({weight_case}) AS score, {sev_cases}, "
+                "SUM(CASE WHEN status NOT IN ('resolved','closed') THEN 1 ELSE 0 END) AS open_n, "
+                # CASE folds '' to NULL so the distinct count matches the old
+                # `if mitre_tech_id:` guard exactly.
+                "COUNT(DISTINCT CASE WHEN mitre_tech_id != '' THEN mitre_tech_id END) AS tdiv, "
+                "MAX(ts) AS last_seen "
+                f"FROM alerts WHERE {field} IS NOT NULL AND {field} != '' {sc} "
+                f"GROUP BY {field}", sp).fetchall()
+            # One grouped row per entity; only the returned top-N become dicts
+            # (an IP-heavy store can have tens of thousands of entities — the
+            # summary needs counters, not materialised objects).
             for r in rows:
-                e = agg.setdefault(r["entity"], {
-                    "value": r["entity"], "type": etype, "alerts": 0, "score": 0,
-                    "techniques": set(), "open": 0, "lastSeen": None,
-                    "bySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
-                })
-                e["alerts"] += 1
-                e["score"] += _SEV_WEIGHT.get(r["severity"], 1)
-                if r["mitre_tech_id"]:
-                    e["techniques"].add(r["mitre_tech_id"])
-                if r["severity"] in e["bySeverity"]:
-                    e["bySeverity"][r["severity"]] += 1
-                if r["status"] not in ("resolved", "closed"):
-                    e["open"] += 1
-                if e["lastSeen"] is None or (r["ts"] or "") > e["lastSeen"]:
-                    e["lastSeen"] = r["ts"]
-            for e in agg.values():
-                tdiv = len(e["techniques"])
-                e["techniqueCount"] = tdiv
-                e["techniques"] = sorted(e["techniques"])[:6]
-                # risk: severity-weighted volume + technique-diversity bonus, capped.
-                e["risk"] = min(100, e["score"] + tdiv * 4)
-                e["band"] = ("critical" if e["risk"] >= 70 else "high" if e["risk"] >= 45
-                             else "elevated" if e["risk"] >= 20 else "normal")
-                out.append(e)
-    out.sort(key=lambda x: -x["risk"])
-    return {"entities": out[:limit],
-            "summary": {"tracked": len(out),
-                        "highRisk": sum(1 for e in out if e["risk"] >= 45)}}
+                risk = min(100, int(r["score"] or 0) + int(r["tdiv"] or 0) * 4)
+                tracked += 1
+                if risk >= 45:
+                    high_risk += 1
+                seq += 1
+                candidates.append((risk, -seq, etype, r))
+        top = []
+        for risk, _, etype, r in heapq.nlargest(limit, candidates):
+            tdiv = int(r["tdiv"] or 0)
+            top.append({
+                "value": r["entity"], "type": etype,
+                "alerts": r["alerts"], "score": int(r["score"] or 0),
+                "open": int(r["open_n"] or 0), "lastSeen": r["last_seen"],
+                "bySeverity": {s: int(r[f"sev_{s}"] or 0) for s in _SEV_WEIGHT},
+                "techniqueCount": tdiv, "risk": risk,
+                "band": ("critical" if risk >= 70 else "high" if risk >= 45
+                         else "elevated" if risk >= 20 else "normal"),
+            })
+        # Up to 6 sample technique ids per returned entity — resolved only for
+        # the top-N (bounded), grouped per entity-type to use the right column.
+        for etype in types:
+            names = [e["value"] for e in top if e["type"] == etype]
+            if not names:
+                continue
+            field = _ENTITY_FIELD[etype]
+            ph = ",".join("?" * len(names))
+            techs: dict[str, list] = {}
+            for r in conn.execute(
+                    f"SELECT DISTINCT {field} AS entity, mitre_tech_id FROM alerts "
+                    f"WHERE {field} IN ({ph}) AND mitre_tech_id IS NOT NULL "
+                    f"AND mitre_tech_id != '' {sc}", names + sp).fetchall():
+                techs.setdefault(r["entity"], []).append(r["mitre_tech_id"])
+            for e in top:
+                if e["type"] == etype:
+                    e["techniques"] = sorted(techs.get(e["value"], []))[:6]
+    for e in top:
+        e.setdefault("techniques", [])
+    return {"entities": top,
+            "summary": {"tracked": tracked, "highRisk": high_risk}}
 
 
 @router.get("/entities/detail")
-def entity_detail(type: str = Query(..., pattern="^(user|host|ip)$"), value: str = Query(...)):
+def entity_detail(type: str = Query(..., pattern="^(user|host|ip)$"), value: str = Query(...),
+                  user: dict = Depends(current_user)):
     """Per-entity risk timeline + contributing alerts (the UEBA drill-down)."""
     field = _ENTITY_FIELD[type]
+    # Workspace clause: unscoped, this let one tenant read another's alert
+    # titles by probing entity names (same class as the sub-resource GET fix).
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT id,title,severity,risk_score,mitre_tech_id,mitre_tactic,ts,status,rule_name "
-            f"FROM alerts WHERE {field}=? ORDER BY ts DESC LIMIT 200", (value,)
+            f"FROM alerts WHERE {field}=? {sc} ORDER BY ts DESC LIMIT 200", [value] + sp
         ).fetchall()
     alerts = [dict(r) for r in rows]
     # day-bucketed timeline of alert counts

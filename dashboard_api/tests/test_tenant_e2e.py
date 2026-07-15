@@ -154,6 +154,33 @@ def test_overview_aggregates_are_tenant_scoped(client, auth, monkeypatch):
     assert after["threats"] == before["threats"]
 
 
+def test_ueba_entities_are_tenant_scoped(client, auth, monkeypatch):
+    """UEBA aggregated across ALL tenants before: one workspace could see
+    another's usernames/hostnames (and probe alert titles via /entities/detail).
+    Both endpoints now scope to the caller's workspace."""
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    org_b, hb = _second_workspace(client)
+    host = f"beta-host-{uuid.uuid4().hex[:8]}"
+    r = client.post("/siem/alerts", headers=hb, json={
+        "title": "beta ueba", "severity": "critical", "rule_name": "E2E",
+        "hostname": host})
+    assert r.status_code in (200, 201), r.text
+
+    # B sees its entity; the default workspace does not.
+    b_vals = [e["value"] for e in client.get(
+        "/siem/entities?type=host&limit=100", headers=hb).json()["entities"]]
+    assert host in b_vals
+    a_vals = [e["value"] for e in client.get(
+        "/siem/entities?type=host&limit=100", headers=auth).json()["entities"]]
+    assert host not in a_vals
+
+    # Probing B's hostname from the default workspace yields nothing.
+    d = client.get(f"/siem/entities/detail?type=host&value={host}", headers=auth).json()
+    assert d["alertCount"] == 0
+    d_b = client.get(f"/siem/entities/detail?type=host&value={host}", headers=hb).json()
+    assert d_b["alertCount"] == 1
+
+
 def test_ioc_import_dedup_is_per_workspace(client, auth, monkeypatch):
     """One tenant's indicators must be neither an existence oracle nor a silent
     drop for another tenant's import of the same value."""

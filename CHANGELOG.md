@@ -9,6 +9,28 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 — UEBA /entities: SQL aggregation + missing tenant scoping; dark-web summary GROUP BY
+- **Scale**: `GET /siem/entities` fetched every alert with a non-null
+  user/host/ip — three near-full table reads into Python per request
+  (measured **2.6 s/request at 200k alerts**). Rewritten as `GROUP BY entity`
+  with `SUM(CASE)` severity buckets/weighted score,
+  `COUNT(DISTINCT …)` technique diversity and `MAX(ts)` — exact-parity
+  semantics (the severity→weight CASE is generated from the same `_SEV_WEIGHT`
+  dict the Python loop used). Only the returned top-N become response objects
+  (an IP-heavy store can hold tens of thousands of entities; the summary needs
+  counters, not materialised dicts), and sample technique ids resolve via a
+  second query bounded to the top-N. **1.4 s at the same scale on SQLite**
+  (the residual is the three grouped scans; Postgres plans these better) —
+  and no more full-table materialisation in Python.
+- **Isolation**: `/siem/entities` aggregated across ALL workspaces and
+  `/siem/entities/detail` let one tenant read another's alert titles by
+  probing entity names — same class as the earlier sub-resource GET fix. Both
+  now scope to the caller's workspace; fence in `test_tenant_e2e.py`.
+- **Dark-web `/summary`** converted from fetch-every-finding-into-Python to a
+  single `GROUP BY category` pass (233 ms → 68 ms at 100k findings), same
+  output contract. Parity fences in `test_entities.py` pin score/diversity/
+  bucket/band semantics exactly — green on SQLite + Postgres.
+
 ### 2026-07-15 — Ingest sources are auto-discovered (zero-setup SIEM → Sources)
 - A collector ingesting under a source name with no `log_sources` row was
   invisible on SIEM → Sources until the operator manually registered a

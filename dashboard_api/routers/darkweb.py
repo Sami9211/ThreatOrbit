@@ -57,28 +57,32 @@ def summary(user: dict = Depends(current_user)):
     sc, sp = tenancy.scope_sql(tenancy.org_of(user))
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     with get_conn() as conn:
+        # One grouped pass instead of fetching every finding into Python — the
+        # rollup was a full-table read on a store that grows for its whole
+        # retention window. `matched_user != ''` mirrors the old truthiness
+        # check; the 24h window rides the same scan via SUM(CASE).
         rows = conn.execute(
-            f"SELECT category, severity, status, matched_user FROM dark_web_findings WHERE 1=1 {sc}",
-            sp).fetchall()
-        # Findings actually surfaced in the last 24h — windowed, not len(rows).
-        # (`last24h` used to alias `total`, i.e. every finding ever recorded.)
-        last24 = conn.execute(
-            f"SELECT COUNT(*) AS n FROM dark_web_findings WHERE ts >= ? {sc}", [cutoff] + sp
-        ).fetchone()["n"]
-    total = len(rows)
+            "SELECT category, COUNT(*) AS n, "
+            "SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) AS crit, "
+            "SUM(CASE WHEN matched_user IS NOT NULL AND matched_user != '' THEN 1 ELSE 0 END) AS matched, "
+            "SUM(CASE WHEN status='takedown-requested' THEN 1 ELSE 0 END) AS takedown, "
+            "SUM(CASE WHEN status IN ('new','investigating','takedown-requested') THEN 1 ELSE 0 END) AS open_n, "
+            "SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS h24 "
+            f"FROM dark_web_findings WHERE 1=1 {sc} GROUP BY category",
+            [cutoff] + sp).fetchall()
     by_cat = {c: 0 for c in _CATEGORIES}
     for r in rows:
         if r["category"] in by_cat:
-            by_cat[r["category"]] += 1
+            by_cat[r["category"]] += r["n"]
     return {
-        "total": total,
-        "critical": sum(1 for r in rows if r["severity"] == "critical"),
+        "total": sum(r["n"] for r in rows),
+        "critical": sum(int(r["crit"] or 0) for r in rows),
         "credentialLeaks": by_cat["credential-leak"],
-        "workforceMatches": sum(1 for r in rows if r["matched_user"]),
-        "takedownsRequested": sum(1 for r in rows if r["status"] == "takedown-requested"),
-        "open": sum(1 for r in rows if r["status"] in ("new", "investigating", "takedown-requested")),
+        "workforceMatches": sum(int(r["matched"] or 0) for r in rows),
+        "takedownsRequested": sum(int(r["takedown"] or 0) for r in rows),
+        "open": sum(int(r["open_n"] or 0) for r in rows),
         "byCategory": by_cat,
-        "last24h": last24,
+        "last24h": sum(int(r["h24"] or 0) for r in rows),
     }
 
 
