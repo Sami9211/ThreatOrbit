@@ -64,3 +64,17 @@ def test_no_documented_path_removed():
     live = set(stable_paths(app))
     missing = [p for p in committed if p not in live]
     assert not missing, f"documented paths removed without a version bump: {missing}"
+
+
+def test_no_live_path_undocumented():
+    """The reverse fence: every route the app serves must be in the committed
+    surface, or the API doc silently rots as features land (12 endpoints had
+    drifted undocumented when this fence was added). Adding an endpoint?
+    Refresh the snapshot in the same change: python scripts/openapi_snapshot.py"""
+    with open(_PATHS_FILE) as fh:
+        committed = set(json.load(fh)["paths"])
+    undocumented = [p for p in stable_paths(app) if p not in committed]
+    assert not undocumented, (
+        "new endpoints missing from docs/api/v1-paths.json "
+        f"(run: python scripts/openapi_snapshot.py): {undocumented}"
+    )

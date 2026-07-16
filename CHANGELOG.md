@@ -9,6 +9,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-16 - API contract fence is now bidirectional (doc rot closed)
+- `docs/api/v1-paths.json` was only fenced against *shrinking* (a route
+  disappearing), so endpoints added since the last snapshot never forced a
+  doc refresh - 12 shipped endpoints had drifted undocumented (`/about`,
+  `/self-health`, the FP-triage trio, `/siem/analytics/trends`,
+  `/siem/rules/import-sigma-pack`, `/siem/alerts/bulk-dismiss`,
+  `/overview/alert-analytics`, `/soar/analysts`, `/stream/ticket`,
+  `/config/mode`). Snapshot refreshed (229 -> 239 paths) and a reverse fence
+  added: `test_no_live_path_undocumented` fails CI when a new route lands
+  without `python scripts/openapi_snapshot.py` in the same change.
+
 ### 2026-07-16 - windows-start.bat: real-data-only default (launcher parity)
 - The Windows launcher booted live mode but left the synthetic-telemetry
   engine ON (the config default), so its "REAL DATA" banner was wrong for the
