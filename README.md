@@ -578,12 +578,14 @@ First run takes a few minutes (npm download + build); after that pages open
 * **Open the dashboard:** click **Sign in** on the site, or go to
   http://localhost:3000/dashboard
 * **Sign in:** `admin@threatorbit.space` / `ChangeMe123!` (or create an account at `/signup`)
-* **Real data:** the launcher runs in **live mode** - the dashboard starts
-  empty and fills itself from real OSINT feeds within a couple of minutes
-  (needs internet). See [§4a Real data vs demo](#4a-real-data-vs-demo-mode).
-  For a production install on **your logs only** (no synthetic telemetry), set
-  the system environment variable `DASHBOARD_ENGINE=off` before launching and
-  follow [`docs/GOING_LIVE.md`](docs/GOING_LIVE.md).
+* **Real data:** the launcher runs in **live mode, real data only** (same
+  default as `linux-start.sh`) - CTI/feeds fill from real OSINT + NVD
+  connectors within a couple of minutes (needs internet), and the SIEM stays
+  empty until you forward real logs
+  ([`docs/GOING_LIVE.md`](docs/GOING_LIVE.md)). Nothing is fabricated. Want a
+  livelier console? Run it from a terminal as `windows-start.bat synthetic`
+  (live + demo telemetry engine) or `windows-start.bat demo` (seeded showcase
+  dataset). See [§4a Real data vs demo](#4a-real-data-vs-demo-mode).
 * **Stop:** close the four windows the script opened.
 * **Test:** double-click **`windows-test.bat`** - it runs all backend tests
   and prints `ALL TESTS PASSED` at the end.
@@ -769,7 +771,9 @@ The dashboard runs in one of two modes, set by `DASHBOARD_DATA_MODE`:
 | `demo` (default) | Seeded, realistic showcase data on first boot - great for evaluation/sales. |
 | `live`           | **Starts empty**, then ingests **real** threat intelligence from connectors. |
 
-* The **Windows launcher uses `live`** so you see real data.
+* **Both launchers default to `live` with the engine off** (real data only) -
+  `windows-start.bat synthetic` / `./linux-start.sh --synthetic` re-enable the
+  evaluation telemetry engine, and `demo` / `--demo` seed the showcase dataset.
 * **Docker** defaults to `demo`; switch with `DASHBOARD_DATA_MODE=live docker compose up --build -d` (or set it in `.env`).
 * In live mode the dashboard bootstraps only the admin account + settings (no
   fake alerts/actors/assets) and a background scheduler keeps pulling real

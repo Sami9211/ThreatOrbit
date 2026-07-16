@@ -74,9 +74,10 @@ DASHBOARD_ENGINE=off
   `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d`.
   (Or set both in `.env` and use the base file for an evaluation run.)
 - **Helm:** `--set config.dataMode=live --set config.engine=off`.
-- **Windows launcher:** set them as *system* environment variables before
-  double-clicking `windows-start.bat` (the launcher inherits them; it defaults
-  to `live` with the engine **on** for evaluation liveliness).
+- **Windows launcher:** nothing to set - double-clicking `windows-start.bat`
+  already boots `live` with the engine **off** (real data only, same default
+  as `linux-start.sh`). `windows-start.bat synthetic` turns the evaluation
+  telemetry engine back on.
 
 Boot and verify: `Config → General → Live Processing Engine` shows **paused**,
 and the log prints `Real-data mode (DASHBOARD_ENGINE=off)`. Every store starts

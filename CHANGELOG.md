@@ -9,6 +9,17 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-16 - windows-start.bat: real-data-only default (launcher parity)
+- The Windows launcher booted live mode but left the synthetic-telemetry
+  engine ON (the config default), so its "REAL DATA" banner was wrong for the
+  SIEM - generated events kept flowing. It now matches `linux-start.sh`:
+  double-click = **live, engine off, nothing fabricated**;
+  `windows-start.bat synthetic` re-enables the evaluation engine;
+  `windows-start.bat demo` seeds the showcase dataset. The end-of-boot banner
+  states the active posture honestly in each mode.
+- README Path A + §4a and docs/GOING_LIVE.md updated - the GOING_LIVE Windows
+  step no longer requires setting system environment variables.
+
 ### 2026-07-15 - Session survives transient API failures (auth hydration bug)
 - On app load the session hydrator (`auth-context`) called `/auth/me` and
   treated ANY failure as an invalid token - deleting the stored session and

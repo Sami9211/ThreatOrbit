@@ -10,7 +10,30 @@ REM  (nodejs.org). Double-click this file and wait.
 REM
 REM  Serves a PRODUCTION build of the website (instant page
 REM  loads) and starts the three real-data APIs.
+REM
+REM  Modes (same as linux-start.sh - double-click = default):
+REM    windows-start.bat            LIVE, real data only (no
+REM                                 synthetic telemetry - the
+REM                                 SIEM fills from real logs)
+REM    windows-start.bat synthetic  LIVE + the demo telemetry
+REM                                 engine (console looks alive
+REM                                 before any log forwarding)
+REM    windows-start.bat demo       seeded demo dataset
 REM ============================================================
+
+REM ---- pick the data posture from the optional first argument ----
+set "MODE_DATA=live"
+set "MODE_ENGINE=off"
+set "MODE_DESC=LIVE - real data only"
+if /i "%~1"=="synthetic" (
+    set "MODE_ENGINE=on"
+    set "MODE_DESC=LIVE + synthetic telemetry engine"
+)
+if /i "%~1"=="demo" (
+    set "MODE_DATA=demo"
+    set "MODE_ENGINE=on"
+    set "MODE_DESC=DEMO - seeded sample dataset"
+)
 
 REM ---- find Python (python on PATH, or the py launcher) ----
 set "PY=python"
@@ -74,9 +97,12 @@ if errorlevel 1 (
 popd
 
 echo [4/6] Starting the three data APIs - each gets its own window...
-REM DASHBOARD_DATA_MODE=live -> start with NO demo data and auto-ingest real
-REM threat intelligence from the OSINT engine in the background.
-start "ThreatOrbit - Dashboard API (port 8002)" cmd /k "set SERVICES_API_KEY=local-dev-key&& set DASHBOARD_DATA_MODE=live&& %PY% -m uvicorn dashboard_api.main:app --port 8002"
+REM DASHBOARD_DATA_MODE=live  -> start with NO demo data and auto-ingest real
+REM   threat intelligence from the OSINT connectors in the background.
+REM DASHBOARD_ENGINE=off      -> REAL DATA ONLY: no synthetic SIEM telemetry
+REM   (the default posture; "synthetic" or "demo" as the first argument
+REM   turns the engine back on - see the header).
+start "ThreatOrbit - Dashboard API (port 8002)" cmd /k "set SERVICES_API_KEY=local-dev-key&& set DASHBOARD_DATA_MODE=%MODE_DATA%&& set DASHBOARD_ENGINE=%MODE_ENGINE%&& %PY% -m uvicorn dashboard_api.main:app --port 8002"
 start "ThreatOrbit - Threat API (port 8000)" cmd /k "set APP_API_KEY=local-dev-key&& set ENABLE_SCHEDULER=true&& %PY% -m threat_api.main"
 start "ThreatOrbit - Log API (port 8001)" cmd /k "set APP_API_KEY=local-dev-key&& %PY% -m uvicorn log_api.main:app --port 8001"
 
@@ -97,9 +123,21 @@ echo                 http://localhost:3000/dashboard
 echo     Sign in     admin@threatorbit.space   ChangeMe123!
 echo                 (or create your own account at /signup)
 echo.
-echo   REAL DATA: the dashboard starts empty and fills itself
-echo   from live OSINT feeds within a couple of minutes (needs
-echo   internet). Watch Feeds -> Sources, or press "Sync now".
+echo   Mode: %MODE_DESC%
+if /i "%MODE_DATA%"=="live" (
+    echo.
+    echo   REAL DATA: CTI/feeds fill from live OSINT + NVD connectors
+    echo   within a couple of minutes - needs internet. Watch
+    echo   Feeds - Sources, or press "Sync now".
+    if /i "%MODE_ENGINE%"=="off" (
+        echo   The SIEM stays empty until you forward real logs - the
+        echo   runbook is docs\GOING_LIVE.md. Nothing on the dashboard
+        echo   is fabricated in this mode.
+    ) else (
+        echo   The synthetic telemetry engine is ON: SIEM events are
+        echo   generated continuously so the console looks alive.
+    )
+)
 echo.
 echo   To STOP ThreatOrbit: close the 4 windows it opened.
 echo  ============================================================
