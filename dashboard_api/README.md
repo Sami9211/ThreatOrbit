@@ -53,7 +53,7 @@ curl localhost:8002/overview/kpis -H "Authorization: Bearer $TOKEN"
 | Triage    | `/siem/fp-triage` (bulk false-positive scoring queue), `POST /siem/rules/import-sigma` + community-pack bulk import |
 | Interchange | `/taxii/*` (TAXII 2.1 server), STIX/MISP import-export, `/stream` (SSE live updates, ticket-authenticated) |
 | Tenancy/Enterprise | `/orgs/*` (workspaces + quotas), `/roles/*` (custom roles), `/billing/*`, `/compliance/*`, `/privacy/*`, SSO (`/sso`, `/saml`, `/scim`) |
-| Meta      | `/health` (liveness, always 200), `/ready` (readiness - real DB check, **503 when the DB is unreachable**), `/self-health` (authed: DB/schema/queue/leader/process verdict, powers Settings → System Health), `/metrics` (Prometheus), `/config/leader` (HA lease) |
+| Meta      | `/health` (liveness, always 200), `/ready` (readiness - real DB check, **503 when the DB is unreachable**), `/self-health` (authed: DB/schema/queue/leader/process verdict, powers Settings → System Health), `/about` (authed: product/API/schema versions + effective posture, powers Settings → About), `/metrics` (Prometheus), `/config/leader` (HA lease) |
 
 The full, versioned path inventory (220+ routes) lives in
 [`docs/api/v1-paths.json`](../docs/api/v1-paths.json); CI fails if a

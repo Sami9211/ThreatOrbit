@@ -8,6 +8,9 @@ const BASE =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) ||
   'http://localhost:8002'
 
+/** The API base this client is actually configured with (read-only display). */
+export const API_BASE_URL = BASE
+
 // -- Key names for localStorage --------------------------------------
 export const TOKEN_KEY = 'to_token'
 export const USER_KEY  = 'to_user'
@@ -1537,6 +1540,19 @@ export interface SelfHealth {
   }
 }
 export const fetchSelfHealth = () => api<SelfHealth>('/self-health')
+
+/** Deployment identity + posture (Config → General "About" card). */
+export interface AboutInfo {
+  productVersion: string
+  gitSha: string | null
+  apiVersion: string
+  schemaVersion: number
+  dbBackend: string
+  dataMode: string
+  engine: string
+  multiTenant: boolean
+}
+export const fetchAbout = () => api<AboutInfo>('/about')
 export const controlEngine = (body: { enabled?: boolean; generate?: number }) =>
   api<{ enabled?: boolean; generated?: Record<string, number> }>('/config/engine', {
     method: 'POST', body: JSON.stringify(body),

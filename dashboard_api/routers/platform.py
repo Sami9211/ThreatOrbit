@@ -25,6 +25,33 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+# -- About this deployment ---------------------------------------------------------
+
+@router.get("/about")
+def about():
+    """Deployment identity + posture, for the Config "About" card and support.
+
+    Every value is real introspection - the version constants shipped in this
+    build and the effective runtime posture - so "what are you running?" has
+    one authoritative answer. Auth-gated like the rest of the router (build
+    details are for operators, not the internet).
+    """
+    from dashboard_api import config, db_backend, version
+    from dashboard_api.api_versioning import API_VERSION
+    from dashboard_api.db import SCHEMA_VERSION
+
+    return {
+        "product_version": version.PRODUCT_VERSION,
+        "git_sha": version.GIT_SHA,
+        "api_version": API_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "db_backend": db_backend.BACKEND,
+        "data_mode": config.DATA_MODE,
+        "engine": config.ENGINE_MODE,
+        "multi_tenant": tenancy.MULTI_TENANT,
+    }
+
+
 # -- Notifications centre ---------------------------------------------------------
 
 def notify(conn, *, type: str, title: str, severity: str = "info",

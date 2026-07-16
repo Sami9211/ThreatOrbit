@@ -7,7 +7,7 @@ import {
   Eye, Copy, CheckCircle,
   Zap, User, BarChart2, ChevronRight, Palette, Check,
   PanelLeftOpen, PanelLeftClose, ScrollText, Plus, RotateCcw, CreditCard, ExternalLink,
-  Monitor, LogOut, Activity,
+  Monitor, LogOut, Activity, Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -18,6 +18,7 @@ import {
   fetchFeeds, toggleFeed, fetchSoarIntegrations, fetchJobs,
   fetchEngineStatus, controlEngine, enforceRetention,
   fetchSelfHealth, type SelfHealth, type HealthStatus,
+  fetchAbout, type AboutInfo, API_BASE_URL,
   fetchCurrentOrg, type Org,
   fetchLicense, activateLicense, type LicenseStatus,
   fetchBillingStatus, startCheckout, openBillingPortal, type BillingStatus,
@@ -1581,6 +1582,49 @@ function SystemHealthCard() {
   )
 }
 
+/* -- About this deployment ------------------------------------------ */
+function AboutRow({ name, value }: { name: string; value: string }) {
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-white/4 last:border-0 text-[11px]">
+      <span className="text-ink-300 font-medium w-28 shrink-0">{name}</span>
+      <span className="text-ink-500 flex-1 min-w-0 truncate font-mono">{value}</span>
+    </div>
+  )
+}
+
+function AboutCard() {
+  const [about, setAbout] = useState<AboutInfo | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    fetchAbout().then(setAbout).catch(() => setError(true))
+  }, [])
+
+  return (
+    <Section title="About This Deployment" icon={Info} color={tk('violet')}>
+      <p className="text-[11px] text-ink-500 mb-4 leading-relaxed">
+        Build identity and effective runtime posture, straight from the running
+        API - the answer to &quot;what are you running?&quot; in one place.
+      </p>
+      {error && !about && (
+        <p className="text-xs text-ink-600 py-6 text-center">Unavailable. Start the dashboard API to see deployment info.</p>
+      )}
+      {!error && !about && <p className="text-[11px] text-ink-600 animate-pulse">Loading…</p>}
+      {about && (
+        <div className="space-y-0.5">
+          <AboutRow name="Version" value={about.productVersion + (about.gitSha ? ` (${about.gitSha})` : '')} />
+          <AboutRow name="API version" value={about.apiVersion} />
+          <AboutRow name="Schema version" value={`v${about.schemaVersion}`} />
+          <AboutRow name="Database" value={about.dbBackend} />
+          <AboutRow name="Data mode" value={about.dataMode} />
+          <AboutRow name="Synthetic engine" value={about.engine} />
+          <AboutRow name="Multi-tenant" value={about.multiTenant ? 'enabled' : 'disabled'} />
+        </div>
+      )}
+    </Section>
+  )
+}
+
 /* -- Background jobs ----------------------------------------------- */
 const JOB_LABEL: Record<string, string> = {
   'threat.sync_iocs': 'IOC sync from Threat API',
@@ -1710,6 +1754,9 @@ export default function ConfigPage() {
               {/* -- Platform self-health ------------------------------ */}
               <SystemHealthCard />
 
+              {/* -- About this deployment ----------------------------- */}
+              <AboutCard />
+
               {/* -- Experience Mode ----------------------------------- */}
               <ExperienceModeCard />
 
@@ -1720,7 +1767,7 @@ export default function ConfigPage() {
                 <div className="space-y-4">
                   <Field label="Platform Name" value={settings.platform_name ?? ''} onChange={setSetting('platform_name')} />
                   <Field label="Organization" value={settings.organization ?? ''} onChange={setSetting('organization')} />
-                  <Field label="API Base URL" value="https://api.threatorbit.space" hint="The base URL for all API endpoints" />
+                  <Field label="API Base URL" value={API_BASE_URL} hint="The API endpoint this dashboard is configured against (NEXT_PUBLIC_API_URL)" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Timezone" value={settings.timezone ?? 'UTC'} onChange={setSetting('timezone')} />
                     <Field label="Feed Update Interval (seconds)" value={settings.feed_update_interval ?? '3'} type="number" hint="Minimum: 1 second" onChange={setSetting('feed_update_interval')} />

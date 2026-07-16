@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - Product versioning + "About This Deployment"
+- `dashboard_api/version.py` is the single source of truth for the product
+  version (`1.0.0-beta.1`) plus a best-effort git SHA (the `GIT_SHA` env var a
+  deploy pipeline bakes in, else the checkout's `.git` metadata, else null -
+  never invented). Bump it in step with release tags.
+- New authed `GET /about`: product/API/schema versions and the effective
+  runtime posture (db backend, data mode, synthetic-engine switch,
+  multi-tenant) - one authoritative answer to "what are you running?", the
+  honest foundation for the roadmap's future update-notice item.
+- Settings → General grows an "About This Deployment" card fed by it, and the
+  "API Base URL" field now shows the URL this dashboard is actually configured
+  against (`NEXT_PUBLIC_API_URL`) instead of a hardcoded
+  `https://api.threatorbit.space` (data honesty).
+- Fences: `test_about.py` (auth required, real constants, posture vocabulary,
+  honest git SHA) on both backends + an e2e spec pinning the rendered card.
+
 ### 2026-07-15 - Dead-code sweep: unused-vars lint warnings 114 -> 0
 - Removed ~100 dead imports (mostly leftover lucide icons) across 24 files,
   plus genuinely dead code the warnings exposed: an unrendered `StatusBadge`
