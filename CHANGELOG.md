@@ -9,6 +9,22 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-16 - Scheduled reports: email delivery, honest outcomes, isolation
+- The background report scheduler (`run_due_report_schedules`) diverged from
+  the manual "Run now" endpoint in three ways, all fixed:
+  - **Email targets were silently skipped** - a schedule created with an
+    email recipient delivered nothing on cadence, ever. The scheduler now
+    emails exactly like the manual run.
+  - **The notification announced "delivered" unconditionally** - even when
+    the webhook failed or the schedule had no delivery target. It now states
+    the actual outcome per target ("webhook ok, email failed: ...") and
+    raises a warning-severity notification when any delivery failed.
+  - **No per-schedule isolation** - one broken schedule aborted the loop,
+    starving every later schedule. Each schedule now runs in its own guard
+    (logged, retried on next cadence), matching the connector/NVD standard.
+- Fences: `test_report_scheduler.py` - email-on-cadence, failure honesty,
+  and starvation - green on SQLite and Postgres.
+
 ### 2026-07-16 - API contract fence is now bidirectional (doc rot closed)
 - `docs/api/v1-paths.json` was only fenced against *shrinking* (a route
   disappearing), so endpoints added since the last snapshot never forced a

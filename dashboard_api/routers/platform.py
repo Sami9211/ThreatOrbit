@@ -254,8 +254,16 @@ def _deliver_report(webhook_url: str | None, report: dict) -> bool:
 
 
 def run_due_report_schedules():
-    """Called by the background scheduler: deliver schedules whose cadence elapsed."""
+    """Called by the background scheduler: deliver schedules whose cadence elapsed.
+
+    Mirrors the manual /run endpoint's delivery (webhook AND email - the email
+    target used to be silently skipped here), isolates each schedule so one
+    failure can't starve the rest, and notifies the *actual* outcome instead
+    of announcing "delivered" unconditionally.
+    """
+    import logging
     from dashboard_api.reports import build_report
+    log = logging.getLogger("dashboard_api.reports.scheduler")
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM report_schedules WHERE enabled=1").fetchall()
@@ -271,13 +279,30 @@ def run_due_report_schedules():
                 due = True
         if not due:
             continue
-        report = build_report(s["kind"], s["period"])
-        _deliver_report(s.get("webhook_url"), report)
-        with get_conn() as conn:
-            conn.execute("UPDATE report_schedules SET last_run=? WHERE id=?", (_now(), s["id"]))
-            notify(conn, type="report", title=f"Scheduled {report['meta']['title']} delivered",
-                   detail=report["meta"]["period"], link="/dashboard")
-            conn.commit()
+        try:
+            report = build_report(s["kind"], s["period"])
+            delivered = _deliver_report(s.get("webhook_url"), report)
+            emailed = _email_report(s.get("email"), report)
+            outcomes = []
+            if s.get("webhook_url"):
+                outcomes.append("webhook ok" if delivered else "webhook FAILED")
+            if s.get("email"):
+                outcomes.append("email ok" if emailed.get("sent")
+                                else f"email failed: {emailed.get('reason', 'error')}")
+            outcome = ", ".join(outcomes) if outcomes else "generated (no delivery target)"
+            all_ok = (delivered or not s.get("webhook_url")) and \
+                     (emailed.get("sent") or not s.get("email"))
+            with get_conn() as conn:
+                conn.execute("UPDATE report_schedules SET last_run=? WHERE id=?",
+                             (_now(), s["id"]))
+                notify(conn, type="report",
+                       severity="info" if all_ok else "warning",
+                       title=f"Scheduled {report['meta']['title']}: {outcome}",
+                       detail=report["meta"]["period"], link="/dashboard")
+                conn.commit()
+        except Exception:
+            # One broken schedule must not starve the others; cadence retries it.
+            log.exception("scheduled report %s (%s) failed", s.get("id"), s.get("kind"))
 
 
 # -- Saved views ------------------------------------------------------------------
