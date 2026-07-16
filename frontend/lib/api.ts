@@ -58,6 +58,16 @@ function toCamel(v: unknown): unknown {
   return v
 }
 
+/** HTTP-level API failure. `status` lets callers tell a definitive rejection
+ * (401/403 - credentials actually refused) from a transient one (5xx), which
+ * a plain Error message can't. Network failures still throw TypeError. */
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 // -- Core fetch wrapper -----------------------------------------------
 async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const tok = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
@@ -73,7 +83,7 @@ async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
     let msg = `HTTP ${res.status}`
     // The API wraps errors as {"error": ...}; older/3rd-party paths use {"detail": ...}.
     try { const j = await res.json(); msg = j.detail ?? j.error ?? msg } catch { /* ignore */ }
-    throw new Error(msg)
+    throw new ApiError(msg, res.status)
   }
   if (res.status === 204) return undefined as T
   const json = await res.json()

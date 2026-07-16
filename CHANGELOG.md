@@ -9,6 +9,19 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - Session survives transient API failures (auth hydration bug)
+- On app load the session hydrator (`auth-context`) called `/auth/me` and
+  treated ANY failure as an invalid token - deleting the stored session and
+  bouncing the operator to /login. A network blip, an API restart, or one
+  5xx at the wrong moment logged you out. Now only a definitive **401/403**
+  destroys the session; transient failures fall back to the cached user
+  (matching the dashboard's offline-tolerant posture) and the next
+  successful call re-validates. Surfaced by an e2e auth race that landed on
+  /login/ mid-suite - the flake was the product bug.
+- `lib/api.ts` errors are now typed `ApiError` carrying the HTTP status, so
+  callers can distinguish rejection from outage (network failures remain
+  TypeError).
+
 ### 2026-07-15 - Product versioning + "About This Deployment"
 - `dashboard_api/version.py` is the single source of truth for the product
   version (`1.0.0-beta.1`) plus a best-effort git SHA (the `GIT_SHA` env var a

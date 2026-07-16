@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { authLogin, authRegister, authMe, TOKEN_KEY, USER_KEY, type User } from './api'
+import { authLogin, authRegister, authMe, ApiError, TOKEN_KEY, USER_KEY, type User } from './api'
 
 interface AuthCtx {
   user: User | null
@@ -32,10 +32,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u)
         localStorage.setItem(USER_KEY, JSON.stringify(u))
       })
-      .catch(() => {
-        localStorage.removeItem(TOKEN_KEY)
-        localStorage.removeItem(USER_KEY)
-        setToken(null)
+      .catch((err) => {
+        // Destroy the session only when the API definitively rejected the
+        // token. A transient failure (network blip, API restart, 5xx) must
+        // NOT log the operator out - fall back to the cached user and let the
+        // next successful call re-validate.
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          localStorage.removeItem(TOKEN_KEY)
+          localStorage.removeItem(USER_KEY)
+          setToken(null)
+          return
+        }
+        const cached = localStorage.getItem(USER_KEY)
+        if (cached) {
+          try { setUser(JSON.parse(cached)) } catch { /* corrupt cache: stay signed out */ }
+        }
       })
       .finally(() => setLoading(false))
   }, [])
