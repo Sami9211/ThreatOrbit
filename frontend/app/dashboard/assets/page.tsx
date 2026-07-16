@@ -3,11 +3,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, Server, Globe, Database, Cloud, Smartphone, Shield,
-  Search, Trash2, RefreshCw, AlertTriangle, CheckCircle, Clock,
+  Plus, Server, Globe, Database, Cloud, Smartphone, 
+  Search, Trash2, RefreshCw, AlertTriangle, Clock,
   X, Activity, Wifi, LayoutGrid, List, ChevronRight,
-  Lock, Cpu, GitBranch, Tag, User, TrendingUp, TrendingDown,
-  ExternalLink, Eye, FileText,
+  Lock, Cpu, User, 
+  Eye, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'

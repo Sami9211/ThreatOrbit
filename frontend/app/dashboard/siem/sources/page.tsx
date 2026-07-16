@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Database, Plus, RefreshCw, CheckCircle, AlertTriangle,
-  XCircle, Server, Cloud, Globe, Wifi, Settings, ChevronDown,
-  Activity, Clock, Cpu, Network, Lock,
+  XCircle, Settings, 
+  Activity, Clock, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchSiemSources, createLogSource } from '@/lib/api'

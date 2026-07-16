@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Radio, CheckCircle2, HelpCircle, X, RefreshCw, ExternalLink,
-  AlertTriangle, Shield, Zap, ChevronDown, ChevronRight, Filter,
-  Activity, Globe, Hash, Link, Download, Send, Eye, Clock,
-  TrendingUp, MoreHorizontal, Flame, Cpu, Lock,
+  Radio, CheckCircle2, HelpCircle, X, 
+  Shield, Zap, ChevronDown, 
+  Activity, Download, 
+  Flame, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { SkeletonRows } from '@/components/dashboard/Skeleton'
-import { fetchFeeds, toggleFeed, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
+import { fetchFeeds, fetchFeedsSummary, createAlert, importIocs, fetchIocs, type Feed as ApiFeed, type FeedsSummary, type Ioc } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
 /* Classify a raw IOC string for the CTI store; returns null for values that

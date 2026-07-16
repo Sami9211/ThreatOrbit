@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
-import { TrendingUp, AlertTriangle, CheckCircle, Clock, Activity } from 'lucide-react'
+import { TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import Reveal from '@/components/ui/Reveal'
 import { usePerfProfile } from '@/lib/usePerf'
 

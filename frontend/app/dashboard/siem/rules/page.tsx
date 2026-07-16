@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield, Search, Plus, ChevronDown, X, Edit2, Trash2,
   AlertTriangle, CheckCircle, MinusCircle, Copy, Code2,
-  ToggleLeft, ToggleRight, Filter, Tag, Clock, Activity,
-  BookOpen, Layers, Zap, ArrowUpRight,
+  Tag, Clock, Activity,
+  BookOpen, Layers, Zap, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
@@ -373,11 +373,6 @@ function SeverityPill({ severity }: { severity: Severity }) {
   )
 }
 
-function StatusBadge({ status }: { status: RuleStatus }) {
-  if (status === 'enabled')    return <span className="text-safe   text-[10px] font-semibold">Enabled</span>
-  if (status === 'suppressed') return <span className="text-amber  text-[10px] font-semibold">Suppressed</span>
-  return                              <span className="text-ink-500 text-[10px] font-semibold">Disabled</span>
-}
 
 function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
@@ -407,7 +402,6 @@ function RulePanel({ rule, onClose, onToggle }: {
   const [overrideSev, setOverrideSev] = useState<Severity | null>(rule.severityOverride)
   const [suppressionWin, setSuppressionWin] = useState(rule.suppressionWindow)
   const [saved, setSaved] = useState(false)
-  const s = SEV_CONFIG[overrideSev ?? rule.severity]
 
   function copyKQL() {
     navigator.clipboard.writeText(rule.kql).then(() => {
@@ -717,7 +711,6 @@ export default function RulesEnginePage() {
   const totalRules = rulesData.length
   const active     = rulesData.filter((r) => statuses[r.id] === 'enabled').length
   const suppressed = rulesData.filter((r) => statuses[r.id] === 'suppressed').length
-  const custom     = rulesData.filter((r) => r.id.startsWith('CLO') || r.id.startsWith('TI')).length
 
   /* Merged rule with live status */
   function mergedRule(r: DetectionRule): DetectionRule {

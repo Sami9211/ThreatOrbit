@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Rocket, CheckCircle2, Circle, X, ArrowRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { fetchOnboarding, dismissOnboarding, type OnboardingStatus } from '@/lib/api'
 
 /**

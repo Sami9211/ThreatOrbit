@@ -4,12 +4,12 @@ import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } fro
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Activity, Search, Filter, ChevronDown, ChevronRight, X, Shield,
-  AlertTriangle, Clock, User, Server, Globe, Terminal, Zap, Eye,
-  BarChart2, Settings, Database, Wifi, CheckCircle, XCircle,
-  ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown,
-  Network, FileText, BookOpen, Hash, Copy, MoreHorizontal,
-  RefreshCw, Lock, Unlock, MessageSquare, Flag, Gauge, Loader2,
+  Activity, Search, ChevronDown, X, Shield,
+  User, Server, Terminal, Zap, Eye,
+  BarChart2, Database, CheckCircle, 
+  ArrowUpRight, 
+  Network, FileText, Copy, 
+  RefreshCw, Lock, Gauge, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
@@ -18,7 +18,7 @@ import { Skeleton, SkeletonRows } from '@/components/dashboard/Skeleton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchSiemAlerts, fetchRules, fetchSiemSources, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, fetchSiemTrends, fetchEntityDetail, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemAlert as ApiSiemAlert, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert, type SiemTrendDay, type EntityDetail } from '@/lib/api'
+import { fetchSiemAlerts, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, fetchSiemTrends, fetchEntityDetail, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert, type SiemTrendDay, type EntityDetail } from '@/lib/api'
 import { fadeInUp, listContainer, listItem } from '@/lib/motion'
 import { tk } from '@/lib/colors'
 
@@ -2027,7 +2027,7 @@ function AlertRow({ alert, idx, selected, onClick }: {
 }
 
 /* -- Rule table row ------------------------------------------------- */
-function RuleRow({ rule, idx }: { rule: CorrelationRule; idx: number }) {
+function RuleRow({ rule }: { rule: CorrelationRule; idx: number }) {
   const [enabled, setEnabled] = useState(rule.enabled)
   const s = SEV[rule.severity]
 
@@ -2056,7 +2056,7 @@ function RuleRow({ rule, idx }: { rule: CorrelationRule; idx: number }) {
 }
 
 /* -- Mini filter select --------------------------------------------- */
-function MiniFilter({ label, value, options, onChange }: {
+function MiniFilter({ value, options, onChange }: {
   label: string; value: string; options: string[]; onChange: (v: string) => void
 }) {
   return (

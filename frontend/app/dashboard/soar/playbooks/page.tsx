@@ -14,7 +14,6 @@ import {
   Circle, Network, Cloud, Lock, FileCheck, Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useExperienceMode } from '@/lib/useExperienceMode'
 import { tk } from '@/lib/colors'
 
 /* -- Types ---------------------------------------------------------- */
@@ -595,8 +594,6 @@ function PlaybookCard({
 
 /* -- Main page ------------------------------------------------------ */
 export default function PlaybooksPage() {
-  const [mode] = useExperienceMode()
-  const isPower = mode === 'power'
 
   const [filter, setFilter] = useState<FilterCat>('All')
   const [search, setSearch] = useState('')

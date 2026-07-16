@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Search, Activity, Zap, Brain, Radio, Settings, Home,
-  ChevronRight, AlertTriangle, Wifi, Server, EyeOff,
+  AlertTriangle, Wifi, Server, EyeOff,
   PanelLeftOpen, PanelLeftClose, X, ChevronDown, Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'

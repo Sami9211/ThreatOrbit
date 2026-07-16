@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { fetchSoarIntegrations, createIntegration, testIntegration, runIntegrationAction, updateIntegration, type Integration as ApiIntegration } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import {
-  Link, Plus, CheckCircle, AlertTriangle, XCircle, Settings,
-  RefreshCw, Activity, Zap, Shield, Globe, Database, Clock,
-  ChevronRight, ToggleLeft, ToggleRight, X, Code,
+  Link, Plus, 
+  RefreshCw, Activity, Zap, Shield, Clock,
+  ToggleLeft, ToggleRight, X, Code,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'

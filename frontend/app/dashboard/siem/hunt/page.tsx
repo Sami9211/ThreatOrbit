@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Terminal, Search, Play, Clock, Save, BookOpen,
   CheckCircle, AlertTriangle, RefreshCw, ChevronDown,
-  X, ArrowUpRight, Database, Zap, Eye, Activity,
+  ArrowUpRight, Database, Zap, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'

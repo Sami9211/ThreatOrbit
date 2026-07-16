@@ -3,11 +3,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Zap, CheckCircle, Clock, AlertTriangle, X, Shield, User,
-  FileText, MessageSquare, ChevronDown, Search, Play, RefreshCw,
-  BarChart2, ArrowRight, Terminal, Paperclip, Flag, Eye,
-  GitBranch, Activity, TrendingUp, TrendingDown, Database,
-  ChevronRight, MoreHorizontal, Circle, Lock,
+  Zap, CheckCircle, AlertTriangle, X, Shield, User,
+  FileText, MessageSquare, Play, RefreshCw,
+  BarChart2, Paperclip, Eye,
+  GitBranch, Activity, TrendingUp, TrendingDown, 
+  Circle, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'

@@ -19,6 +19,13 @@ const config = [
       'react-hooks/immutability': 'warn',
       // Aspirational: typed incrementally, not a merge blocker.
       '@typescript-eslint/no-explicit-any': 'warn',
+      // Underscore prefix marks intentionally-unused (e.g. rest-destructuring
+      // an object to strip a key); rest siblings are that pattern's core.
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      }],
     },
   },
   {

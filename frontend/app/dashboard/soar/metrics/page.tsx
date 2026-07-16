@@ -7,12 +7,11 @@ import { fetchSoarMetrics, fetchSiemKpis, fetchAttackCoverage,
          type AnalystStat, type Playbook, type AlertAnalytics, type AlertVolumeDay } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
-  TrendingDown, TrendingUp, Clock, Zap, AlertTriangle,
-  CheckCircle, User, Award, BarChart2, Target,
-  Shield, Activity, ChevronUp, ChevronDown, Minus,
+  Clock, Zap, AlertTriangle,
+  CheckCircle, User, Award, Target,
+  Activity, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useExperienceMode } from '@/lib/useExperienceMode'
 import { tk, withAlpha } from '@/lib/colors'
 
 /* -- Static data --------------------------------------------------- */
@@ -293,7 +292,6 @@ function DonutChart({
 
 /* -- Main page ------------------------------------------------------ */
 export default function SOCMetricsPage() {
-  const [mode] = useExperienceMode()
   const [metrics, setMetrics] = useState<SoarMetrics | null>(null)
   const [siem, setSiem] = useState<SiemKpis | null>(null)
   const [coverage, setCoverage] = useState<AttackCoverage | null>(null)

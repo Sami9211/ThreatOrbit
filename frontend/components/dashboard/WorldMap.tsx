@@ -49,7 +49,6 @@ function flag(iso2: string | null): string {
 }
 
 type Mode = 'country' | 'continent'
-type Shape = typeof SHAPES[number]
 
 export default function WorldMap() {
   const [data, setData] = useState<GeoCountry[]>([])

@@ -9,6 +9,23 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-15 - Dead-code sweep: unused-vars lint warnings 114 -> 0
+- Removed ~100 dead imports (mostly leftover lucide icons) across 24 files,
+  plus genuinely dead code the warnings exposed: an unrendered `StatusBadge`
+  component and the never-displayed "custom rules" count on the SIEM rules
+  page (the fabricated `+ 4` fixed earlier turned out to feed a variable
+  nothing rendered - now the whole computation is gone), a redundant
+  `severityFromCvss` helper, an orphaned `TYPE_CFG` actor-icon map, and dead
+  experience-mode wiring on the SOAR metrics/playbooks pages that gated
+  nothing.
+- `no-unused-vars` now runs with the standard escape hatches
+  (`argsIgnorePattern: '^_'`, `varsIgnorePattern: '^_'`,
+  `ignoreRestSiblings: true`) so intentional strip-a-key rest destructuring
+  isn't flagged.
+- Remaining warnings are only the deliberately-downgraded react-hooks v7 /
+  `no-explicit-any` families. Verified: tsc, eslint, check:routes, build,
+  desktop-chromium e2e.
+
 ### 2026-07-15 - Tailwind CSS 3 -> 4 (last trailing frontend major)
 - Migrated with the official `@tailwindcss/upgrade` tool and hand-verified:
   `tailwind.config.ts` is replaced by a CSS-first `@theme` block in

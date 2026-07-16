@@ -5,7 +5,7 @@ import { fetchFleetVulnFindings, fetchVulnSummary, type FleetVulnFinding, type V
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShieldAlert, Bug, Search, X, ExternalLink, Crosshair, Clock,
-  User, Server, FileText, Wrench, Activity, ChevronRight, Zap, ShieldCheck,
+  User, Server, FileText, Wrench, Activity, Zap, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'
@@ -65,12 +65,6 @@ function cvssColor(score: number): string {
   return tk('safe')
 }
 
-function severityFromCvss(score: number): Severity {
-  if (score >= 9.0) return 'critical'
-  if (score >= 7.0) return 'high'
-  if (score >= 4.0) return 'medium'
-  return 'low'
-}
 
 /* -- Seed data ---------------------------------------------------- */
 const SEED: Vuln[] = [

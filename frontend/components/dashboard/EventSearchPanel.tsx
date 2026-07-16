@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { SearchCode, Loader2, Play, BarChart3, Hash } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { eventSearch, type EventSearchResult } from '@/lib/api'

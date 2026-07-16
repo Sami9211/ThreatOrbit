@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, RefreshCw, AlertTriangle, X, Search, Command, Menu, Zap, LogOut, Settings } from 'lucide-react'
+import { Bell, RefreshCw, AlertTriangle, Search, Command, Menu, Zap, LogOut, Settings } from 'lucide-react'
 import { fetchNotifications, markNotificationRead, type Notification } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { motion, AnimatePresence } from 'framer-motion'

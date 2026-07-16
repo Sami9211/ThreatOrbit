@@ -4,11 +4,10 @@ import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fetchActors, fetchCtiSummary, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
 import {
-  UserSearch, Search, X, ChevronRight, ExternalLink, Shield,
+  UserSearch, Search, X, ExternalLink, Shield,
   Crosshair, Bug, Clock, Activity, Building2, Filter,
   Globe, Skull, DollarSign, Megaphone, Flame, Users,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { tk } from '@/lib/colors'
 
 /* --- Types ----------------------------------------------------------- */
@@ -327,12 +326,6 @@ const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ComponentT
 // Neutral fallback so an unrecognised motivation/threat value from the API can
 // never crash the page (the lookups below are all `?? FALLBACK_*`).
 const FALLBACK_MOTIVATION = { color: '#8A7DA3', icon: Crosshair }
-
-const TYPE_CFG: Record<ActorType, { color: string; icon: React.ComponentType<any> }> = {
-  'Nation-State': { color: tk('magenta'), icon: Globe },
-  Cybercrime:     { color: tk('amber'), icon: DollarSign },
-  Hacktivist:     { color: tk('safe'), icon: Megaphone },
-}
 
 const THREAT_CFG: Record<ThreatActor['threatLevel'], { color: string; label: string }> = {
   critical: { color: tk('magenta'), label: 'Critical' },

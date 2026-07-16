@@ -8,7 +8,6 @@ import {
   Search, ShieldOff, Server, UserX, FileText, MessageSquare, CheckCircle2,
   Bell, Webhook, UserCheck, GitBranch, History, RotateCcw,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import {
   fetchStepKinds, createPlaybook, updatePlaybook, dryRunPlaybook,
   fetchPlaybookVersions, revertPlaybook,

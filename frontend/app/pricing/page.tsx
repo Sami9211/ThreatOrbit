@@ -17,7 +17,6 @@ import {
   Check,
   X,
   ChevronRight,
-  ArrowLeft,
   Sparkles,
   ToggleLeft,
   ToggleRight,

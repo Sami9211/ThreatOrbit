@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
   Globe, Hash, Link, File, ChevronDown, ExternalLink, Loader,
-  TrendingUp, Clock, Database, Zap, Bookmark, BookmarkCheck,
+  Clock, Database, Zap, Bookmark, BookmarkCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tk, withAlpha } from '@/lib/colors'

@@ -21,7 +21,7 @@ export default function RuleEditor({ onClose, onCreated }: {
   const [schema, setSchema] = useState<RuleSchema | null>(null)
   const [name, setName] = useState('')
   const [severity, setSeverity] = useState('high')
-  const [category, setCategory] = useState('Custom')
+  const category = 'Custom'
   const [techId, setTechId] = useState('')
   const [logic, setLogic] = useState<'and' | 'or'>('and')
   const [conditions, setConditions] = useState<RuleCondition[]>([{ field: 'event_type', op: 'equals', value: '' }])

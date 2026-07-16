@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain, Globe, Hash, Target, ChevronRight, ExternalLink,
-  Shield, AlertTriangle, Clock, TrendingUp, Network, Eye,
+  Shield, Network, Eye,
   Search, Play, Pause, CheckCircle, Crosshair, Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,7 +13,7 @@ import IocLifecyclePanel from '@/components/dashboard/IocLifecyclePanel'
 import IntelReportsPanel from '@/components/dashboard/IntelReportsPanel'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
-import { fetchActors, fetchIocTypes, fetchCtiHunts, fetchCtiGraph, createCtiHunt, fetchCtiSummary, type SavedHunt as ApiSavedHunt, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
+import { fetchActors, fetchIocTypes, fetchCtiHunts, createCtiHunt, fetchCtiSummary, type SavedHunt as ApiSavedHunt, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
 import CreateModal from '@/components/dashboard/CreateModal'
 import { tk } from '@/lib/colors'
 
