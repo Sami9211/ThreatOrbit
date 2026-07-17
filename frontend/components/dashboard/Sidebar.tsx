@@ -332,9 +332,11 @@ export default function Sidebar() {
           </div>
 
           {/* Nav */}
-          <nav aria-label="Main navigation" className="flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-0.5">
+          <nav aria-label="Main navigation" className="flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-1">
             {nav.map(({ section, items }) => (
-              <div key={section ?? '__root'}>
+              // space-y-1 between rows: they used to stack flush (0px), which
+              // read as cramped/overlapping at real-world zoom levels.
+              <div key={section ?? '__root'} className="space-y-1">
                 <AnimatePresence initial={false}>
                   {expanded && section && (
                     <motion.div
@@ -342,9 +344,9 @@ export default function Sidebar() {
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                      className="px-4 pt-4 pb-1 overflow-hidden"
+                      className="px-4 pt-5 pb-1.5 overflow-hidden"
                     >
-                      <span className="text-[9px] font-semibold tracking-widest uppercase text-ink-600">
+                      <span className="block text-[10px] leading-none font-semibold tracking-widest uppercase text-ink-600">
                         {section}
                       </span>
                     </motion.div>
@@ -428,7 +430,7 @@ export default function Sidebar() {
                             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                             className="overflow-hidden"
                           >
-                            <div className="ml-4 mr-2 mb-1 border-l border-white/8 pl-3 space-y-0.5">
+                            <div className="ml-4 mr-2 mt-1 mb-2 border-l border-white/8 pl-3 space-y-1">
                               {sub!.map((subItem) => {
                                 const subActive = subItem.href === href
                                   ? pathname === href || pathname === href + '/'
