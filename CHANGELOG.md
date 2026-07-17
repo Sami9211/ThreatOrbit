@@ -26,6 +26,11 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
   works in both modes.
 - Fenced by e2e/deep-links.spec.ts: both contracts must open the named
   record's detail view.
+- Backend links now carry the record too: engine notifications for critical
+  alerts and escalated cases (the record id was already in `detail` - the
+  link discarded it), playbook notify steps (link the case acted on), and
+  global-search results for alerts and cases (a search hit opens THAT
+  record, not a text filter or the bare board).
 
 ### 2026-07-17 - SOC Console: honest empty state + always-live intel activity
 - In live mode with no logs forwarded yet, the console showed unexplained

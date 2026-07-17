@@ -129,7 +129,7 @@ def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25
                             "severity": d.get(sev_key) if sev_key else None, "link": link_fn(d)})
         add(conn.execute(f"SELECT id,title,src_ip,severity FROM alerts WHERE (title LIKE ? OR src_ip LIKE ?) {clause} LIMIT ?",
                          (like, like, *sp, limit)).fetchall(), "alert", "title", "src_ip",
-            lambda d: f"/dashboard/siem?q={d['src_ip'] or d['title']}", "severity")
+            lambda d: f"/dashboard/siem?alert={d['id']}", "severity")
         add(conn.execute(f"SELECT id,value,type,severity FROM iocs WHERE (value LIKE ?) {clause} LIMIT ?",
                          (like, *sp, limit)).fetchall(),
             "ioc", "value", "type", lambda d: f"/dashboard/scanner?q={d['value']}", "severity")
@@ -138,7 +138,7 @@ def global_search(q: str = Query(..., min_length=1), limit: int = Query(8, le=25
             lambda d: "/dashboard/assets", "criticality")
         add(conn.execute(f"SELECT id,title,severity FROM cases WHERE (title LIKE ?) {clause} LIMIT ?",
                          (like, *sp, limit)).fetchall(),
-            "case", "title", "id", lambda d: "/dashboard/soar", "severity")
+            "case", "title", "id", lambda d: f"/dashboard/soar?case={d['id']}", "severity")
         add(conn.execute(f"SELECT id,name,origin FROM threat_actors WHERE (name LIKE ? OR aliases LIKE ?) {clause} LIMIT ?",
                          (like, like, *sp, limit)).fetchall(), "actor", "name", "origin",
             lambda d: "/dashboard/cti/actors")

@@ -385,8 +385,10 @@ def _step_notify(conn, ctx, params, dry_run):
     if dry_run:
         return "success", f"Would notify: “{msg[:70]}”"
     from dashboard_api.routers.platform import notify
+    case_id = ctx.get("case_id")
     notify(conn, type="playbook", severity=alert.get("severity") or "info",
-           title=msg, detail=ctx.get("case_id"), link="/dashboard/soar/playbooks")
+           title=msg, detail=case_id,
+           link=f"/dashboard/soar?case={case_id}" if case_id else "/dashboard/soar/playbooks")
     return "success", f"Notification sent: “{msg[:70]}”"
 
 

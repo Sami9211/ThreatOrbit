@@ -722,7 +722,7 @@ def _emit_notifications(conn):
         "ORDER BY ts DESC LIMIT 1").fetchone()
     if a:
         notify(conn, type="alert", severity="critical", title=a["title"],
-               detail=a["id"], link="/dashboard/siem")
+               detail=a["id"], link=f"/dashboard/siem?alert={a['id']}")
     # newest unnotified credential leak
     d = conn.execute(
         "SELECT id, title FROM dark_web_findings WHERE category='credential-leak' "
@@ -738,4 +738,4 @@ def _emit_notifications(conn):
         "ORDER BY created DESC LIMIT 1").fetchone()
     if c:
         notify(conn, type="case", severity=c["severity"], title=c["title"],
-               detail=c["id"], link="/dashboard/soar")
+               detail=c["id"], link=f"/dashboard/soar?case={c['id']}")
