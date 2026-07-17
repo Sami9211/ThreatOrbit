@@ -560,7 +560,7 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                 )}
                 <div className="space-y-1.5">
                   {related.alerts.slice(0, 5).map((a) => (
-                    <a key={a.id} href={`/dashboard/siem?q=${encodeURIComponent(a.srcIp ?? a.hostname ?? a.title)}`}
+                    <a key={a.id} href={`/dashboard/siem?alert=${encodeURIComponent(a.id)}`}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/5 hover:border-white/15 transition-colors">
                       <span className="w-1.5 h-1.5 rounded-full shrink-0"
                         style={{ background: { critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe') }[a.severity] ?? tk('violet') }} />
@@ -734,7 +734,12 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
 }
 
 /* -- Normal Mode: Case Kanban Board -------------------------------- */
-function NormalSOAR({ cases: casesData, casesPending = false }: { cases: CaseRecord[]; casesPending?: boolean }) {
+function NormalSOAR({ cases: casesData, casesPending = false, selectedCase, onSelect }: {
+  cases: CaseRecord[]
+  casesPending?: boolean
+  selectedCase: CaseRecord | null
+  onSelect: (c: CaseRecord | null) => void
+}) {
   const CASES = casesData
   const SEV_COLOR: Record<string, string> = {
     critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe'),
@@ -780,11 +785,17 @@ function NormalSOAR({ cases: casesData, casesPending = false }: { cases: CaseRec
                       : <div className="py-10 text-center text-xs text-ink-600">No cases</div>
                   ) : (
                     colCases.map((c) => (
+                      // Cards open the same case detail Power mode uses (its
+                      // simplified variant) - they used to be dead ends.
                       <motion.div
                         key={c.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="glass border border-white/5 rounded-lg p-3.5 space-y-2 hover:border-white/10 transition-colors group"
+                        onClick={() => onSelect(c)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(c) } }}
+                        className="glass border border-white/5 rounded-lg p-3.5 space-y-2 hover:border-magenta/25 transition-colors group cursor-pointer"
                       >
                         <div className="flex items-start gap-2">
                           <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: SEV_COLOR[c.severity] }} />
@@ -829,6 +840,22 @@ function NormalSOAR({ cases: casesData, casesPending = false }: { cases: CaseRec
           <span className="text-[10px] text-ink-500 shrink-0 hidden sm:block">Toggle in top bar →</span>
         </div>
       </div>
+
+      {/* Case detail overlay - same drawer Power mode uses, simplified. */}
+      <AnimatePresence>
+        {selectedCase && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
+              onClick={() => onSelect(null)}
+            />
+            <CaseDetail key={selectedCase.id} c={selectedCase} onClose={() => onSelect(null)} simplified />
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -964,6 +991,19 @@ export default function SOARPage() {
     fetchSoarMetrics().then(setSoarApi).catch(() => {})
   }, [])
 
+  // Deep-link: ?case=<id> opens that case's detail directly - asset drawers
+  // and notifications link specific cases, and landing on the generic board
+  // loses the context the click carried. Runs once cases are loaded.
+  const caseDeepLinked = useRef(false)
+  useEffect(() => {
+    if (caseDeepLinked.current || cases.length === 0) return
+    caseDeepLinked.current = true
+    const id = new URLSearchParams(window.location.search).get('case')
+    if (!id) return
+    const target = cases.find((c) => c.id === id)
+    if (target) setSelectedCase(target)
+  }, [cases])
+
   // Prefer live SOAR metrics; fall back to static demo values. Trends are
   // real week-over-week movements from the backend (null = no baseline yet).
   const metrics = useMemo(() => {
@@ -1024,7 +1064,8 @@ export default function SOARPage() {
       })
   }
 
-  if (isNormal) return <NormalSOAR cases={cases} casesPending={casesPending} />
+  if (isNormal) return <NormalSOAR cases={cases} casesPending={casesPending}
+    selectedCase={selectedCase} onSelect={setSelectedCase} />
 
   return (
     <div className="flex h-full overflow-hidden">

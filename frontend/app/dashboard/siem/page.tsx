@@ -1390,6 +1390,20 @@ export default function SIEMPage() {
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
+  // Deep-link: ?alert=<id> opens that alert's detail drawer directly - case
+  // and asset drawers link specific related alerts, and "go to the SIEM
+  // module" is not an answer to "show me THIS alert". Runs once alerts are
+  // loaded; if the id isn't in the loaded queue window, fall back to
+  // filtering by it so the target is still findable.
+  const alertDeepLinked = useRef(false)
+  useEffect(() => {
+    if (alertDeepLinked.current || alerts.length === 0) return
+    alertDeepLinked.current = true
+    const id = new URLSearchParams(window.location.search).get('alert')
+    if (!id) return
+    if (alerts.some((a) => a.id === id)) setSelectedId(id)
+    else setSearch(id)
+  }, [alerts])
   const [filterSev, setFilterSev] = useState<Severity | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
   const [filterTactic, setFilterTactic] = useState('All')

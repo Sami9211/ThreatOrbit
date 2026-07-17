@@ -840,7 +840,7 @@ export default function AssetsPage() {
                           </div>
                         ))}
                         {activity.alerts.slice(0, 4).map((al) => (
-                          <a key={al.id} href={`/dashboard/siem?q=${encodeURIComponent(al.srcIp ?? a.name)}`}
+                          <a key={al.id} href={`/dashboard/siem?alert=${encodeURIComponent(al.id)}`}
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5 hover:border-white/15 transition-colors">
                             <span className="w-1.5 h-1.5 rounded-full shrink-0"
                               style={{ background: { critical: tk('magenta'), high: tk('threat'), medium: tk('amber'), low: tk('safe') }[al.severity] ?? tk('violet') }} />
@@ -849,7 +849,7 @@ export default function AssetsPage() {
                           </a>
                         ))}
                         {activity.cases.slice(0, 2).map((c) => (
-                          <a key={c.id} href="/dashboard/soar"
+                          <a key={c.id} href={`/dashboard/soar?case=${encodeURIComponent(c.id)}`}
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/50 border border-white/5 hover:border-white/15 transition-colors">
                             <span className="text-[9px] font-mono text-violet shrink-0">{c.id}</span>
                             <span className="text-[10px] text-ink-300 truncate flex-1">{c.title}</span>

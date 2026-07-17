@@ -9,6 +9,24 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-17 - Contextual deep links: actions land on the record, not the module
+- New URL contracts consumed on load: `/dashboard/siem?alert=<id>` opens that
+  alert's detail drawer directly (falls back to filtering by the id when it
+  isn't in the loaded queue window), and `/dashboard/soar?case=<id>` opens
+  that case's detail panel. "Open the SIEM module" is no longer the answer to
+  "show me THIS alert".
+- Cross-module item links now use them: SOAR case-drawer related alerts and
+  asset-drawer related alerts link `?alert=<id>` (was a loose `?q=` text
+  filter), and asset-drawer case chips link `?case=<id>` (was the bare SOAR
+  board - the "redirects only to a generic module" audit finding).
+- The fence immediately caught a real dead end: Normal-mode's SOAR case board
+  cards were completely non-interactive - clicking a case did nothing ("opening
+  a Case leads nowhere"). Cards now open the same case detail Power mode uses
+  (its simplified variant), keyboard-accessible, and the `?case=` deep link
+  works in both modes.
+- Fenced by e2e/deep-links.spec.ts: both contracts must open the named
+  record's detail view.
+
 ### 2026-07-17 - SOC Console: honest empty state + always-live intel activity
 - In live mode with no logs forwarded yet, the console showed unexplained
   zeros and blank panels ("its purpose unclear"). The queue panel now renders
