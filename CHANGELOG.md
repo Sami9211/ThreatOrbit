@@ -9,6 +9,21 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-17 - SOC Console: honest empty state + always-live intel activity
+- In live mode with no logs forwarded yet, the console showed unexplained
+  zeros and blank panels ("its purpose unclear"). The queue panel now renders
+  a real empty state that says exactly why it's empty and what to do
+  (forward logs per docs/GOING_LIVE.md, or resume the demo engine), with
+  direct actions to Log Sources and Settings.
+- New "Intel Activity" panel (indicators tracked, new today, feed sources
+  active/erroring - all live from /feeds/summary): the console now reflects
+  the platform's living intel side even while the SIEM queue is legitimately
+  empty, and deep-links to Feeds.
+- Verified with screenshots in both postures (populated demo: 73 open / 56
+  breaches listed; fresh live: explanatory empty state). Fenced by
+  e2e/soc.spec.ts: with alerts present the empty state must never show, KPI
+  tiles carry real numbers, and Intel Activity renders.
+
 ### 2026-07-17 - Mode-switch errors were CORS: private origins now accepted (eval posture)
 - Reaching the dashboard from any origin outside the fixed allowlist (a LAN
   IP like `http://192.168.1.20:3000`, an intranet hostname, a non-3000 port)

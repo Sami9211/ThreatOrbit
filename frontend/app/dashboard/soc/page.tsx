@@ -13,13 +13,15 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   Gauge, AlertTriangle, Clock, User, Activity, Zap, ShieldCheck,
-  RefreshCw, ArrowUpRight, Wifi, Server, Timer, Inbox, Flame,
+  RefreshCw, ArrowUpRight, Wifi, Server, Timer, Inbox, Flame, Rss,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SEVERITY_COLOR as SEV_COLOR, tk, withAlpha } from '@/lib/colors'
 import {
   fetchTriage, fetchSiemKpis, fetchEngineStatus, fetchAttackCoverage, fetchLogListeners,
+  fetchFeedsSummary,
   type SocTriage, type SiemKpis, type EngineStatus, type AttackCoverage, type LogListenerStatus,
+  type FeedsSummary,
 } from '@/lib/api'
 const STATUS_LABEL: Record<string, string> = {
   new: 'New', assigned: 'Assigned', 'in-progress': 'In Progress', pending: 'Pending',
@@ -69,20 +71,23 @@ export default function SocConsolePage() {
   const [engine, setEngine] = useState<EngineStatus | null>(null)
   const [coverage, setCoverage] = useState<AttackCoverage | null>(null)
   const [listeners, setListeners] = useState<LogListenerStatus | null>(null)
+  const [feeds, setFeeds] = useState<FeedsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [updated, setUpdated] = useState<Date | null>(null)
 
   const load = useCallback(async () => {
     setRefreshing(true)
-    const [t, k, e, c, l] = await Promise.allSettled([
+    const [t, k, e, c, l, f] = await Promise.allSettled([
       fetchTriage(), fetchSiemKpis(), fetchEngineStatus(), fetchAttackCoverage(), fetchLogListeners(),
+      fetchFeedsSummary(),
     ])
     if (t.status === 'fulfilled') setTriage(t.value)
     if (k.status === 'fulfilled') setKpis(k.value)
     if (e.status === 'fulfilled') setEngine(e.value)
     if (c.status === 'fulfilled') setCoverage(c.value)
     if (l.status === 'fulfilled') setListeners(l.value)
+    if (f.status === 'fulfilled') setFeeds(f.value)
     setUpdated(new Date())
     setLoading(false)
     setRefreshing(false)
@@ -145,7 +150,32 @@ export default function SocConsolePage() {
             <div className="lg:col-span-2">
               <Panel title={`SLA Breach Queue${triage ? ` · ${triage.sla.breachCount}` : ''}`} icon={AlertTriangle}
                 action={<Link href="/dashboard/siem" className="text-[11px] text-magenta hover:underline flex items-center gap-0.5">Full queue<ArrowUpRight className="w-3 h-3" /></Link>}>
-                {breaches.length === 0 ? (
+                {triage && triage.open.total === 0 ? (
+                  /* Honest empty state: an empty queue in live mode means no
+                     telemetry is flowing yet - say so and point at the fix,
+                     instead of a blank room with unexplained zeros. */
+                  <div className="flex flex-col items-center gap-3 py-10 text-center">
+                    <ShieldCheck className="w-6 h-6 text-safe" />
+                    <div>
+                      <p className="text-xs font-medium text-ink-200">The SIEM alert queue is empty.</p>
+                      <p className="text-[11px] text-ink-500 mt-1 max-w-sm">
+                        This console activates when telemetry flows. Forward real logs
+                        (the runbook is <span className="font-mono">docs/GOING_LIVE.md</span>)
+                        {engine && !engine.enabled ? ', or resume the demo engine for evaluation data' : ''}.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Link href="/dashboard/siem/sources"
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-ink-200 border border-white/10 hover:border-white/20 hover:text-white transition-colors">
+                        Log sources
+                      </Link>
+                      <Link href="/dashboard/config"
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-ink-200 border border-white/10 hover:border-white/20 hover:text-white transition-colors">
+                        Settings
+                      </Link>
+                    </div>
+                  </div>
+                ) : breaches.length === 0 ? (
                   <div className="flex items-center gap-2 py-8 justify-center text-xs text-ink-500">
                     <ShieldCheck className="w-4 h-4 text-safe" />All open alerts within SLA.
                   </div>
@@ -243,6 +273,35 @@ export default function SocConsolePage() {
                   </div>
                 </div>
               </Panel>
+
+              {/* Intel activity - the platform's living side. In live mode the
+                 alert queue can be legitimately empty (no logs forwarded yet)
+                 while the intel pipeline is fully active; surfacing it here
+                 keeps the console honest about what IS happening. */}
+              {feeds && (
+                <Panel title="Intel Activity" icon={Rss}
+                  action={<Link href="/dashboard/feeds" className="text-[11px] text-magenta hover:underline flex items-center gap-0.5">Feeds<ArrowUpRight className="w-3 h-3" /></Link>}>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-400">Indicators tracked</span>
+                      <span className="font-mono text-white">{feeds.totalIndicators.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-400">New today</span>
+                      <span className={cn('font-mono', feeds.newToday > 0 ? 'text-safe' : 'text-ink-500')}>
+                        {feeds.newToday.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-400">Feed sources</span>
+                      <span className="font-mono text-white">
+                        {feeds.active}<span className="text-ink-600">/{feeds.totalFeeds} active</span>
+                        {feeds.errored > 0 && <span className="text-threat"> · {feeds.errored} erroring</span>}
+                      </span>
+                    </div>
+                  </div>
+                </Panel>
+              )}
 
               {/* Open by severity */}
               <Panel title="Open by Severity" icon={Inbox}>
