@@ -87,6 +87,29 @@ if "*" in CORS_ALLOWED:
                "(credentials are enabled). Set the exact dashboard origin(s).")
     sys.exit(1)
 
+# Evaluation installs get reached from origins the fixed allowlist can't
+# anticipate - a LAN IP (http://192.168.1.20:3000), the machine's hostname
+# (http://desk-01:3000), a nonstandard port. Every API call then fails CORS,
+# and the loudest symptom is UI actions "erroring" (the mode toggle POSTs
+# /config/mode on every click). In evaluation posture we therefore also accept
+# loopback/private-range IPs and single-label intranet hostnames on any port
+# (single-label = no dot, unreachable from the public internet). Production
+# (DASHBOARD_REQUIRE_SECRETS=true) keeps the explicit allowlist only, unless
+# the operator sets DASHBOARD_CORS_ORIGIN_REGEX deliberately.
+_PRIVATE_ORIGIN_REGEX = (
+    r"^https?://("
+    r"localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\]"
+    r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|[A-Za-z0-9-]+"
+    r")(:\d+)?$"
+)
+CORS_ORIGIN_REGEX = os.environ.get(
+    "DASHBOARD_CORS_ORIGIN_REGEX",
+    "" if REQUIRE_SECRETS else _PRIVATE_ORIGIN_REGEX,
+) or None
+
 # --- Auth throttling ----------------------------------------------------------
 # Failed login/register attempts allowed per client+identity inside the window
 # before the API answers 429. Successful auth clears the counter.

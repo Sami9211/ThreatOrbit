@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ALLOWED, DATA_MODE
+from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ALLOWED, CORS_ORIGIN_REGEX, DATA_MODE
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
     assets, assistant as assistant_router, auth, billing as billing_router,
@@ -54,6 +54,10 @@ app.add_middleware(observability.BodySizeLimitMiddleware, max_bytes=MAX_BODY_BYT
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED,
+    # Evaluation posture also accepts private-network origins (LAN IP /
+    # intranet hostname) so a non-localhost origin doesn't break every call;
+    # production keeps the explicit allowlist. See config.CORS_ORIGIN_REGEX.
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

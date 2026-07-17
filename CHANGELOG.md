@@ -9,6 +9,40 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-17 - Mode-switch errors were CORS: private origins now accepted (eval posture)
+- Reaching the dashboard from any origin outside the fixed allowlist (a LAN
+  IP like `http://192.168.1.20:3000`, an intranet hostname, a non-3000 port)
+  made EVERY API call fail CORS preflight - the loudest symptom being UI
+  actions "erroring", since the Normal/Power toggle POSTs `/config/mode` on
+  every click. Reproduced: 680 failures across the 27 routes from a
+  non-allowlisted origin; 0 from an allowlisted one.
+- Evaluation posture now also accepts loopback/private-range IPs and
+  single-label intranet hostnames on any port via `allow_origin_regex`
+  (public, dotted domains stay rejected). Production
+  (`DASHBOARD_REQUIRE_SECRETS=true`) keeps the explicit allowlist unless
+  `DASHBOARD_CORS_ORIGIN_REGEX` is set deliberately. Fenced by
+  `test_cors.py`. After the fix the same crawl from the broken origin: 0.
+
+### 2026-07-17 - Landing scenes: canvas-edge boxes eliminated + globe arcs de-looped
+- The rectangular boundaries around the orbital planet, the globe, and the
+  IOC network graph were the WebGL canvas rectangle itself: bloom spreads
+  glow across the whole framebuffer, so the canvas edge shows as a hard
+  straight line however the browser composites it. Each scene's wrapper now
+  carries a radial mask fading the canvas to fully transparent before its
+  rectangle ends - a visible straight boundary is impossible by construction.
+- The globe's attack arcs also overflowed the camera frustum (apex up to 3.8
+  world units vs 2.38 half-height) and were hard-cut at the canvas edge -
+  apex now capped.
+- The "repeating ~2s loop with a visible break": every arc had an identical
+  2.8s period, phase-locking all 20 into one visibly repeating ensemble.
+  Arcs now roll a random speed and rest every cycle - continuous traffic.
+
+### 2026-07-17 - Sidebar: consistent spacing rhythm
+- Nav rows stacked flush (0px apart) and sub-lists started flush against
+  their parent row - cramped/overlapping at real-world zoom levels. Every
+  row now has a consistent 4px gap; section headers got room and explicit
+  leading; sub-lists separate from parent and next section.
+
 ### 2026-07-16 - Scheduled reports: email delivery, honest outcomes, isolation
 - The background report scheduler (`run_due_report_schedules`) diverged from
   the manual "Run now" endpoint in three ways, all fixed:
