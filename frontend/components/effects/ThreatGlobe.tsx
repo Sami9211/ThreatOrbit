@@ -56,14 +56,24 @@ function makeArc(): THREE.QuadraticBezierCurve3 {
   const end   = randSpherePoint()
   const mid   = start.clone().add(end).multiplyScalar(0.5)
   const dist  = start.distanceTo(end)
-  mid.normalize().multiplyScalar(R + dist * 0.45)
+  // Cap the apex: uncapped (R + dist*0.45 reached 3.8 world units) the tall
+  // arcs overflowed the camera frustum and were hard-cut at the canvas edge -
+  // one of the "box around the globe" contributors.
+  mid.normalize().multiplyScalar(Math.min(R + dist * 0.3, R * 1.16))
   return new THREE.QuadraticBezierCurve3(start, mid, end)
 }
+
+const rand = (a: number, b: number) => a + Math.random() * (b - a)
 
 function Arc({ delay, color }: { delay: number; color: string }) {
   const lineRef  = useRef<THREE.Line>(null)
   const headRef  = useRef<THREE.Mesh>(null)
-  const state    = useRef({ curve: makeArc(), t: -delay })
+  // Per-arc random speed + rest, re-rolled every cycle: with one shared period
+  // (it was exactly 2.8s for every arc) the whole ensemble phase-locked into a
+  // visibly repeating ~2s loop with a synchronized dead gap. Incommensurate
+  // periods never realign, so the traffic reads as continuous.
+  const state    = useRef({ curve: makeArc(), t: -delay - rand(0, 2),
+                            speed: rand(0.3, 0.55), rest: rand(0.1, 0.5) })
   const geom     = useMemo(() => new THREE.BufferGeometry(), [])
 
   const setLine = (curve: THREE.QuadraticBezierCurve3) => {
@@ -73,8 +83,13 @@ function Arc({ delay, color }: { delay: number; color: string }) {
 
   useFrame((_, dt) => {
     const s = state.current
-    s.t += dt * 0.5
-    if (s.t > 1.4) { s.curve = makeArc(); setLine(s.curve); s.t = 0 }
+    s.t += dt * s.speed
+    if (s.t > 1 + s.rest) {
+      s.curve = makeArc(); setLine(s.curve)
+      s.t = -rand(0.05, 0.6)
+      s.speed = rand(0.3, 0.55)
+      s.rest = rand(0.1, 0.5)
+    }
     const tt = Math.max(0, Math.min(1, s.t))
     if (headRef.current) {
       headRef.current.position.copy(s.curve.getPoint(tt))
@@ -259,8 +274,16 @@ export default function ThreatGlobe() {
   const nodeCount = isLowPower ? 25 : 55
   const bloomOn   = !isLowPower && !degraded
 
+  // Fade the canvas to transparent before its rectangle ends (same fix as
+  // OrbitalScene): bloom glow + arc lines otherwise terminate in a hard
+  // straight edge at the canvas boundary - the visible box around the globe.
+  const edgeFade = {
+    maskImage: 'radial-gradient(closest-side circle at 50% 50%, #000 80%, transparent 99%)',
+    WebkitMaskImage: 'radial-gradient(closest-side circle at 50% 50%, #000 80%, transparent 99%)',
+  } as const
+
   return (
-    <div ref={ref} className="w-full h-full">
+    <div ref={ref} className="w-full h-full" style={edgeFade}>
       {mounted ? (
         <Canvas
           frameloop={animate && visible ? 'always' : 'demand'}

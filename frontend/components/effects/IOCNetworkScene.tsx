@@ -160,8 +160,17 @@ export default function IOCNetworkScene() {
   const nodeCount = isLowPower ? 30 : 60
   const bloomOn   = !isLowPower && !degraded
 
+  // Fade the canvas to transparent before its rectangle ends (same fix as
+  // OrbitalScene/ThreatGlobe): bloom glow otherwise terminates in a hard
+  // straight edge at the canvas boundary - a visible box around the graph.
+  // Ellipse, because this canvas is wider than tall.
+  const edgeFade = {
+    maskImage: 'radial-gradient(closest-side ellipse at 50% 50%, #000 74%, transparent 100%)',
+    WebkitMaskImage: 'radial-gradient(closest-side ellipse at 50% 50%, #000 74%, transparent 100%)',
+  } as const
+
   return (
-    <div ref={ref} className="w-full h-full">
+    <div ref={ref} className="w-full h-full" style={edgeFade}>
       {mounted ? (
         <Canvas
           frameloop={animate && visible ? 'always' : 'demand'}

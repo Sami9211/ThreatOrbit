@@ -183,8 +183,20 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   // box). Low-power shows only 3 orbits, so it can sit closer / look larger.
   const camZ = isLowPower ? 6.0 : 7.4
 
+  // Fade the canvas itself to transparent before its rectangle ends. Bloom
+  // spreads glow across the whole framebuffer, so the canvas boundary shows
+  // up as a hard straight edge - a visible box around the scene - however the
+  // browser composites it (glow clipped at the rect on most GPUs, an opaque
+  // composer target on others). Masking the element makes a visible boundary
+  // impossible: the outermost orbit tops out at ~76% of the half-size, so
+  // geometry stays untouched and only the halo fades.
+  const edgeFade = {
+    maskImage: 'radial-gradient(closest-side circle at 50% 50%, #000 80%, transparent 99%)',
+    WebkitMaskImage: 'radial-gradient(closest-side circle at 50% 50%, #000 80%, transparent 99%)',
+  } as const
+
   return (
-    <div ref={ref} className="w-full h-full">
+    <div ref={ref} className="w-full h-full" style={edgeFade}>
       {mounted ? (
         <Canvas
           frameloop={animate && visible ? 'always' : 'demand'}
