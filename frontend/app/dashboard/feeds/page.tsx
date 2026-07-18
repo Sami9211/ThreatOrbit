@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Radio, CheckCircle2, HelpCircle, X, 
@@ -296,11 +297,14 @@ function ThreatCard({
   isNew?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const [actionMsg, setActionMsg] = useState<string | null>(null)
+  // Action feedback can carry a link straight to the record the action just
+  // created - the user must never have to go search for it afterwards.
+  const [actionMsg, setActionMsg] = useState<{ text: string; href?: string; hrefLabel?: string } | null>(null)
 
-  function note(msg: string) {
-    setActionMsg(msg)
-    setTimeout(() => setActionMsg(null), 4000)
+  function note(text: string, href?: string, hrefLabel?: string) {
+    setActionMsg({ text, href, hrefLabel })
+    // Linked results stay up longer - the link is the point.
+    setTimeout(() => setActionMsg(null), href ? 12_000 : 4000)
   }
 
   // Raise a real SIEM alert from this intel entry.
@@ -316,7 +320,8 @@ function ThreatCard({
       ruleName: 'Threat Intel Escalation',
       tiHits: entry.feedSources.length,
     })
-      .then((a) => note(`SIEM alert raised (${a.id.slice(0, 8)}…)`))
+      .then((a) => note(`SIEM alert raised (${a.id.slice(0, 8)}…)`,
+        `/dashboard/siem?alert=${encodeURIComponent(a.id)}`, 'Open alert →'))
       .catch(() => note('Could not raise alert - is the dashboard API running?'))
   }
 
@@ -336,7 +341,8 @@ function ThreatCard({
       threat_type: entry.attackType,
       tags: ['blocklist', ...entry.tags.slice(0, 3)],
     })
-      .then((out) => note(`${out.imported} IOC${out.imported === 1 ? '' : 's'} added to blocklist (${out.duplicates} already known)`))
+      .then((out) => note(`${out.imported} IOC${out.imported === 1 ? '' : 's'} added to blocklist (${out.duplicates} already known)`,
+        '/dashboard/cti', 'View IOC store →'))
       .catch(() => note('Could not import IOCs - is the dashboard API running?'))
   }
 
@@ -489,7 +495,15 @@ function ThreatCard({
                   Block IOCs
                 </button>
                 {actionMsg && (
-                  <span className="text-[10px] text-safe basis-full sm:basis-auto" role="status">{actionMsg}</span>
+                  <span className="text-[10px] text-safe basis-full sm:basis-auto" role="status">
+                    {actionMsg.text}
+                    {actionMsg.href && (
+                      <Link href={actionMsg.href} onClick={(e) => e.stopPropagation()}
+                        className="ml-2 text-magenta underline underline-offset-2 hover:text-white">
+                        {actionMsg.hrefLabel ?? 'Open →'}
+                      </Link>
+                    )}
+                  </span>
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onDismiss(entry.id) }}

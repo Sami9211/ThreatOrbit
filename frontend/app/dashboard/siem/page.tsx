@@ -542,7 +542,9 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   onUpdate: (id: string, patch: Partial<SiemAlert>) => void
 }) {
   const [tab, setTab] = useState<'overview' | 'network' | 'identity' | 'host' | 'raw'>('overview')
-  const [toast, setToast] = useState<string | null>(null)
+  // Toasts can carry a link straight to the record an action just created
+  // (case, suppression) - the user never has to go search for it afterwards.
+  const [toast, setToast] = useState<{ text: string; href?: string; hrefLabel?: string } | null>(null)
   const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
   const [fpChecking, setFpChecking] = useState(false)
   // Real UEBA context for the identity/host tabs (fetched lazily when the tab
@@ -552,7 +554,10 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   const s = SEV[alert.severity]
   const st = STATUS_LABEL[alert.status]
 
-  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2200) }
+  const flash = (text: string, href?: string, hrefLabel?: string) => {
+    setToast({ text, href, hrefLabel })
+    setTimeout(() => setToast(null), href ? 10_000 : 2200)  // links need time to click
+  }
 
   // Reset the (advisory, never auto-acted-on) FP assessment when the
   // selected alert changes so a stale score from a different alert can't
@@ -644,7 +649,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                     ...(alert.username ? [{ type: 'user', value: alert.username }] : []),
                   ],
                 })
-                  .then((c) => flash(`SOAR case ${c.id} created from this alert`))
+                  .then((c) => flash(`SOAR case ${c.id} created from this alert`,
+                    `/dashboard/soar?case=${encodeURIComponent(c.id)}`, 'Open case →'))
                   .catch(() => flash('Could not create case - is the dashboard API running?'))
               } },
             { label: 'Suppress', icon: Lock, color: 'text-ink-400',
@@ -660,7 +666,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                 if (!ent) { flash('Alert closed as false-positive'); return }
                 createSuppression({ value: ent.value, field: ent.field,
                   reason: `From alert ${alert.id} · ${alert.ruleName}` })
-                  .then(() => flash(`Suppression added for ${ent.field}=${ent.value} - future matches dropped`))
+                  .then(() => flash(`Suppression added for ${ent.field}=${ent.value} - future matches dropped`,
+                    '/dashboard/siem/rules#suppressions', 'Manage / undo →'))
                   .catch(() => flash('Could not create suppression - is the dashboard API running?'))
               } },
             { label: 'Run Playbook', icon: Zap, color: 'text-safe',
@@ -728,7 +735,13 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="mt-2.5 flex items-center gap-1.5 text-[10px] text-safe bg-safe/10 border border-safe/20 rounded-lg px-2.5 py-1.5">
               <CheckCircle className="w-3 h-3 shrink-0" />
-              {toast}
+              {toast.text}
+              {toast.href && (
+                <Link href={toast.href}
+                  className="ml-1 text-magenta underline underline-offset-2 hover:text-white shrink-0">
+                  {toast.hrefLabel ?? 'Open →'}
+                </Link>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

@@ -261,10 +261,11 @@ SOAR-integrations fake fallback). Items below updated accordingly.
    live check shows the real state: NVD + OSINT-engine connectors with
    genuine error reporting). Remaining: run the full stack (threat_api
    bridged) and verify the engine's own intel lands and is labeled.
-7. **[fix-on-main?] Dashboard elements don't navigate (Critical Alerts,
-   cards)** - contextual deep links shipped (`1a008d8`, `46647ce`) after
-   the audited build; re-verify each Overview card/knob on a fresh deploy;
-   close the remainder (every element navigates or acts - no dead UI).
+7. **[fixed] Dashboard elements don't navigate (Critical Alerts, cards)** -
+   every Overview KPI/status card now opens the surface it summarises
+   (SOC queue / CTI / feed sources / assets) in BOTH modes, and row
+   drawers link the exact record (`?alert=` / `?case=`) instead of the
+   module. Overview re-polls every 30s so numbers move with detections.
 8. **[~] CVE → "Lookup in CTI Scanner" hand-off** - must pre-populate the
    scanner (value + type) and require at most one click (or auto-run).
    In progress together with item 9.
@@ -280,9 +281,11 @@ SOAR-integrations fake fallback). Items below updated accordingly.
     is empty" note; the blank-page failure was the cross-machine API-base
     defect, now fixed. Populates as soon as alerts exist (e2e-fenced in
     demo posture).
-11. **[ ] "Send to SIEM" (and similar) give no feedback** - must confirm
-    completion and link straight to the created SIEM event/alert/
-    investigation (no manual searching afterwards).
+11. **[fixed] "Send to SIEM" (and similar) give no feedback** - action
+    toasts now confirm completion AND link straight to the created
+    record: feed "Send to SIEM" → "Open alert →" (`?alert=`), SIEM
+    "Create Case" → "Open case →" (`?case=`), "Suppress" → "Manage /
+    undo →" (suppressions panel anchor). Linked toasts persist 10-12s.
 12. **[~] Threat-feed verification + connector management** - the fake
     paid-API placeholder rows are gone (feeds/sources + SOAR
     integrations now backend-only with honest unreachable/empty states),

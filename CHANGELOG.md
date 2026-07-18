@@ -9,6 +9,25 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-18 - Overview navigates + stays live; actions link to what they created (Audit-3 items 5, 7, 11)
+- **No inert cards on the Overview.** Every KPI opens the surface it
+  summarises, in both modes: Active Threats → the SOC console's open
+  queue, IOCs Tracked → CTI, Sources Online → Feeds → Sources, Avg Risk /
+  View Assets → Assets. Normal mode's three status cards ditto.
+- **Exact-record navigation** replaces module-level links on the Overview:
+  incident rows open *their* SOAR case (`?case=<id>`), alert rows and
+  Normal mode's "Investigate" open *their* SIEM drawer (`?alert=<id>`)
+  instead of a text search near it.
+- **The Overview re-polls every 30s** so its numbers demonstrably move
+  with real detections instead of freezing at page-load values (the
+  "always exactly N alerts" audit finding, second half).
+- **Actions now link to the record they created**: "Send to SIEM" on a
+  feed entry answers with "SIEM alert raised - Open alert →" straight
+  into that alert's drawer; the SIEM drawer's "Create Case" links "Open
+  case →" (`?case=`); "Suppress" links "Manage / undo →" to the
+  suppressions panel (which gained an anchor). Linked toasts stay up
+  10-12s so the link is actually clickable.
+
 ### 2026-07-18 - Landing scroll performance + hero scroll-return jump (Audit-3 items 3-4)
 - **Scenes pause while you scroll.** All four landing WebGL scenes now gate
   their render loop on a shared scroll-idle signal (`useScrollIdle`): during

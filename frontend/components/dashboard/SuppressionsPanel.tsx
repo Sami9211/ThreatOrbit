@@ -71,6 +71,7 @@ export default function SuppressionsPanel() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      id="suppressions"
       className="glass border border-white/8 rounded-xl overflow-hidden">
       <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/5 flex-wrap">
         <div className="p-1.5 rounded-lg bg-amber/15 border border-amber/25 shrink-0">

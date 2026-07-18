@@ -37,7 +37,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 /* -- KPI Card ------------------------------------------------------ */
 function KPICard({
-  label, value, format, sub, icon: Icon, color, trend, trendVal,
+  label, value, format, sub, icon: Icon, color, trend, trendVal, href,
 }: {
   label: string
   /** A number counts up on change (AnimatedNumber); a string renders as-is. */
@@ -49,11 +49,16 @@ function KPICard({
   color: string
   trend?: 'up' | 'down'
   trendVal?: string
+  /** Every KPI navigates to the surface it summarises - no inert cards. */
+  href?: string
 }) {
-  return (
+  const body = (
     <motion.div
       variants={fadeInUp} initial="hidden" animate="show" {...hoverLift}
-      className="glass border border-white/5 rounded-xl p-5 relative overflow-hidden"
+      className={cn(
+        'glass border border-white/5 rounded-xl p-5 relative overflow-hidden h-full',
+        href && 'cursor-pointer hover:border-white/15 transition-colors',
+      )}
     >
       <div className="absolute inset-0 opacity-30"
         style={{ background: `radial-gradient(circle at 0% 0%, ${color}18, transparent 70%)` }}
@@ -81,6 +86,9 @@ function KPICard({
       )}
     </motion.div>
   )
+  return href
+    ? <Link href={href} aria-label={`${label} - open details`}>{body}</Link>
+    : body
 }
 
 /* -- Trending CVEs (static - no CVE endpoint yet) ------------------ */
@@ -280,7 +288,7 @@ function ActiveIncidents({ incidents }: { incidents: Incident[] }) {
                 { label: 'Status', value: inc.status }, { label: 'Category', value: inc.category },
                 { label: 'Assigned', value: inc.assigned }, { label: 'Age', value: timeAgo(inc.age) },
               ],
-              actions: [{ label: 'Open in SOAR cases', href: '/dashboard/soar' }],
+              actions: [{ label: 'Open this case in SOAR', href: `/dashboard/soar?case=${encodeURIComponent(inc.id)}` }],
             })}
             className="flex items-center gap-3 px-5 py-2.5 hover:bg-white/2 transition-colors cursor-pointer group">
             <span className="w-1.5 h-1.5 rounded-full shrink-0 ring-2 ring-current/10"
@@ -322,7 +330,7 @@ function RecentAlerts({ alerts }: { alerts: OverviewAlert[] }) {
                 { label: 'Source', value: a.src, mono: true }, { label: 'Severity', value: a.severity },
                 { label: 'Time', value: a.time },
               ],
-              actions: [{ label: 'Open in SIEM alert queue', href: '/dashboard/siem' }],
+              actions: [{ label: 'Open this alert in SIEM', href: `/dashboard/siem?alert=${encodeURIComponent(a.id)}` }],
             })}
             className="flex items-start gap-3 px-5 py-3 hover:bg-white/2 transition-colors cursor-pointer group">
             <span
@@ -799,22 +807,25 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
 
       {/* Key status cards (right column of the top row) */}
       <div className="lg:col-span-7 xl:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4 content-start">
+        {/* Each card opens the surface it summarises - no inert cards. */}
         {[
-          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats, sub: `${count.iocs.toLocaleString()} indicators tracked`, iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-ink-500' },
-          { icon: CheckCircle2,  label: 'Sources Online',       value: count.sources, sub: 'feeds & connectors active',   iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-ink-500'  },
-          { icon: Clock,         label: 'Alerts Pending Review', value: topAlerts.length || alerts.length, sub: `${topAlerts.filter(a => ['critical','high'].includes(a.severity)).length} high priority`, iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat' },
+          { icon: AlertTriangle, label: 'Active Threats',       value: count.threats, sub: `${count.iocs.toLocaleString()} indicators tracked`, iconCls: 'text-threat', bgCls: 'bg-threat/10', borderCls: 'border-threat/20', subCls: 'text-ink-500', href: '/dashboard/soc' },
+          { icon: CheckCircle2,  label: 'Sources Online',       value: count.sources, sub: 'feeds & connectors active',   iconCls: 'text-safe',   bgCls: 'bg-safe/10',   borderCls: 'border-safe/20',   subCls: 'text-ink-500',  href: '/dashboard/feeds/sources' },
+          { icon: Clock,         label: 'Alerts Pending Review', value: topAlerts.length || alerts.length, sub: `${topAlerts.filter(a => ['critical','high'].includes(a.severity)).length} high priority`, iconCls: 'text-amber',  bgCls: 'bg-amber/10',  borderCls: 'border-amber/20',  subCls: 'text-threat', href: '/dashboard/siem' },
         ].map((c, i) => (
-          <motion.div key={c.label}
-            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
-            {...hoverLift}
-            className={cn('glass border rounded-xl p-6 text-center', c.borderCls)}>
-            <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4', c.bgCls)}>
-              <c.icon className={cn('w-7 h-7', c.iconCls)} />
-            </div>
-            <p className="font-display text-4xl font-bold text-white mb-1.5"><AnimatedNumber value={c.value} /></p>
-            <p className="text-sm text-ink-400">{c.label}</p>
-            <p className={cn('text-xs font-medium mt-2', c.subCls)}>{c.sub}</p>
-          </motion.div>
+          <Link key={c.label} href={c.href} aria-label={`${c.label} - open details`}>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.08 }}
+              {...hoverLift}
+              className={cn('glass border rounded-xl p-6 text-center h-full cursor-pointer hover:bg-white/2 transition-colors', c.borderCls)}>
+              <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4', c.bgCls)}>
+                <c.icon className={cn('w-7 h-7', c.iconCls)} />
+              </div>
+              <p className="font-display text-4xl font-bold text-white mb-1.5"><AnimatedNumber value={c.value} /></p>
+              <p className="text-sm text-ink-400">{c.label}</p>
+              <p className={cn('text-xs font-medium mt-2', c.subCls)}>{c.sub}</p>
+            </motion.div>
+          </Link>
         ))}
       </div>
       </div>
@@ -844,7 +855,8 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
                   { label: 'Source', value: a.src, mono: true }, { label: 'Severity', value: a.severity },
                   { label: 'Time', value: a.time },
                 ],
-                actions: [{ label: 'Investigate in SIEM', href: `/dashboard/siem?q=${encodeURIComponent(a.src || a.title)}` }],
+                // Land on THIS alert's drawer, not a text search near it.
+                actions: [{ label: 'Investigate in SIEM', href: `/dashboard/siem?alert=${encodeURIComponent(a.id)}` }],
               })}
               className="flex items-center gap-4 px-6 py-4 hover:bg-white/2 transition-colors group cursor-pointer">
               <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0',
@@ -860,7 +872,7 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
                   <span className="text-[11px] text-ink-600 font-mono">{a.src} · {timeAgo(a.time)}</span>
                 </div>
               </div>
-              <Link href={`/dashboard/siem?q=${encodeURIComponent(a.src || a.title)}`} onClick={(e) => e.stopPropagation()}
+              <Link href={`/dashboard/siem?alert=${encodeURIComponent(a.id)}`} onClick={(e) => e.stopPropagation()}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-magenta/10 text-magenta hover:bg-magenta/20 transition-colors border border-magenta/20 shrink-0">
                 Investigate →
               </Link>
@@ -926,19 +938,28 @@ export default function DashboardOverview() {
   const isPower = mode === 'power'
 
   useEffect(() => {
-    fetchKpis().then(setKpis).catch(() => {})
-    fetchSiemKpis().then(setSiemKpis).catch(() => {})
-    fetchSoarMetrics().then(setSoarMetrics).catch(() => {})
-    fetchRecentAlerts(8).then(setRecentAlerts).catch(() => {})
-    fetchRecentIncidents(6).then(setIncidents).catch(() => {})
-    fetchTopActors(5).then(setTopActors).catch(() => {})
-    fetchHourly().then(setHourly).catch(() => {})
-    fetchVectors().then(setVectors).catch(() => {})
-    fetchLiveFeed(20).then(setLiveFeed).catch(() => {})
-    fetchRiskDistribution().then(setRiskDist).catch(() => {})
-    fetchHeatmap().then(setHeatmap).catch(() => {})
-    fetchServicesStatus().then(setServices).catch(() => {})
-    fetchSiemTrends().then(({ days }) => setTrends(days)).catch(() => {})
+    const load = () => {
+      fetchKpis().then(setKpis).catch(() => {})
+      fetchSiemKpis().then(setSiemKpis).catch(() => {})
+      fetchSoarMetrics().then(setSoarMetrics).catch(() => {})
+      fetchRecentAlerts(8).then(setRecentAlerts).catch(() => {})
+      fetchRecentIncidents(6).then(setIncidents).catch(() => {})
+      fetchTopActors(5).then(setTopActors).catch(() => {})
+      fetchHourly().then(setHourly).catch(() => {})
+      fetchVectors().then(setVectors).catch(() => {})
+      fetchLiveFeed(20).then(setLiveFeed).catch(() => {})
+      fetchRiskDistribution().then(setRiskDist).catch(() => {})
+      fetchHeatmap().then(setHeatmap).catch(() => {})
+      fetchServicesStatus().then(setServices).catch(() => {})
+      fetchSiemTrends().then(({ days }) => setTrends(days)).catch(() => {})
+    }
+    load()
+    // The overview is a status surface: re-poll so its numbers demonstrably
+    // move with real detections instead of freezing at page-load values
+    // (the "always exactly N alerts" audit finding). AnimatedNumber makes
+    // changes visible; unchanged answers re-render nothing.
+    const id = setInterval(load, 30_000)
+    return () => clearInterval(id)
   }, [])
 
   // Honest movement note for the Active Threats card. That KPI is a STOCK
@@ -984,15 +1005,18 @@ export default function DashboardOverview() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Each KPI opens the surface it summarises: the open critical/high
+           queue lives on the SOC console; IOCs in CTI; feeds and assets ditto. */}
         <KPICard label="Active Threats" value={kpis.threats}          sub="open critical/high alerts" icon={AlertTriangle} color={tk('magenta')}
+          href="/dashboard/soc"
           trend={severeFlow && severeFlow.delta !== 0 ? (severeFlow.delta > 0 ? 'up' : 'down') : undefined}
           trendVal={severeFlow && severeFlow.delta !== 0
             ? `${severeFlow.delta > 0 ? '+' : ''}${severeFlow.delta} new critical/high`
             : undefined} />
-        <KPICard label="IOCs Tracked"   value={kpis.iocs}             sub="in threat database" icon={Eye}           color={tk('violet')} />
-        <KPICard label="Sources Online" value={kpis.sources}          sub="active feeds"       icon={Globe}         color={tk('teal')} />
+        <KPICard label="IOCs Tracked"   value={kpis.iocs}             sub="in threat database" icon={Eye}           color={tk('violet')} href="/dashboard/cti" />
+        <KPICard label="Sources Online" value={kpis.sources}          sub="active feeds"       icon={Globe}         color={tk('teal')}   href="/dashboard/feeds/sources" />
         <KPICard label="Avg Risk Score" value={Number(kpis.score ?? 0)} format={(v) => v.toFixed(1)}
-          sub="weighted mean" icon={Shield} color={tk('amber')} />
+          sub="weighted mean" icon={Shield} color={tk('amber')} href="/dashboard/assets" />
       </div>
 
       {/* SOC operations metrics (Power User only) */}
