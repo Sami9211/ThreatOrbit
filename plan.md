@@ -216,7 +216,20 @@ Status legend: `[ ]` open / `[~]` in progress / `[fix-on-main]` a fix for
 this exact symptom shipped on main after the audited build - must be
 re-verified on a fresh Linux deployment before it may be called closed.
 
-1. **[ ] Default mode** - the app must start in Normal Mode by default.
+**Triage round 1 (2026-07-18, same day): systemic root cause found and
+fixed.** The built frontend hard-defaulted its API base to
+`localhost:8002` while the start scripts build without
+`NEXT_PUBLIC_API_URL` - so viewing the deployment from any machine other
+than the server silently killed every API call and left the UI running on
+leftover placeholder constants (static data, dead actions, fake
+"connected" vendors, empty consoles). Fixed (hostname-derived base) and
+proven in the cross-machine topology; placeholder fallbacks purged
+(Overview live-feed recycler, feeds/sources 16 fake vendor rows,
+SOAR-integrations fake fallback). Items below updated accordingly.
+
+1. **[verified] Default mode** - fresh live-posture session starts in
+   Normal mode (browser-verified on the owner-faithful build; the backend
+   only overrides when an org has explicitly chosen a mode).
 2. **[fix-on-main?] Landing: second-planet edge boundary** - masks shipped
    (`9511178`) but the owner still sees edges on the deployed build;
    re-verify on the deployed artifact, not the dev preview. If still
@@ -229,13 +242,18 @@ re-verified on a fresh Linux deployment before it may be called closed.
 4. **[ ] Hero 3D object jumps when scrolling back to top** - position/
    animation must be consistent; likely spring re-target or scroll-progress
    discontinuity.
-5. **[ ] Dashboard alerts look static ("always exactly 6 critical/high")** -
-   demo seed is a fixed snapshot; live overview KPIs must reflect the real
-   store and change with detections. Verify the demo engine actually
-   generates fresh alerts over time and the KPI queries read live.
-6. **[ ] IOC provenance skew: nearly everything is NVD CVE** - verify the
-   ThreatOrbit engine generates its own intelligence, feeds are genuinely
-   connected, enrichment runs; balance/label source mix honestly.
+5. **[~] Dashboard alerts look static ("always exactly 6 critical/high")** -
+   root cause split: (a) cross-machine API-base failure froze the page on
+   constants - FIXED; (b) the Overview "Live Threat Feed" recycled the
+   same rows with fresh ids every 3.5s, manufacturing activity - FIXED
+   (honest 15s re-poll of the real endpoint). Remaining: verify the KPI
+   numbers move with real detections over time on a long-running deploy.
+6. **[~] IOC provenance skew: nearly everything is NVD CVE** - partial
+   root cause: feeds/sources rendered 16 fabricated vendor rows
+   regardless of reality - REMOVED (backend-only rows + honest states;
+   live check shows the real state: NVD + OSINT-engine connectors with
+   genuine error reporting). Remaining: run the full stack (threat_api
+   bridged) and verify the engine's own intel lands and is labeled.
 7. **[fix-on-main?] Dashboard elements don't navigate (Critical Alerts,
    cards)** - contextual deep links shipped (`1a008d8`, `46647ce`) after
    the audited build; re-verify each Overview card/knob on a fresh deploy;
@@ -249,18 +267,21 @@ re-verified on a fresh Linux deployment before it may be called closed.
    (Details / Relations / Community / Sources), real RDAP registry data,
    relations from own stores (alerts/cases/dark-web/assets/events/graph),
    analyst-history community panel - all honest (no fabricated vendors).
-10. **[fix-on-main?] SOC Console empty** - live-population fix + e2e
-    shipped (`c646552`); the owner still sees it empty on Linux deploy -
-    re-verify in the LIVE posture (not demo), especially with zero/low
-    ingest: the console must surface whatever alerts/incidents exist
-    elsewhere in the app, and say honestly when there are none.
+10. **[verified] SOC Console empty** - re-verified on the owner-faithful
+    live build: the console renders the full operational shell (queue,
+    SLA timers, pipeline health) with real zeros and an explicit "queue
+    is empty" note; the blank-page failure was the cross-machine API-base
+    defect, now fixed. Populates as soon as alerts exist (e2e-fenced in
+    demo posture).
 11. **[ ] "Send to SIEM" (and similar) give no feedback** - must confirm
     completion and link straight to the created SIEM event/alert/
     investigation (no manual searching afterwards).
-12. **[ ] Threat-feed verification + connector management** - verify every
-    listed feed/connector is genuinely connected (no fake/paid-API
-    placeholders); add connector edit/reconfigure/API-key management and
-    honest connection state.
+12. **[~] Threat-feed verification + connector management** - the fake
+    paid-API placeholder rows are gone (feeds/sources + SOAR
+    integrations now backend-only with honest unreachable/empty states),
+    and the connector panel already reports genuine per-connector errors
+    (verified live: NVD 403, engine connection refused). Remaining:
+    connector edit/reconfigure/API-key management UI (task #89).
 13. **[ ] CTI CVE actions fail** - dead buttons, pages fail to load; every
     CVE entry needs official references (NVD/vendor/mitigation) that
     actually resolve.

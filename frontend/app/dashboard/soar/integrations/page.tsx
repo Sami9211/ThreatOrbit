@@ -32,20 +32,7 @@ interface Integration {
   baseUrl: string | null
 }
 
-const INTEGRATIONS: Integration[] = [
-  { id: 'i01', name: 'CrowdStrike Falcon',  vendor: 'CrowdStrike',  category: 'EDR',          status: 'connected',    lastSync: '8s ago',   actionsRun: 1847, avgResponseMs: 220,  description: 'Endpoint isolation, process kill, containment via RTR', actions: ['Contain Host', 'Kill Process', 'Get Process Tree', 'Network Quarantine'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i02', name: 'Palo Alto NGFW',      vendor: 'Palo Alto',    category: 'Firewall',     status: 'connected',    lastSync: '3m ago',   actionsRun: 924,  avgResponseMs: 540,  description: 'Block IPs, add to DAGs, update security policy', actions: ['Block IP', 'Block URL', 'Add to DAG', 'Get Traffic Logs'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i03', name: 'Splunk ES',           vendor: 'Splunk',       category: 'SIEM',         status: 'connected',    lastSync: '1m ago',   actionsRun: 3241, avgResponseMs: 180,  description: 'Create notable events, run SPL searches, update risk scores', actions: ['Create Notable', 'Run Search', 'Add Risk Score', 'Correlate Events'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i04', name: 'Jira Service Mgmt',   vendor: 'Atlassian',    category: 'Ticketing',    status: 'connected',    lastSync: '2m ago',   actionsRun: 548,  avgResponseMs: 1200, description: 'Auto-create incidents, assign tickets, update SLA fields', actions: ['Create Issue', 'Update Issue', 'Assign Issue', 'Add Comment'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i05', name: 'PagerDuty',           vendor: 'PagerDuty',    category: 'Communication', status: 'connected',   lastSync: '45s ago',  actionsRun: 287,  avgResponseMs: 340,  description: 'Page on-call engineers, trigger incidents, resolve alerts', actions: ['Create Incident', 'Trigger Alert', 'Resolve Incident', 'Send Notification'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i06', name: 'Slack',               vendor: 'Slack',        category: 'Communication', status: 'connected',   lastSync: '12s ago',  actionsRun: 2140, avgResponseMs: 290,  description: 'War room notifications, analyst alerts, status updates', actions: ['Send Message', 'Create Channel', 'Post File', 'Add Reaction'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i07', name: 'VirusTotal',          vendor: 'Google',       category: 'Threat Intel', status: 'connected',    lastSync: '5m ago',   actionsRun: 7824, avgResponseMs: 680,  description: 'Enrich IOCs - IPs, domains, hashes, URLs against 90+ engines', actions: ['Scan IP', 'Scan URL', 'Scan Hash', 'Get File Report'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i08', name: 'Recorded Future',     vendor: 'Recorded Future', category: 'Threat Intel', status: 'connected', lastSync: '11m ago',  actionsRun: 1203, avgResponseMs: 820,  description: 'Threat actor enrichment, risk scoring, C2 infrastructure lookup', actions: ['Enrich IP', 'Actor Lookup', 'Risk Score', 'IOC Context'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i09', name: 'Okta',               vendor: 'Okta',          category: 'Identity',     status: 'degraded',    lastSync: '18m ago',  actionsRun: 344,  avgResponseMs: 4800, description: 'Suspend user, reset MFA, revoke sessions, get user activity', actions: ['Suspend User', 'Reset MFA', 'Revoke Sessions', 'Get User Logs'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i10', name: 'AWS Security Hub',   vendor: 'Amazon',         category: 'Cloud',        status: 'connected',   lastSync: '2m ago',   actionsRun: 892,  avgResponseMs: 450,  description: 'Update findings, isolate EC2, revoke IAM keys, S3 lockdown', actions: ['Update Finding', 'Isolate EC2', 'Revoke IAM Key', 'Block S3 Access'], enabled: true, credentialed: false, baseUrl: null },
-  { id: 'i11', name: 'Microsoft Sentinel', vendor: 'Microsoft',      category: 'SIEM',         status: 'pending',     lastSync: 'Never',    actionsRun: 0,    avgResponseMs: 0,    description: 'Pending API configuration - requires Azure app registration', actions: ['Create Incident', 'Run Logic App', 'Update Alert'], enabled: false, credentialed: false, baseUrl: null },
-  { id: 'i12', name: 'ServiceNow ITSM',   vendor: 'ServiceNow',      category: 'Ticketing',   status: 'disconnected', lastSync: '3d ago',   actionsRun: 0,    avgResponseMs: 0,    description: 'Disconnected - credential rotation required', actions: ['Create Incident', 'Update Incident', 'Assign CI'], enabled: false, credentialed: false, baseUrl: null },
-]
+
 
 const CAT_COLORS: Record<IntCategory, string> = {
   EDR: 'bg-magenta/15 text-magenta border-magenta/20',
@@ -151,6 +138,7 @@ export default function SoarIntegrationsPage() {
   // an empty list is the honest truth on a real deployment. Demo vendors would
   // misrepresent what SOAR can actually act on, so they're offline-only.
   const [integrations, setIntegrations] = useState<Integration[]>([])
+  const [unreachable, setUnreachable] = useState(false)
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [catFilter, setCatFilter] = useState<string>('All')
@@ -163,8 +151,9 @@ export default function SoarIntegrationsPage() {
       setIntegrations(mapped)
       setEnabledMap(Object.fromEntries(mapped.map(i => [i.id, i.enabled])))
     }).catch(() => {
-      setIntegrations(INTEGRATIONS)               // API unreachable → offline preview
-      setEnabledMap(Object.fromEntries(INTEGRATIONS.map(i => [i.id, i.enabled])))
+      // API unreachable: say so - a fabricated "connected" vendor list would
+      // misrepresent what this deployment can actually act on.
+      setUnreachable(true)
     })
   }, [])
 
@@ -272,6 +261,20 @@ export default function SoarIntegrationsPage() {
 
       {/* Integration cards */}
       <div className="flex-1 overflow-y-auto p-6">
+        {unreachable && (
+          <div className="mb-4 px-4 py-3 rounded-xl border border-amber/30 bg-amber/10 text-xs text-amber">
+            The dashboard API is unreachable - integration status cannot be shown.
+            Nothing here is simulated: this page only ever lists integrations the
+            backend actually knows about.
+          </div>
+        )}
+        {!unreachable && integrations.length === 0 && (
+          <div className="mb-4 px-4 py-8 rounded-xl border border-white/8 text-center text-xs text-ink-500">
+            No integrations connected yet. Use &quot;Connect Integration&quot; to add your
+            SIEM, EDR, ticketing or threat-intel tooling - status here always
+            reflects a real configured connection, never a demo vendor list.
+          </div>
+        )}
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {(filtered as Integration[]).map((int, i) => {
             const st = STATUS_CFG[int.status]

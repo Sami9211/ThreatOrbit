@@ -4,9 +4,16 @@
  * All snake_case API responses are converted to camelCase before returning.
  */
 
+// When NEXT_PUBLIC_API_URL isn't baked in at build time (the one-command
+// linux/windows start scripts build without it), derive the API host from
+// wherever the site is actually being served. A hardcoded localhost default
+// broke every deployment viewed from another machine: each browser call went
+// to the VIEWER'S localhost:8002, silently emptying the whole dashboard.
 const BASE =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) ||
-  'http://localhost:8002'
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8002`
+    : 'http://localhost:8002')
 
 /** The API base this client is actually configured with (read-only display). */
 export const API_BASE_URL = BASE
@@ -481,6 +488,10 @@ export interface Feed {
   indicators: number
   lastSync: string | null
   description: string
+  provider: string | null
+  format: string | null
+  reliability: string | null
+  syncInterval: number
 }
 
 export interface FeedsSummary {

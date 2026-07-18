@@ -13,8 +13,8 @@ import {
 import { cn } from '@/lib/utils'
 
 type FeedType = 'OSINT' | 'Commercial' | 'Government' | 'Community'
-type FeedFormat = 'STIX 2.1' | 'MISP' | 'CSV' | 'JSON' | 'TAXII'
-type Reliability = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
+type FeedFormat = 'STIX 2.1' | 'MISP' | 'CSV' | 'JSON' | 'TAXII' | '-'
+type Reliability = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | '-'
 
 interface FeedSource {
   id: string
@@ -33,25 +33,6 @@ interface FeedSource {
   tagMapping: string[]
 }
 
-const FEEDS: FeedSource[] = [
-  { id: 'f01', name: 'MISP - Internal Sharing',     type: 'Community',  format: 'MISP',      iocsPerDay: 4820,  lastPull: '2m ago',  reliability: 'A', enabled: true,  url: 'https://misp.corp.local/feeds', apiKeyConfigured: true,  pullInterval: '15m', taxiiCollection: 'org-default',          confidenceWeight: 90, tagMapping: ['tlp:amber', 'apt', 'internal'] },
-  { id: 'f02', name: 'AlienVault OTX',              type: 'Community',  format: 'STIX 2.1',  iocsPerDay: 12400, lastPull: '1m ago',  reliability: 'B', enabled: true,  url: 'https://otx.alienvault.com/api/v1/pulses', apiKeyConfigured: true,  pullInterval: '30m', taxiiCollection: 'subscribed-pulses', confidenceWeight: 65, tagMapping: ['osint', 'community'] },
-  { id: 'f03', name: 'Abuse.ch - URLhaus',         type: 'OSINT',      format: 'CSV',       iocsPerDay: 8200,  lastPull: '4m ago',  reliability: 'A', enabled: true,  url: 'https://urlhaus.abuse.ch/downloads/csv', apiKeyConfigured: false, pullInterval: '10m', taxiiCollection: 'n/a',                 confidenceWeight: 88, tagMapping: ['malware-url', 'osint'] },
-  { id: 'f04', name: 'Abuse.ch - ThreatFox',       type: 'OSINT',      format: 'JSON',      iocsPerDay: 5600,  lastPull: '3m ago',  reliability: 'A', enabled: true,  url: 'https://threatfox-api.abuse.ch/api/v1', apiKeyConfigured: true,  pullInterval: '10m', taxiiCollection: 'n/a',                 confidenceWeight: 85, tagMapping: ['ioc', 'malware'] },
-  { id: 'f05', name: 'Abuse.ch - Feodo Tracker',   type: 'OSINT',      format: 'CSV',       iocsPerDay: 320,   lastPull: '6m ago',  reliability: 'B', enabled: true,  url: 'https://feodotracker.abuse.ch/downloads/ipblocklist.csv', apiKeyConfigured: false, pullInterval: '30m', taxiiCollection: 'n/a',     confidenceWeight: 80, tagMapping: ['botnet-c2', 'ip'] },
-  { id: 'f06', name: 'GreyNoise',                  type: 'Commercial', format: 'JSON',      iocsPerDay: 9800,  lastPull: '5m ago',  reliability: 'A', enabled: true,  url: 'https://api.greynoise.io/v3', apiKeyConfigured: true,  pullInterval: '20m', taxiiCollection: 'n/a',                 confidenceWeight: 92, tagMapping: ['scanner', 'noise', 'context'] },
-  { id: 'f07', name: 'Shodan',                     type: 'Commercial', format: 'JSON',      iocsPerDay: 2100,  lastPull: '12m ago', reliability: 'B', enabled: true,  url: 'https://api.shodan.io', apiKeyConfigured: true,  pullInterval: '60m', taxiiCollection: 'n/a',                 confidenceWeight: 70, tagMapping: ['exposure', 'recon'] },
-  { id: 'f08', name: 'AbuseIPDB',                  type: 'Community',  format: 'JSON',      iocsPerDay: 6400,  lastPull: '2m ago',  reliability: 'B', enabled: true,  url: 'https://api.abuseipdb.com/api/v2/blacklist', apiKeyConfigured: true,  pullInterval: '15m', taxiiCollection: 'n/a',          confidenceWeight: 72, tagMapping: ['malicious-ip', 'community'] },
-  { id: 'f09', name: 'Recorded Future',            type: 'Commercial', format: 'STIX 2.1',  iocsPerDay: 18200, lastPull: '8m ago',  reliability: 'A', enabled: true,  url: 'https://api.recordedfuture.com/v2', apiKeyConfigured: true,  pullInterval: '30m', taxiiCollection: 'risk-lists',      confidenceWeight: 95, tagMapping: ['premium', 'risk-score', 'apt'] },
-  { id: 'f10', name: 'Mandiant Advantage',         type: 'Commercial', format: 'TAXII',     iocsPerDay: 14600, lastPull: '9m ago',  reliability: 'A', enabled: false, url: 'https://api.intelligence.mandiant.com/v4/taxii2', apiKeyConfigured: true, pullInterval: '60m', taxiiCollection: 'fireeye-indicators', confidenceWeight: 96, tagMapping: ['premium', 'attribution', 'apt'] },
-  { id: 'f11', name: 'CISA AIS',                   type: 'Government', format: 'TAXII',     iocsPerDay: 3400,  lastPull: '22m ago', reliability: 'B', enabled: true,  url: 'https://ais2.cisa.dhs.gov/taxii2', apiKeyConfigured: true,  pullInterval: '60m', taxiiCollection: 'cisa-ais',         confidenceWeight: 82, tagMapping: ['gov', 'tlp:amber', 'us-cert'] },
-  { id: 'f12', name: 'SpamHaus DROP',             type: 'OSINT',      format: 'CSV',       iocsPerDay: 1200,  lastPull: '40m ago', reliability: 'A', enabled: true,  url: 'https://www.spamhaus.org/drop/drop.txt', apiKeyConfigured: false, pullInterval: '120m', taxiiCollection: 'n/a',          confidenceWeight: 90, tagMapping: ['bogon', 'ip-block'] },
-  { id: 'f13', name: 'Emerging Threats',          type: 'Community',  format: 'CSV',       iocsPerDay: 4100,  lastPull: '7m ago',  reliability: 'B', enabled: true,  url: 'https://rules.emergingthreats.net/blockrules', apiKeyConfigured: false, pullInterval: '30m', taxiiCollection: 'n/a',         confidenceWeight: 68, tagMapping: ['ids', 'suricata'] },
-  { id: 'f14', name: 'VirusTotal Intelligence',   type: 'Commercial', format: 'JSON',      iocsPerDay: 7800,  lastPull: '3m ago',  reliability: 'A', enabled: true,  url: 'https://www.virustotal.com/api/v3', apiKeyConfigured: true,  pullInterval: '20m', taxiiCollection: 'n/a',               confidenceWeight: 89, tagMapping: ['hash', 'file', 'premium'] },
-  { id: 'f15', name: 'PhishTank',                 type: 'Community',  format: 'CSV',       iocsPerDay: 2600,  lastPull: '15m ago', reliability: 'C', enabled: false, url: 'https://data.phishtank.com/data/online-valid.csv', apiKeyConfigured: false, pullInterval: '60m', taxiiCollection: 'n/a',      confidenceWeight: 55, tagMapping: ['phishing', 'url'] },
-  { id: 'f16', name: 'CIRCL OSINT Feed',          type: 'Government', format: 'MISP',      iocsPerDay: 1900,  lastPull: '18m ago', reliability: 'B', enabled: true,  url: 'https://www.circl.lu/doc/misp/feed-osint', apiKeyConfigured: false, pullInterval: '60m', taxiiCollection: 'circl-osint',  confidenceWeight: 78, tagMapping: ['osint', 'eu-cert', 'misp'] },
-]
-
 const TYPE_CONFIG: Record<FeedType, string> = {
   OSINT:      'text-safe bg-safe/10 border-safe/20',
   Commercial: 'text-magenta bg-magenta/10 border-magenta/20',
@@ -66,22 +47,25 @@ const RELIABILITY_COLOR: Record<Reliability, string> = {
   D: 'text-amber border-amber/30 bg-amber/10',
   E: 'text-threat border-threat/30 bg-threat/10',
   F: 'text-threat border-threat/30 bg-threat/10',
+  '-': 'text-ink-500 border-white/10 bg-white/5',
 }
 
 // API feed → UI row mapping shared by the initial load and add-feed flows.
+// Every displayed value is the backend's own record; fields this deployment
+// doesn't track render "-" rather than an invented constant.
 const apiFeedToRow = (f: ApiFeed): FeedSource => ({
   id: f.id,
   name: f.name,
   type: (f.type === 'commercial' ? 'Commercial' : f.type === 'government' ? 'Government' : f.type === 'community' ? 'Community' : 'OSINT') as FeedType,
-  format: 'STIX 2.1' as FeedFormat,
+  format: ((f.format?.toUpperCase() === 'STIX' ? 'STIX 2.1' : f.format) ?? '-') as FeedFormat,
   iocsPerDay: f.indicators,
   lastPull: f.lastSync ?? 'Never',
-  reliability: 'B' as Reliability,
+  reliability: ((f.reliability?.toUpperCase() as Reliability) || '-'),
   enabled: f.enabled,
   url: f.url ?? '',
   apiKeyConfigured: false,
-  pullInterval: '30m',
-  taxiiCollection: 'n/a',
+  pullInterval: f.syncInterval ? `${Math.round(f.syncInterval / 60)}m` : '-',
+  taxiiCollection: '-',
   confidenceWeight: 75,
   tagMapping: [],
 })
@@ -90,7 +74,12 @@ export default function FeedSourcesPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | FeedType>('all')
   const [selected, setSelected] = useState<string | null>(null)
-  const [feeds, setFeeds] = useState<FeedSource[]>(FEEDS)
+  // Rows come ONLY from the backend: an empty deployment shows an honest
+  // empty state and an unreachable API says so - never a fabricated list of
+  // premium vendors with invented pull times (the audit's "fake feeds").
+  const [feeds, setFeeds] = useState<FeedSource[]>([])
+  const [feedsLoaded, setFeedsLoaded] = useState(false)
+  const [unreachable, setUnreachable] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [summary, setSummary] = useState<FeedsSummary | null>(null)
 
@@ -106,9 +95,10 @@ export default function FeedSourcesPage() {
   }
 
   useEffect(() => {
-    fetchFeeds().then((data: ApiFeed[]) => {
-      if (data.length > 0) setFeeds(data.map(apiFeedToRow))
-    }).catch(() => {})
+    fetchFeeds()
+      .then((data: ApiFeed[]) => setFeeds(data.map(apiFeedToRow)))
+      .catch(() => setUnreachable(true))
+      .finally(() => setFeedsLoaded(true))
     fetchFeedsSummary().then(setSummary).catch(() => {})
   }, [])
 
@@ -215,6 +205,19 @@ export default function FeedSourcesPage() {
             </tr>
           </thead>
           <tbody>
+            {!feedsLoaded && (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-ink-600">Loading feeds…</td></tr>
+            )}
+            {feedsLoaded && unreachable && (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-amber">
+                The dashboard API is unreachable - feed status cannot be shown. Nothing here is simulated.
+              </td></tr>
+            )}
+            {feedsLoaded && !unreachable && filtered.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-ink-500">
+                No feeds registered yet. OSINT/NVD connectors register themselves on their first sync; use &quot;Add Feed&quot; for custom sources.
+              </td></tr>
+            )}
             {filtered.map((feed, i) => (
               <motion.tr
                 key={feed.id}

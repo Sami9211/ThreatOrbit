@@ -591,17 +591,19 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
   const [region, setRegion] = useState('All')
   const [sev, setSev] = useState<string>('All')
 
-  useEffect(() => { if (seed.length > 0) setFeeds(seed) }, [seed])
+  useEffect(() => { setFeeds(seed) }, [seed])
 
+  // Honest "live": re-poll the real endpoint - a new row appears only when
+  // the backend actually has one. The old version recycled the same items
+  // with fresh ids every 3.5s, manufacturing endless activity out of a
+  // finite list (the "same IOCs keep re-appearing" audit finding).
   useEffect(() => {
-    if (paused || seed.length === 0) return
-    let counter = 1000
+    if (paused) return
     const id = setInterval(() => {
-      const base = seed[counter % seed.length]
-      setFeeds((prev) => [{ ...base, id: String(counter++) }, ...prev].slice(0, 40))
-    }, 3500)
+      fetchLiveFeed(40).then(setFeeds).catch(() => {})
+    }, 15_000)
     return () => clearInterval(id)
-  }, [paused, seed])
+  }, [paused])
 
   const filtered = useMemo(
     () =>
@@ -693,7 +695,11 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
           ))}
         </AnimatePresence>
         {filtered.length === 0 && (
-          <div className="py-10 text-center text-xs text-ink-600">No threats match the current filters</div>
+          <div className="py-10 text-center text-xs text-ink-600">
+            {feeds.length === 0
+              ? 'No threat activity yet - rows appear as feeds sync and detections fire'
+              : 'No threats match the current filters'}
+          </div>
         )}
       </div>
     </div>

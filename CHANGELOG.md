@@ -9,6 +9,39 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-18 - Cross-machine deployments work; placeholder-data purge (Audit-3 root causes)
+- **The dashboard now works when viewed from a different machine than the
+  server.** The built frontend hard-defaulted its API base to
+  `http://localhost:8002`; the one-command start scripts build without
+  `NEXT_PUBLIC_API_URL`, so every browser call from another machine went to
+  the *viewer's* localhost and silently died - leaving the whole app
+  running on leftover placeholder constants: static-looking data, dead
+  actions, empty consoles, "connected" vendors that don't exist. The base
+  now derives from the page's own hostname when not baked at build time.
+  Proven live: API bound off-loopback, browsed via a LAN-style hostname -
+  login + live data work; the old build fails at login in that topology.
+- **Placeholder purge** (fabrications that showed whenever the API was
+  unreachable, or regardless):
+  - Overview "Live Threat Feed" stopped recycling the same rows with fresh
+    ids every 3.5s (manufactured endless activity - the "same IOCs keep
+    re-appearing" audit finding). It now re-polls the real endpoint every
+    15s; a new row appears only when the backend has one, and an empty
+    store says so.
+  - Feeds → Sources: the 16 fabricated vendor rows (GreyNoise, Recorded
+    Future, Mandiant... with invented "last pull 5m ago" / "API key
+    configured") are deleted. Rows come only from the backend; real
+    format/reliability/interval columns are shown ("-" when untracked);
+    honest loading / unreachable / empty states.
+  - SOAR → Integrations: the API-unreachable fallback to a fake "connected"
+    vendor list is gone - an explicit unreachable banner replaces it, plus
+    an honest empty state for fresh deployments.
+- Live-posture verification on the owner-faithful build (API off-loopback,
+  live data mode, fresh DB): login OK from the "other machine", default
+  experience mode = Normal, no fabricated vendors anywhere, SOC console
+  renders the full operational shell with real zeros, connectors report
+  their genuine errors (NVD 403 via proxy, engine connection refused),
+  zero console errors.
+
 ### 2026-07-18 - IntelScope depth: tabbed investigation view, RDAP registry data, relations, hand-off
 - **Result tabs** (Details / Relations / Community / Sources) replace the
   single panel - a VirusTotal-grade layout where every datum is real:
