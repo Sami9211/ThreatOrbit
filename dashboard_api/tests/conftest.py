@@ -15,6 +15,10 @@ os.environ["DASHBOARD_ADMIN_PASSWORD"] = "ChangeMe123!"
 # targets here. The SSRF guard's blocking behaviour is covered directly in
 # test_net_guard.py (which calls it with allow_private=False).
 os.environ["DASHBOARD_ALLOW_PRIVATE_URLS"] = "true"
+# Never let the suite depend on external registries: RDAP enrichment reports
+# an honest "disabled" instead of making live rdap.org calls. The parser is
+# covered in test_scanner_lookup.py with a monkeypatched transport.
+os.environ["DASHBOARD_DISABLE_RDAP"] = "true"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

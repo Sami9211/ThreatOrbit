@@ -669,7 +669,10 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
                   { label: 'Region', value: f.region }, { label: 'Detail', value: f.detail },
                 ],
                 actions: [
-                  { label: 'Look up in CTI scanner', href: '/dashboard/scanner' },
+                  // Carry the indicator into the scanner and start the scan -
+                  // the user never re-types what the platform already knows.
+                  { label: 'Look up in CTI scanner',
+                    href: `/dashboard/scanner?value=${encodeURIComponent(f.ip)}&type=${/^\d+\.\d+\.\d+\.\d+$/.test(f.ip) ? 'ip' : 'url'}&run=1` },
                   { label: 'Open threat feeds', href: '/dashboard/feeds' },
                 ],
               })}

@@ -9,6 +9,46 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-18 - IntelScope depth: tabbed investigation view, RDAP registry data, relations, hand-off
+- **Result tabs** (Details / Relations / Community / Sources) replace the
+  single panel - a VirusTotal-grade layout where every datum is real:
+  - **Details**: the full TI-store record (severity, confidence + decay,
+    sightings, lifecycle, actor, feed source, tags), offline indicator
+    analysis, and a live **RDAP registry block**.
+  - **Relations**: everything this deployment actually knows around the
+    indicator via new `GET /cti/scan/context` - SIEM alerts (deep-linked
+    `?alert=`), SOAR cases (`?case=`), sibling IOCs (same actor / same
+    host), dark-web mentions, matching inventory assets (flagged), bounded
+    raw-event volume, co-observed entities (IP chips pivot the scan), and
+    CTI-graph neighbours. Unknown indicators return honest empty states.
+  - **Community**: real analyst signal - this SOC's prior scans of the exact
+    target (verdict tally, last scan), feed sightings, known-good state;
+    the external panel states plainly that VT/GreyNoise reputation appears
+    only once keys are configured.
+  - **Sources**: the per-provider honesty panel from the previous entry.
+- **RDAP enricher** (new `rdap` provider, keyless, real): queries the
+  registries' own RDAP service (rdap.org redirect chain, every hop through
+  the SSRF guard - redirects are never followed blindly) for IP network
+  ownership (org/country/range) and domain registration (registrar, dates,
+  nameservers). A domain younger than 30 days reads *suspicious* with the
+  age stated; unreachable registry reports `available:false` - never a
+  made-up record. `DASHBOARD_DISABLE_RDAP=true` turns it off (tests/CI set
+  it - suites never depend on external registries).
+- **Hand-off deep link** (`/dashboard/scanner?value=&type=&run=1`): CVE /
+  IOC / threat-map "Look up in CTI scanner" actions now carry their
+  indicator into a pre-populated, auto-running scan (Overview threat map
+  wired; audit-3 item 8). `cve` accepted as a scan-history type.
+- Two bugs the new e2e/live pass caught and fixed before ship: the verdict
+  gauge rendered a known indicator as **4500/100** (lookup confidence is
+  0-100, the gauge scale is 0-1), and the offline IP analysis called any
+  private/loopback address **benign** - in a SOC, private space is where
+  lateral movement lives (and Python classes the TEST-NET documentation
+  ranges as private too). Class is context now; the verdict stays unknown.
+- Snapshot: 241 API paths. Fences: 6 new backend tests (context relations,
+  empty-state honesty, RDAP parsing via monkeypatched transport, disabled
+  mode) + new `e2e/scanner.spec.ts` (unverified honesty, tab presence,
+  hand-off autorun, known-indicator record).
+
 ### 2026-07-18 - IntelScope rebuilt honest: no fabricated vendor verdicts, real depth
 - **The false-positive mechanism is closed.** The lookup's blind substring
   fallback (`LIKE %query%`) matched any IOC merely CONTAINING the query -

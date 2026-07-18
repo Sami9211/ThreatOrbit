@@ -3023,7 +3023,9 @@ def test_ioc_enrichment_units():
     dga = _enrich_indicator(None, "x7k2q9zp4m.xyz", "domain")
     assert dga["data"]["suspiciousTld"] is True and dga["verdict"] == "suspicious"
     priv = _enrich_indicator(None, "10.0.0.5", "ip")
-    assert priv["data"]["ipClass"] == "private" and priv["verdict"] == "benign"
+    # Private class is context, never a verdict: lateral movement lives on
+    # private space, and Python also classes TEST-NET ranges as private.
+    assert priv["data"]["ipClass"] == "private" and priv["verdict"] == "unknown"
     pub = _enrich_indicator(None, "8.8.8.8", "ip")
     assert pub["data"]["ipClass"] == "public" and "rirHint" in pub["data"]
     assert _combined_verdict([{"available": True, "verdict": "suspicious"},

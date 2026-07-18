@@ -714,6 +714,146 @@ def graph_path(from_: str = Query(..., alias="from"), to: str = Query(...)):
 
 # -- Scanner history ------------------------------------------------------------
 
+def _context_host(v: str) -> str | None:
+    """The hostname to pivot on alongside the raw value: a URL query also
+    relates through its host; a bare value relates only through itself."""
+    if "://" in v:
+        from urllib.parse import urlparse
+        host = (urlparse(v).hostname or "").strip(".")
+        return host or None
+    return None
+
+
+@router.get("/scan/context")
+def scan_context(value: str, user: dict = Depends(current_user)):
+    """Everything this deployment actually knows around an indicator: the IOC
+    record, sibling indicators (same actor / same host), SIEM alerts, SOAR
+    cases, dark-web findings, assets, raw-event volume, graph neighbours and
+    prior analyst scans. Every relation is a real stored record (deep-linkable
+    by id) - an indicator we know nothing about honestly returns empty lists,
+    not invented context."""
+    v = value.strip()
+    if not v:
+        raise HTTPException(status_code=400, detail="value is required")
+    host = _context_host(v)
+    keys = [v] + ([host] if host and host != v else [])
+    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    with get_conn() as conn:
+        # The indicator itself (same delimiter-bounded matching as /lookup).
+        row = conn.execute(f"SELECT * FROM iocs WHERE value=? {sc}", (v, *sp)).fetchone()
+        if row is None and host:
+            row = conn.execute(f"SELECT * FROM iocs WHERE value=? {sc}",
+                               (host, *sp)).fetchone()
+        if row is None and "/" not in v and "." in v:
+            row = conn.execute(
+                f"SELECT * FROM iocs WHERE (value LIKE ? OR value LIKE ? OR value LIKE ?) {sc} "
+                "ORDER BY confidence DESC LIMIT 1",
+                (f"%://{v}/%", f"%://{v}", f"%://{v}?%", *sp)).fetchone()
+        indicator = row_to_dict(row) if row else None
+
+        # Sibling indicators: same attributed actor, then same host family.
+        related_iocs: list[dict] = []
+        seen_ids = {indicator["id"]} if indicator else set()
+        if indicator and indicator.get("actor"):
+            for r in conn.execute(
+                    f"SELECT id, value, type, severity, confidence, actor FROM iocs "
+                    f"WHERE actor=? AND id != ? {sc} ORDER BY confidence DESC LIMIT 6",
+                    (indicator["actor"], indicator["id"], *sp)).fetchall():
+                related_iocs.append(row_to_dict(r)); seen_ids.add(r["id"])
+        pivot_host = host or (v if "/" not in v and "." in v else None)
+        if pivot_host and len(related_iocs) < 6:
+            for r in conn.execute(
+                    f"SELECT id, value, type, severity, confidence, actor FROM iocs "
+                    f"WHERE (value LIKE ? OR value LIKE ? OR value LIKE ?) {sc} "
+                    "ORDER BY confidence DESC LIMIT 8",
+                    (f"%://{pivot_host}/%", f"%://{pivot_host}", f"%://{pivot_host}?%",
+                     *sp)).fetchall():
+                if r["id"] not in seen_ids and len(related_iocs) < 6:
+                    related_iocs.append(row_to_dict(r)); seen_ids.add(r["id"])
+
+        # SIEM alerts touching the indicator (src/dest/hostname, exact match).
+        ph = ",".join("?" * len(keys))
+        alert_where = (f"(src_ip IN ({ph}) OR dest_ip IN ({ph}) OR hostname IN ({ph})) {sc}")
+        aparams = keys * 3 + sp
+        alert_total = conn.execute(
+            f"SELECT COUNT(*) FROM alerts WHERE {alert_where}", aparams).fetchone()[0]
+        alerts = rows_to_dicts(conn.execute(
+            f"SELECT id, ts, title, severity, status, src_ip, dest_ip, hostname, username "
+            f"FROM alerts WHERE {alert_where} ORDER BY ts DESC LIMIT 5", aparams).fetchall())
+
+        # SOAR cases holding the indicator as an entity (exact JSON element).
+        case_clause = " OR ".join(["entities LIKE ?"] * len(keys))
+        cparams = [f'%"{k}"%' for k in keys] + sp
+        cases = rows_to_dicts(conn.execute(
+            f"SELECT id, title, severity, status, owner, created FROM cases "
+            f"WHERE ({case_clause}) {sc} ORDER BY created DESC LIMIT 5", cparams).fetchall())
+
+        # Dark-web findings: exact entity match, or a mention inside the detail.
+        dw_where = (f"(entity IN ({ph}) OR " + " OR ".join(["detail LIKE ?"] * len(keys))
+                    + f") {sc}")
+        dwparams = keys + [f"%{k}%" for k in keys] + sp
+        dw_total = conn.execute(
+            f"SELECT COUNT(*) FROM dark_web_findings WHERE {dw_where}", dwparams).fetchone()[0]
+        dark_web = rows_to_dicts(conn.execute(
+            f"SELECT id, ts, category, severity, source, title, entity FROM dark_web_findings "
+            f"WHERE {dw_where} ORDER BY ts DESC LIMIT 5", dwparams).fetchall())
+
+        # Inventory assets that ARE the indicator (address or name).
+        assets = rows_to_dicts(conn.execute(
+            f"SELECT id, name, type, value, criticality, status, risk_score FROM assets "
+            f"WHERE (value IN ({ph}) OR name IN ({ph})) {sc} LIMIT 5",
+            keys * 2 + sp).fetchall())
+
+        # Raw-event volume, bounded so a hot indicator can't trigger a full scan.
+        ev_cap = 500
+        ev_count = conn.execute(
+            f"SELECT COUNT(*) FROM (SELECT 1 FROM events "
+            f"WHERE (src_ip IN ({ph}) OR dest_ip IN ({ph}) OR hostname IN ({ph})) {sc} "
+            f"LIMIT {ev_cap}) capped", keys * 3 + sp).fetchone()[0]
+
+        # Related entities observed alongside it in those alerts.
+        rel: dict[str, list[str]] = {"ips": [], "hostnames": [], "usernames": [], "emails": []}
+        for a in alerts:
+            for k, col in (("ips", "src_ip"), ("ips", "dest_ip"),
+                           ("hostnames", "hostname"), ("usernames", "username")):
+                val = a.get(col)
+                if val and val not in keys and val not in rel[k] and len(rel[k]) < 8:
+                    rel[k].append(val)
+        for f in dark_web:
+            ent = f.get("entity")
+            if ent and "@" in ent and ent not in rel["emails"] and len(rel["emails"]) < 8:
+                rel["emails"].append(ent)
+
+        # Prior analyst activity on this exact target - the honest "community"
+        # signal: what THIS SOC's analysts concluded before, not invented votes.
+        scan_rows = conn.execute(
+            f"SELECT verdict, COUNT(*) AS n, MAX(ts) AS last_ts FROM scans "
+            f"WHERE target=? {sc} GROUP BY verdict", (v, *sp)).fetchall()
+        analyst = {"scans": sum(r["n"] for r in scan_rows),
+                   "byVerdict": {r["verdict"]: r["n"] for r in scan_rows},
+                   "lastScan": max((r["last_ts"] for r in scan_rows), default=None)}
+
+        # Intelligence-graph neighbourhood (actors/malware/techniques/sectors).
+        graph = None
+        if indicator:
+            from dashboard_api import cti_graph
+            g = cti_graph.neighbours(conn, f"ioc:{indicator['value']}")
+            if g.get("node") is not None:
+                graph = g["neighbours"]
+    return {
+        "value": v, "host": host, "indicator": indicator,
+        "relatedIocs": related_iocs,
+        "alerts": {"total": alert_total, "items": alerts},
+        "cases": cases,
+        "darkWeb": {"total": dw_total, "items": dark_web},
+        "assets": assets,
+        "events": {"count": ev_count, "capped": ev_count >= ev_cap},
+        "relatedEntities": rel,
+        "analystActivity": analyst,
+        "graph": graph,
+    }
+
+
 @router.get("/scan/enrich")
 def scan_enrich(value: str, type: str = "", refresh: bool = False,
                 user: dict = Depends(require_perm("cti.write"))):
@@ -733,7 +873,7 @@ def scan_enrich(value: str, type: str = "", refresh: bool = False,
     return result
 
 
-_SCAN_TYPES = {"url", "ip", "hash", "domain", "file"}
+_SCAN_TYPES = {"url", "ip", "hash", "domain", "file", "cve"}
 _VERDICTS = {"malicious", "suspicious", "clean", "unverified"}
 
 

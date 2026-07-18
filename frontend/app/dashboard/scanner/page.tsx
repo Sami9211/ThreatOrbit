@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { lookupIoc, recordScan, fetchScans, importIocs, fetchScanEnrich, fetchEnrichers,
-  type ScanEntry, type EnrichProvider } from '@/lib/api'
+  fetchScanContext, type ScanEntry, type EnrichProvider, type ScanContext,
+  type IocLookup } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
   Globe, Hash, Link, File, ChevronDown, ExternalLink, Loader,
-  Clock, Database, Zap, Bookmark, BookmarkCheck,
+  Clock, Database, Zap, Bookmark, BookmarkCheck, Layers, Network, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tk, withAlpha } from '@/lib/colors'
@@ -152,8 +154,12 @@ type ScanResult = {
   /** Live results carry real provenance instead of the demo blocks. */
   source?: string | null            // which feed knew the indicator
   providers?: EnrichProvider[]      // real enrichment pipeline rows
+  lookup?: IocLookup | null         // the raw TI-store record (Details tab)
+  context?: ScanContext | null      // real relations from our own stores
   demo?: boolean                    // API unreachable - sample result, labeled
 }
+
+type ResultTab = 'details' | 'relations' | 'community' | 'sources'
 
 const SCAN_TYPES = [
   { key: 'url',  label: 'URL',      icon: Link,   placeholder: 'https://example.com/path' },
@@ -239,6 +245,7 @@ function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
 const PROVIDER_LABEL: Record<string, string> = {
   internal: 'Internal telemetry',
   indicator: 'Indicator heuristics',
+  rdap: 'RDAP registry',
   otx: 'AlienVault OTX',
   virustotal: 'VirusTotal',
   greynoise: 'GreyNoise',
@@ -349,12 +356,396 @@ function EngineResults({ engines }: { engines: ScanResult['engines'] }) {
   )
 }
 
+/* -- Shared result-tab primitives ----------------------------------- */
+
+function KV({ k, v, mono = true }: { k: string; v: string | number | null | undefined; mono?: boolean }) {
+  if (v === null || v === undefined || v === '') return null
+  return (
+    <div className="flex justify-between gap-4 py-1 text-xs border-b border-white/4 last:border-0">
+      <span className="text-ink-500 shrink-0">{k}</span>
+      <span className={cn('text-ink-200 text-right break-all', mono && 'font-mono')}>{String(v)}</span>
+    </div>
+  )
+}
+
+function SevBadge({ sev }: { sev: string }) {
+  return (
+    <span className={cn(
+      'text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-sm shrink-0',
+      sev === 'critical' ? 'bg-magenta/15 text-magenta'
+        : sev === 'high' ? 'bg-threat/15 text-threat'
+        : sev === 'medium' ? 'bg-amber/15 text-amber' : 'bg-surface-3 text-ink-400',
+    )}>{sev}</span>
+  )
+}
+
+function Card({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="glass border border-white/8 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function EmptyNote({ text }: { text: string }) {
+  return <p className="text-xs text-ink-500 leading-relaxed">{text}</p>
+}
+
+const providerOf = (r: ScanResult, name: string): EnrichProvider | undefined =>
+  (r.providers ?? []).find((p) => p.provider === name)
+
+/* -- Details tab: the full record behind the verdict ----------------- */
+function DetailsTab({ result }: { result: ScanResult }) {
+  const lu = result.lookup
+  const rdap = providerOf(result, 'rdap')
+  const heur = providerOf(result, 'indicator')
+  const rd = (rdap?.data ?? {}) as Record<string, unknown>
+  const rdFound = rdap?.available && rd.found === true
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <Card title="Threat-Intel Record"
+        right={lu?.found ? <SevBadge sev={String(lu.severity)} /> : undefined}>
+        {lu?.found ? (
+          <div>
+            <KV k="Threat type" v={lu.threatType} mono={false} />
+            <KV k="Attributed actor" v={lu.actor} mono={false} />
+            <KV k="Feed source" v={lu.source} mono={false} />
+            <KV k="Confidence" v={`${lu.confidence}${lu.effectiveConfidence != null && lu.effectiveConfidence !== lu.confidence ? ` (effective ${lu.effectiveConfidence} after decay)` : ''}`} />
+            <KV k="Sightings" v={lu.sightings} />
+            <KV k="Lifecycle" v={lu.status} mono={false} />
+            <KV k="First seen" v={lu.firstSeen} />
+            <KV k="Last seen" v={lu.lastSeen} />
+            {lu.knownGood && (
+              <p className="text-[11px] text-safe mt-2">Marked known-good by an analyst - it reads back benign and stops matching.</p>
+            )}
+            {lu.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {lu.tags.map((t) => (
+                  <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-surface-3 text-ink-400">{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : result.demo ? (
+          <EmptyNote text="Demo result - the live TI store was not consulted." />
+        ) : (
+          <EmptyNote text="Not present in the ThreatOrbit intelligence store. No feed this deployment ingests has published this indicator." />
+        )}
+      </Card>
+
+      <Card title="Registry (RDAP)"
+        right={rdap?.cached ? <span className="text-[9px] text-ink-600">cached</span> : undefined}>
+        {rdFound ? (
+          <div>
+            {/* Domain record */}
+            <KV k="Registrar" v={rd.registrar as string} mono={false} />
+            <KV k="Registered" v={rd.registered as string} />
+            <KV k="Domain age" v={rd.ageDays != null ? `${rd.ageDays} days` : null} />
+            <KV k="Expires" v={rd.expires as string} />
+            <KV k="Last changed" v={rd.lastChanged as string} />
+            {/* IP network record */}
+            <KV k="Network" v={(rd.name ?? rd.handle) as string} />
+            <KV k="Organisation" v={rd.org as string} mono={false} />
+            <KV k="Country" v={rd.country as string} />
+            <KV k="Address range" v={rd.range as string} />
+            <KV k="Allocation" v={rd.allocationType as string} mono={false} />
+            {Array.isArray(rd.nameservers) && rd.nameservers.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[10px] text-ink-500 mb-1">Nameservers</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(rd.nameservers as string[]).map((ns) => (
+                    <span key={ns} className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-surface-3 text-ink-300">{ns}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {rdap?.summary && <p className="text-[11px] text-ink-400 mt-3">{rdap.summary}</p>}
+          </div>
+        ) : rdap?.available ? (
+          <EmptyNote text={rdap.summary || 'No registry record for this value.'} />
+        ) : (
+          <EmptyNote text={`Registry lookup did not run: ${rdap?.reason ?? 'not applicable for this indicator type'}. RDAP is the registries' own public data - nothing is substituted when it is unreachable.`} />
+        )}
+      </Card>
+
+      {heur?.available && heur.data && Object.keys(heur.data).length > 1 && (
+        <Card title="Indicator Analysis">
+          {Object.entries(heur.data as Record<string, unknown>)
+            .filter(([k]) => k !== 'type')
+            .map(([k, v]) => (
+              <KV key={k} k={k.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
+                v={typeof v === 'boolean' ? (v ? 'yes' : 'no') : (v as string | number)} />
+            ))}
+          {heur.summary && <p className="text-[11px] text-ink-400 mt-3">{heur.summary}</p>}
+        </Card>
+      )}
+
+      {result.fileInfo && (
+        <Card title="File Details">
+          {Object.entries(result.fileInfo).map(([k, v]) => (
+            <KV key={k} k={k.charAt(0).toUpperCase() + k.slice(1)} v={v} />
+          ))}
+        </Card>
+      )}
+
+      {result.demo && (
+        <Card title="Network Info (sample)">
+          {Object.entries(result.network).map(([k, v]) => (
+            <KV key={k} k={k.toUpperCase()} v={v} />
+          ))}
+        </Card>
+      )}
+
+      {result.demo && result.mitre.length > 0 && (
+        <Card title="MITRE ATT&CK (sample)">
+          <div className="space-y-2">
+            {result.mitre.map((t) => (
+              <div key={t} className="flex items-center gap-2 text-xs">
+                <span className="px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono text-[9px]">{t.split(' - ')[0]}</span>
+                <span className="text-ink-300">{t.split(' - ')[1]}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+/* -- Relations tab: real records around the indicator ---------------- */
+function RelationsTab({ result, onOpenAlert, onOpenCase, onPivot }: {
+  result: ScanResult
+  onOpenAlert: (id: string) => void
+  onOpenCase: (id: string) => void
+  onPivot: (value: string, type: string) => void
+}) {
+  const cx = result.context
+  if (result.demo || !cx) {
+    return <EmptyNote text="Live relations are unavailable - the dashboard API could not be reached. Relations always come from this deployment's own alert, case, dark-web and asset stores; they are never invented." />
+  }
+  const entityGroups: Array<{ label: string; values: string[]; pivotType?: string }> = [
+    { label: 'IPs', values: cx.relatedEntities.ips, pivotType: 'ip' },
+    { label: 'Hostnames', values: cx.relatedEntities.hostnames },
+    { label: 'Usernames', values: cx.relatedEntities.usernames },
+    { label: 'Emails', values: cx.relatedEntities.emails },
+  ].filter((g) => g.values.length > 0)
+  const nothing = cx.alerts.total === 0 && cx.cases.length === 0 && cx.relatedIocs.length === 0
+    && cx.darkWeb.total === 0 && cx.assets.length === 0 && cx.events.count === 0
+    && entityGroups.length === 0 && !cx.graph?.length
+  if (nothing) {
+    return (
+      <Card title="No Recorded Relations">
+        <EmptyNote text="No SIEM alert, SOAR case, dark-web finding, asset or raw event in this deployment references this indicator, and it has no intelligence-graph neighbours. That is a real answer from your own data - not a gap being papered over." />
+      </Card>
+    )
+  }
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <Card title="SIEM Alerts" right={<span className="text-xs text-ink-500">{cx.alerts.total} total</span>}>
+        {cx.alerts.items.length === 0 ? <EmptyNote text="No alert references this indicator." /> : (
+          <div className="space-y-1">
+            {cx.alerts.items.map((a) => (
+              <button key={a.id} onClick={() => onOpenAlert(a.id)}
+                className="w-full flex items-center gap-2.5 py-1.5 px-3 rounded-lg hover:bg-white/4 transition-colors text-left group">
+                <SevBadge sev={a.severity} />
+                <span className="text-xs text-ink-200 truncate flex-1">{a.title}</span>
+                <span className="text-[10px] text-ink-600 shrink-0">{relativeTime(a.ts)}</span>
+                <ExternalLink className="w-3 h-3 text-ink-600 group-hover:text-magenta shrink-0" />
+              </button>
+            ))}
+            {cx.alerts.total > cx.alerts.items.length && (
+              <p className="text-[10px] text-ink-600 px-3 pt-1">Showing {cx.alerts.items.length} of {cx.alerts.total} - open one to triage in the SIEM.</p>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card title="SOAR Cases">
+        {cx.cases.length === 0 ? <EmptyNote text="No case holds this indicator as an entity." /> : (
+          <div className="space-y-1">
+            {cx.cases.map((c) => (
+              <button key={c.id} onClick={() => onOpenCase(c.id)}
+                className="w-full flex items-center gap-2.5 py-1.5 px-3 rounded-lg hover:bg-white/4 transition-colors text-left group">
+                <SevBadge sev={c.severity} />
+                <span className="text-xs text-ink-200 truncate flex-1">{c.title}</span>
+                <span className="text-[10px] text-ink-600 uppercase shrink-0">{c.status}</span>
+                <ExternalLink className="w-3 h-3 text-ink-600 group-hover:text-magenta shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Related Indicators">
+        {cx.relatedIocs.length === 0 ? <EmptyNote text="No sibling indicators (same actor or same host)." /> : (
+          <div className="space-y-1">
+            {cx.relatedIocs.map((i) => (
+              <div key={i.id} className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg hover:bg-white/3 transition-colors">
+                <span className="text-[9px] text-ink-600 font-mono uppercase bg-surface-3 px-1.5 py-0.5 rounded-sm shrink-0">{i.type}</span>
+                <span className="text-xs font-mono text-ink-200 truncate flex-1">{i.value}</span>
+                {i.actor && <span className="text-[10px] text-violet shrink-0">{i.actor}</span>}
+                <SevBadge sev={i.severity} />
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Dark-Web Mentions" right={<span className="text-xs text-ink-500">{cx.darkWeb.total} total</span>}>
+        {cx.darkWeb.items.length === 0 ? <EmptyNote text="No monitored forum, market or paste mentions this indicator." /> : (
+          <div className="space-y-1">
+            {cx.darkWeb.items.map((f) => (
+              <div key={f.id} className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg hover:bg-white/3 transition-colors">
+                <SevBadge sev={f.severity} />
+                <span className="text-xs text-ink-200 truncate flex-1">{f.title}</span>
+                <span className="text-[10px] text-ink-600 shrink-0">{f.source ?? f.category}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {cx.assets.length > 0 && (
+        <Card title="Your Assets">
+          <div className="space-y-1">
+            {cx.assets.map((a) => (
+              <div key={a.id} className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg hover:bg-white/3 transition-colors">
+                <SevBadge sev={a.criticality} />
+                <span className="text-xs text-ink-200 truncate flex-1">{a.name}</span>
+                <span className="text-[10px] font-mono text-ink-500 shrink-0">{a.value}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-amber mt-2">This indicator matches an asset in your inventory - treat detections against it with care.</p>
+        </Card>
+      )}
+
+      <Card title="Raw Event Volume">
+        <p className="font-display text-2xl font-bold text-white">
+          {cx.events.count}{cx.events.capped ? '+' : ''}
+        </p>
+        <p className="text-[11px] text-ink-500 mt-1">
+          ingested events reference this indicator{cx.events.capped ? ' (count capped at 500)' : ''} - pivot to the SIEM event explorer for the full stream.
+        </p>
+      </Card>
+
+      {entityGroups.length > 0 && (
+        <Card title="Co-observed Entities">
+          <div className="space-y-3">
+            {entityGroups.map((g) => (
+              <div key={g.label}>
+                <p className="text-[10px] text-ink-500 mb-1.5">{g.label}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {g.values.map((v) => g.pivotType ? (
+                    <button key={v} onClick={() => onPivot(v, g.pivotType!)}
+                      title={`Scan ${v}`}
+                      className="text-[10px] font-mono px-2 py-1 rounded-md bg-surface-2 border border-white/8 text-ink-300 hover:text-white hover:border-magenta/40 transition-colors">
+                      {v}
+                    </button>
+                  ) : (
+                    <span key={v} className="text-[10px] font-mono px-2 py-1 rounded-md bg-surface-3 text-ink-400">{v}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-ink-600 mt-3">Seen in the same alerts as this indicator. Click an IP to pivot the scan onto it.</p>
+        </Card>
+      )}
+
+      {cx.graph && cx.graph.length > 0 && (
+        <Card title="Intelligence Graph">
+          <div className="flex flex-wrap gap-1.5">
+            {cx.graph.slice(0, 12).map((n) => (
+              <span key={n.id} className="text-[10px] px-2 py-1 rounded-md bg-violet/10 text-violet border border-violet/20">
+                {n.label} <span className="text-ink-600">({n.group})</span>
+              </span>
+            ))}
+          </div>
+          <p className="text-[10px] text-ink-600 mt-2">One-hop neighbours in the CTI relationship graph.</p>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+/* -- Community tab: real analyst signal, honest external state -------- */
+function CommunityTab({ result }: { result: ScanResult }) {
+  const cx = result.context
+  const lu = result.lookup
+  const vt = providerOf(result, 'virustotal')
+  if (result.demo) {
+    return (
+      <Card title="Community (sample)">
+        <div className="flex items-end gap-6">
+          <div>
+            <p className="font-display text-2xl font-bold text-threat">{result.community.malicious}</p>
+            <p className="text-[10px] text-ink-500">malicious votes</p>
+          </div>
+          <div>
+            <p className="font-display text-2xl font-bold text-safe">{result.community.clean}</p>
+            <p className="text-[10px] text-ink-500">clean votes</p>
+          </div>
+        </div>
+        <p className="text-[10px] text-amber mt-3">Sample data - the dashboard API is unreachable.</p>
+      </Card>
+    )
+  }
+  const tally = cx?.analystActivity
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <Card title="Your Analysts">
+        {tally && tally.scans > 0 ? (
+          <div>
+            <p className="text-xs text-ink-300 mb-3">
+              Scanned <span className="font-bold text-white">{tally.scans}</span> time{tally.scans === 1 ? '' : 's'} by this SOC
+              {tally.lastScan && <span className="text-ink-500"> - last {relativeTime(tally.lastScan)}</span>}
+            </p>
+            {Object.entries(tally.byVerdict).map(([v, n]) => (
+              <div key={v} className="flex items-center justify-between py-1 text-xs border-b border-white/4 last:border-0">
+                <span className={cn('font-semibold uppercase text-[10px]',
+                  v === 'malicious' ? 'text-threat' : v === 'suspicious' ? 'text-amber'
+                    : v === 'unverified' ? 'text-violet' : 'text-safe')}>{v}</span>
+                <span className="text-ink-200 font-mono">{n}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyNote text="No analyst on this deployment has scanned this exact value before. This panel reflects your own team's history - not invented votes." />
+        )}
+        {lu?.found && (
+          <div className="mt-3 pt-3 border-t border-white/5">
+            <KV k="Feed sightings" v={lu.sightings} />
+            {lu.knownGood && <p className="text-[11px] text-safe mt-1">Whitelisted (known-good) by an analyst.</p>}
+          </div>
+        )}
+      </Card>
+      <Card title="External Community">
+        {vt?.available ? (
+          <div>
+            <p className="text-xs text-ink-300">{vt.summary || 'VirusTotal responded with no additional detail.'}</p>
+            <p className="text-[10px] text-ink-600 mt-2">Live VirusTotal result for this indicator.</p>
+          </div>
+        ) : (
+          <EmptyNote text="External community reputation (VirusTotal votes, GreyNoise sightings) appears here once the provider API keys are configured in Settings. Until then this panel stays empty rather than showing invented numbers." />
+        )}
+      </Card>
+    </div>
+  )
+}
+
 /* -- Page ---------------------------------------------------------- */
 export default function ScannerPage() {
+  const router = useRouter()
   const [scanType, setScanType] = useState<string>('url')
   const [query, setQuery] = useState('')
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
+  const [activeTab, setActiveTab] = useState<ResultTab>('details')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState<ScanRow[]>([])
@@ -385,11 +776,22 @@ export default function ScannerPage() {
 
   useEffect(() => { refreshHistory() }, [refreshHistory])
 
-  const handleScan = () => {
-    if (!query.trim() && scanType !== 'file') return
+  // `pivotValue`/`pivotType` let Relations-tab entity chips re-scan a related
+  // value directly (state updates land too late for the same call otherwise).
+  const handleScan = (pivotValue?: string, pivotType?: string) => {
+    const target = (pivotValue ?? query).trim()
+    const typ = pivotType ?? scanType
+    if (pivotValue) {
+      setQuery(pivotValue)
+      // Only known UI tabs get selected; other backend types (cve, domain)
+      // still scan under their real type via `typ`.
+      if (pivotType && SCAN_TYPES.some((s) => s.key === pivotType)) setScanType(pivotType)
+    }
+    if (!target && typ !== 'file') return
     setScanning(true)
     setResult(null)
     setSaved(false)
+    setActiveTab('details')
 
     const finish = (r: ScanResult, persist = true) => setTimeout(() => {
       setResult(r)
@@ -403,18 +805,19 @@ export default function ScannerPage() {
     }, 900)
 
     const demoOf = () => {
-      const d = scanType === 'ip' ? DEMO_RESULTS.ip
-        : scanType === 'hash' ? DEMO_RESULTS.hash : DEMO_RESULTS.url
+      const d = typ === 'ip' ? DEMO_RESULTS.ip
+        : typ === 'hash' ? DEMO_RESULTS.hash : DEMO_RESULTS.url
       return { ...d, demo: true }
     }
-    if (!query.trim()) { finish(demoOf(), false); return }
+    if (!target) { finish(demoOf(), false); return }
 
-    const target = query.trim()
-    // Two real sources, in parallel: our TI store (verdict + feed provenance)
-    // and the enrichment pipeline (per-provider results with honest
-    // availability). Nothing else is shown - no invented vendor tables.
-    Promise.allSettled([lookupIoc(target), fetchScanEnrich(target, scanType)])
-      .then(([lu, en]) => {
+    // Three real sources, in parallel: our TI store (verdict + feed
+    // provenance), the enrichment pipeline (per-provider results with honest
+    // availability) and the relations context (alerts/cases/dark-web around
+    // the indicator). Nothing else is shown - no invented vendor tables.
+    Promise.allSettled([lookupIoc(target), fetchScanEnrich(target, typ),
+      fetchScanContext(target)])
+      .then(([lu, en, cx]) => {
         if (lu.status === 'rejected') {
           // API unreachable → clearly-labeled sample result, never persisted.
           finish(demoOf(), false)
@@ -431,9 +834,10 @@ export default function ScannerPage() {
           : (enr && enr.verdict !== 'unknown' ? enr.verdict : 'unverified')
         finish({
           target: hit.found ? hit.value : target,
-          type: scanType as ScanResult['type'],
+          type: typ as ScanResult['type'],
           verdict,
-          score: hit.found ? hit.confidence : 0,
+          // Lookup confidence is 0-100; the gauge/score scale is 0-1.
+          score: hit.found ? hit.confidence / 100 : 0,
           detectionRatio: `${flagged.length}/${consulted.length + 1}`,  // +1 = TI store itself
           firstSeen: hit.firstSeen ?? '-',
           lastSeen: hit.lastSeen ?? '-',
@@ -446,9 +850,29 @@ export default function ScannerPage() {
           engines: [], iocs: [], mitre: [],
           source: hit.found ? hit.source : null,
           providers,
+          lookup: hit,
+          context: cx.status === 'fulfilled' ? cx.value : null,
         })
       })
   }
+
+  // Hand-off deep link: /dashboard/scanner?value=<v>&type=<t>&run=1 arrives
+  // pre-populated from CVE/IOC/threat-map actions elsewhere in the app -
+  // the user never re-types data the platform already knows. `run=1`
+  // starts the scan immediately; otherwise it is one click away.
+  const deepLinked = useRef(false)
+  useEffect(() => {
+    if (deepLinked.current) return
+    deepLinked.current = true
+    const params = new URLSearchParams(window.location.search)
+    const v = (params.get('value') ?? '').trim()
+    if (!v) return
+    const t = (params.get('type') ?? '').trim().toLowerCase()
+    setQuery(v)
+    if (SCAN_TYPES.some((s) => s.key === t)) setScanType(t)
+    if (params.get('run') === '1') handleScan(v, t || undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, [])
 
   // File scan: fingerprint the file in-browser (SHA-256, nothing uploaded)
   // and check the digest against the live threat-intel store.
@@ -460,6 +884,7 @@ export default function ScannerPage() {
     setScanning(true)
     setResult(null)
     setSaved(false)
+    setActiveTab('details')
     try {
       const hash = await sha256Hex(file)
       const fileInfo = {
@@ -478,7 +903,8 @@ export default function ScannerPage() {
       }
       let scanResult = base
       try {
-        const [lu, en] = await Promise.allSettled([lookupIoc(hash), fetchScanEnrich(hash, 'hash')])
+        const [lu, en, cx] = await Promise.allSettled([
+          lookupIoc(hash), fetchScanEnrich(hash, 'hash'), fetchScanContext(hash)])
         const hit = lu.status === 'fulfilled' ? lu.value : null
         const enr = en.status === 'fulfilled' ? en.value : null
         const providers = enr?.providers ?? []
@@ -488,7 +914,7 @@ export default function ScannerPage() {
           ...base,
           verdict: hit?.found ? hit.verdict
             : (enr && enr.verdict !== 'unknown' ? enr.verdict : 'unverified'),
-          score: hit?.found ? hit.confidence : 0,
+          score: hit?.found ? hit.confidence / 100 : 0,
           detectionRatio: `${flagged.length}/${consulted.length + 1}`,
           firstSeen: hit?.firstSeen ?? '-',
           lastSeen: hit?.lastSeen ?? '-',
@@ -498,6 +924,8 @@ export default function ScannerPage() {
             : [],
           source: hit?.found ? hit.source : null,
           providers,
+          lookup: hit,
+          context: cx.status === 'fulfilled' ? cx.value : null,
         }
       } catch { /* TI store unreachable - report the unverified fingerprint */ }
       setResult(scanResult)
@@ -620,7 +1048,7 @@ export default function ScannerPage() {
                 />
               </div>
               <button
-                onClick={handleScan}
+                onClick={() => handleScan()}
                 disabled={!query.trim() || scanning}
                 className="px-6 py-3 rounded-xl bg-plasma text-white font-semibold text-sm transition-all hover:shadow-magenta-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
@@ -675,7 +1103,7 @@ export default function ScannerPage() {
               <p className="text-xs text-ink-500 mt-1">The ThreatOrbit TI store plus every enricher this deployment has configured…</p>
             </div>
             <div className="flex gap-2 flex-wrap justify-center">
-              {['ThreatOrbit TI', 'Internal telemetry', 'Indicator heuristics', 'OTX', 'VirusTotal'].map((e) => (
+              {['ThreatOrbit TI', 'Internal telemetry', 'Indicator heuristics', 'RDAP registry', 'VirusTotal'].map((e) => (
                 <span key={e} className="text-[10px] px-2 py-1 rounded-md bg-surface-2 border border-white/8 text-ink-500 animate-pulse">{e}</span>
               ))}
             </div>
@@ -845,73 +1273,75 @@ export default function ScannerPage() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* Live results: the real provider panel. Demo: the labeled
-                 sample engine table. Never both, never unlabeled. */}
-              <div className="glass border border-white/8 rounded-xl p-5">
-                {result.demo
-                  ? <EngineResults engines={result.engines} />
-                  : <ProviderResults providers={result.providers ?? []}
-                      unknown={result.source == null} />}
-              </div>
+            {/* Result tabs: Details / Relations / Community / Sources */}
+            <div className="flex items-center gap-2 flex-wrap" role="tablist" aria-label="Scan result sections">
+              {([
+                { key: 'details', label: 'Details', icon: Layers },
+                { key: 'relations', label: 'Relations', icon: Network,
+                  badge: result.context
+                    ? result.context.alerts.total + result.context.cases.length
+                      + result.context.relatedIocs.length + result.context.darkWeb.total
+                      + result.context.assets.length
+                    : 0 },
+                { key: 'community', label: 'Community', icon: Users },
+                { key: 'sources', label: 'Sources', icon: Database,
+                  badge: (result.providers ?? []).filter((p) => p.available).length + 1 },
+              ] as Array<{ key: ResultTab; label: string; icon: typeof Layers; badge?: number }>).map(({ key, label, icon: Icon, badge }) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={activeTab === key}
+                  onClick={() => setActiveTab(key)}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all',
+                    activeTab === key
+                      ? 'bg-violet/15 text-violet border border-violet/30'
+                      : 'text-ink-400 border border-white/8 hover:text-white hover:border-white/15',
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                  {badge != null && badge > 0 && (
+                    <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full',
+                      activeTab === key ? 'bg-violet/20' : 'bg-surface-3 text-ink-500')}>
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
 
-              {/* Network + MITRE */}
-              <div className="space-y-4">
-                {result.fileInfo && (
-                  <div className="glass border border-white/8 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-white mb-3">File Details</h3>
-                    {Object.entries(result.fileInfo).map(([k, v]) => (
-                      <div key={k} className="flex justify-between py-1 text-xs border-b border-white/4">
-                        <span className="text-ink-500 capitalize">{k}</span>
-                        <span className="text-ink-200 font-mono">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {result.demo && (
-                  <div className="glass border border-white/8 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-white mb-3">Network Info</h3>
-                    {Object.entries(result.network).map(([k, v]) => (
-                      <div key={k} className="flex justify-between py-1 text-xs border-b border-white/4">
-                        <span className="text-ink-500 capitalize">{k}</span>
-                        <span className="text-ink-200 font-mono">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {result.mitre.length > 0 && (
-                  <div className="glass border border-white/8 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-white mb-3">MITRE ATT&CK</h3>
-                    <div className="space-y-2">
-                      {result.mitre.map((t) => (
-                        <div key={t} className="flex items-center gap-2 text-xs">
-                          <span className="px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono text-[9px]">
-                            {t.split(' - ')[0]}
-                          </span>
-                          <span className="text-ink-300">{t.split(' - ')[1]}</span>
-                          <ExternalLink className="w-3 h-3 text-ink-600 ml-auto shrink-0" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+            {activeTab === 'details' && <DetailsTab result={result} />}
+            {activeTab === 'relations' && (
+              <RelationsTab
+                result={result}
+                onOpenAlert={(id) => router.push(`/dashboard/siem?alert=${encodeURIComponent(id)}`)}
+                onOpenCase={(id) => router.push(`/dashboard/soar?case=${encodeURIComponent(id)}`)}
+                onPivot={(v, t) => handleScan(v, t)}
+              />
+            )}
+            {activeTab === 'community' && <CommunityTab result={result} />}
+            {activeTab === 'sources' && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="glass border border-white/8 rounded-xl p-5">
+                  {result.demo
+                    ? <EngineResults engines={result.engines} />
+                    : <ProviderResults providers={result.providers ?? []}
+                        unknown={result.source == null} />}
+                </div>
                 {result.iocs.length > 0 && (
-                  <div className="glass border border-white/8 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-white mb-3">Extracted IOCs</h3>
+                  <Card title={result.demo ? 'Extracted IOCs (sample)' : 'Scanned Indicator'}>
                     <div className="space-y-1">
                       {result.iocs.map((ioc) => (
-                        <div key={ioc} className="font-mono text-xs text-ink-300 bg-surface-3 px-3 py-1.5 rounded-lg">
+                        <div key={ioc} className="font-mono text-xs text-ink-300 bg-surface-3 px-3 py-1.5 rounded-lg break-all">
                           {ioc}
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </Card>
                 )}
               </div>
-            </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

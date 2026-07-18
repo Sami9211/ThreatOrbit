@@ -204,6 +204,93 @@ item is a large, multi-part feature.
 
 ---
 
+## Audit 3 (2026-07-18) - post-Linux-deployment findings (owner's brief audit)
+
+The owner deployed on Linux and ran a brief first inspection. Standing
+directive reaffirmed: **stop adding features - fix existing functionality,
+remove placeholder behaviour, make every button/workflow work, validate
+integrations, improve performance, and QA properly.** The owner should be
+finding edge cases, not fundamental breaks.
+
+Status legend: `[ ]` open / `[~]` in progress / `[fix-on-main]` a fix for
+this exact symptom shipped on main after the audited build - must be
+re-verified on a fresh Linux deployment before it may be called closed.
+
+1. **[ ] Default mode** - the app must start in Normal Mode by default.
+2. **[fix-on-main?] Landing: second-planet edge boundary** - masks shipped
+   (`9511178`) but the owner still sees edges on the deployed build;
+   re-verify on the deployed artifact, not the dev preview. If still
+   visible after the mask, hunt the actual painted geometry (canvas
+   clear color / sprite atlas edges), not the container.
+3. **[ ] Landing scroll performance** - "extremely laggy". Profile
+   (CPU-throttled) and fix: reduce per-frame allocations, cap DPR,
+   pause offscreen scenes (IntersectionObserver), memoize scroll-driven
+   re-renders.
+4. **[ ] Hero 3D object jumps when scrolling back to top** - position/
+   animation must be consistent; likely spring re-target or scroll-progress
+   discontinuity.
+5. **[ ] Dashboard alerts look static ("always exactly 6 critical/high")** -
+   demo seed is a fixed snapshot; live overview KPIs must reflect the real
+   store and change with detections. Verify the demo engine actually
+   generates fresh alerts over time and the KPI queries read live.
+6. **[ ] IOC provenance skew: nearly everything is NVD CVE** - verify the
+   ThreatOrbit engine generates its own intelligence, feeds are genuinely
+   connected, enrichment runs; balance/label source mix honestly.
+7. **[fix-on-main?] Dashboard elements don't navigate (Critical Alerts,
+   cards)** - contextual deep links shipped (`1a008d8`, `46647ce`) after
+   the audited build; re-verify each Overview card/knob on a fresh deploy;
+   close the remainder (every element navigates or acts - no dead UI).
+8. **[~] CVE → "Lookup in CTI Scanner" hand-off** - must pre-populate the
+   scanner (value + type) and require at most one click (or auto-run).
+   In progress together with item 9.
+9. **[~] IntelScope depth** (VirusTotal-grade result page) - detailed
+   analysis, evidence for the verdict, reputation, sources, related
+   indicators, investigation context. In flight on main: tabbed results
+   (Details / Relations / Community / Sources), real RDAP registry data,
+   relations from own stores (alerts/cases/dark-web/assets/events/graph),
+   analyst-history community panel - all honest (no fabricated vendors).
+10. **[fix-on-main?] SOC Console empty** - live-population fix + e2e
+    shipped (`c646552`); the owner still sees it empty on Linux deploy -
+    re-verify in the LIVE posture (not demo), especially with zero/low
+    ingest: the console must surface whatever alerts/incidents exist
+    elsewhere in the app, and say honestly when there are none.
+11. **[ ] "Send to SIEM" (and similar) give no feedback** - must confirm
+    completion and link straight to the created SIEM event/alert/
+    investigation (no manual searching afterwards).
+12. **[ ] Threat-feed verification + connector management** - verify every
+    listed feed/connector is genuinely connected (no fake/paid-API
+    placeholders); add connector edit/reconfigure/API-key management and
+    honest connection state.
+13. **[ ] CTI CVE actions fail** - dead buttons, pages fail to load; every
+    CVE entry needs official references (NVD/vendor/mitigation) that
+    actually resolve.
+14. **(deferred by owner)** Dark-web section stays as-is until core
+    functionality is fixed.
+15. **[ ] Attack visualisation** - per attack/investigation: timeline,
+    affected systems, attack path, relationship map ("how did this attack
+    happen?", not isolated alerts). Verify network-map data provenance
+    while there.
+16. **[ ] Undo / action history** - critical analyst actions (e.g. threat
+    suppression) need discoverable reversal: undo affordances, recent
+    actions, action history.
+17. **[ ] SIEM Rules Engine** - rules open/edit/test/related-alerts all
+    broken links or errors; make every rule-management function work.
+18. **[ ] ATT&CK Navigator** - "View Matching Alerts" (and other entity
+    actions) fail; wire every entity action to real alerts/investigations/
+    techniques.
+19. **[ ] Entity Risk** - many non-functional links/actions; every
+    displayed action must work.
+20. **[ ] SOAR feels incomplete** - empty pages, missing workflows, little
+    automation evidence; needs playbooks, automated responses, workflows,
+    analyst approvals, action history demonstrably working.
+
+**Process obligation (standing):** each item gets reproduce-first triage on
+a fresh Linux live deployment; fixes ship with regression fences (unit/e2e);
+"fix-on-main" items are only closed after re-verification on the deployed
+artifact.
+
+---
+
 ## Open roadmap (remaining work only - finished items live in the CHANGELOG)
 
 **Shipped & complete** (full detail in the CHANGELOG below): Phase 0

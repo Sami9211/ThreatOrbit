@@ -113,8 +113,10 @@ def _enrich_indicator(conn, value: str, ioc_type: str) -> dict:
                 data["rirHint"] = rir
                 summary = f"public IPv{ip.version} ({rir} space)"
             else:
+                # Class is context, NOT a verdict: most real intrusions move
+                # laterally across private space, and Python also classes the
+                # TEST-NET documentation ranges as private. Never "benign".
                 summary = f"{cls} IPv{ip.version} (non-routable)"
-                verdict = "benign" if cls in ("private", "loopback") else "unknown"
         except ValueError:
             summary = "unparseable IP"
     elif t == "hash":
@@ -259,6 +261,154 @@ def _whois_lookup(key: str, value: str, ioc_type: str) -> dict:
             "data": {"createdDate": created, "registrar": registrar, "ageDays": age_days}}
 
 
+# -- Public-registry enricher (RDAP) ----------------------------------------------
+#
+# RDAP is the registries' own successor to WHOIS: rdap.org redirects each query
+# to the authoritative registry (ARIN/RIPE/APNIC/... for IPs, the TLD registry
+# for domains), no API key involved. It yields real ownership/geography/
+# registration data - the "ASN / country / registrar" block the scanner used to
+# fill with placeholders.
+
+_RDAP_BASE = "https://rdap.org"
+_RDAP_MAX_REDIRECTS = 5
+
+
+def _rdap_get(url: str):
+    """GET an RDAP URL following the registry redirect chain manually.
+    net_guard refuses redirects by design (a 30x to an internal address would
+    bypass the SSRF guard), so each hop is re-validated through safe_get."""
+    from urllib.parse import urljoin
+
+    from dashboard_api import net_guard
+    for _ in range(_RDAP_MAX_REDIRECTS):
+        r = net_guard.safe_get(url, timeout=_HTTP_TIMEOUT,
+                               headers={"Accept": "application/rdap+json"})
+        if r.status_code in (301, 302, 303, 307, 308):
+            loc = r.headers.get("location")
+            if not loc:
+                return r
+            url = urljoin(url, loc)
+            continue
+        return r
+    raise RuntimeError("too many RDAP redirects")
+
+
+def _vcard_fn(entity: dict) -> str | None:
+    """The display name ("fn") from an RDAP entity's jCard, if present."""
+    try:
+        for item in entity.get("vcardArray", [None, []])[1]:
+            if item and item[0] == "fn" and len(item) > 3 and item[3]:
+                return str(item[3])
+    except (TypeError, IndexError):
+        pass
+    return None
+
+
+def _entity_by_role(entities: list, role: str) -> str | None:
+    for e in entities or []:
+        if role in (e.get("roles") or []):
+            name = _vcard_fn(e)
+            if name:
+                return name
+    return None
+
+
+def _enrich_rdap(conn, value: str, ioc_type: str) -> dict:
+    """Registry data for an IP or domain via RDAP (public, keyless, real).
+
+    IPs return the registered network (handle/name/range/country/org); domains
+    return registrar + registration/expiry dates + nameservers. A domain
+    registered under 30 days ago is flagged suspicious (with the age stated) -
+    everything else is context, not a verdict. Unreachable registry (air-gapped
+    deployment, egress blocked) reports available:false - never a made-up
+    answer. Set DASHBOARD_DISABLE_RDAP=true to switch the lookup off entirely
+    (tests/CI do, so suites never depend on external registries)."""
+    from urllib.parse import quote, urlparse
+    base = {"provider": "rdap", "verdict": "unknown", "summary": "", "data": {}}
+    if os.environ.get("DASHBOARD_DISABLE_RDAP", "").lower() == "true":
+        return {**base, "available": False, "reason": "disabled (DASHBOARD_DISABLE_RDAP)",
+                "summary": "disabled"}
+    t = (ioc_type or "").lower()
+    target = value
+    if t == "url":
+        host = (urlparse(value).hostname or "").strip(".")
+        if not host:
+            return {**base, "available": False, "reason": "URL has no host",
+                    "summary": "URL has no host"}
+        target = host
+        try:
+            ipaddress.ip_address(host)
+            t = "ip"
+        except ValueError:
+            t = "domain"
+    if t == "ip":
+        try:
+            ip = ipaddress.ip_address(target)
+        except ValueError:
+            return {**base, "available": False, "reason": "not a valid IP",
+                    "summary": "not a valid IP"}
+        if not ip.is_global:
+            return {**base, "available": True,
+                    "summary": "non-routable address - no registry record",
+                    "data": {"global": False}}
+        path = f"/ip/{quote(target, safe='')}"
+    elif t == "domain":
+        path = f"/domain/{quote(target, safe='')}"
+    else:
+        return {**base, "available": False,
+                "reason": f"RDAP covers IPs, domains and URLs (not '{t or 'unknown'}')",
+                "summary": "not applicable"}
+    try:
+        r = _rdap_get(f"{_RDAP_BASE}{path}")
+        if r.status_code == 404:
+            return {**base, "available": True, "summary": "no registry record",
+                    "data": {"found": False}}
+        r.raise_for_status()
+        d = r.json()
+    except Exception as e:  # network/HTTP/parse - honest failure, no fabrication
+        return {**base, "available": False,
+                "reason": f"registry query failed: {e.__class__.__name__}",
+                "summary": "registry unreachable"}
+    if t == "ip":
+        data = {"found": True, "handle": d.get("handle"), "name": d.get("name"),
+                "country": d.get("country"),
+                "range": (f"{d['startAddress']} - {d['endAddress']}"
+                          if d.get("startAddress") and d.get("endAddress") else None),
+                "org": _entity_by_role(d.get("entities"), "registrant"),
+                "allocationType": d.get("type")}
+        bits = [b for b in (data["name"] or data["handle"], data["org"], data["country"]) if b]
+        return {**base, "available": True, "data": data,
+                "summary": "registered network: " + ", ".join(bits) if bits
+                           else "registry record found"}
+    # domain
+    events = {e.get("eventAction"): e.get("eventDate") for e in d.get("events") or []}
+    created = events.get("registration")
+    age_days = None
+    if created:
+        try:
+            age_days = (datetime.now(timezone.utc)
+                        - datetime.fromisoformat(str(created).replace("Z", "+00:00"))).days
+        except (ValueError, TypeError):
+            pass
+    data = {"found": True, "handle": d.get("handle"),
+            "registrar": _entity_by_role(d.get("entities"), "registrar"),
+            "registered": created, "expires": events.get("expiration"),
+            "lastChanged": events.get("last changed"), "ageDays": age_days,
+            "status": (d.get("status") or [])[:6],
+            "nameservers": [ns.get("ldhName") for ns in (d.get("nameservers") or [])[:6]
+                            if ns.get("ldhName")]}
+    verdict = "suspicious" if age_days is not None and age_days < 30 else "unknown"
+    if age_days is not None:
+        summary = f"registered {age_days}d ago"
+        if verdict == "suspicious":
+            summary += " - very young domain"
+    else:
+        summary = "registration date not published"
+    if data["registrar"]:
+        summary += f" via {data['registrar']}"
+    return {**base, "available": True, "verdict": verdict, "summary": summary, "data": data}
+
+
 _PROVIDER_CALLS = {
     "virustotal": _vt_lookup,
     "greynoise": _greynoise_lookup,
@@ -292,11 +442,18 @@ def _enrich_external(provider: str, value: str, ioc_type: str) -> dict:
 
 
 BUILTIN = {"internal": _enrich_internal, "indicator": _enrich_indicator}
-ALL_PROVIDERS = list(BUILTIN) + list(EXTERNAL_PROVIDERS)
+# Public registries: keyless like the builtins, but they DO make a network call,
+# so availability is only known at query time (air-gapped deployments get an
+# honest available:false per lookup, not a fabricated record).
+PUBLIC = {"rdap": _enrich_rdap}
+ALL_PROVIDERS = list(BUILTIN) + list(PUBLIC) + list(EXTERNAL_PROVIDERS)
 
 
 def provider_status() -> list[dict]:
     out = [{"provider": p, "kind": "builtin", "available": True} for p in BUILTIN]
+    for p in PUBLIC:
+        out.append({"provider": p, "kind": "public",
+                    "available": os.environ.get("DASHBOARD_DISABLE_RDAP", "").lower() != "true"})
     for p, env in EXTERNAL_PROVIDERS.items():
         out.append({"provider": p, "kind": "external", "available": bool(os.environ.get(env)),
                     "envVar": env})
@@ -349,6 +506,8 @@ def enrich(conn, value: str, ioc_type: str = "", *, providers: list[str] | None 
                 continue
         if p in BUILTIN:
             res = BUILTIN[p](conn, value, ioc_type)
+        elif p in PUBLIC:
+            res = PUBLIC[p](conn, value, ioc_type)
         elif p in EXTERNAL_PROVIDERS:
             res = _enrich_external(p, value, ioc_type)
         else:

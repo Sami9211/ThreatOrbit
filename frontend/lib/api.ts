@@ -373,7 +373,7 @@ export interface CtiSummary {
 export interface IocLookup {
   value: string
   found: boolean
-  verdict: 'malicious' | 'suspicious' | 'clean'
+  verdict: 'malicious' | 'suspicious' | 'clean' | 'benign' | 'expired' | 'unverified'
   confidence: number
   severity: string | null
   threatType: string | null
@@ -382,6 +382,10 @@ export interface IocLookup {
   firstSeen: string | null
   lastSeen: string | null
   tags: string[]
+  status?: string
+  effectiveConfidence?: number
+  sightings?: number
+  knownGood?: boolean
 }
 
 export interface SavedHunt {
@@ -1197,6 +1201,32 @@ export interface EnricherStatus { provider: string; kind: string; available: boo
 export const fetchEnrichers = () => api<EnricherStatus[]>('/cti/enrichers')
 export const fetchScanEnrich = (value: string, type = '', refresh = false) =>
   api<ScanEnrichResult>(`/cti/scan/enrich?value=${encodeURIComponent(value)}&type=${encodeURIComponent(type)}${refresh ? '&refresh=true' : ''}`)
+
+/** IntelScope relations: everything this deployment actually knows around an
+ * indicator - real stored records with deep-linkable ids, never invented. */
+export interface ScanContextAlert {
+  id: string; ts: string; title: string; severity: string; status: string
+  src_ip: string | null; dest_ip: string | null; hostname: string | null; username: string | null
+}
+export interface ScanContextIoc {
+  id: string; value: string; type: string; severity: string; confidence: number; actor: string | null
+}
+export interface ScanContext {
+  value: string
+  host: string | null
+  indicator: (Record<string, unknown> & { id: string; value: string }) | null
+  relatedIocs: ScanContextIoc[]
+  alerts: { total: number; items: ScanContextAlert[] }
+  cases: Array<{ id: string; title: string; severity: string; status: string; owner: string | null; created: string }>
+  darkWeb: { total: number; items: Array<{ id: string; ts: string; category: string; severity: string; source: string | null; title: string; entity: string | null }> }
+  assets: Array<{ id: string; name: string; type: string; value: string; criticality: string; status: string; risk_score: number }>
+  events: { count: number; capped: boolean }
+  relatedEntities: { ips: string[]; hostnames: string[]; usernames: string[]; emails: string[] }
+  analystActivity: { scans: number; byVerdict: Record<string, number>; lastScan: string | null }
+  graph: Array<{ id: string; label: string; group: string; kind: string }> | null
+}
+export const fetchScanContext = (value: string) =>
+  api<ScanContext>(`/cti/scan/context?value=${encodeURIComponent(value)}`)
 export interface ImportResult { imported: number; duplicates: number; skipped: number; total: number }
 export interface ImportHistoryRow {
   id: string; source: string; method: string; imported: number; duplicates: number

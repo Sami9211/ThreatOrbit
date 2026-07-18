@@ -22,6 +22,9 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:8002
       # The suite logs in many times; don't let the brute-force throttle trip.
       DASHBOARD_AUTH_MAX_FAILURES: '1000'
+      # No live registry calls from CI - RDAP enrichment reports honest
+      # "disabled" instead of adding an external dependency to the suite.
+      DASHBOARD_DISABLE_RDAP: 'true'
     steps:
       - uses: actions/checkout@v4
 
