@@ -186,14 +186,15 @@ def test_cti_summary(client, auth):
 
 
 def test_ioc_lookup(client, auth):
-    """A seeded IOC is found with enrichment; an unknown value is clean/not-found."""
+    """A seeded IOC is found with enrichment; an unknown value is unverified."""
     known = client.get("/cti/iocs?limit=1", headers=auth).json()["items"][0]
     hit = client.get(f"/cti/lookup?value={known['value']}", headers=auth).json()
     assert hit["found"] is True
     assert hit["verdict"] in {"malicious", "suspicious", "clean"}
     assert hit["confidence"] == known["confidence"]
     miss = client.get("/cti/lookup?value=definitely-not-a-real-indicator-xyz", headers=auth).json()
-    assert miss["found"] is False and miss["verdict"] == "clean"
+    # Unknown means UNVERIFIED, not clean - absence from our TI proves nothing.
+    assert miss["found"] is False and miss["verdict"] == "unverified"
 
 
 def test_ioc_import_history(client, auth):

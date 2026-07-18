@@ -1172,6 +1172,31 @@ export const fetchStixBundle = (type?: string) =>
     `/cti/stix/bundle${type ? `?type=${type}` : ''}`)
 export const lookupIoc = (value: string) =>
   api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
+
+/** IntelScope provider panel: the real enrichment pipeline run over an
+ * arbitrary value. Every row carries an honest `available` flag - external
+ * providers without API keys report unavailable, never invented verdicts. */
+export interface EnrichProvider {
+  provider: string
+  available: boolean
+  verdict?: string | null
+  summary?: string | null
+  data?: Record<string, unknown>
+  cached?: boolean
+  ts?: string
+  reason?: string
+}
+export interface ScanEnrichResult {
+  value: string
+  type: string
+  verdict: string
+  providers: EnrichProvider[]
+  ts: string
+}
+export interface EnricherStatus { provider: string; kind: string; available: boolean; envVar?: string }
+export const fetchEnrichers = () => api<EnricherStatus[]>('/cti/enrichers')
+export const fetchScanEnrich = (value: string, type = '', refresh = false) =>
+  api<ScanEnrichResult>(`/cti/scan/enrich?value=${encodeURIComponent(value)}&type=${encodeURIComponent(type)}${refresh ? '&refresh=true' : ''}`)
 export interface ImportResult { imported: number; duplicates: number; skipped: number; total: number }
 export interface ImportHistoryRow {
   id: string; source: string; method: string; imported: number; duplicates: number
@@ -1188,7 +1213,7 @@ export interface ScanEntry {
   ts: string
   target: string
   type: string
-  verdict: 'malicious' | 'suspicious' | 'clean'
+  verdict: 'malicious' | 'suspicious' | 'clean' | 'unverified'
   score: number
   engines: string | null
   actor: string | null

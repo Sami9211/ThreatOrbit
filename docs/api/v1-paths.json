@@ -103,6 +103,7 @@
     "/cti/reports",
     "/cti/reports/{report_id}",
     "/cti/reports/{report_id}/misp",
+    "/cti/scan/enrich",
     "/cti/scans",
     "/cti/stix/bundle",
     "/cti/summary",

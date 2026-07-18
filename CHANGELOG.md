@@ -9,6 +9,34 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-18 - IntelScope rebuilt honest: no fabricated vendor verdicts, real depth
+- **The false-positive mechanism is closed.** The lookup's blind substring
+  fallback (`LIKE %query%`) matched any IOC merely CONTAINING the query -
+  scanning `linkedin.com` matched a phishing URL hosted elsewhere that embeds
+  the string and branded the legitimate domain malicious. Matching is now
+  delimiter-bounded: exact value, a URL's own hostname, and URL indicators
+  hosted ON a queried domain (host position only). False negatives beat
+  fabricated positives.
+- **No invented vendor tables.** Live results used to overlay a hardcoded
+  engine list attributing "Phishing/malicious" verdicts to real companies
+  (Kaspersky, CrowdStrike, Cisco Talos, ...) regardless of the target - the
+  worst kind of fabrication. Replaced by an "Intelligence Sources" panel fed
+  by the real enrichment pipeline via new `GET /cti/scan/enrich` (no stored
+  IOC required): builtin providers run for real, external ones (OTX,
+  VirusTotal, GreyNoise, Shodan, WHOIS) report *not configured* when keyless
+  - never invented verdicts. Fake community votes, fake ASN/registrar block,
+  and the "90+ engines" claims are gone; the header tile now counts the
+  sources actually available.
+- **Unknown means unverified, not clean.** A value absent from the TI store
+  and unflagged by enrichers reports `unverified` (new verdict across
+  lookup, scan history, gauge, history rows) with an explicit "unknown, not
+  proven clean" note. Feed provenance (which feed knew the indicator) shows
+  on hits.
+- API-unreachable fallback is now a clearly-labeled "Demo result" banner and
+  is never persisted. Snapshot: 240 API paths. Fences:
+  `test_scanner_lookup.py` (the LinkedIn regression among them, 6 tests) +
+  live browser verification of the unverified path.
+
 ### 2026-07-17 - Contextual deep links: actions land on the record, not the module
 - New URL contracts consumed on load: `/dashboard/siem?alert=<id>` opens that
   alert's detail drawer directly (falls back to filtering by the id when it

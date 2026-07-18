@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { lookupIoc, recordScan, fetchScans, importIocs, type ScanEntry } from '@/lib/api'
+import { lookupIoc, recordScan, fetchScans, importIocs, fetchScanEnrich, fetchEnrichers,
+  type ScanEntry, type EnrichProvider } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
@@ -136,7 +137,7 @@ const DEMO_RESULTS: Record<string, ScanResult> = {
 type ScanResult = {
   target: string
   type: 'url' | 'ip' | 'hash' | 'file'
-  verdict: 'malicious' | 'suspicious' | 'clean'
+  verdict: string
   detectionRatio: string
   score: number
   firstSeen: string
@@ -148,6 +149,10 @@ type ScanResult = {
   iocs: string[]
   mitre: string[]
   fileInfo?: { name: string; size: string; type: string; compiler: string; signature: string }
+  /** Live results carry real provenance instead of the demo blocks. */
+  source?: string | null            // which feed knew the indicator
+  providers?: EnrichProvider[]      // real enrichment pipeline rows
+  demo?: boolean                    // API unreachable - sample result, labeled
 }
 
 const SCAN_TYPES = [
@@ -185,7 +190,10 @@ function relativeTime(iso: string): string {
 
 /* -- Verdict gauge -------------------------------------------------- */
 function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
-  const color = verdict === 'malicious' ? tk('magenta') : verdict === 'suspicious' ? tk('amber') : tk('safe')
+  const color = verdict === 'malicious' ? tk('magenta')
+    : verdict === 'suspicious' ? tk('amber')
+    : verdict === 'unverified' || verdict === 'expired' ? tk('violet')
+    : tk('safe')   // clean / benign
   const pct   = score * 100
   const r = 44
   const circ = 2 * Math.PI * r
@@ -216,6 +224,8 @@ function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
           'px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider',
           verdict === 'malicious' ? 'bg-magenta/15 text-magenta border border-magenta/30' :
           verdict === 'suspicious' ? 'bg-amber/15 text-amber border border-amber/30' :
+          verdict === 'unverified' || verdict === 'expired'
+            ? 'bg-violet/15 text-violet border border-violet/30' :
           'bg-safe/15 text-safe border border-safe/30',
         )}
       >
@@ -225,7 +235,76 @@ function VerdictGauge({ score, verdict }: { score: number; verdict: string }) {
   )
 }
 
-/* -- Engine table -------------------------------------------------- */
+/* -- Provider results (the honest engine panel) --------------------- */
+const PROVIDER_LABEL: Record<string, string> = {
+  internal: 'Internal telemetry',
+  indicator: 'Indicator heuristics',
+  otx: 'AlienVault OTX',
+  virustotal: 'VirusTotal',
+  greynoise: 'GreyNoise',
+  shodan: 'Shodan',
+  whois: 'WHOIS',
+}
+
+function ProviderResults({ providers, unknown }: { providers: EnrichProvider[]; unknown: boolean }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-white">Intelligence Sources</h3>
+        <span className="text-xs text-ink-500">
+          {providers.filter((p) => p.available).length + 1} consulted
+        </span>
+      </div>
+      <div className="space-y-1">
+        {/* The TI store itself is always consulted first. */}
+        <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/2">
+          <span className="text-xs text-ink-300">ThreatOrbit TI store</span>
+          <span className={cn('text-[10px] font-semibold', unknown ? 'text-ink-500' : 'text-threat')}>
+            {unknown ? 'no record' : 'known indicator'}
+          </span>
+        </div>
+        {providers.map((p) => (
+          <div key={p.provider} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-white/3 transition-colors">
+            <span className={cn('text-xs', p.available ? 'text-ink-300' : 'text-ink-600')}>
+              {PROVIDER_LABEL[p.provider] ?? p.provider}
+              {p.cached && <span className="text-ink-600 ml-1.5 text-[9px]">cached</span>}
+            </span>
+            {p.available ? (
+              <span className={cn(
+                'flex items-center gap-1 text-[10px] font-semibold',
+                p.verdict === 'malicious' ? 'text-threat'
+                  : p.verdict === 'suspicious' ? 'text-amber'
+                  : p.verdict === 'clean' || p.verdict === 'benign' ? 'text-safe' : 'text-ink-500',
+              )}>
+                {(p.verdict === 'malicious' || p.verdict === 'suspicious')
+                  ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                {p.verdict ?? 'no verdict'}
+              </span>
+            ) : (
+              <span className="text-[10px] text-ink-600">not configured</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {providers.some((p) => p.available && p.summary) && (
+        <div className="mt-3 space-y-1.5 border-t border-white/5 pt-3">
+          {providers.filter((p) => p.available && p.summary).map((p) => (
+            <p key={p.provider} className="text-[11px] text-ink-400 leading-snug">
+              <span className="text-ink-200 font-medium">{PROVIDER_LABEL[p.provider] ?? p.provider}:</span>{' '}
+              {p.summary}
+            </p>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-ink-600 mt-3 leading-relaxed">
+        Every row above is a source that actually ran. External providers
+        without API keys report &quot;not configured&quot; - nothing here is invented.
+      </p>
+    </div>
+  )
+}
+
+/* -- Engine table (demo results only - clearly labeled sample data) -- */
 function EngineResults({ engines }: { engines: ScanResult['engines'] }) {
   const [showAll, setShowAll] = useState(false)
   const visible = showAll ? engines : engines.slice(0, 8)
@@ -280,6 +359,13 @@ export default function ScannerPage() {
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState<ScanRow[]>([])
   const [stats, setStats] = useState<{ scansToday: number; malicious: number } | null>(null)
+  // Real source count for the header tile: the TI store + available enrichers.
+  const [sources, setSources] = useState<number | null>(null)
+  useEffect(() => {
+    fetchEnrichers().then((rows) => {
+      setSources(1 + rows.filter((r) => r.available).length)
+    }).catch(() => {})
+  }, [])
 
   // Live scan history + header stats. On a fresh install there are no scans, so
   // the list is genuinely empty (an empty state) rather than invented rows.
@@ -305,14 +391,6 @@ export default function ScannerPage() {
     setResult(null)
     setSaved(false)
 
-    // Base demo shape for the indicator type, then overlay a real verdict from
-    // the IOC threat-intel store when the value is known to us.
-    const q = query.toLowerCase()
-    let demo = DEMO_RESULTS.url
-    if (scanType === 'ip')   demo = DEMO_RESULTS.ip
-    if (scanType === 'hash') demo = DEMO_RESULTS.hash
-    if (q.includes('8.8.8.8') || q.includes('google')) demo = DEMO_RESULTS.clean
-
     const finish = (r: ScanResult, persist = true) => setTimeout(() => {
       setResult(r)
       setScanning(false)
@@ -324,31 +402,52 @@ export default function ScannerPage() {
       }
     }, 900)
 
-    if (!query.trim()) { finish(demo, false); return }
+    const demoOf = () => {
+      const d = scanType === 'ip' ? DEMO_RESULTS.ip
+        : scanType === 'hash' ? DEMO_RESULTS.hash : DEMO_RESULTS.url
+      return { ...d, demo: true }
+    }
+    if (!query.trim()) { finish(demoOf(), false); return }
 
-    lookupIoc(query.trim())
-      .then((hit) => {
-        if (!hit.found) {
-          // Not in our TI - report clean/unverified rather than a fake verdict.
-          finish({
-            ...demo, target: query.trim(), verdict: 'clean', score: 0,
-            detectionRatio: '0/90', categories: [],
-            iocs: [], mitre: [],
-          })
+    const target = query.trim()
+    // Two real sources, in parallel: our TI store (verdict + feed provenance)
+    // and the enrichment pipeline (per-provider results with honest
+    // availability). Nothing else is shown - no invented vendor tables.
+    Promise.allSettled([lookupIoc(target), fetchScanEnrich(target, scanType)])
+      .then(([lu, en]) => {
+        if (lu.status === 'rejected') {
+          // API unreachable → clearly-labeled sample result, never persisted.
+          finish(demoOf(), false)
           return
         }
+        const hit = lu.value
+        const enr = en.status === 'fulfilled' ? en.value : null
+        const providers = enr?.providers ?? []
+        const consulted = providers.filter((p) => p.available)
+        const flagged = consulted.filter((p) => p.verdict === 'malicious' || p.verdict === 'suspicious')
+        // Verdict precedence: our TI store, then the enrichment consensus,
+        // else "unverified" - absence of evidence is not a clean bill.
+        const verdict = hit.found ? hit.verdict
+          : (enr && enr.verdict !== 'unknown' ? enr.verdict : 'unverified')
         finish({
-          ...demo,
-          target: hit.value,
-          verdict: hit.verdict,
-          score: hit.confidence,
-          firstSeen: hit.firstSeen ?? demo.firstSeen,
-          lastSeen: hit.lastSeen ?? demo.lastSeen,
-          categories: [hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
-            .filter(Boolean) as string[],
+          target: hit.found ? hit.value : target,
+          type: scanType as ScanResult['type'],
+          verdict,
+          score: hit.found ? hit.confidence : 0,
+          detectionRatio: `${flagged.length}/${consulted.length + 1}`,  // +1 = TI store itself
+          firstSeen: hit.firstSeen ?? '-',
+          lastSeen: hit.lastSeen ?? '-',
+          categories: hit.found
+            ? ([hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
+                .filter(Boolean) as string[])
+            : [],
+          community: { votes: 0, malicious: 0, clean: 0 },
+          network: { asn: '-', ip: '-', country: '-', registrar: '-' },
+          engines: [], iocs: [], mitre: [],
+          source: hit.found ? hit.source : null,
+          providers,
         })
       })
-      .catch(() => finish(demo, false))  // API unreachable → demo result, nothing persisted
   }
 
   // File scan: fingerprint the file in-browser (SHA-256, nothing uploaded)
@@ -371,25 +470,34 @@ export default function ScannerPage() {
         signature: `sha256:${hash.slice(0, 16)}…`,
       }
       const base: ScanResult = {
-        target: hash, type: 'file', verdict: 'clean', detectionRatio: '0/90', score: 0,
+        target: hash, type: 'file', verdict: 'unverified', detectionRatio: '0/1', score: 0,
         firstSeen: '-', lastSeen: '-', categories: [],
         community: { votes: 0, malicious: 0, clean: 0 },
-        network: { asn: 'N/A', ip: 'N/A', country: 'N/A', registrar: 'N/A' },
+        network: { asn: '-', ip: '-', country: '-', registrar: '-' },
         engines: [], iocs: [hash], mitre: [], fileInfo,
       }
       let scanResult = base
       try {
-        const hit = await lookupIoc(hash)
-        if (hit.found) {
-          scanResult = {
-            ...base,
-            verdict: hit.verdict,
-            score: hit.confidence,
-            firstSeen: hit.firstSeen ?? '-',
-            lastSeen: hit.lastSeen ?? '-',
-            categories: [hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
-              .filter(Boolean) as string[],
-          }
+        const [lu, en] = await Promise.allSettled([lookupIoc(hash), fetchScanEnrich(hash, 'hash')])
+        const hit = lu.status === 'fulfilled' ? lu.value : null
+        const enr = en.status === 'fulfilled' ? en.value : null
+        const providers = enr?.providers ?? []
+        const consulted = providers.filter((p) => p.available)
+        const flagged = consulted.filter((p) => p.verdict === 'malicious' || p.verdict === 'suspicious')
+        scanResult = {
+          ...base,
+          verdict: hit?.found ? hit.verdict
+            : (enr && enr.verdict !== 'unknown' ? enr.verdict : 'unverified'),
+          score: hit?.found ? hit.confidence : 0,
+          detectionRatio: `${flagged.length}/${consulted.length + 1}`,
+          firstSeen: hit?.firstSeen ?? '-',
+          lastSeen: hit?.lastSeen ?? '-',
+          categories: hit?.found
+            ? ([hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
+                .filter(Boolean) as string[])
+            : [],
+          source: hit?.found ? hit.source : null,
+          providers,
         }
       } catch { /* TI store unreachable - report the unverified fingerprint */ }
       setResult(scanResult)
@@ -431,14 +539,14 @@ export default function ScannerPage() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-safe/15 text-safe border border-safe/30 uppercase tracking-wider">Free</span>
             <span className="text-[10px] text-ink-600">by ThreatOrbit</span>
           </div>
-          <p className="text-xs text-ink-500">Scan URLs, IPs, file hashes, and files against 90+ threat intelligence engines</p>
+          <p className="text-xs text-ink-500">Scan URLs, IPs, file hashes, and files against the ThreatOrbit intelligence store and every configured enricher</p>
         </div>
         {/* Stats row */}
         <div className="flex items-center gap-3 flex-wrap">
           {[
             { label: 'Scans today', value: stats ? stats.scansToday.toLocaleString() : '-', icon: Zap,          color: tk('violet') },
             { label: 'Malicious',   value: stats ? stats.malicious.toLocaleString() : '-',  icon: AlertTriangle, color: tk('magenta') },
-            { label: 'Engines',     value: '90+',   icon: Database,      color: tk('teal') },
+            { label: 'Sources',     value: sources != null ? String(sources) : '-',   icon: Database,      color: tk('teal') },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="glass border border-white/5 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg" style={{ background: `${color}18` }}>
@@ -563,11 +671,11 @@ export default function ScannerPage() {
               <Shield className="absolute inset-0 m-auto w-6 h-6 text-magenta" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">Scanning across 90+ engines</p>
-              <p className="text-xs text-ink-500 mt-1">Checking reputation databases, malware feeds, and threat intelligence…</p>
+              <p className="text-sm font-semibold text-white">Checking configured intelligence sources</p>
+              <p className="text-xs text-ink-500 mt-1">The ThreatOrbit TI store plus every enricher this deployment has configured…</p>
             </div>
             <div className="flex gap-2 flex-wrap justify-center">
-              {['VirusTotal', 'Kaspersky', 'Cisco Talos', 'AlienVault', 'Shodan', 'AbuseIPDB'].map((e) => (
+              {['ThreatOrbit TI', 'Internal telemetry', 'Indicator heuristics', 'OTX', 'VirusTotal'].map((e) => (
                 <span key={e} className="text-[10px] px-2 py-1 rounded-md bg-surface-2 border border-white/8 text-ink-500 animate-pulse">{e}</span>
               ))}
             </div>
@@ -603,7 +711,8 @@ export default function ScannerPage() {
                 <div key={`${s.target}-${i}`} className="flex items-center gap-4 px-5 py-3 hover:bg-white/2 transition-colors">
                   <div className={cn(
                     'w-2 h-2 rounded-full shrink-0',
-                    s.verdict === 'malicious' ? 'bg-threat' : s.verdict === 'suspicious' ? 'bg-amber' : 'bg-safe',
+                    s.verdict === 'malicious' ? 'bg-threat' : s.verdict === 'suspicious' ? 'bg-amber'
+                      : s.verdict === 'unverified' ? 'bg-violet' : 'bg-safe',
                   )} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-ink-200 truncate">{s.target}</p>
@@ -612,7 +721,8 @@ export default function ScannerPage() {
                   <span className="text-[10px] text-ink-500 font-mono w-14 text-right">{s.engines}</span>
                   <span className={cn(
                     'text-[10px] font-semibold w-16 text-right uppercase',
-                    s.verdict === 'malicious' ? 'text-threat' : s.verdict === 'suspicious' ? 'text-amber' : 'text-safe',
+                    s.verdict === 'malicious' ? 'text-threat' : s.verdict === 'suspicious' ? 'text-amber'
+                      : s.verdict === 'unverified' ? 'text-violet' : 'text-safe',
                   )}>
                     {s.verdict}
                   </span>
@@ -638,7 +748,7 @@ export default function ScannerPage() {
               { icon: Link,   title: 'URLs',   desc: 'Phishing, malware delivery & C2 domains', color: tk('magenta'), example: 'https://example.com/path' },
               { icon: Globe,  title: 'IPs',    desc: 'Reputation, geolocation & ASN context',   color: tk('violet'), example: '45.95.147.236' },
               { icon: Hash,   title: 'Hashes', desc: 'MD5 / SHA-1 / SHA-256 file fingerprints',  color: tk('amber'), example: 'a3f8e92b1d47…' },
-              { icon: File,   title: 'Files',  desc: 'Static analysis across 90+ engines',       color: tk('teal'), example: 'invoice.pdf' },
+              { icon: File,   title: 'Files',  desc: 'SHA-256 fingerprint checked against TI',   color: tk('teal'), example: 'invoice.pdf' },
             ].map((c) => (
               <div key={c.title} className="glass border border-white/5 rounded-2xl p-5">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: `${c.color}18` }}>
@@ -662,6 +772,17 @@ export default function ScannerPage() {
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
+            {result.demo && (
+              <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-amber/30 bg-amber/10">
+                <AlertTriangle className="w-4 h-4 text-amber shrink-0" />
+                <p className="text-xs text-amber">
+                  <span className="font-bold">Demo result.</span> The dashboard API is
+                  unreachable, so this is illustrative sample data - nothing below is
+                  live intelligence, and it is not saved to history.
+                </p>
+              </div>
+            )}
+
             {/* Overview row */}
             <div className="glass border border-white/8 rounded-2xl p-6 grid md:grid-cols-[auto_1fr_auto] gap-8 items-center relative overflow-hidden">
               <div className="absolute inset-0 pointer-events-none"
@@ -674,10 +795,24 @@ export default function ScannerPage() {
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
                   <div><span className="text-ink-500">First seen:</span> <span className="text-ink-200 ml-1">{result.firstSeen}</span></div>
                   <div><span className="text-ink-500">Last seen:</span> <span className="text-ink-200 ml-1">{result.lastSeen}</span></div>
-                  <div><span className="text-ink-500">Detections:</span> <span className="text-threat font-semibold ml-1">{result.detectionRatio}</span></div>
-                  <div><span className="text-ink-500">ASN:</span> <span className="text-ink-200 ml-1">{result.network.asn}</span></div>
-                  <div><span className="text-ink-500">Country:</span> <span className="text-ink-200 ml-1">{result.network.country}</span></div>
+                  <div><span className="text-ink-500">Detections:</span> <span className={cn('font-semibold ml-1', result.detectionRatio.startsWith('0/') ? 'text-ink-200' : 'text-threat')}>{result.detectionRatio}</span></div>
+                  {!result.demo && (
+                    <div><span className="text-ink-500">Feed source:</span> <span className="text-ink-200 ml-1">{result.source ?? 'none'}</span></div>
+                  )}
+                  {result.demo && (
+                    <>
+                      <div><span className="text-ink-500">ASN:</span> <span className="text-ink-200 ml-1">{result.network.asn}</span></div>
+                      <div><span className="text-ink-500">Country:</span> <span className="text-ink-200 ml-1">{result.network.country}</span></div>
+                    </>
+                  )}
                 </div>
+                {result.verdict === 'unverified' && (
+                  <p className="text-[11px] text-ink-500 mt-3 leading-snug max-w-md">
+                    Not present in the ThreatOrbit intelligence store and no configured
+                    enricher flagged it. Unverified means <span className="text-ink-300">unknown</span> -
+                    not proven clean.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5 mt-4">
                   {result.categories.map((c) => (
                     <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-threat/10 text-threat border border-threat/20">{c}</span>
@@ -685,12 +820,14 @@ export default function ScannerPage() {
                 </div>
               </div>
               <div className="text-center space-y-4">
-                <div>
-                  <div className="text-xs text-ink-500 mb-2">Community</div>
-                  <div className="text-2xl font-display font-bold text-threat">{result.community.malicious}</div>
-                  <div className="text-[10px] text-ink-500">malicious votes</div>
-                  <div className="text-sm text-safe mt-1">{result.community.clean} clean</div>
-                </div>
+                {result.demo && (
+                  <div>
+                    <div className="text-xs text-ink-500 mb-2">Community</div>
+                    <div className="text-2xl font-display font-bold text-threat">{result.community.malicious}</div>
+                    <div className="text-[10px] text-ink-500">malicious votes</div>
+                    <div className="text-sm text-safe mt-1">{result.community.clean} clean</div>
+                  </div>
+                )}
                 <button
                   onClick={handleSaveIoc}
                   disabled={saved || saving}
@@ -709,9 +846,13 @@ export default function ScannerPage() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {/* Engine results */}
+              {/* Live results: the real provider panel. Demo: the labeled
+                 sample engine table. Never both, never unlabeled. */}
               <div className="glass border border-white/8 rounded-xl p-5">
-                <EngineResults engines={result.engines} />
+                {result.demo
+                  ? <EngineResults engines={result.engines} />
+                  : <ProviderResults providers={result.providers ?? []}
+                      unknown={result.source == null} />}
               </div>
 
               {/* Network + MITRE */}
@@ -728,15 +869,17 @@ export default function ScannerPage() {
                   </div>
                 )}
 
-                <div className="glass border border-white/8 rounded-xl p-5">
-                  <h3 className="text-sm font-semibold text-white mb-3">Network Info</h3>
-                  {Object.entries(result.network).map(([k, v]) => (
-                    <div key={k} className="flex justify-between py-1 text-xs border-b border-white/4">
-                      <span className="text-ink-500 capitalize">{k}</span>
-                      <span className="text-ink-200 font-mono">{v}</span>
-                    </div>
-                  ))}
-                </div>
+                {result.demo && (
+                  <div className="glass border border-white/8 rounded-xl p-5">
+                    <h3 className="text-sm font-semibold text-white mb-3">Network Info</h3>
+                    {Object.entries(result.network).map(([k, v]) => (
+                      <div key={k} className="flex justify-between py-1 text-xs border-b border-white/4">
+                        <span className="text-ink-500 capitalize">{k}</span>
+                        <span className="text-ink-200 font-mono">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {result.mitre.length > 0 && (
                   <div className="glass border border-white/8 rounded-xl p-5">

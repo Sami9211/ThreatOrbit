@@ -237,20 +237,32 @@ def cti_summary(user: dict = Depends(current_user)):
 def ioc_lookup(value: str):
     """Look an indicator up against the IOC store and return a verdict + enrichment.
 
-    Exact match first, then a substring fallback (handles URLs/paths). A known
-    indicator's verdict follows its severity/confidence; unknown values are
-    reported clean-but-unverified so the caller can distinguish "not in our TI".
+    Matching is exact-first, then *delimiter-bounded*: a URL query also tries
+    its hostname, and a bare-domain query matches URL indicators hosted ON that
+    domain (`://domain/...`). The old blind substring fallback (`LIKE %v%`)
+    returned any IOC merely CONTAINING the query - scanning `linkedin.com`
+    matched phishing URLs hosted elsewhere that embed the string, branding the
+    legitimate domain malicious. False negatives beat fabricated positives.
     """
     v = value.strip()
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM iocs WHERE value=?", (v,)).fetchone()
-        if row is None and v:
+        if row is None and "://" in v:
+            # URL query → is its host itself a known indicator?
+            from urllib.parse import urlparse
+            host = (urlparse(v).hostname or "").strip(".")
+            if host:
+                row = conn.execute("SELECT * FROM iocs WHERE value=?", (host,)).fetchone()
+        elif row is None and v and "/" not in v and "." in v:
+            # Bare domain/IP query → URL indicators hosted ON it (host position
+            # only, so `evil.com/linkedin.com/x` can never match linkedin.com).
             row = conn.execute(
-                "SELECT * FROM iocs WHERE value LIKE ? ORDER BY confidence DESC LIMIT 1",
-                (f"%{v}%",),
+                "SELECT * FROM iocs WHERE value LIKE ? OR value LIKE ? OR value LIKE ? "
+                "ORDER BY confidence DESC LIMIT 1",
+                (f"%://{v}/%", f"%://{v}", f"%://{v}?%"),
             ).fetchone()
     if row is None:
-        return {"value": v, "found": False, "verdict": "clean", "confidence": 0,
+        return {"value": v, "found": False, "verdict": "unverified", "confidence": 0,
                 "severity": None, "threatType": None, "actor": None, "source": None,
                 "firstSeen": None, "lastSeen": None, "tags": []}
     ioc = row_to_dict(row)
@@ -702,8 +714,27 @@ def graph_path(from_: str = Query(..., alias="from"), to: str = Query(...)):
 
 # -- Scanner history ------------------------------------------------------------
 
+@router.get("/scan/enrich")
+def scan_enrich(value: str, type: str = "", refresh: bool = False,
+                user: dict = Depends(require_perm("cti.write"))):
+    """Run the enrichment pipeline over an arbitrary value (no stored IOC
+    required) - the IntelScope scanner's provider panel. Same engine as
+    /iocs/{id}/enrich: builtin providers plus OTX/VirusTotal when configured,
+    cached with TTL, and every provider row carries an honest `available`
+    flag - nothing is fabricated for unconfigured providers.
+    """
+    from dashboard_api.enrichment import enrich
+    v = value.strip()
+    if not v:
+        raise HTTPException(status_code=400, detail="value is required")
+    with get_conn() as conn:
+        result = enrich(conn, v, type.strip().lower(), refresh=refresh)
+        conn.commit()   # persist provider cache rows
+    return result
+
+
 _SCAN_TYPES = {"url", "ip", "hash", "domain", "file"}
-_VERDICTS = {"malicious", "suspicious", "clean"}
+_VERDICTS = {"malicious", "suspicious", "clean", "unverified"}
 
 
 @router.post("/scans", status_code=201)
