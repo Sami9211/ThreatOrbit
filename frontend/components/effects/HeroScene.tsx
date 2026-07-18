@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Float, AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/drei'
+import { AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
-import { usePerfProfile, useInViewport } from '@/lib/usePerf'
+import { usePerfProfile, useInViewport, useScrollIdle, clampDelta } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 /* -- Floating solid objects --
@@ -30,6 +30,30 @@ const OBJECTS: Array<{
   { p: [-2.0,  0.1, -1.6], s: 0.11, g: 'hex',  c: '#7A3CFF', fs: 1.7, wire: true,  r: [Math.PI / 2.4, -0.35, 0.2] },
 ]
 
+/* Pause-safe float: drei's <Float> wobbles on the ABSOLUTE clock, which keeps
+   running while the render loop is paused (off-screen / mid-scroll `demand`),
+   so every resume snapped objects to a new phase - the "hero moves
+   unexpectedly when scrolling back to top" audit finding. This accumulates
+   its own clamped-local time instead: a resume continues from the frozen pose. */
+function PausableFloat({ speed, floatIntensity, rotationIntensity, children }: {
+  speed: number; floatIntensity: number; rotationIntensity: number
+  children: React.ReactNode
+}) {
+  const ref = useRef<THREE.Group>(null)
+  const t = useRef(Math.random() * 100)  // random phase so objects de-sync
+  useFrame((_, dt) => {
+    const g = ref.current
+    if (!g || speed === 0) return
+    t.current += clampDelta(dt) * speed
+    const tt = t.current
+    g.position.y = Math.sin(tt) * 0.1 * floatIntensity
+    g.rotation.x = Math.sin(tt * 0.8) * 0.07 * rotationIntensity
+    g.rotation.y = Math.cos(tt * 0.6) * 0.07 * rotationIntensity
+    g.rotation.z = Math.sin(tt * 0.5) * 0.07 * rotationIntensity
+  })
+  return <group ref={ref}>{children}</group>
+}
+
 function SceneObject({ p, s, g, c, fs, wire, r, animate, bright }: typeof OBJECTS[0] & { animate: boolean; bright: boolean }) {
   // bright=true means bloom is off (mobile/degraded). A flat unlit material
   // there rendered every solid as a featureless filled silhouette - hex prisms
@@ -38,7 +62,7 @@ function SceneObject({ p, s, g, c, fs, wire, r, animate, bright }: typeof OBJECT
   // facets stay visible; bump the emissive so nothing goes murky.
   const emissiveIntensity = bright ? (wire ? 1.2 : 0.6) : (wire ? 0.9 : 0.45)
   return (
-    <Float speed={animate ? fs : 0} floatIntensity={animate ? 0.7 : 0} rotationIntensity={animate ? 0.6 : 0}>
+    <PausableFloat speed={animate ? fs : 0} floatIntensity={0.7} rotationIntensity={0.6}>
       <mesh position={p as [number, number, number]} scale={s} rotation={r ?? [0, 0, 0]}>
         {g === 'hex' && <cylinderGeometry args={[1, 1, 0.5, 6, 1]} />}
         {g === 'oct' && <octahedronGeometry args={[1, 0]} />}
@@ -49,7 +73,7 @@ function SceneObject({ p, s, g, c, fs, wire, r, animate, bright }: typeof OBJECT
           wireframe={wire} flatShading toneMapped={false}
         />
       </mesh>
-    </Float>
+    </PausableFloat>
   )
 }
 
@@ -58,8 +82,9 @@ function BackdropKnot({ animate }: { animate: boolean }) {
   const ref = useRef<THREE.Mesh>(null)
   useFrame((_, dt) => {
     if (ref.current && animate) {
-      ref.current.rotation.x += dt * 0.04
-      ref.current.rotation.y += dt * 0.06
+      const d = clampDelta(dt)
+      ref.current.rotation.x += d * 0.04
+      ref.current.rotation.y += d * 0.06
     }
   })
   return (
@@ -130,6 +155,9 @@ export default function HeroScene({ mouseX, mouseY }: {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
+  // Pause the loop while the user is actively scrolling: the WebGL loops were
+  // ~60% of scroll frame time (measured at 4x CPU throttle on the export).
+  const scrolling = useScrollIdle()
 
   const objects   = isLowPower ? OBJECTS.slice(0, 6) : OBJECTS
   const animate   = !prefersReducedMotion
@@ -145,7 +173,7 @@ export default function HeroScene({ mouseX, mouseY }: {
     <div ref={ref} className="w-full h-full">
       {mounted ? (
         <Canvas
-          frameloop={animate && visible ? 'always' : 'demand'}
+          frameloop={animate && visible && !scrolling ? 'always' : 'demand'}
           camera={{ position: [0, 0, 6.5], fov: 56 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           dpr={dpr}

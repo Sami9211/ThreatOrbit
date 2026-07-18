@@ -6,7 +6,7 @@ import { AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/dre
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
-import { usePerfProfile, useInViewport } from '@/lib/usePerf'
+import { usePerfProfile, useInViewport, useScrollIdle, clampDelta } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 /* -- Orbit definitions: a planet circled by rings of dots -- */
@@ -44,7 +44,7 @@ function DotOrbit({ radius, count, tilt, color, speed, dot, moon, animate }: Orb
   }, [count, radius])
 
   useFrame((_, dt) => {
-    if (spinRef.current && animate) spinRef.current.rotation.y += dt * speed
+    if (spinRef.current && animate) spinRef.current.rotation.y += clampDelta(dt) * speed
   })
 
   return (
@@ -86,8 +86,9 @@ function Planet({ animate, bright }: { animate: boolean; bright: boolean }) {
 
   useFrame((_, dt) => {
     if (!animate) return
-    t.current += dt
-    if (shellRef.current) shellRef.current.rotation.y += dt * 0.08
+    const d = clampDelta(dt)
+    t.current += d
+    if (shellRef.current) shellRef.current.rotation.y += d * 0.08
     if (coreRef.current) {
       const s = 0.97 + 0.03 * Math.sin(t.current * 1.6)
       coreRef.current.scale.setScalar(s)
@@ -169,6 +170,10 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   // the orbit briefly vanishing. Render loop pauses (frameloop demand) while
   // off-screen, so the last frame stays put at zero GPU cost.
   const { ref, visible } = useInViewport<HTMLDivElement>('800px')
+  // Pause while actively scrolling like the other scenes. The scroll-linked
+  // planet rotation reads a spring-smoothed value, so on idle it catches up
+  // smoothly from the frozen pose - no snap.
+  const scrolling = useScrollIdle()
   const [mounted, setMounted] = useState(false)
   useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
@@ -199,7 +204,7 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
     <div ref={ref} className="w-full h-full" style={edgeFade}>
       {mounted ? (
         <Canvas
-          frameloop={animate && visible ? 'always' : 'demand'}
+          frameloop={animate && visible && !scrolling ? 'always' : 'demand'}
           camera={{ position: [0, 0.8, camZ], fov: 46 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           // Phone sharpness: cap dpr at 1.75-2 (was 1.25-1.5, visibly pixelated

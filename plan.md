@@ -230,18 +230,25 @@ SOAR-integrations fake fallback). Items below updated accordingly.
 1. **[verified] Default mode** - fresh live-posture session starts in
    Normal mode (browser-verified on the owner-faithful build; the backend
    only overrides when an org has explicitly chosen a mode).
-2. **[fix-on-main?] Landing: second-planet edge boundary** - masks shipped
-   (`9511178`) but the owner still sees edges on the deployed build;
-   re-verify on the deployed artifact, not the dev preview. If still
-   visible after the mask, hunt the actual painted geometry (canvas
-   clear color / sprite atlas edges), not the container.
-3. **[ ] Landing scroll performance** - "extremely laggy". Profile
-   (CPU-throttled) and fix: reduce per-frame allocations, cap DPR,
-   pause offscreen scenes (IntersectionObserver), memoize scroll-driven
-   re-renders.
-4. **[ ] Hero 3D object jumps when scrolling back to top** - position/
-   animation must be consistent; likely spring re-target or scroll-progress
-   discontinuity.
+2. **[fix-on-main, not reproduced] Landing: second-planet edge boundary** -
+   zoomed captures of the current production export show no rectangle on
+   any of the five canvases (masks from `9511178` verified). Awaiting
+   owner confirmation on the updated build; if it persists there, capture
+   the exact GPU/browser and hunt driver-specific compositing.
+3. **[~] Landing scroll performance** - measured (4x CPU throttle,
+   production export): 8.6fps baseline; attribution showed the WebGL
+   loops as the largest cost plus a forced reflow per scroll event in the
+   hero. FIXED: all four scenes pause their render loop during active
+   scroll (`useScrollIdle`), hero rect cache re-measures on scroll end.
+   Loops-paused scroll ceiling doubled (16.8 → 35.3fps on a GPU-less
+   rig; real GPUs skip the software-raster floor). Remaining: owner
+   confirmation on real hardware.
+4. **[fixed] Hero 3D object jumps when scrolling back to top** - drei
+   Float wobbled on the absolute clock (kept running while the loop was
+   paused off-screen → snap on return) and unclamped deltas integrated
+   the whole pause in one step. Pause-safe float + `clampDelta`
+   everywhere; return-to-top verified: objects resume from the frozen
+   pose.
 5. **[~] Dashboard alerts look static ("always exactly 6 critical/high")** -
    root cause split: (a) cross-machine API-base failure froze the page on
    constants - FIXED; (b) the Overview "Live Threat Feed" recycled the

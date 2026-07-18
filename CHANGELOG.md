@@ -9,6 +9,31 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-18 - Landing scroll performance + hero scroll-return jump (Audit-3 items 3-4)
+- **Scenes pause while you scroll.** All four landing WebGL scenes now gate
+  their render loop on a shared scroll-idle signal (`useScrollIdle`): during
+  an active scroll the last frame stays composited (imperceptible - the page
+  is moving) and animation resumes ~180ms after the scroll settles. Measured
+  on the production export at 4x CPU throttle, the loops were the largest
+  single scroll cost.
+- **Hero no longer jumps when scrolling back to top.** Two mechanisms, both
+  fixed: (a) drei's `<Float>` wobbles on the ABSOLUTE clock, which keeps
+  running while a paused (`frameloop: demand`) scene is off-screen - every
+  return snapped objects to the phase they "would have been" at; replaced
+  with a pause-safe float that accumulates its own clamped local time, so a
+  resume continues from the frozen pose. (b) unclamped `useFrame` deltas
+  integrated the whole pause as one step on resume - all scene deltas now
+  go through `clampDelta`.
+- **No more forced reflow per scroll event**: the hero's rect cache re-read
+  `getBoundingClientRect()` on every scroll (a synchronous layout on a very
+  tall page - it was itself a jank source); it now re-measures on scroll
+  end. Measured effect: the loops-paused scroll ceiling doubled (16.8 →
+  35.3 fps at 4x throttle on a GPU-less rig; real-GPU machines skip the
+  software-raster floor entirely).
+- Second-planet edge boundary (item 2): not reproducible on the current
+  export (masks from `9511178` verified in zoomed captures) - awaiting
+  owner confirmation on the updated build.
+
 ### 2026-07-18 - Cross-machine deployments work; placeholder-data purge (Audit-3 root causes)
 - **The dashboard now works when viewed from a different machine than the
   server.** The built frontend hard-defaulted its API base to

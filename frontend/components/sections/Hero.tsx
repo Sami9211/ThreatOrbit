@@ -99,11 +99,18 @@ export default function Hero() {
   useEffect(() => {
     const measure = () => { rectRef.current = sectionRef.current?.getBoundingClientRect() ?? null }
     measure()
+    // Re-measure on scroll END, not per scroll event: getBoundingClientRect
+    // forces a synchronous layout, and calling it every scroll frame on a page
+    // this tall was itself a source of the scroll jank it existed to prevent.
+    // Mouse parallax tolerates a stale rect for the ~150ms a scroll lasts.
+    let t: number | undefined
+    const onScroll = () => { window.clearTimeout(t); t = window.setTimeout(measure, 150) }
     window.addEventListener('resize', measure)
-    window.addEventListener('scroll', measure, { passive: true })
+    window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       window.removeEventListener('resize', measure)
-      window.removeEventListener('scroll', measure)
+      window.removeEventListener('scroll', onScroll)
+      window.clearTimeout(t)
     }
   }, [])
 
