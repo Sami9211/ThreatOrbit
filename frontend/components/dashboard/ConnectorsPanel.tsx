@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plug, RefreshCw, Plus, X, Trash2, Play, Pause, CheckCircle,
-  AlertTriangle, Loader2, Database,
+  AlertTriangle, Loader2, Database, Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -43,6 +43,7 @@ export default function ConnectorsPanel() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<Connector | null>(null)
 
   const load = () => {
     fetchConnectors().then(setConnectors).catch(() => setUnavailable(true))
@@ -99,6 +100,33 @@ export default function ConnectorsPanel() {
     setConnectors((prev) => [...(prev ?? []), created])
     setShowAdd(false)
     flash(`Connector "${created.name}" added - press Sync to pull data now.`)
+  }
+
+  // Reconfigure an existing connector: only changed fields are sent, and the
+  // API key is left untouched unless a new one is typed (it never leaves the
+  // server, so we can't prefill it).
+  async function update(c: Connector, values: Record<string, string>) {
+    const patch: Parameters<typeof patchConnector>[1] = {}
+    if (values.name?.trim() && values.name.trim() !== c.name) patch.name = values.name.trim()
+    if (values.url !== undefined && values.url.trim() !== (c.url ?? '')) patch.url = values.url.trim()
+    if (values.interval_minutes?.trim()) {
+      const n = Number(values.interval_minutes)
+      if (Number.isFinite(n) && n > 0 && n !== c.intervalMinutes) patch.interval_minutes = n
+    }
+    if (values.api_key?.trim()) patch.api_key = values.api_key.trim()
+    if (['json', 'csv', 'stix'].includes(c.kind)) {
+      const fm: Record<string, string> = {}
+      for (const k of ['value', 'type', 'threat_type', 'confidence', 'severity', 'tags']) {
+        if (values[`fm_${k}`]?.trim()) fm[k] = values[`fm_${k}`].trim()
+      }
+      // Only replace the map when the analyst actually supplied one.
+      if (Object.keys(fm).length) patch.field_map = fm
+    }
+    if (Object.keys(patch).length === 0) { setEditing(null); return }
+    const updated = await patchConnector(c.id, patch)
+    setConnectors((prev) => prev?.map((x) => (x.id === c.id ? updated : x)) ?? prev)
+    setEditing(null)
+    flash(`Connector "${updated.name}" updated.`)
   }
 
   return (
@@ -163,6 +191,12 @@ export default function ConnectorsPanel() {
                   className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
                   {c.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                 </button>
+                <button
+                  onClick={() => setEditing(c)}
+                  title="Edit / reconfigure"
+                  className="p-1.5 rounded-lg text-ink-400 hover:text-violet hover:bg-violet/10 transition-colors">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
                 {!c.builtin && (
                   <button onClick={() => remove(c)} title="Delete connector"
                     className="p-1.5 rounded-lg text-ink-400 hover:text-threat hover:bg-threat/5 transition-colors">
@@ -177,6 +211,7 @@ export default function ConnectorsPanel() {
 
       <AnimatePresence>
         {showAdd && <AddConnectorModal kinds={kinds} onClose={() => setShowAdd(false)} onAdd={add} />}
+        {editing && <EditConnectorModal connector={editing} onClose={() => setEditing(null)} onSave={update} />}
       </AnimatePresence>
     </motion.div>
   )
@@ -288,6 +323,111 @@ function AddConnectorModal({ kinds, onClose, onAdd }: {
             className={cn('w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
               values.name.trim() && !submitting ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
             {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding…</> : <><CheckCircle className="w-4 h-4" /> Add Connector</>}
+          </button>
+        </form>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/* -- Edit-connector modal ------------------------------------------ */
+function EditConnectorModal({ connector, onClose, onSave }: {
+  connector: Connector
+  onClose: () => void
+  onSave: (c: Connector, values: Record<string, string>) => Promise<void>
+}) {
+  const c = connector
+  const isCustom = c.kind === 'json' || c.kind === 'csv' || c.kind === 'stix'
+  const [values, setValues] = useState<Record<string, string>>(() => ({
+    name: c.name,
+    url: c.url ?? '',
+    interval_minutes: String(c.intervalMinutes ?? ''),
+    api_key: '',
+    ...Object.fromEntries(Object.entries(c.fieldMap ?? {}).map(([k, v]) => [`fm_${k}`, String(v)])),
+  }))
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const set = (k: string) => (v: string) => setValues((s) => ({ ...s, [k]: v }))
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!values.name.trim() || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSave(c, values)
+    } catch {
+      setError('Could not update the connector. Check the URL and that you have admin access.')
+      setSubmitting(false)
+    }
+  }
+
+  const input = 'w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40 placeholder-ink-600'
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6" onClick={onClose}>
+      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-surface p-6 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-2 rounded-lg bg-violet/15 shrink-0"><Pencil className="w-4 h-4 text-violet" /></div>
+            <h2 className="text-sm font-semibold text-white truncate">Edit {c.name}</h2>
+            {Boolean(c.builtin) && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/5 text-ink-400 border border-white/10 shrink-0">built-in</span>}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-white hover:bg-white/5"><X className="w-4 h-4" /></button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Connector name <span className="text-magenta">*</span></label>
+            <input value={values.name} onChange={(e) => set('name')(e.target.value)} className={input} />
+          </div>
+
+          {/* Built-in connectors have a fixed source URL; only cadence + key are tunable. */}
+          {!c.builtin && c.kind !== 'threatorbit' && (
+            <div>
+              <label className="block text-xs font-medium text-ink-300 mb-1.5">Source URL</label>
+              <input value={values.url} onChange={(e) => set('url')(e.target.value)} placeholder="https://your-source/api/indicators" className={cn(input, 'font-mono text-xs')} />
+            </div>
+          )}
+
+          {c.kind !== 'threatorbit' && c.kind !== 'nvd' && (
+            <div>
+              <label className="block text-xs font-medium text-ink-300 mb-1.5">
+                API key <span className="text-ink-600">{c.hasKey ? '(configured - leave blank to keep)' : '(optional)'}</span>
+              </label>
+              <input type="password" value={values.api_key} onChange={(e) => set('api_key')(e.target.value)}
+                placeholder={c.hasKey ? '•••••••• stored - type to replace' : 'paste your key'} className={cn(input, 'font-mono text-xs')} />
+            </div>
+          )}
+
+          {isCustom && (
+            <div className="rounded-xl border border-white/8 bg-surface-2/40 p-3 space-y-3">
+              <p className="text-[11px] text-ink-400">Field mapping - leave all blank to keep the current map.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[['value', 'Indicator value'], ['type', 'Type'], ['threat_type', 'Threat type'], ['confidence', 'Confidence'], ['severity', 'Severity'], ['tags', 'Tags']].map(([k, label]) => (
+                  <div key={k}>
+                    <label className="block text-[10px] text-ink-500 mb-1">{label}</label>
+                    <input value={values[`fm_${k}`] ?? ''} onChange={(e) => set(`fm_${k}`)(e.target.value)} placeholder={k} className="w-full px-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-xs text-ink-100 font-mono focus:outline-hidden focus:border-magenta/40 placeholder-ink-700" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (minutes)</label>
+            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} className={input} />
+          </div>
+
+          {error && <p className="flex items-center gap-2 px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}</p>}
+
+          <button type="submit" disabled={!values.name.trim() || submitting}
+            className={cn('w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
+              values.name.trim() && !submitting ? 'bg-plasma text-white hover:shadow-magenta-sm' : 'bg-surface-3 text-ink-600 cursor-not-allowed')}>
+            {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <><CheckCircle className="w-4 h-4" /> Save Changes</>}
           </button>
         </form>
       </motion.div>

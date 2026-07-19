@@ -1201,6 +1201,20 @@ def test_connector_kinds_and_crud(client, auth):
     assert client.post("/connectors", json={"name": "OTX", "kind": "otx"}, headers=auth).status_code == 400
     # update + toggle
     assert client.patch(f"/connectors/{cid}", json={"enabled": False}, headers=auth).json()["enabled"] == 0
+    # reconfigure: url / interval / field-map persist; a new API key is stored
+    # (surfaced only as has_key) and never returned in the clear.
+    upd = client.patch(f"/connectors/{cid}", json={
+        "url": "https://example.com/v2/iocs.json", "interval_minutes": 30,
+        "field_map": {"value": "ioc", "type": "kind"}, "api_key": "s3cret-token",
+    }, headers=auth).json()
+    assert upd["url"] == "https://example.com/v2/iocs.json"
+    assert upd["interval_minutes"] == 30
+    assert "api_key" not in upd
+    me = next(x for x in client.get("/connectors", headers=auth).json() if x["id"] == cid)
+    assert me["has_key"] in (1, True)
+    assert me["field_map"] == {"value": "ioc", "type": "kind"}
+    # an empty patch is a client error, not a silent no-op
+    assert client.patch(f"/connectors/{cid}", json={}, headers=auth).status_code == 400
     assert client.delete(f"/connectors/{cid}", headers=auth).status_code == 204
 
 

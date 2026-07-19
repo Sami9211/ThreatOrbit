@@ -7,8 +7,8 @@ import CreateModal from '@/components/dashboard/CreateModal'
 import IngestionEnginePanel from '@/components/dashboard/IngestionEnginePanel'
 import ConnectorsPanel from '@/components/dashboard/ConnectorsPanel'
 import {
-  Radio, Plus, RefreshCw, XCircle, Settings, Key, Link2,
-  Clock, Tag, SlidersHorizontal, Activity, ShieldCheck,
+  Radio, Plus, RefreshCw, XCircle, Link2,
+  Clock, Tag, Activity, ShieldCheck, Pause, Play,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -26,11 +26,11 @@ interface FeedSource {
   reliability: Reliability
   enabled: boolean
   url: string
-  apiKeyConfigured: boolean
   pullInterval: string
-  taxiiCollection: string
-  confidenceWeight: number
-  tagMapping: string[]
+  // Real backend fields - no invented API-key / TAXII / tag-mapping state.
+  status: string
+  provider: string
+  description: string
 }
 
 const TYPE_CONFIG: Record<FeedType, string> = {
@@ -63,11 +63,10 @@ const apiFeedToRow = (f: ApiFeed): FeedSource => ({
   reliability: ((f.reliability?.toUpperCase() as Reliability) || '-'),
   enabled: f.enabled,
   url: f.url ?? '',
-  apiKeyConfigured: false,
   pullInterval: f.syncInterval ? `${Math.round(f.syncInterval / 60)}m` : '-',
-  taxiiCollection: '-',
-  confidenceWeight: 75,
-  tagMapping: [],
+  status: f.status ?? 'unknown',
+  provider: f.provider ?? f.name,
+  description: f.description ?? '',
 })
 
 export default function FeedSourcesPage() {
@@ -109,10 +108,6 @@ export default function FeedSourcesPage() {
     apiToggleFeed(id, !feed.enabled).catch(() => {
       setFeeds(prev => prev.map(f => (f.id === id ? { ...f, enabled: feed.enabled } : f)))
     })
-  }
-
-  const setWeight = (id: string, weight: number) => {
-    setFeeds(prev => prev.map(f => (f.id === id ? { ...f, confidenceWeight: weight } : f)))
   }
 
   const filtered = feeds.filter(f => {
@@ -287,70 +282,61 @@ export default function FeedSourcesPage() {
                 </button>
               </div>
 
+              {selectedFeed.description && (
+                <p className="text-xs text-ink-300 mb-4 leading-relaxed">{selectedFeed.description}</p>
+              )}
+
               <div className="grid sm:grid-cols-2 gap-4 mb-5">
                 <div>
                   <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Link2 className="w-3 h-3" /> Feed URL</p>
-                  <p className="text-xs font-mono text-ink-200 break-all">{selectedFeed.url}</p>
+                  <p className="text-xs font-mono text-ink-200 break-all">{selectedFeed.url || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Key className="w-3 h-3" /> API Key</p>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Activity className="w-3 h-3" /> Status</p>
                   <span className={cn(
-                    'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold',
-                    selectedFeed.apiKeyConfigured ? 'text-safe bg-safe/10 border-safe/20' : 'text-ink-400 bg-white/5 border-white/10',
+                    'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold capitalize',
+                    selectedFeed.status === 'active' ? 'text-safe bg-safe/10 border-safe/20'
+                      : selectedFeed.status === 'error' ? 'text-threat bg-threat/10 border-threat/20'
+                      : 'text-ink-400 bg-white/5 border-white/10',
                   )}>
-                    <ShieldCheck className="w-3 h-3" />
-                    {selectedFeed.apiKeyConfigured ? 'Configured' : 'Not required'}
+                    <span className={cn('w-1.5 h-1.5 rounded-full',
+                      selectedFeed.status === 'active' ? 'bg-safe' : selectedFeed.status === 'error' ? 'bg-threat' : 'bg-ink-500')} />
+                    {selectedFeed.status}
                   </span>
                 </div>
                 <div>
-                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Pull Interval</p>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Provider</p>
+                  <p className="text-sm text-ink-200">{selectedFeed.provider}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Sync Interval</p>
                   <p className="text-sm font-mono text-ink-200">{selectedFeed.pullInterval}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> STIX / TAXII Collection</p>
-                  <p className="text-sm font-mono text-ink-200">{selectedFeed.taxiiCollection}</p>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Tag className="w-3 h-3" /> Indicators</p>
+                  <p className="text-sm font-mono text-violet">{selectedFeed.iocsPerDay.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-1 flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Last Pull</p>
+                  <p className="text-sm text-ink-200">{selectedFeed.lastPull}</p>
                 </div>
               </div>
 
-              {/* Confidence weighting slider */}
-              <div className="mb-5">
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[10px] text-ink-600 uppercase tracking-wider">Confidence Weighting</p>
-                  <span className="text-xs font-mono text-magenta">{selectedFeed.confidenceWeight}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={selectedFeed.confidenceWeight}
-                  onChange={e => setWeight(selectedFeed.id, Number(e.target.value))}
-                  className="w-full accent-magenta"
-                />
-              </div>
-
-              {/* Tag mapping */}
-              <div className="mb-5">
-                <p className="text-[10px] text-ink-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Tag className="w-3 h-3" /> Tag Mapping</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedFeed.tagMapping.map(t => (
-                    <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-violet/10 text-violet border border-violet/20 font-mono">{t}</span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
-                  <Settings className="w-3.5 h-3.5" />
-                  Configure
+              {/* Honest action row: enabling/disabling is really supported; pulling
+                  and API keys are configured per connector, so we point there
+                  rather than showing dead "Pull Now"/"Test Connection" buttons. */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => toggleFeed(selectedFeed.id)}
+                  className={cn('px-3 py-1.5 rounded-lg border text-xs flex items-center gap-1.5 transition-colors',
+                    selectedFeed.enabled
+                      ? 'border-white/10 text-ink-300 hover:text-white hover:bg-white/5'
+                      : 'border-safe/30 text-safe hover:bg-safe/10')}>
+                  {selectedFeed.enabled ? <><Pause className="w-3.5 h-3.5" /> Disable feed</> : <><Play className="w-3.5 h-3.5" /> Enable feed</>}
                 </button>
-                <button className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Pull Now
-                </button>
-                <button className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5" />
-                  Test Connection
-                </button>
+                <p className="text-[10px] text-ink-600">
+                  Pull cadence &amp; API keys are managed on the connector in <span className="text-ink-400">Threat Intel Connectors</span> above.
+                </p>
               </div>
             </motion.div>
           )}
