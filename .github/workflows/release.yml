@@ -43,10 +43,10 @@ jobs:
     outputs:
       hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with: { python-version: '3.11' }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -67,7 +67,7 @@ jobs:
           # The SLSA generator signs over exactly these subjects.
           echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-artifacts
           path: dist/*
@@ -81,7 +81,7 @@ jobs:
       contents: write   # create the GitHub release + upload assets
       id-token: write   # cosign keyless (OIDC) signing
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-artifacts
           path: dist
@@ -97,7 +97,7 @@ jobs:
           done
 
       - name: Publish release with signatures
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true

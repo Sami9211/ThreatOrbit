@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       # One install of all three services proves the shared pins still resolve
@@ -54,8 +54,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/threatorbit
       DASHBOARD_JWT_SECRET: ci-pg-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Install API deps + Postgres extras (psycopg, pool, sqlglot)
@@ -71,8 +71,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
