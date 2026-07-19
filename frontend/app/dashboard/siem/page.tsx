@@ -9,7 +9,7 @@ import {
   BarChart2, Database, CheckCircle, 
   ArrowUpRight, 
   Network, FileText, Copy, 
-  RefreshCw, Lock, Gauge, Loader2,
+  RefreshCw, Lock, Gauge, Loader2, RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
@@ -544,7 +544,7 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   const [tab, setTab] = useState<'overview' | 'network' | 'identity' | 'host' | 'raw'>('overview')
   // Toasts can carry a link straight to the record an action just created
   // (case, suppression) - the user never has to go search for it afterwards.
-  const [toast, setToast] = useState<{ text: string; href?: string; hrefLabel?: string } | null>(null)
+  const [toast, setToast] = useState<{ text: string; href?: string; hrefLabel?: string; undo?: () => void } | null>(null)
   const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
   const [fpChecking, setFpChecking] = useState(false)
   // Real UEBA context for the identity/host tabs (fetched lazily when the tab
@@ -557,6 +557,13 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
   const flash = (text: string, href?: string, hrefLabel?: string) => {
     setToast({ text, href, hrefLabel })
     setTimeout(() => setToast(null), href ? 10_000 : 2200)  // links need time to click
+  }
+  // A reversible triage action: it applies immediately but the toast offers a
+  // one-click Undo that restores the prior state (and re-persists it). Critical
+  // actions - closing an alert, changing disposition - are never a dead end.
+  const flashUndo = (text: string, undo: () => void) => {
+    setToast({ text, undo })
+    setTimeout(() => setToast(null), 8000)  // undo needs time to notice + click
   }
 
   // Reset the (advisory, never auto-acted-on) FP assessment when the
@@ -632,9 +639,17 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
         <div className="flex items-center gap-2 mt-3 flex-wrap">
           {[
             { label: 'Assign to Me', icon: User, color: 'text-amber',
-              run: () => { onUpdate(alert.id, { owner: 'you', status: alert.status === 'new' ? 'assigned' : alert.status }); flash('Assigned to you') } },
+              run: () => {
+                const prev = { owner: alert.owner, status: alert.status }
+                onUpdate(alert.id, { owner: 'you', status: alert.status === 'new' ? 'assigned' : alert.status })
+                flashUndo('Assigned to you', () => onUpdate(alert.id, prev))
+              } },
             { label: 'Escalate', icon: ArrowUpRight, color: 'text-threat',
-              run: () => { onUpdate(alert.id, { status: 'in-progress' }); flash('Escalated - status set to In Progress') } },
+              run: () => {
+                const prev = alert.status
+                onUpdate(alert.id, { status: 'in-progress' })
+                flashUndo('Escalated - status set to In Progress', () => onUpdate(alert.id, { status: prev }))
+              } },
             { label: 'Create Case', icon: FileText, color: 'text-violet',
               run: () => {
                 createCase({
@@ -706,7 +721,12 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <span className="text-[10px] text-ink-600">Status</span>
             <select
               value={alert.status}
-              onChange={(e) => { onUpdate(alert.id, { status: e.target.value as AlertStatus }); flash(`Status → ${STATUS_LABEL[e.target.value as AlertStatus].label}`) }}
+              onChange={(e) => {
+                const next = e.target.value as AlertStatus, prev = alert.status
+                if (next === prev) return
+                onUpdate(alert.id, { status: next })
+                flashUndo(`Status → ${STATUS_LABEL[next].label}`, () => onUpdate(alert.id, { status: prev }))
+              }}
               className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 focus:outline-hidden focus:border-magenta/40 cursor-pointer"
             >
               {(['new','assigned','in-progress','pending','resolved','closed'] as AlertStatus[]).map((s) => (
@@ -718,7 +738,12 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <span className="text-[10px] text-ink-600">Disposition</span>
             <select
               value={alert.disposition}
-              onChange={(e) => { onUpdate(alert.id, { disposition: e.target.value as Disposition }); flash('Disposition recorded') }}
+              onChange={(e) => {
+                const next = e.target.value as Disposition, prev = alert.disposition
+                if (next === prev) return
+                onUpdate(alert.id, { disposition: next })
+                flashUndo(`Disposition → ${next.replace('-', ' ')}`, () => onUpdate(alert.id, { disposition: prev }))
+              }}
               className="appearance-none bg-surface-2 border border-white/10 rounded-md text-[10px] text-ink-200 px-2 py-1 capitalize focus:outline-hidden focus:border-magenta/40 cursor-pointer"
             >
               {(['undetermined','true-positive','false-positive','benign','duplicate'] as Disposition[]).map((d) => (
@@ -741,6 +766,13 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                   className="ml-1 text-magenta underline underline-offset-2 hover:text-white shrink-0">
                   {toast.hrefLabel ?? 'Open →'}
                 </Link>
+              )}
+              {toast.undo && (
+                <button
+                  onClick={() => { toast.undo!(); setToast({ text: 'Reverted' }); setTimeout(() => setToast(null), 1600) }}
+                  className="ml-1 inline-flex items-center gap-1 text-magenta font-semibold underline underline-offset-2 hover:text-white shrink-0">
+                  <RotateCcw className="w-3 h-3" /> Undo
+                </button>
               )}
             </motion.div>
           )}
