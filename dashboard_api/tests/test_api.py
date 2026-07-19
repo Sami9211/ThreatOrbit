@@ -1261,6 +1261,48 @@ def test_connector_nvd_engine(client, auth, monkeypatch):
     assert items and items[0]["type"] == "cve" and items[0]["severity"] == "critical"
 
 
+def test_engine_generated_iocs_carry_honest_provenance(client, auth):
+    """Provenance honesty: indicators the live engine derives from telemetry are
+    labelled source='engine:telemetry' with an 'engine-detected' tag - they are
+    never passed off as an external feed (OTX/MISP/VirusTotal/abuse.ch) or as an
+    authoritative NVD record. This fences the 'engine-generated intel vs feed/NVD
+    skew' guarantee: internally-derived intel stays visibly internal, and the
+    honest source survives all the way to the lookup API the scanner reads."""
+    import json as _json
+    from dashboard_api.engine import process_tick
+    from dashboard_api.db import get_conn
+
+    # Drive the real engine so it derives indicators from synthetic telemetry.
+    produced = 0
+    for _ in range(60):
+        produced += process_tick(max_events=6).get("iocs", 0)
+    assert produced > 0, "engine derived no IOCs over 60 ticks"
+
+    _FEED_OR_NVD = {"nvd", "alienvault-otx", "otx", "misp", "virustotal", "abuse.ch"}
+    with get_conn() as conn:
+        engine_rows = conn.execute(
+            "SELECT value, source, tags FROM iocs WHERE source='engine:telemetry'"
+        ).fetchall()
+        # Nothing the engine writes may masquerade under a feed/NVD source name.
+        _ph = ",".join("?" * len(_FEED_OR_NVD))
+        masquerading = conn.execute(
+            f"SELECT COUNT(*) FROM iocs WHERE tags LIKE ? AND lower(source) IN ({_ph})",
+            ("%engine-detected%", *_FEED_OR_NVD),
+        ).fetchone()[0]
+    assert engine_rows, "no engine-sourced IOCs found after ticks"
+    assert masquerading == 0, "engine-detected IOC mislabelled with a feed/NVD source"
+    for r in engine_rows:
+        assert r["source"] == "engine:telemetry"
+        assert r["source"].lower() not in _FEED_OR_NVD
+        tags = _json.loads(r["tags"]) if r["tags"] else []
+        assert "engine-detected" in tags, f"{r['value']} missing engine-detected tag"
+
+    # The honest source reaches the scanner's lookup surface unchanged.
+    sample = engine_rows[0]["value"]
+    hit = client.get(f"/cti/lookup?value={sample}", headers=auth).json()
+    assert hit["found"] and hit["source"] == "engine:telemetry"
+
+
 def test_nvd_catalogue_sync_drives_scanning(client, auth, monkeypatch):
     """The NVD connector syncs CPE version ranges into the CVE catalogue, and
     the vulnerability scanner matches assets against the synced rows."""

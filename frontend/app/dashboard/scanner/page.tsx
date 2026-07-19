@@ -391,6 +391,26 @@ function Card({ title, right, children }: { title: string; right?: ReactNode; ch
   )
 }
 
+/* Classify an indicator's source so engine-derived intel never reads as an
+   authoritative external feed or NVD record - keeps provenance honest at a
+   glance and stops the "engine-generated vs feed/NVD" skew. */
+function provClass(source: string | null | undefined):
+    { label: string; cls: string; hint: string } | null {
+  if (!source) return null
+  const s = source.toLowerCase()
+  if (s.startsWith('engine:'))
+    return { label: 'Engine-derived', cls: 'bg-violet/15 text-violet border-violet/25',
+      hint: 'Derived by this deployment’s correlation engine from local telemetry - internal intelligence, not an external feed.' }
+  if (s === 'nvd' || s.includes('nvd'))
+    return { label: 'NVD (official)', cls: 'bg-safe/15 text-safe border-safe/25',
+      hint: 'National Vulnerability Database - authoritative CVE record.' }
+  if (s === 'manual' || s.startsWith('import'))
+    return { label: 'Analyst / import', cls: 'bg-amber/15 text-amber border-amber/25',
+      hint: 'Added by an analyst or a one-off import, not a live feed.' }
+  return { label: 'External feed', cls: 'bg-surface-3 text-ink-300 border-white/10',
+    hint: 'Pulled from an external threat-intel feed connector.' }
+}
+
 function EmptyNote({ text }: { text: string }) {
   return <p className="text-xs text-ink-500 leading-relaxed">{text}</p>
 }
@@ -414,6 +434,15 @@ function DetailsTab({ result }: { result: ScanResult }) {
             <KV k="Threat type" v={lu.threatType} mono={false} />
             <KV k="Attributed actor" v={lu.actor} mono={false} />
             <KV k="Feed source" v={lu.source} mono={false} />
+            {(() => {
+              const p = provClass(lu.source)
+              return p ? (
+                <div className="flex justify-between gap-4 py-1 text-xs border-b border-white/4">
+                  <span className="text-ink-500 shrink-0">Provenance</span>
+                  <span title={p.hint} className={cn('text-[10px] px-2 py-0.5 rounded-full border cursor-help', p.cls)}>{p.label}</span>
+                </div>
+              ) : null
+            })()}
             <KV k="Confidence" v={`${lu.confidence}${lu.effectiveConfidence != null && lu.effectiveConfidence !== lu.confidence ? ` (effective ${lu.effectiveConfidence} after decay)` : ''}`} />
             <KV k="Sightings" v={lu.sightings} />
             <KV k="Lifecycle" v={lu.status} mono={false} />
