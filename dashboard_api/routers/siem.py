@@ -1184,7 +1184,10 @@ def update_rule(rule_id: str, body: RuleUpdate, user: dict = Depends(require_per
     if body.status is not None:
         fields.append("status=?"); values.append(body.status)
     if body.severity_override is not None:
-        fields.append("severity_override=?"); values.append(body.severity_override)
+        # An empty string clears the override back to NULL (no override), so the
+        # "No override" choice in the editor actually persists rather than
+        # storing a meaningless empty string.
+        fields.append("severity_override=?"); values.append(body.severity_override or None)
     if body.suppression_window is not None:
         fields.append("suppression_window=?"); values.append(body.suppression_window)
     if body.definition is not None:

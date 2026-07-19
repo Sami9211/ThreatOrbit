@@ -304,8 +304,16 @@ SOAR-integrations fake fallback). Items below updated accordingly.
 16. **[ ] Undo / action history** - critical analyst actions (e.g. threat
     suppression) need discoverable reversal: undo affordances, recent
     actions, action history.
-17. **[ ] SIEM Rules Engine** - rules open/edit/test/related-alerts all
-    broken links or errors; make every rule-management function work.
+17. **[fixed] SIEM Rules Engine** - root cause: the page cast the API
+    response onto the seed display type, so opening any real rule crashed
+    (`hits24h.toString()` / `tags.join()` on mismatched fields). Added a
+    `normalizeRule()` (parses tags/definition, aliases snake-case
+    counters, labels the integer suppression window). Panel now opens
+    clean; Save persists the severity override (`PATCH`, empty→NULL),
+    Delete is wired, new Test Rule backtests structured rules (disabled
+    with tooltip for KQL-only display rules), new Related Alerts filters
+    the queue to the rule's alerts. Write actions gated on siem.write.
+    Backend test extended; live-verified.
 18. **[ ] ATT&CK Navigator** - "View Matching Alerts" (and other entity
     actions) fail; wire every entity action to real alerts/investigations/
     techniques.

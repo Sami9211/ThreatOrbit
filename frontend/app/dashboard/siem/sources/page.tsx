@@ -33,6 +33,39 @@ interface LogSource {
   tags: string[]
 }
 
+/* The /siem/sources payload doesn't line up 1:1 with the display shape:
+   `total_events_24h` survives camelCasing as snake_case (digit after `_`),
+   `tags` arrives as a JSON string, and several display fields aren't in the
+   minimal API type. Blindly casting left `tags` a string, so rendering a
+   source row crashed on `tags.slice().map()`. Normalise defensively. */
+function normalizeSource(r: Record<string, unknown>): LogSource {
+  const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v) || d)
+  const str = (v: unknown, d = '') => (typeof v === 'string' && v ? v : d)
+  const rawTags = typeof r.tags === 'string'
+    ? (() => { try { return JSON.parse(r.tags as string) } catch { return [] } })()
+    : r.tags
+  const tags = Array.isArray(rawTags) ? rawTags.map(String) : []
+  const evts = r.totalEvents24h ?? r.total_events_24h ?? r.events7d
+  const totalEvents24h = typeof evts === 'number' ? evts.toLocaleString() : str(evts, '0')
+  const validStatus = ['healthy', 'degraded', 'offline', 'paused']
+  const st = str(r.status, 'healthy')
+  return {
+    id: str(r.id),
+    name: str(r.name, 'Unnamed source'),
+    type: str(r.type, 'Syslog') as SourceType,
+    host: str(r.host, '-'),
+    status: (validStatus.includes(st) ? st : 'healthy') as SourceStatus,
+    epsAvg: num(r.epsAvg ?? r.eps_avg),
+    epsPeak: num(r.epsPeak ?? r.eps_peak),
+    lastEvent: str(r.lastEvent ?? r.last_event, 'never'),
+    totalEvents24h,
+    latencyMs: num(r.latencyMs ?? r.latency_ms),
+    parseSuccess: num(r.parseSuccess ?? r.parse_success, 100),
+    format: str(r.format, '-'),
+    tags,
+  }
+}
+
 const SOURCES: LogSource[] = [
   { id: 's01', name: 'Windows Domain Controllers (6 hosts)', type: 'Windows Event', host: 'dc-prod-01..06', status: 'healthy',  epsAvg: 1240, epsPeak: 4800, lastEvent: '2s ago',   totalEvents24h: '107M', latencyMs: 140,  parseSuccess: 99.8, format: 'WEF/WinRM',      tags: ['AD', 'Identity', 'Critical'] },
   { id: 's02', name: 'Linux Fleet - Endpoint Syslog',        type: 'Syslog',        host: '10.0.0.0/16',  status: 'healthy',  epsAvg: 2840, epsPeak: 6200, lastEvent: '1s ago',   totalEvents24h: '245M', latencyMs: 88,   parseSuccess: 98.4, format: 'RFC 5424',       tags: ['Linux', 'Endpoint'] },
@@ -62,7 +95,7 @@ export default function SiemSourcesPage() {
 
   useEffect(() => {
     fetchSiemSources()
-      .then((data) => { if (data.length > 0) setSourcesData(data as unknown as typeof SOURCES) })
+      .then((data) => { if (data.length > 0) setSourcesData((data as unknown as Record<string, unknown>[]).map(normalizeSource)) })
       .catch(() => {})
   }, [])
 
@@ -71,7 +104,7 @@ export default function SiemSourcesPage() {
       name: values.name, type: values.type, host: values.host || undefined,
       format: values.format || undefined,
     })
-    setSourcesData((prev) => [created as unknown as LogSource, ...prev])
+    setSourcesData((prev) => [normalizeSource(created as unknown as Record<string, unknown>), ...prev])
   }
 
   const SOURCES_ACTIVE = sourcesData

@@ -1,17 +1,18 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield, Search, Plus, ChevronDown, X, Edit2, Trash2,
   AlertTriangle, CheckCircle, MinusCircle, Copy, Code2,
-  Tag, Clock, Activity,
-  BookOpen, Layers, Zap, 
+  Tag, Clock, Activity, Play, ArrowUpRight,
+  BookOpen, Layers, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { usePermissions } from '@/lib/usePermissions'
-import { fetchRules, patchRule, deleteRule, exportSigmaRule } from '@/lib/api'
+import { fetchRules, patchRule, deleteRule, exportSigmaRule, testRule, type RuleDefinition } from '@/lib/api'
 import RuleEditor from '@/components/dashboard/RuleEditor'
 import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
 import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
@@ -44,6 +45,9 @@ interface DetectionRule {
   severityOverride:  Severity | null
   tags:        string[]
   noise?:      string | null
+  /** Structured detection definition (present on API-authored rules; absent on
+   *  the KQL-only display seeds) - required to backtest against live events. */
+  definition?: RuleDefinition | null
 }
 
 /* --- Seed data -------------------------------------------------------- */
@@ -345,6 +349,57 @@ AND NOT source.ip: (lookup TI_ALLOWLIST ip)
   },
 ]
 
+/* --- API → display-row normalizer -----------------------------------
+   The `/siem/rules` payload doesn't line up 1:1 with the display shape:
+   `hits_24h`/`fired_last_7d` survive camelCasing as snake_case (the digit
+   after `_` isn't matched), `tags`/`definition` arrive as JSON strings, and
+   `suppression_window` is an integer. Blindly casting the response to the
+   seed type (the old `as unknown as` cast) left `hits24h` undefined and
+   `tags` a string - so opening any real rule's panel crashed on
+   `hits24h.toString()` / `tags.join()`. Normalise every field with a safe
+   fallback so the panel and table both work on live data. */
+function normalizeRule(r: Record<string, unknown>): DetectionRule {
+  const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v) || d)
+  const str = (v: unknown, d = '') => (typeof v === 'string' && v ? v : d)
+  const parseJson = (v: unknown): unknown => {
+    if (typeof v === 'string') { try { return JSON.parse(v) } catch { return null } }
+    return v
+  }
+  const rawTags = parseJson(r.tags)
+  const tags = Array.isArray(rawTags) ? rawTags.map(String) : []
+  const def = parseJson(r.definition)
+  const win = r.suppressionWindow ?? r.suppression_window
+  const suppression = typeof win === 'number'
+    ? (win > 0 ? `${win}m window` : 'None (alert every occurrence)')
+    : str(win, 'None (alert every occurrence)')
+  const sevOverride = (r.severityOverride ?? r.severity_override) as Severity | null
+  const validCats = ['Network', 'Endpoint', 'Cloud', 'Identity', 'Threat Intel']
+  const cat = str(r.category, 'Network')
+  return {
+    id: str(r.id),
+    name: str(r.name, 'Unnamed rule'),
+    category: (validCats.includes(cat) ? cat : 'Network') as Category,
+    severity: (str(r.severity, 'medium')) as Severity,
+    mitreTactic: str(r.mitreTactic ?? r.mitre_tactic, '-'),
+    mitreTechId: str(r.mitreTechId ?? r.mitre_tech_id, '-'),
+    mitreTech: str(r.mitreTech ?? r.mitre_tech, '-'),
+    hits24h: num(r.hits24h ?? r.hits_24h),
+    fpRate: num(r.fpRate ?? r.fp_rate),
+    status: (str(r.status, 'enabled')) as RuleStatus,
+    source: str(r.source, 'custom'),
+    lastFired: str(r.lastFired ?? r.last_fired, 'never'),
+    created: str(r.created, '-'),
+    updatedBy: str(r.updatedBy ?? r.updated_by, '-'),
+    description: str(r.description, 'No description provided.'),
+    kql: str(r.kql, '(no detection query stored for this rule)'),
+    suppressionWindow: suppression,
+    severityOverride: sevOverride || null,
+    tags,
+    noise: (r.noise as string | null) ?? null,
+    definition: (def && typeof def === 'object') ? (def as RuleDefinition) : null,
+  }
+}
+
 /* --- Severity config ------------------------------------------------- */
 const SEV_CONFIG: Record<Severity, { bg: string; text: string; border: string; dot: string; label: string }> = {
   critical: { bg: 'bg-magenta/15',  text: 'text-magenta',  border: 'border-magenta/30',  dot: tk('magenta'), label: 'Critical' },
@@ -393,15 +448,24 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
 }
 
 /* --- Rule Detail Panel ------------------------------------------------ */
-function RulePanel({ rule, onClose, onToggle }: {
+function RulePanel({ rule, onClose, onToggle, onDelete, onSaved, canWrite }: {
   rule: DetectionRule
   onClose: () => void
   onToggle: (id: string) => void
+  onDelete: (rule: DetectionRule) => void
+  onSaved: (id: string, patch: Partial<DetectionRule>) => void
+  canWrite: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const [overrideSev, setOverrideSev] = useState<Severity | null>(rule.severityOverride)
-  const [suppressionWin, setSuppressionWin] = useState(rule.suppressionWindow)
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
+  // Backtest (Test Rule) state.
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ matched: number; scanned: number } | null>(null)
+  const [testErr, setTestErr] = useState<string | null>(null)
+  const dirty = overrideSev !== rule.severityOverride
 
   function copyKQL() {
     navigator.clipboard.writeText(rule.kql).then(() => {
@@ -410,9 +474,28 @@ function RulePanel({ rule, onClose, onToggle }: {
     })
   }
 
+  // Persist the severity override for real (was a no-op toast before).
   function handleSave() {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    if (saving) return
+    setSaving(true); setSaveErr(null)
+    patchRule(rule.id, { severityOverride: overrideSev ?? '' })
+      .then(() => {
+        onSaved(rule.id, { severityOverride: overrideSev })
+        setSaved(true); setTimeout(() => setSaved(false), 2500)
+      })
+      .catch(() => setSaveErr('Could not save - is the dashboard API running?'))
+      .finally(() => setSaving(false))
+  }
+
+  // Backtest the rule's structured definition against recent events without
+  // raising any alerts. KQL-only display rules carry no definition to run.
+  function handleTest() {
+    if (testing || !rule.definition) return
+    setTesting(true); setTestErr(null); setTestResult(null)
+    testRule(rule.definition)
+      .then((r) => setTestResult({ matched: r.matched, scanned: r.scanned }))
+      .catch(() => setTestErr('Backtest failed - is the dashboard API running?'))
+      .finally(() => setTesting(false))
   }
 
   return (
@@ -526,18 +609,23 @@ function RulePanel({ rule, onClose, onToggle }: {
           </div>
         </section>
 
-        {/* Suppression config */}
+        {/* Tuning: severity override (editable, persisted) + suppression note */}
         <section>
           <PanelSection title="Suppression &amp; Tuning" icon={Clock} />
           <div className="mt-2 space-y-3">
             <div>
               <label className="block text-[10px] text-ink-500 mb-1">Suppression Window</label>
-              <input
-                type="text"
-                value={suppressionWin}
-                onChange={(e) => setSuppressionWin(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-surface-2 border border-white/10 rounded-lg text-ink-200 focus:outline-hidden focus:border-violet/40 transition-colors"
-              />
+              <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-mono bg-surface-2 border border-white/10 rounded-lg text-ink-300">
+                <span className="truncate">{rule.suppressionWindow}</span>
+                <Link href="/dashboard/siem/rules#suppressions"
+                  className="text-[10px] font-sans text-magenta hover:text-white shrink-0 whitespace-nowrap">
+                  Manage suppressions →
+                </Link>
+              </div>
+              <p className="text-[9px] text-ink-600 mt-1">
+                Per-entity suppressions and allow-lists are managed in the Suppressions
+                panel below - additions there take effect immediately.
+              </p>
             </div>
             <div>
               <label className="block text-[10px] text-ink-500 mb-1">Severity Override</label>
@@ -548,9 +636,11 @@ function RulePanel({ rule, onClose, onToggle }: {
                   return (
                     <button
                       key={sev}
+                      disabled={!canWrite}
                       onClick={() => setOverrideSev(sev === 'none' ? null : sev)}
                       className={cn(
                         'px-2.5 py-1 rounded-full text-[10px] font-semibold border capitalize transition-all',
+                        !canWrite && 'opacity-40 cursor-not-allowed',
                         active
                           ? (cfg ? cn(cfg.bg, cfg.text, cfg.border) : 'bg-white/10 text-white border-white/25')
                           : 'bg-transparent text-ink-600 border-white/10 hover:border-white/20 hover:text-ink-300',
@@ -565,28 +655,67 @@ function RulePanel({ rule, onClose, onToggle }: {
           </div>
         </section>
 
-        {/* Save feedback */}
+        {/* Backtest result */}
         <AnimatePresence>
-          {saved && (
+          {(testResult || testErr) && (
             <motion.div
               initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="flex items-center gap-2 text-xs text-safe bg-safe/10 border border-safe/20 rounded-lg px-3 py-2"
+              className={cn('flex items-center gap-2 text-xs rounded-lg px-3 py-2 border',
+                testErr ? 'text-amber bg-amber/10 border-amber/20' : 'text-ink-200 bg-surface-2 border-white/10')}
+            >
+              <Activity className="w-3.5 h-3.5 shrink-0" />
+              {testErr ?? (testResult && (
+                testResult.matched > 0
+                  ? `Backtest: ${testResult.matched} match${testResult.matched === 1 ? '' : 'es'} across ${testResult.scanned.toLocaleString()} recent events - no alerts were created.`
+                  : `Backtest: no matches across ${testResult.scanned.toLocaleString()} recent events - no alerts were created.`
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Save feedback */}
+        <AnimatePresence>
+          {(saved || saveErr) && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className={cn('flex items-center gap-2 text-xs rounded-lg px-3 py-2 border',
+                saveErr ? 'text-amber bg-amber/10 border-amber/20' : 'text-safe bg-safe/10 border-safe/20')}
             >
               <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-              Rule configuration saved successfully
+              {saveErr ?? 'Rule configuration saved'}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
       {/* Footer actions */}
-      <div className="p-4 border-t border-white/8 flex items-center gap-2 shrink-0">
+      <div className="p-4 border-t border-white/8 flex items-center gap-2 shrink-0 flex-wrap">
+        {canWrite && (
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-violet/20 border border-violet/30 text-violet hover:bg-violet/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <CheckCircle className="w-3.5 h-3.5" /> {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        )}
+        {/* Test / backtest - only meaningful for rules with a structured definition. */}
         <button
-          onClick={handleSave}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-violet/20 border border-violet/30 text-violet hover:bg-violet/30 transition-colors"
+          onClick={handleTest}
+          disabled={testing || !rule.definition}
+          title={rule.definition ? 'Backtest against recent events (no alerts created)'
+            : 'This display rule has no structured definition to backtest'}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <CheckCircle className="w-3.5 h-3.5" /> Save Changes
+          <Play className="w-3.5 h-3.5" /> {testing ? 'Testing…' : 'Test Rule'}
         </button>
+        {/* View the alerts this rule has produced. */}
+        <Link
+          href={`/dashboard/siem?q=${encodeURIComponent(rule.name)}`}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors"
+        >
+          <ArrowUpRight className="w-3.5 h-3.5" /> Related Alerts
+        </Link>
         <button
           onClick={() => {
             exportSigmaRule(rule.id).then((r) => {
@@ -599,12 +728,16 @@ function RulePanel({ rule, onClose, onToggle }: {
               URL.revokeObjectURL(url)
             }).catch(() => {})
           }}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-400 hover:text-white hover:border-white/20 transition-colors">
           <Code2 className="w-3.5 h-3.5" /> Export Sigma
         </button>
-        <button className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-threat/70 hover:text-threat border border-transparent hover:border-threat/30 hover:bg-threat/10 transition-colors">
-          <Trash2 className="w-3.5 h-3.5" /> Delete Rule
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => onDelete(rule)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-threat/70 hover:text-threat border border-transparent hover:border-threat/30 hover:bg-threat/10 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" /> Delete Rule
+          </button>
+        )}
       </div>
     </motion.div>
   )
@@ -639,7 +772,7 @@ export default function RulesEnginePage() {
 
   useEffect(() => {
     fetchRules()
-      .then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) })
+      .then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) })
       .catch(() => {})
   }, [])
 
@@ -737,9 +870,9 @@ export default function RulesEnginePage() {
         {canWrite && (
           <div className="flex items-center gap-2">
             <StarterPackButton onLoaded={() =>
-              fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
+              fetchRules().then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) }).catch(() => {})} />
             <SigmaImportButton onImported={() =>
-              fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {})} />
+              fetchRules().then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) }).catch(() => {})} />
             <button
               onClick={() => setShowNewRule(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
@@ -1019,6 +1152,9 @@ export default function RulesEnginePage() {
               rule={mergedRule(selectedRule)}
               onClose={() => setSelectedId(null)}
               onToggle={toggleRule}
+              onDelete={(r) => removeRule(r)}
+              onSaved={(id, patch) => setRulesData((rs) => rs.map((r) => r.id === id ? { ...r, ...patch } : r))}
+              canWrite={canWrite}
             />
           </>
         )}
@@ -1028,7 +1164,7 @@ export default function RulesEnginePage() {
         {showNewRule && (
           <RuleEditor
             onClose={() => setShowNewRule(false)}
-            onCreated={() => { fetchRules().then((data) => { if (data.length > 0) setRulesData(data as unknown as typeof RULES_DATA) }).catch(() => {}) }}
+            onCreated={() => { fetchRules().then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) }).catch(() => {}) }}
           />
         )}
       </AnimatePresence>

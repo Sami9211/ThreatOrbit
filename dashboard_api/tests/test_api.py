@@ -1579,6 +1579,13 @@ def test_detection_rule_crud_and_backtest(client, auth):
     # update the definition
     upd = client.patch(f"/siem/rules/{rid}", json={"definition": {"conditions": [{"field": "bytes_out", "op": "gte", "value": 1000}], "logic": "and"}}, headers=auth)
     assert upd.json()["definition"]["conditions"][0]["op"] == "gte"
+    # severity override round-trips, and an empty string clears it back to NULL
+    # (the rules panel's "No override" choice) rather than storing "".
+    ov = client.patch(f"/siem/rules/{rid}", json={"severity_override": "low"}, headers=auth)
+    assert ov.json()["severity_override"] == "low"
+    cleared = client.patch(f"/siem/rules/{rid}", json={"severity_override": ""}, headers=auth)
+    assert cleared.json()["severity_override"] in (None, "")  # NULL after clear
+    assert cleared.json().get("severity_override") is None
 
 
 def test_engine_rule_driven_detection(client, auth):

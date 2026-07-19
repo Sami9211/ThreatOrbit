@@ -9,6 +9,40 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-18 - SIEM Rules Engine: opening a rule no longer crashes; edit/test/related all work (Audit-3 item 17)
+- **The real "clicking rules errors" bug found and fixed.** The rules page
+  cast the `/siem/rules` response straight onto the seed display type
+  (`as unknown as`), but the shapes differ: `hits_24h`/`fired_last_7d`
+  survive camelCasing unchanged (a digit follows the `_`), and
+  `tags`/`definition` arrive as JSON strings. Opening any *real* rule's
+  detail panel then threw `hits24h.toString()` / `tags.join()` and the
+  slide-over died. Replaced the blind cast with a `normalizeRule()` that
+  maps every field with a safe fallback (parses tags/definition, coerces
+  the integer suppression window to a label, aliases the snake-case
+  counters). Verified live: the panel opens on real API rules with zero
+  console errors.
+- **Rule actions are now real, not decorative:**
+  - "Save Changes" *persists* the severity override via `PATCH /rules/{id}`
+    (was a no-op success toast); "No override" clears it back to NULL
+    (small backend change: empty string → NULL).
+  - "Delete Rule" is wired (was a button with no handler).
+  - New **Test Rule** backtests the rule's structured definition against
+    recent events via `POST /rules/test` - no alerts created - showing the
+    match count; disabled with an explanatory tooltip for the KQL-only
+    display rules that carry no structured definition.
+  - New **Related Alerts** opens the SIEM queue filtered to the alerts this
+    rule produced (rule name added to the queue's search filter).
+  - Write actions (Save / Delete / override) are gated on `siem.write`.
+- **Same crash class swept from the Log Sources page**: it rendered
+  `src.tags.slice().map()` on the JSON-string `tags` and displayed
+  `total_events_24h` (which also survives camelCasing unchanged) - a
+  `normalizeSource()` now parses tags, formats the event counter, and
+  falls back on every field. Live-verified: the sources list + detail
+  drawer render with zero console errors.
+- Fences: `test_detection_rule_crud_and_backtest` extended with the
+  severity-override clear round-trip; live browser verification of the
+  rules panel + sources page opening cleanly on real data.
+
 ### 2026-07-18 - Overview navigates + stays live; actions link to what they created (Audit-3 items 5, 7, 11)
 - **No inert cards on the Overview.** Every KPI opens the surface it
   summarises, in both modes: Active Threats → the SOC console's open

@@ -1437,9 +1437,15 @@ export default function SIEMPage() {
       if (filterSev !== 'all' && a.severity !== filterSev) return false
       if (filterStatus !== 'all' && a.status !== filterStatus) return false
       if (filterTactic !== 'All' && a.mitreTactic !== filterTactic) return false
-      if (search && !a.title.toLowerCase().includes(search.toLowerCase()) &&
-          !a.ruleId.toLowerCase().includes(search.toLowerCase()) &&
-          !(a.srcIp).includes(search)) return false
+      if (search) {
+        const q = search.toLowerCase()
+        // rule name included so the Rules Engine "Related Alerts" link
+        // (?q=<rule name>) filters to the alerts this rule produced.
+        if (!a.title.toLowerCase().includes(q) &&
+            !a.ruleId.toLowerCase().includes(q) &&
+            !(a.ruleName ?? '').toLowerCase().includes(q) &&
+            !(a.srcIp).includes(search)) return false
+      }
       return true
     })
     const dir = alertSort.dir === 'asc' ? 1 : -1
