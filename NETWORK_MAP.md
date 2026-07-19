@@ -469,12 +469,227 @@ pattern (real API primary; hardcoded array only rendered on `.catch`, gated):
 
 ---
 
-## 7–24, 26–27. Remaining page detail *(in progress)*
+## 5. Threat Feeds — Import IOCs  ·  `/dashboard/feeds/import`
 
-> Same control-level template, page by page. Completed: Overview (1), SOC (2),
-> Feeds·Live (3), Feed·Sources (4), IntelScope (6), Config·Data-Sources (25).
-> Remaining reads: Feeds·Import (5), CTI (7–9), Dark Web (10), Assets (11–13),
-> SIEM·rules/attack/entities/sources/hunt (15–19), SOAR (20–23),
-> Config·General/Users/API (24,26,27), chrome (TopBar/CommandPalette/Assistant).
-> The confirmed-bug list above already covers what those reads surfaced so far;
-> full per-page control tables land as each is read.
+**File:** `feeds/import/page.tsx` · **Data:** `importIocs`, `fetchImportHistory`.
+**Purpose.** Paste or upload raw text; auto-extract IPs/domains/URLs/hashes/CVEs
+(regex `RE_URL`/`RE_CVE`/`RE_DOMAIN`, lines 60–62), tag with TLP + confidence, import.
+**Controls.** Textarea (defang-aware) → live extraction preview ✅; TLP/confidence
+selects 🟢; tag input ✅; Import → `importIocs` ✅; import-history table (`fetchImportHistory`) ✅.
+**Status.** ✅ Honest real-import flow. No fabrication.
+
+## 7. CTI — Overview  ·  `/dashboard/cti`
+
+**File:** `cti/page.tsx` · **Data:** `fetchActors`, `fetchCtiSummary`, `fetchCtiHunts`,
+`createCtiHunt`, `fetchIocTypes`. Components: `EntityGraph`, `IntelReportsPanel`, `IocLifecyclePanel`.
+**Purpose.** Threat-intel command view — top actors, IOC-type breakdown, hunts, intel reports, relationship graph.
+**Controls.** Actor cards → actor detail/graph ✅; hunt create (`CreateModal`→`createCtiHunt`) ✅;
+IOC-type chips ✅; `EntityGraph` relationship view ⚠️(verify); report/lifecycle panels ⚠️(verify).
+**Gaps.** ❌ **B8d** — `useState<Actor[]>(ACTORS)` (`:686`) + `if(data.length>0)` (`:698`):
+the fake actor list shows on an empty deployment. `HUNTS`/`IOC_TYPES` are correctly
+`.catch`-fallback (`:363,721`, "offline preview only") ✅.
+
+## 8. CTI — Threat Hunt  ·  `/dashboard/cti/hunt`
+
+**File:** `cti/hunt/page.tsx` · **Data:** `fetchCtiHunts`, `runCtiHunt`, `fetchAttackCoverage`.
+**Purpose.** Hypothesis-driven hunts across the intel corpus, ATT&CK-tactic framed.
+**Controls.** Hunt list + run (`runCtiHunt`) ✅; hypothesis status pills ✅; `MATRIX_TACTICS`
+is ATT&CK reference data 🟢; MITRE links → `attack.mitre.org` ✅.
+**Gaps.** `HUNTS` seed is `.catch`-fallback only (`:570`, "offline preview only") ✅. Clean.
+
+## 9. CTI — Actor Profiles  ·  `/dashboard/cti/actors`
+
+**File:** `cti/actors/page.tsx` · **Data:** `fetchActors`, `fetchCtiSummary`.
+**Purpose.** Browse/search threat actors (aliases, malware, motivation, threat level, TTPs).
+**Controls.** Search/filter ✅; actor card → detail ✅; MITRE technique links → `attack.mitre.org` ✅.
+**Gaps.** `ACTORS` seed is `.catch`-fallback (`:647`) ✅. **KPI strip is DERIVED** — live from
+`fetchCtiSummary`, hardcoded 47/12/23/16 only as fallback (`:654–661`) ✅ (minor ⚠️: values are
+keyed by label string, so a summary missing a label falls back to the hardcoded number).
+
+## 10. Dark Web  ·  `/dashboard/darkweb`
+
+**File:** `darkweb/page.tsx` · **Data:** `fetchDarkWebFindings`, `fetchDarkWebSummary`,
+`updateDarkWebFinding`, `requestTakedown`.
+**Purpose.** Monitor leaked creds / brand abuse / chatter; triage + request takedowns.
+**Controls.** Search/filter ✅; finding status update (`updateDarkWebFinding`, optimistic + rollback `:71`) ✅;
+**Request takedown** (`requestTakedown`) ✅; `ReportButton`, `SavedViewsButton` ⚠️(verify).
+**Status.** ✅ Honest, real-data, actions wired.
+
+## 11. Assets — Inventory  ·  `/dashboard/assets`
+
+**File:** `assets/page.tsx` · **Data:** `fetchAssets`, `fetchAsset`, `createAsset`, `deleteAsset`,
+`recomputeAssetRisk`, `scanAssetVulns`, `fetchAssetActivity`. Component: `AttackSurfacePanel`.
+**Purpose.** Asset inventory + attack surface; per-asset risk, scan, activity.
+**Controls.** Search/filter ✅; **Scan** (`scanAssetVulns`) ✅; **Scan all** ✅; **Remove**
+(`deleteAsset`) ✅; add asset (`createAsset`) ✅; rows → `siem?alert=`, `soar?case=` ✅.
+**Gaps.** ❌ **B3** — asset row **Details** button (`:664`) has no `onClick` (dead). `SEED` is
+correct `.catch`-fallback (`:195`, "used only if the API is unreachable") ✅.
+
+## 12. Assets — Vulnerabilities  ·  `/dashboard/assets/vulns`
+
+**File:** `assets/vulns/page.tsx` · **Data:** `fetchFleetVulnFindings`, `fetchVulnSummary`. **Verified:** #90.
+**Purpose.** Fleet CVE findings with CVSS, exploit maturity, KEV, remediation, references.
+**Controls.** Filters (sev/status/KEV/exploit) ✅; row → detail drawer ✅; **View on NVD**
+(`nvd.nist.gov/vuln/detail/<cve>`, new tab) ✅ (#90); **Look up in IntelScope**
+(`scanner?value=<cve>&type=cve&run=1`) ✅ (#86,#90); clickable NVD references ✅.
+**Status.** ✅ Seed CVE catalogue is legitimate reference data 🟢; findings are live. Clean.
+
+## 13. Assets — Network Map  ·  `/dashboard/assets/network`
+
+**File:** `assets/network/page.tsx` · **Data:** `fetchAssets`.
+**Purpose.** Zone topology (DMZ/Internal/Cloud/OT) with hosts, ports, risk, attack-path trace.
+**Controls.** Zoom/pan SVG ✅; node drag ✅; zone toggle ✅; node select → detail ✅; trace-path toggle ✅.
+**Gaps.** ❌ **B7 (High)** — `useState<Node[]>(NODES)` (`:199`) renders a hardcoded fake corporate
+topology (firewalls/servers/workstations, invented IPs) **unconditionally**; live assets are
+merged on top (`:217,242`); `.catch` does nothing (`:245`). On a real deployment an analyst sees
+fabricated infrastructure. Fix: seed topology offline-only; live → real assets only.
+
+## 14. SIEM — Alert Queue  ·  `/dashboard/siem`
+
+**File:** `siem/page.tsx` · **Data:** `fetchSiemAlerts`, `fetchSiemKpis`, `fetchSiemTrends`,
+`fetchCorrelations`, `fetchMitreDistribution`, `patchAlert`, `updateAlert`, `createCase`,
+`createSuppression`, `fetchAlertFpAssessment`, `fetchFpTriage`, `bulkDismissAlerts`,
+`fetchEntityDetail`, `fetchPlaybooks`, `runPlaybook`. **Verified:** this session (#92).
+**Purpose.** The core triage surface: alert queue, detail, FP triage, correlations, MITRE dist.
+**Controls (alert detail).** Assign / Escalate / Create Case (`createCase`→`soar?case=`) /
+Suppress (`createSuppression`) / Run Playbook (`runPlaybook`) ✅; Status + Disposition selects
+(`updateAlert`) ✅; **one-click Undo** on all four via toast ✅ (#92); FP assessment ✅;
+`?alert=<id>` + `?q=` deep-link handlers ✅; links → `siem/hunt`, `siem/rules`, `assets/vulns`.
+**Gaps.** ❌ **B5 (Low)** — Raw-log **Copy** button (`:955`) has no `onClick` (dead).
+Seed `ALERTS` array is `.catch`-fallback ✅.
+
+## 15. SIEM — Rules Engine  ·  `/dashboard/siem/rules`
+
+**File:** `siem/rules/page.tsx` · **Data:** `fetchRules`, `patchRule`, `deleteRule`. Components:
+`RuleEditor`, `SuppressionsPanel`, `SigmaImportButton`, `StarterPackButton`. **Verified:** #93.
+**Purpose.** View/create/edit/test/enable/delete detection rules; suppressions; Sigma import.
+**Controls.** Rule row → detail/edit (`RuleEditor`, create+backtest, `:486,497`) ✅; enable toggle
+(`patchRule`, `:804`) ✅; delete (`deleteRule`) ✅; Sigma import ✅; starter pack ✅;
+suppressions panel ✅; row → `siem?q=` ✅.
+**Gaps.** ❌ **B8a (High)** — `useState(RULES_DATA)` (`:770`) + `if(data.length>0)` guards
+(`:775,873,875,1167`): fake rules show on an empty deployment.
+
+## 16. SIEM — ATT&CK Navigator  ·  `/dashboard/siem/attack`
+
+**File:** `siem/attack/page.tsx` · **Data:** `fetchAttackCoverage`. **Verified:** #94.
+**Purpose.** Detection coverage by MITRE technique; gaps; per-technique drill-down.
+**Controls.** Technique cell → drawer ✅; **`?technique=<id>` inbound deep-link** opens the cell (#94) ✅;
+View matching alerts (`siem?q=`) ✅; Review/Author rules (`siem/rules`) ✅; MITRE reference (external) ✅.
+**Status.** ✅ Fully wired. Coverage from live rules+alerts.
+
+## 17. SIEM — Entity Risk (UEBA)  ·  `/dashboard/siem/entities`
+
+**File:** `siem/entities/page.tsx` · **Data:** `fetchEntities`, `fetchEntityDetail`. **Verified:** #94.
+**Purpose.** Users/hosts/IPs ranked by behavioural risk; timeline, baseline, techniques, alerts.
+**Controls.** Type filter ✅; entity → detail drawer ✅; **top techniques → `siem/attack?technique=`** (#94) ✅;
+**contributing alerts → `siem?alert=`** (#94) ✅; View all in SIEM (`siem?q=`) ✅.
+**Status.** ✅ Every drill-down lands on a real record.
+
+## 18. SIEM — Log Sources  ·  `/dashboard/siem/sources`
+
+**File:** `siem/sources/page.tsx` · **Data:** `fetchSiemSources`, `createLogSource`. Components:
+`LogCollectorPanel`, `LogAnalysisPanel`.
+**Purpose.** Registered log sources, EPS/health, collector config, log analysis.
+**Controls.** Source row → detail ✅; add source (`CreateModal`→`createLogSource`) ✅;
+collector/analysis panels ⚠️(verify).
+**Gaps.** ❌ **B2 (High)** — source-detail **Configure / Reconnect / Test Parse** buttons
+(`:283,287,291`) have no `onClick` (dead action row — same class fixed on feeds/sources #89).
+❌ **B8b (High)** — `useState(SOURCES)` (`:93`) + `if(data.length>0)` (`:98`): fake sources on empty deployment.
+
+## 19. SIEM — Threat Hunt  ·  `/dashboard/siem/hunt`
+
+**File:** `siem/hunt/page.tsx` · **Data:** `fetchSiemHunts`, `createSiemHunt`, `runHuntQuery`.
+Component: `EventSearchPanel`.
+**Purpose.** Query-based hunting over the raw event stream; save hunts; export results.
+**Controls.** Query editor (⌘/Ctrl+Enter runs, `:313`) → `runHuntQuery` ✅; time-range select ✅;
+save hunt (`createSiemHunt`, `:340`) ✅; **Export results** (client-side CSV, `:189`) ✅;
+`EventSearchPanel` ✅; saved-hunt list ✅.
+**Gaps.** `SAVED_HUNTS` is `.catch`-fallback (`:262`) ✅; `DEFAULT_QUERY` is a default string 🟢. Clean.
+
+## 20. SOAR — Cases  ·  `/dashboard/soar`
+
+**File:** `soar/page.tsx` · **Data:** `fetchCases`, `fetchCaseRelated`, `fetchSoarMetrics`,
+`createCase`, `addCaseNote`, `patchCaseTask`, `runPlaybook`, `addCaseEvidence`, `exportEvidenceBundle`.
+**Verified:** #91.
+**Purpose.** Case management: queue, detail (overview/warroom/tasks/evidence), investigation viz.
+**Controls.** Case → detail ✅; `?case=<id>` deep-link ✅; task advance (`patchCaseTask`) ✅;
+war-room note (`addCaseNote`) ✅; **Attack timeline** + **Affected systems** from `/related` (#91) ✅;
+technique badges → `siem/attack?technique=` ✅; linked alerts → `siem?alert=` ✅; evidence export ✅.
+**Gaps.** `CASES` seed is `.catch`-fallback (`:986`) ✅. Clean.
+
+## 21. SOAR — Playbooks  ·  `/dashboard/soar/playbooks`
+
+**File:** `soar/playbooks/page.tsx` · **Data:** `fetchPlaybooks`, `runPlaybook`, `updatePlaybook`.
+Components: `PlaybookBuilder`, `PlaybookRunsPanel`. **Verified:** #95.
+**Purpose.** Playbook library, run, enable/disable (auto-trigger), visual builder, run history, approvals.
+**Controls.** Run (`runPlaybook`) ✅; enable toggle (`updatePlaybook`) ✅; builder create/edit/revert ✅;
+in-place refetch after save (#95) ✅; `PlaybookRunsPanel`: run history + per-step audit + **approve/reject** ✅.
+**Gaps.** `PLAYBOOKS` seed is `.catch`-fallback (`:986` equiv) ✅. Clean.
+
+## 22. SOAR — Integrations  ·  `/dashboard/soar/integrations`
+
+**File:** `soar/integrations/page.tsx` · **Data:** `fetchSoarIntegrations`, `createIntegration`,
+`testIntegration`, `runIntegrationAction`, `updateIntegration`.
+**Purpose.** Third-party SOAR integrations (ticketing/chat/EDR): credentials, enable, run actions.
+**Controls.** Add (`createIntegration`) ✅; credential save (`updateIntegration`, `:92`) ✅;
+enable toggle (optimistic+rollback, `:310`) ✅; **Test** (`testIntegration`) ✅; **Run action**
+(`runIntegrationAction`, `:191`) ✅. `api.vendor.example` is an input **placeholder** only ✅.
+**Status.** ✅ Honest, real CRUD + actions.
+
+## 23. SOAR — SOC Metrics  ·  `/dashboard/soar/metrics`
+
+**File:** `soar/metrics/page.tsx` · **Data:** `fetchSoarMetrics`, `fetchSoarAnalysts`,
+`fetchAlertAnalytics`, `fetchSiemKpis`, `fetchAttackCoverage`, `fetchPlaybooks`. **Verified:** #59,#61.
+**Purpose.** SOC performance: MTTR/MTTD, cases-by-type, analyst leaderboard, coverage, trends.
+**Controls.** Read-only analytics dashboard; all cards live (hardcoded "Cases by Type" and 7-day
+trends were replaced with real endpoints in #59/#61) ✅.
+**Status.** ✅ Clean.
+
+## 24. Configuration — General  ·  `/dashboard/config`
+
+**File:** `config/page.tsx` (large; tabbed) · **Data:** `fetchSettings`/`updateSettings`, `fetchAbout`,
+`fetchSelfHealth`, `fetchEngineStatus`, `fetchDatabaseInfo`, `fetchJobs`, `fetchLicense`,
+`fetchBillingStatus`+`startCheckout`+`openBillingPortal`, `fetchMfaStatus`+`mfaEnroll/Verify/Disable`,
+`fetchSessions`+`revokeSession`, `fetchAuditLog`, `fetchMySlackRouting`, `fetchCurrentOrg`, `fetchSoarIntegrations`, `fetchFeeds`.
+**Purpose.** Deployment settings hub: Experience Mode, Appearance, MFA, Sessions, Billing, About,
+Self-Health, **Activity/Audit log**, Slack routing, engine/DB status.
+**Controls.** Settings toggles (`updateSettings`, `FloatingSave`) ✅; **MFA** enroll/verify/disable ✅;
+**Sessions** list + **revoke** (`:1095`) + revoke-others ✅; **Billing** Stripe checkout/portal with
+honest "not configured" fallback (`:1331`) ✅; Self-Health surface ✅; Audit/Activity log
+(`fetchAuditLog`) ✅ — *this is the "action history" surface referenced by #92*.
+**Status.** ✅ Real throughout. Seed constants are `.catch`-fallbacks.
+
+## 26. Configuration — Users & Roles  ·  `/dashboard/config/users`
+
+**File:** `config/users/page.tsx` · **Data:** `fetchUsers`, `createUser`, `patchUser`, `deleteUser`,
+`fetchAuditLog`.
+**Purpose.** Team management: invite/create users, change roles, deactivate; per-user activity log.
+**Controls.** Create user (`createUser`) ✅; role change (`patchUser`, optimistic+rollback `:388`) ✅;
+delete (`deleteUser`) ✅; per-user **Activity Log** (`fetchAuditLog`, `:317`) ✅.
+**Gaps.** ⚠️ **B8c** — `useState<TeamUser[]>(USERS)` (`:373`) + `if(data.length>0)` (`:378`): fake
+users show on an empty result. (Lower real-world risk — the users endpoint is rarely empty since
+the admin always exists — but same pattern; fix with the B8 change.)
+
+## 27. Configuration — API Keys  ·  `/dashboard/config/api`
+
+**File:** `config/api/page.tsx` · **Data:** `fetchApiKeys`+`createApiKey`+`revokeApiKey`,
+`fetchWebhooks`+`createWebhook`+`patchWebhook`+`deleteWebhook`+`testWebhook`+`rotateWebhookSecret`.
+**Purpose.** Programmatic access: API keys (scopes, usage) + outbound webhooks (events, delivery).
+**Controls.** Create key (`createApiKey`, one-time reveal) ✅; revoke ✅; create/edit/delete webhook ✅;
+**Test webhook** ✅; **Rotate secret** ✅; cURL snippet 🟢.
+**Gaps.** ❌ **B4 (Low)** — API-key **View scopes** button (`:411`) has no `onClick` (dead). The
+`API_KEYS`/`WEBHOOKS` (`acme.io`) arrays are correct `.catch`-fallbacks (`:239,250,254`) ✅.
+
+---
+
+## Appendix A — Persistent chrome detail *(pending read)*
+
+`TopBar`, `CommandPalette` (⌘K), `AssistantWidget` — to be documented with the same
+template. Structural note: these are shared across all routes (mounted in `layout.tsx`).
+
+## Appendix B — Backend API surface
+
+Every `fetchX`/`createX`/… in `frontend/lib/api.ts` maps to a FastAPI route under
+`dashboard_api/routers/` (`overview`, `siem`, `soar`, `cti`, `feeds`, `connectors`,
+`assets`, `config`, `platform`, `auth`). All responses pass through `toCamel()`.
+Multi-tenant scoping (`tenancy.scope_sql`) is enforced server-side regardless of UI.
