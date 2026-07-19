@@ -6,8 +6,8 @@ import {
   Zap, CheckCircle, AlertTriangle, X, Shield, User,
   FileText, MessageSquare, Play, RefreshCw,
   BarChart2, Paperclip, Eye,
-  GitBranch, Activity, TrendingUp, TrendingDown, 
-  Circle, Lock,
+  GitBranch, Activity, TrendingUp, TrendingDown,
+  Circle, Lock, Server, Globe, Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -385,6 +385,26 @@ function fmtWarRoomTs(ts: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
 }
 
+/* Compact "MM-DD HH:MM" for the multi-day attack timeline; falls back to the
+   raw value for non-ISO strings so nothing renders blank. */
+function fmtTimelineTs(ts: string | null): string {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ts
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/* Attack-timeline event styling by source type. */
+const TIMELINE_STYLE: Record<string, { color: string; label: string }> = {
+  alert:    { color: tk('threat'),  label: 'alert' },
+  playbook: { color: tk('safe'),    label: 'playbook' },
+  system:   { color: tk('violet'),  label: 'system' },
+  auto:     { color: tk('safe'),    label: 'automated' },
+  manual:   { color: tk('amber'),   label: 'analyst' },
+  note:     { color: tk('amber'),   label: 'note' },
+}
+
 function slaPercent(created: string, slaHours: number): number {
   const now = Date.parse('2024-11-12T16:00:00Z')
   const start = new Date(created).getTime()
@@ -415,6 +435,21 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   useEffect(() => {
     fetchCaseRelated(c.id).then(setRelated).catch(() => {})
   }, [c.id])
+
+  // Affected systems: the distinct hosts / IPs / users named across this case's
+  // linked alerts, ranked by how many alerts touched each. Derived live from
+  // the same real alert set, never a hardcoded list.
+  const affected = useMemo(() => {
+    const hosts: Record<string, number> = {}, ips: Record<string, number> = {}, users: Record<string, number> = {}
+    for (const a of related?.alerts ?? []) {
+      if (a.hostname) hosts[a.hostname] = (hosts[a.hostname] ?? 0) + 1
+      if (a.srcIp) ips[a.srcIp] = (ips[a.srcIp] ?? 0) + 1
+      if (a.username) users[a.username] = (users[a.username] ?? 0) + 1
+    }
+    const rank = (m: Record<string, number>) => Object.entries(m).sort((x, y) => y[1] - x[1])
+    return { hosts: rank(hosts), ips: rank(ips), users: rank(users) }
+  }, [related])
+  const affectedTotal = affected.hosts.length + affected.ips.length + affected.users.length
   const st = STATUS_STYLE[c.status]
   const detailTabs = simplified
     ? (['overview', 'tasks'] as const)
@@ -552,9 +587,11 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                 {related.techniques.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {related.techniques.slice(0, 6).map((t) => (
-                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 font-mono">
+                      <a key={t.technique} href={`/dashboard/siem/attack?technique=${encodeURIComponent(t.technique)}`}
+                        title={`View ${t.technique} coverage in the ATT&CK Navigator`}
+                        className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 font-mono hover:bg-violet/20 hover:text-white transition-colors">
                         {t.technique} ×{t.count}
-                      </span>
+                      </a>
                     ))}
                   </div>
                 )}
@@ -576,6 +613,69 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
                       <span className="text-[9px] text-ink-600 shrink-0">{r.trigger} · {r.status}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Affected systems - distinct hosts / IPs / users across the case's
+                linked alerts, ranked by alert count. Each pivots to the SIEM. */}
+            {affectedTotal > 0 && (
+              <div>
+                <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Server className="w-3 h-3" /> Affected systems
+                  <span className="normal-case tracking-normal text-ink-500">{affectedTotal}</span>
+                </p>
+                <div className="space-y-2">
+                  {([
+                    ['Hosts', affected.hosts, Server],
+                    ['Source IPs', affected.ips, Globe],
+                    ['Users', affected.users, User],
+                  ] as const).filter(([, list]) => list.length > 0).map(([label, list, Icon]) => (
+                    <div key={label}>
+                      <p className="text-[9px] text-ink-600 mb-1 flex items-center gap-1"><Icon className="w-2.5 h-2.5" /> {label}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {list.map(([value, count]) => (
+                          <a key={value} href={`/dashboard/siem?q=${encodeURIComponent(value)}`}
+                            title={`${count} alert${count === 1 ? '' : 's'} · view in SIEM`}
+                            className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-lg bg-surface-2/60 border border-white/8 text-ink-200 hover:border-magenta/30 hover:text-white transition-colors">
+                            {value}<span className="text-ink-600">×{count}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Attack timeline - the real merged, MITRE-mapped event sequence
+                (alerts + playbook runs + war-room notes) in chronological order. */}
+            {related && related.timeline.length > 0 && (
+              <div>
+                <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Clock className="w-3 h-3" /> Attack timeline
+                  <span className="normal-case tracking-normal text-ink-500">{related.timeline.length} events</span>
+                </p>
+                <div className="relative pl-4 space-y-2 border-l border-white/8">
+                  {related.timeline.map((ev, i) => {
+                    const style = TIMELINE_STYLE[ev.type] ?? { color: tk('violet'), label: ev.type }
+                    return (
+                      <div key={i} className="relative">
+                        <span className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full ring-2 ring-surface" style={{ background: style.color }} />
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="text-[9px] font-mono text-ink-600 shrink-0">{fmtTimelineTs(ev.ts)}</span>
+                          <span className="text-[8px] uppercase font-semibold px-1 py-0.5 rounded-sm shrink-0"
+                            style={{ color: style.color, background: `${style.color}18` }}>{style.label}</span>
+                          <span className="text-[11px] text-ink-200 flex-1 min-w-0">{ev.title ?? ev.actor ?? '—'}</span>
+                          {ev.technique && (
+                            <a href={`/dashboard/siem/attack?technique=${encodeURIComponent(ev.technique)}`}
+                              title={`View ${ev.technique} in the ATT&CK Navigator`}
+                              className="text-[9px] font-mono text-violet hover:text-white shrink-0">{ev.technique}</a>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
