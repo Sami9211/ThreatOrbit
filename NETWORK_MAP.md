@@ -394,14 +394,59 @@ badge is conditionally fabricated** — see below.
 
 ---
 
+## 🔴 SYSTEMIC ROOT CAUSE — "seed-persists-on-empty" (B8)
+
+**This is why "bugs like the audit" keep reappearing.** One wrong data-loading
+pattern was copy-pasted across pages. The honest pattern (used by feeds, soar,
+scanner, config/api …) is:
+
+```ts
+const [rows, setRows] = useState<T[]>([])                 // start EMPTY
+useEffect(() => { fetchX().then(setRows).catch(() => setRows(SEED)) }, [])
+//   live result (even []) wins → honest empty state; SEED only when API is unreachable
+```
+
+The broken pattern (below) shows fabricated seed data on any **empty-but-reachable**
+deployment — a freshly provisioned SOC with the API up but nothing ingested yet:
+
+```ts
+const [rows, setRows] = useState<T[]>(SEED)               // ❌ starts with fake data
+useEffect(() => { fetchX().then(d => { if (d.length > 0) setRows(d) }) ... }, [])
+//   empty live result is IGNORED → the fake SEED stays on screen as if real
+```
+
+**Affected pages (all show fabricated data on an empty deployment):**
+
+| ID | Page | Seed shown as real | Init | Guard |
+|---|---|---|---|---|
+| B8a | `siem/rules` | fake detection rules `RULES_DATA` | `page.tsx:770` | `:775,873,875,1167` |
+| B8b | `siem/sources` | fake log sources `SOURCES` | `page.tsx:93` | `:98` |
+| B8c | `config/users` | fake team users `USERS` | `page.tsx:373` | `:378` |
+| B8d | `cti` (Actors) | fake threat actors `ACTORS` (+ `ACTORS[0]` default) | `page.tsx:686-687` | `:698` |
+| B1 (variant) | `config/sources` | 10 vendors "Connected" | `page.tsx:324` | recompute early-returns `:398` |
+| B7 (variant) | `assets/network` | fake network topology `NODES`/`BASE_LINKS` | `page.tsx:199` | merges, never gates `:242` |
+
+**Uniform fix (one small edit per page):** init state to `[]`; drop the
+`if (data.length > 0)` guard so the live result always wins; move the SEED into
+`.catch(() => setRows(SEED))` (API-unreachable only). For B1 drop the
+`sources.length === 0` early-return; for B7 render the seed topology only in the
+`.catch`/offline branch (or drop it and render live assets only).
+
+**Impact:** fixing this one pattern removes fabrication from 6 pages at once. This
+is the highest-leverage change on the board.
+
+---
+
 ## ⭐ Confirmed bug list (fix targets)
 
-Surfaced by reading source + two systematic scans (hardcoded-state-without-gate;
-`<button>` without a handler). This is the actionable output — fix top-down.
+Surfaced by reading source + systematic scans (seed-persists-on-empty;
+hardcoded-state; `<button>` without a handler). Fix top-down.
 
 | # | Severity | Page | Bug | Location | Fix |
 |---|---|---|---|---|---|
-| B1 | **High** | `config/sources` | 10 major vendors show live "Connected" (pulsing green) on a fresh deployment — hardcoded status, never re-derived when there are zero log sources | `config/sources/page.tsx:398` (`if (sources.length===0) return`) | Drop the early return; with no live sources every built-in connector resolves to `unconfigured`. |
+| **B8** | **High (systemic)** | `siem/rules`, `siem/sources`, `config/users`, `cti`/Actors | **seed-persists-on-empty** — fake rules/log-sources/users/actors render as real on any empty-but-reachable deployment (see root-cause section above) | init `useState(SEED)` + `if(data.length>0)` guard | init `[]`; live result always wins; SEED only in `.catch`. **One pattern, 4 pages.** |
+| B1 | **High** | `config/sources` | 10 major vendors show live "Connected" (pulsing green) on a fresh deployment — hardcoded status, never re-derived when there are zero log sources (B8 variant) | `config/sources/page.tsx:398` (`if (sources.length===0) return`) | Drop the early return; with no live sources every built-in connector resolves to `unconfigured`. |
+| B7 | **High** | `assets/network` | Fake network topology (firewalls/servers/workstations w/ invented IPs like `fw-edge-01`, `203.0.113.1`, `DESKTOP-FIN-087`) renders **unconditionally**; live assets merged on top (B8 variant) | `assets/network/page.tsx:199,242` | Render seed topology only offline; on live, show real assets only (empty state if none). |
 | B2 | **High** | `siem/sources` | Dead action row on the source detail: **Configure / Reconnect / Test Parse** buttons have no `onClick` (same class fixed on feeds/sources in #89, missed here) | `siem/sources/page.tsx:283,287,291` | Wire to real endpoints or remove; mirror the honest feeds/sources treatment. |
 | B3 | Med | `assets` | Asset row **Details** button is dead (Scan + remove work) | `assets/page.tsx:664` | Open the asset detail drawer (`fetchAsset`/`fetchAssetActivity` already imported). |
 | B4 | Low | `config/api` | API-key **View scopes** button is dead | `config/api/page.tsx:411` | Expand/show the key's scopes (data already present in the row). |
