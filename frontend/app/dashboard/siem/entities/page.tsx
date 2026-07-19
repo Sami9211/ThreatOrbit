@@ -177,7 +177,10 @@ export default function EntityRiskPage() {
                   <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-2">Top techniques</p>
                   <div className="flex flex-wrap gap-1.5">
                     {selected.topTechniques.map((t) => (
-                      <span key={t.technique} className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 font-mono">{t.technique} ×{t.count}</span>
+                      // Each observed technique deep-links to its ATT&CK coverage record.
+                      <a key={t.technique} href={`/dashboard/siem/attack?technique=${encodeURIComponent(t.technique)}`}
+                        title={`View ${t.technique} coverage in the ATT&CK Navigator`}
+                        className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/10 text-violet border border-violet/20 font-mono hover:bg-violet/20 hover:text-white transition-colors">{t.technique} ×{t.count}</a>
                     ))}
                   </div>
                 </div>
@@ -188,13 +191,16 @@ export default function EntityRiskPage() {
                 <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-2">Contributing alerts</p>
                 <div className="space-y-1.5">
                   {selected.alerts.map((a) => (
-                    <div key={a.id} className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-surface-2/40 border border-white/5">
+                    // Each contributing alert opens its own record in the SIEM queue.
+                    <a key={a.id} href={`/dashboard/siem?alert=${encodeURIComponent(a.id)}`}
+                      className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-surface-2/40 border border-white/5 hover:border-magenta/30 hover:bg-magenta/5 transition-colors group">
                       <span className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ background: SEV_COLOR[a.severity] }} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] text-ink-200 truncate">{a.title}</p>
+                        <p className="text-[11px] text-ink-200 truncate group-hover:text-white">{a.title}</p>
                         <p className="text-[9px] text-ink-600">{a.rule_name} · {relTime(a.ts)} · {a.status}</p>
                       </div>
-                    </div>
+                      <ExternalLink className="w-3 h-3 text-ink-700 group-hover:text-magenta shrink-0 mt-0.5" />
+                    </a>
                   ))}
                 </div>
                 <a href={`/dashboard/siem?q=${encodeURIComponent(selected.value)}`} className="flex items-center gap-1.5 mt-3 text-[11px] text-magenta hover:underline">

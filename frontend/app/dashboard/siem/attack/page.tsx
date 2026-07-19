@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Crosshair, X, ShieldCheck, ShieldAlert, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,19 @@ export default function AttackNavigatorPage() {
     const t = setInterval(load, 15000)
     return () => clearInterval(t)
   }, [])
+
+  // Deep-link: ?technique=<T1234> opens that technique's coverage drawer once
+  // the matrix has loaded - the Entity Risk drill-down links each observed
+  // technique straight to its coverage record here.
+  const techDeepLinked = useRef(false)
+  useEffect(() => {
+    if (techDeepLinked.current || !cov) return
+    techDeepLinked.current = true
+    const id = new URLSearchParams(window.location.search).get('technique')
+    if (!id) return
+    const match = cov.tactics.flatMap((tac) => tac.techniques).find((t) => t.technique === id)
+    if (match) setSelected(match)
+  }, [cov])
 
   function cellColor(t: AttackTechnique): string {
     if (!t.covered) return 'rgba(255,255,255,0.04)'
