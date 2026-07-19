@@ -394,21 +394,42 @@ badge is conditionally fabricated** — see below.
 
 ---
 
-## 7–24, 26–27. Remaining pages *(in progress)*
+## ⭐ Confirmed bug list (fix targets)
 
-> Filled in page-by-page with the same control-level detail. Completed so far:
-> Overview (1), SOC (2), Feeds Live (3), Feed Sources (4), IntelScope (6),
-> Config·Data-Sources (25). Remaining: Feeds·Import (5), CTI (7–9), Dark Web (10),
-> Assets (11–13), SIEM sub-pages (14–19), SOAR (20–23), Config·General/Users/API
-> (24, 26, 27), and the shell chrome (TopBar/CommandPalette/Assistant).
->
-> **Confirmed bugs so far (fix targets):**
-> 1. ❌ `config/sources` — fabricated "Connected" badges on empty deployment
->    (`page.tsx:398` early-return). *[detailed in §25]*
->
-> **Flags still to confirm:**
-> - `config/api` — `hooks.acme.io` / `intel.acme.io` / `soar.acme.io` /
->   `slack.acme.io`: placeholder text vs seeded "live" webhook/key rows?
-> - `feeds` live-feed — hardcoded threat-card array (`c001…`): fallback-only vs
->   rendered beside live data?
-> - `soar/integrations` — `api.vendor.example`: placeholder vs seeded integration?
+Surfaced by reading source + two systematic scans (hardcoded-state-without-gate;
+`<button>` without a handler). This is the actionable output — fix top-down.
+
+| # | Severity | Page | Bug | Location | Fix |
+|---|---|---|---|---|---|
+| B1 | **High** | `config/sources` | 10 major vendors show live "Connected" (pulsing green) on a fresh deployment — hardcoded status, never re-derived when there are zero log sources | `config/sources/page.tsx:398` (`if (sources.length===0) return`) | Drop the early return; with no live sources every built-in connector resolves to `unconfigured`. |
+| B2 | **High** | `siem/sources` | Dead action row on the source detail: **Configure / Reconnect / Test Parse** buttons have no `onClick` (same class fixed on feeds/sources in #89, missed here) | `siem/sources/page.tsx:283,287,291` | Wire to real endpoints or remove; mirror the honest feeds/sources treatment. |
+| B3 | Med | `assets` | Asset row **Details** button is dead (Scan + remove work) | `assets/page.tsx:664` | Open the asset detail drawer (`fetchAsset`/`fetchAssetActivity` already imported). |
+| B4 | Low | `config/api` | API-key **View scopes** button is dead | `config/api/page.tsx:411` | Expand/show the key's scopes (data already present in the row). |
+| B5 | Low | `siem` | Raw-log **Copy** button is dead (alert detail → Raw tab) | `siem/page.tsx:955` | `navigator.clipboard.writeText(raw)` + toast. |
+| B6 | Low | `config/sources` | ConfigPanel field-mapping inputs persist nothing (cosmetic) + demo `acme.*` endpoints pre-fill | `config/sources/page.tsx:205–222,49–67` | Persist the mapping or drop it; default endpoint to empty. |
+
+**Verified honest (do NOT re-flag) —** these use the correct offline-only fallback
+pattern (real API primary; hardcoded array only rendered on `.catch`, gated):
+- `config/api` — `acme.io` webhook/key rows are fallback (`page.tsx:239,250,254`). ✅
+- `feeds` (Live Feed) — seed threat cards + simulator are offline/`demoMode`-only
+  with honest empty states (`page.tsx:547–560,813,862`). ✅
+- `soar`, `siem`, `scanner`, `soar/playbooks`, `feeds/sources` — all fallback-gated. ✅
+
+**Scan results (dashboard-wide):**
+- `<button>` without an inline handler: **7 total** → 6 real dead controls (B2×3, B3,
+  B4, B5) + 1 false positive (`WorldMap.tsx:210` is a hover-highlight row). Clean
+  overall — the #79 dead-navigation pass held.
+- Hardcoded-state-without-fallback-gate: **1** (`config/sources`, B1). Everything
+  else follows the honest `.catch` fallback pattern.
+
+---
+
+## 7–24, 26–27. Remaining page detail *(in progress)*
+
+> Same control-level template, page by page. Completed: Overview (1), SOC (2),
+> Feeds·Live (3), Feed·Sources (4), IntelScope (6), Config·Data-Sources (25).
+> Remaining reads: Feeds·Import (5), CTI (7–9), Dark Web (10), Assets (11–13),
+> SIEM·rules/attack/entities/sources/hunt (15–19), SOAR (20–23),
+> Config·General/Users/API (24,26,27), chrome (TopBar/CommandPalette/Assistant).
+> The confirmed-bug list above already covers what those reads surfaced so far;
+> full per-page control tables land as each is read.
