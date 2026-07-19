@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fetchPlaybooks, runPlaybook, updatePlaybook, type Playbook as ApiPlaybook } from '@/lib/api'
 import PlaybookRunsPanel from '@/components/dashboard/PlaybookRunsPanel'
@@ -604,7 +604,7 @@ export default function PlaybooksPage() {
   const [playbooks, setPlaybooks] = useState<typeof PLAYBOOKS>([])
   const [pbPending, setPbPending] = useState(true)
 
-  useEffect(() => {
+  const loadPlaybooks = useCallback(() => {
     fetchPlaybooks().then((data: ApiPlaybook[]) => {
       const mapped = data.map((p) => {
         const seed = PLAYBOOKS.find((s) => s.id === p.id || s.name === p.name)
@@ -635,6 +635,8 @@ export default function PlaybooksPage() {
       .finally(() => setPbPending(false))
   }, [])
 
+  useEffect(() => { loadPlaybooks() }, [loadPlaybooks])
+
   // Live KPI strip (replaced a hardcoded demo array)
   const kpis = useMemo(() => {
     const enabled = playbooks.filter((p) => p.enabled).length
@@ -652,9 +654,10 @@ export default function PlaybooksPage() {
   const [runningId, setRunningId] = useState<string | null>(null)
   // null = closed; {} = new; {id,name,steps} = edit. Drives the visual builder.
   const [builder, setBuilder] = useState<{ id?: string; name?: string; steps?: Array<{ kind?: string; name: string; params?: Record<string, unknown> }> } | null>(null)
-  // After a builder save/revert, refetch so the new definition is reflected.
+  // After a builder save/revert, refetch in place so the new definition is
+  // reflected without a full-page reload (which discarded filter/scroll state).
   function reloadPlaybooks() {
-    if (typeof window !== 'undefined') window.location.reload()
+    loadPlaybooks()
   }
 
   const selectedPB = playbooks.find((p) => p.id === selectedId) ?? null
