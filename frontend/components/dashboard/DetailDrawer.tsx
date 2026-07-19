@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ArrowRight } from 'lucide-react'
+import { X, ArrowRight, ExternalLink } from 'lucide-react'
 import { SEVERITY_COLOR as SEV_COLOR, withAlpha } from '@/lib/colors'
 
 /* -- Public payload + helper -----------------------------------------
@@ -11,7 +11,10 @@ import { SEVERITY_COLOR as SEV_COLOR, withAlpha } from '@/lib/colors'
      import { openDetail } from '@/components/dashboard/DetailDrawer'
      openDetail({ title, subtitle, severity, rows, actions, body })            */
 export interface DetailRow { label: string; value: React.ReactNode; mono?: boolean }
-export interface DetailAction { label: string; href: string }
+/** `external: true` opens the href in a new tab as a real anchor - used for
+ *  official references (NVD, vendor advisories) that live off-app. Internal
+ *  hrefs stay as client-side <Link> navigations. */
+export interface DetailAction { label: string; href: string; external?: boolean }
 export interface DetailPayload {
   title: string
   subtitle?: string
@@ -92,12 +95,18 @@ export default function DetailDrawer() {
 
               {payload.actions && payload.actions.length > 0 && (
                 <div className="space-y-2 pt-1">
-                  {payload.actions.map((a) => (
-                    <Link key={a.href} href={a.href} onClick={() => setPayload(null)}
-                      className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-white/10 text-xs text-ink-200 hover:text-white hover:border-magenta/40 hover:bg-magenta/5 transition-colors">
-                      {a.label}<ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
-                  ))}
+                  {payload.actions.map((a) => {
+                    const cls = 'flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-white/10 text-xs text-ink-200 hover:text-white hover:border-magenta/40 hover:bg-magenta/5 transition-colors'
+                    return a.external ? (
+                      <a key={a.href} href={a.href} target="_blank" rel="noopener noreferrer" className={cls}>
+                        {a.label}<ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    ) : (
+                      <Link key={a.href} href={a.href} onClick={() => setPayload(null)} className={cls}>
+                        {a.label}<ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
             </div>

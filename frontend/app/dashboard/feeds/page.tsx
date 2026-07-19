@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Radio, CheckCircle2, HelpCircle, X, 
-  Shield, Zap, ChevronDown, 
-  Activity, Download, 
-  Flame, 
+  Radio, CheckCircle2, HelpCircle, X,
+  Shield, Zap, ChevronDown,
+  Activity, Download,
+  Flame, ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
@@ -374,9 +374,17 @@ function ThreatCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2 flex-wrap">
             {entry.cve && (
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet border border-violet/20 shrink-0">
-                {entry.cve}
-              </span>
+              // The CVE id links straight to its official NVD record (new tab) -
+              // it used to be dead text ("official documentation links missing").
+              <a
+                href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(entry.cve)}`}
+                target="_blank" rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="View this CVE on NVD"
+                className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet border border-violet/20 shrink-0 hover:bg-violet/25 hover:text-white transition-colors"
+              >
+                {entry.cve}<ExternalLink className="w-2.5 h-2.5" />
+              </a>
             )}
             <span className={cn(
               'text-[9px] font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide shrink-0',

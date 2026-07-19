@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import Link from 'next/link'
 import { fetchFleetVulnFindings, fetchVulnSummary, type FleetVulnFinding, type VulnSummary } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -531,6 +532,21 @@ export default function VulnsPage() {
                       <button onClick={() => setSelectedId(null)} className="p-1.5 rounded-lg hover:bg-white/8 text-ink-500 shrink-0">
                         <X className="w-4 h-4" />
                       </button>
+                    </div>
+
+                    {/* Actions: official NVD record + carry the CVE into IntelScope */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(v.id)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white hover:border-white/20 transition-colors">
+                        <ExternalLink className="w-3.5 h-3.5" /> View on NVD
+                      </a>
+                      <Link
+                        href={`/dashboard/scanner?value=${encodeURIComponent(v.id)}&type=cve&run=1`}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-magenta/15 border border-magenta/30 text-magenta hover:bg-magenta/25 transition-colors">
+                        <Search className="w-3.5 h-3.5" /> Look up in IntelScope
+                      </Link>
                     </div>
 
                     {/* Quick stats */}
