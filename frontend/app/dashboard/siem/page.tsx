@@ -952,7 +952,9 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] text-ink-500 uppercase tracking-wide">Raw Log</p>
-              <button className="flex items-center gap-1 text-[10px] text-ink-500 hover:text-white transition-colors">
+              <button
+                onClick={() => { navigator.clipboard?.writeText(alert.rawLog ?? '').then(() => flash('Raw log copied')).catch(() => {}) }}
+                className="flex items-center gap-1 text-[10px] text-ink-500 hover:text-white transition-colors">
                 <Copy className="w-3 h-3" /> Copy
               </button>
             </div>

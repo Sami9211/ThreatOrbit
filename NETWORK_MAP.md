@@ -731,9 +731,18 @@ and external `<a target=_blank>` actions (external flag added #90).
 - Systemic fabrication **B8** (seed-persists-on-empty, 6 pages) identified and
   **fixed** in `f1a02e2` (siem/rules, siem/sources, config/users, cti, config/sources,
   assets/network). Verified live.
-- Remaining open (dead controls): **B2** siem/sources (Configure/Reconnect/Test-Parse),
-  **B3** assets (Details), **B4** config/api (View-scopes), **B5** siem (Copy raw log),
-  **B6** config/sources (ConfigPanel field-mapping persists nothing).
+- Dead controls **B2–B6 fixed** (commit after `b908a8c`):
+  - **B2** siem/sources — dead Configure/Reconnect/Test-Parse row replaced with an
+    honest note + working "Configure connectors" link to `config/sources`.
+  - **B3** assets — Details button now opens the asset detail (`setSelectedId`).
+  - **B4** config/api — redundant dead "View scopes" removed (scopes already shown).
+  - **B5** siem — Copy raw-log button now copies to clipboard + toast.
+  - **B6** config/sources — non-persisting field-mapping section removed; endpoint
+    field no longer pre-fills the demo `acme.*` value.
+  - Verified: tsc clean, build clean.
+
+**All B1–B8 map findings are now resolved.** The dashboard shows no fabricated
+data on an empty deployment and has no dead controls in the audited set.
 
 ## Appendix B — Backend API surface
 

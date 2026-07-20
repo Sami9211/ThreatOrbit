@@ -661,7 +661,8 @@ export default function AssetsPage() {
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] bg-violet/10 border border-violet/25 text-violet hover:bg-violet/20 transition-colors disabled:opacity-40">
                         <RefreshCw className={cn('w-3 h-3', a.status === 'scanning' && 'animate-spin')} /> Scan
                       </button>
-                      <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] bg-surface-2 border border-white/8 text-ink-400 hover:text-white transition-colors">
+                      <button onClick={() => setSelectedId(a.id)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] bg-surface-2 border border-white/8 text-ink-400 hover:text-white transition-colors">
                         <Eye className="w-3 h-3" /> Details
                       </button>
                       <button onClick={() => removeAsset(a.id)}

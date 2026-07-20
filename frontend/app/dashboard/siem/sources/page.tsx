@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Database, Plus, RefreshCw, CheckCircle, AlertTriangle,
-  XCircle, Settings, 
-  Activity, Clock, 
+  Database, Plus, CheckCircle, AlertTriangle,
+  XCircle, Settings,
+  Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchSiemSources, createLogSource } from '@/lib/api'
@@ -281,19 +281,18 @@ export default function SiemSourcesPage() {
                   </div>
                 ))}
               </div>
-              <div className="flex items-center gap-2 mt-4">
-                <button className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
+              {/* Log sources auto-register from ingestion, so per-source
+                  Configure/Reconnect/Test-Parse had no backend and were dead.
+                  Point to where sources are actually configured instead. */}
+              <div className="flex items-center gap-2 mt-4 flex-wrap">
+                <a href="/dashboard/config/sources"
+                  className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
                   <Settings className="w-3.5 h-3.5" />
-                  Configure
-                </button>
-                <button className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Reconnect
-                </button>
-                <button className="px-3 py-1.5 rounded-lg glass border border-white/10 text-xs text-ink-300 hover:text-white flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5" />
-                  Test Parse
-                </button>
+                  Configure connectors
+                </a>
+                <p className="text-[10px] text-ink-600">
+                  Sources register automatically from the ingestion engine; collector setup + parse checks are in the panels below.
+                </p>
               </div>
             </motion.div>
           )}

@@ -89,7 +89,9 @@ function ConfigPanel({ connector, onClose, onConnected }: {
 }) {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(false)
-  const [endpoint, setEndpoint] = useState(connector.endpoint)
+  // Start empty (the field has a placeholder). Pre-filling the demo catalogue's
+  // acme.* endpoint read like a real configured value on an unconfigured source.
+  const [endpoint, setEndpoint] = useState('')
   const [authMethod, setAuthMethod] = useState('API Key')
   const [interval, setIntervalSel] = useState('Every 5 minutes')
 
@@ -197,30 +199,6 @@ function ConfigPanel({ connector, onClose, onConnected }: {
               <option>Every 15 minutes</option>
               <option>Every hour</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-ink-300 mb-2">Field Mapping</label>
-            <div className="space-y-2">
-              {[
-                { src: 'eventTime', dst: '@timestamp' },
-                { src: 'srcIp',     dst: 'source.ip' },
-                { src: 'userName',  dst: 'user.name' },
-                { src: 'action',    dst: 'event.action' },
-              ].map((m) => (
-                <div key={m.src} className="flex items-center gap-2">
-                  <input
-                    defaultValue={m.src}
-                    className="flex-1 px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 font-mono focus:outline-hidden focus:border-magenta/40"
-                  />
-                  <span className="text-ink-600 text-xs">&rarr;</span>
-                  <input
-                    defaultValue={m.dst}
-                    className="flex-1 px-2.5 py-2 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-safe font-mono focus:outline-hidden focus:border-magenta/40"
-                  />
-                </div>
-              ))}
-            </div>
           </div>
 
           {saveError && (

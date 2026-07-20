@@ -408,9 +408,8 @@ export default function ApiKeysPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <button className="text-[10px] text-ink-400 hover:text-white px-2 py-1 rounded-lg hover:bg-white/5 transition-colors">
-                          View scopes
-                        </button>
+                        {/* scopes are already shown in their own column, so the
+                            old dead "View scopes" button was removed as redundant */}
                         <button
                           disabled={k.status === 'revoked'}
                           onClick={() => handleRevoke(k.id)}
