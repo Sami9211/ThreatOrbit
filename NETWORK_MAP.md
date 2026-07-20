@@ -692,10 +692,48 @@ the admin always exists — but same pattern; fix with the B8 change.)
 
 ---
 
-## Appendix A — Persistent chrome detail *(pending read)*
+## Appendix A — Persistent chrome detail
 
-`TopBar`, `CommandPalette` (⌘K), `AssistantWidget` — to be documented with the same
-template. Structural note: these are shared across all routes (mounted in `layout.tsx`).
+Mounted in `app/dashboard/layout.tsx`; present on every route.
+
+### TopBar  ·  `components/dashboard/TopBar.tsx`
+**Data:** `fetchNotifications`, `markNotificationRead`.
+**Controls.** Mobile sidebar toggle (dispatches `sidebar-mobile-toggle`) ✅;
+**Experience-mode toggle** (Simple/Power, `setMode`) ✅; **Command-palette trigger**
+(dispatches ⌘K, `:149`) ✅; **Notifications** bell — live list (`fetchNotifications`),
+unread count, mark-read, **click → `router.push(n.link)`** (deep-links to the record) ✅;
+clear-all ✅; user menu (settings/logout) ✅.
+**Status.** ✅ Fully real. Notifications carry context links.
+
+### CommandPalette (⌘K)  ·  `components/dashboard/CommandPalette.tsx`
+**Data:** `globalSearch` (`/search`, across alerts/IOCs/assets/cases/actors/dark-web).
+**Controls.** Fuzzy input → **live global search** (`:44`) → result rows link to the
+real record (`r.link`) ✅; static nav commands (Overview/Scanner/… with `G S`-style
+hints) ✅; Esc/backdrop close ✅.
+**Status.** ✅ Real cross-entity search; every hit is a live deep-link.
+
+### AssistantWidget  ·  `components/dashboard/AssistantWidget.tsx`
+**Data:** `fetchAssistantStatus`, `sendAssistantChat`.
+**Controls.** Floating toggle ✅; chat input → `sendAssistantChat` ✅; suggestion chips
+(prefill+send) ✅; assistant **nav actions → `router.push(n.path)`** ✅; honest mode
+indicator (degrades if the assistant backend/LLM key is absent) ✅.
+**Status.** ✅ Real. No fabricated responses — availability reflects backend status.
+
+### DetailDrawer  ·  `components/dashboard/DetailDrawer.tsx`
+Global `openDetail({...})` overlay (documented in §0.2). ✅ Supports internal `<Link>`
+and external `<a target=_blank>` actions (external flag added #90).
+
+---
+
+## Appendix C — Change log for this map
+
+- Built from `574b240`; all 27 routes + chrome documented.
+- Systemic fabrication **B8** (seed-persists-on-empty, 6 pages) identified and
+  **fixed** in `f1a02e2` (siem/rules, siem/sources, config/users, cti, config/sources,
+  assets/network). Verified live.
+- Remaining open (dead controls): **B2** siem/sources (Configure/Reconnect/Test-Parse),
+  **B3** assets (Details), **B4** config/api (View-scopes), **B5** siem (Copy raw log),
+  **B6** config/sources (ConfigPanel field-mapping persists nothing).
 
 ## Appendix B — Backend API surface
 
