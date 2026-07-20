@@ -767,13 +767,16 @@ export default function RulesEnginePage() {
   const { can } = usePermissions()
   const canWrite = can('siem.write')
 
-  const [rulesData, setRulesData] = useState(RULES_DATA)
+  // Start empty; the live rule set is authoritative EVEN WHEN EMPTY (a fresh
+  // deployment has no rules and must say so, never show the seed as if real).
+  // RULES_DATA is an offline-only fallback, shown only if the API is unreachable.
+  const [rulesData, setRulesData] = useState<typeof RULES_DATA>([])
   const [showNewRule, setShowNewRule] = useState(false)
 
   useEffect(() => {
     fetchRules()
-      .then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) })
-      .catch(() => {})
+      .then((data) => setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)))
+      .catch(() => setRulesData(RULES_DATA))
   }, [])
 
   /* filter state */
@@ -870,9 +873,9 @@ export default function RulesEnginePage() {
         {canWrite && (
           <div className="flex items-center gap-2">
             <StarterPackButton onLoaded={() =>
-              fetchRules().then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) }).catch(() => {})} />
+              fetchRules().then((data) => setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule))).catch(() => {})} />
             <SigmaImportButton onImported={() =>
-              fetchRules().then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) }).catch(() => {})} />
+              fetchRules().then((data) => setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule))).catch(() => {})} />
             <button
               onClick={() => setShowNewRule(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-magenta/20 border border-magenta/35 text-magenta hover:bg-magenta/30 transition-colors active:scale-95">
@@ -1164,7 +1167,7 @@ export default function RulesEnginePage() {
         {showNewRule && (
           <RuleEditor
             onClose={() => setShowNewRule(false)}
-            onCreated={() => { fetchRules().then((data) => { if (data.length > 0) setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)) }).catch(() => {}) }}
+            onCreated={() => { fetchRules().then((data) => setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule))).catch(() => {}) }}
           />
         )}
       </AnimatePresence>

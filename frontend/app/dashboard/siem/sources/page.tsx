@@ -90,13 +90,15 @@ export default function SiemSourcesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selected, setSelected] = useState<string | null>(null)
-  const [sourcesData, setSourcesData] = useState(SOURCES)
+  // Live sources are authoritative even when empty; SOURCES is an offline-only
+  // fallback (shown solely if the API is unreachable), never on an empty store.
+  const [sourcesData, setSourcesData] = useState<typeof SOURCES>([])
   const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     fetchSiemSources()
-      .then((data) => { if (data.length > 0) setSourcesData((data as unknown as Record<string, unknown>[]).map(normalizeSource)) })
-      .catch(() => {})
+      .then((data) => setSourcesData((data as unknown as Record<string, unknown>[]).map(normalizeSource)))
+      .catch(() => setSourcesData(SOURCES))
   }, [])
 
   async function handleAddSource(values: Record<string, string>) {

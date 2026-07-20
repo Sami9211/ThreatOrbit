@@ -370,13 +370,15 @@ const apiToTeamUser = (u: ApiUser): TeamUser => ({
 export default function UsersRolesPage() {
   const [tab, setTab] = useState<'users' | 'roles'>('users')
   const [selected, setSelected] = useState<string | null>(null)
-  const [users, setUsers] = useState<TeamUser[]>(USERS)
+  // Live roster is authoritative even when empty; USERS is an offline-only
+  // fallback shown solely if the API is unreachable.
+  const [users, setUsers] = useState<TeamUser[]>([])
   const [showInvite, setShowInvite] = useState(false)
 
   useEffect(() => {
-    fetchUsers().then((data) => {
-      if (data.length > 0) setUsers(data.map(apiToTeamUser))
-    }).catch(() => {})
+    fetchUsers()
+      .then((data) => setUsers(data.map(apiToTeamUser)))
+      .catch(() => setUsers(USERS))
   }, [])
 
   const selectedUser = users.find((u) => u.id === selected) ?? null

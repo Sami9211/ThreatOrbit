@@ -435,6 +435,16 @@ useEffect(() => { fetchX().then(d => { if (d.length > 0) setRows(d) }) ... }, []
 **Impact:** fixing this one pattern removes fabrication from 6 pages at once. This
 is the highest-leverage change on the board.
 
+> ✅ **FIXED** (commit after `2463d8d`). All six now start empty and let the live
+> result win: `siem/rules`, `siem/sources`, `config/users` init `[]` + seed only in
+> `.catch`; `cti` makes `selectedActor` nullable with an honest empty state;
+> `config/sources` drops the `sources.length===0` early-return so connectors
+> resolve to `unconfigured` with no live sources; `assets/network` adds a clear
+> "illustrative topology" banner so example nodes are never mistaken for real
+> assets (full live-only topology render is a follow-up). Verified: tsc clean,
+> build clean, all six render real data with zero runtime errors against the live
+> demo stack. Remaining dead-button fixes B2–B5 still open.
+
 ---
 
 ## ⭐ Confirmed bug list (fix targets)

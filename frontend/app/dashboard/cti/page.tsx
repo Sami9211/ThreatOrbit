@@ -683,25 +683,28 @@ function apiActorToPage(a: ApiActor): Actor {
 }
 
 export default function CTIPage() {
-  const [actors, setActors] = useState<Actor[]>(ACTORS)
-  const [selectedActor, setSelectedActor] = useState<Actor>(ACTORS[0])
+  // Live actor library is authoritative even when empty; ACTORS is an
+  // offline-only fallback shown solely if the API is unreachable, never on an
+  // empty store. `null` selection renders an honest empty state.
+  const [actors, setActors] = useState<Actor[]>([])
+  const [selectedActor, setSelectedActor] = useState<Actor | null>(null)
+  const [actorsLoaded, setActorsLoaded] = useState(false)
   // Empty until the API answers - the per-type counts are the store's, never
   // the demo constants. IOC_TYPES shows only if the fetch fails (offline).
   const [iocTypes, setIocTypes] = useState<typeof IOC_TYPES>([])
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
-  const graph = buildGraph(selectedActor)
+  const graph = selectedActor ? buildGraph(selectedActor) : null
 
   useEffect(() => {
     fetchActors()
       .then((data) => {
-        if (data.length > 0) {
-          const mapped = data.map(apiActorToPage)
-          setActors(mapped)
-          setSelectedActor(mapped[0])
-        }
+        const mapped = data.map(apiActorToPage)
+        setActors(mapped)
+        setSelectedActor(mapped[0] ?? null)
       })
-      .catch(() => {})
+      .catch(() => { setActors(ACTORS); setSelectedActor(ACTORS[0] ?? null) })  // offline fallback only
+      .finally(() => setActorsLoaded(true))
     // Live IOC counts per indicator type, keeping the static strip as fallback.
     fetchIocTypes()
       .then((rows) => {
@@ -774,11 +777,14 @@ export default function CTIPage() {
         {/* Actor list */}
         <div className="space-y-3 min-w-0">
           <h2 className="text-sm font-semibold text-white">Threat Actors</h2>
+          {actorsLoaded && actors.length === 0 && (
+            <p className="text-xs text-ink-600 py-8 text-center">No threat actors tracked yet - they populate from your intel feeds and imports.</p>
+          )}
           {actors.map((actor) => (
             <ActorCard
               key={actor.id}
               actor={actor}
-              selected={selectedActor.id === actor.id}
+              selected={selectedActor?.id === actor.id}
               onSelect={() => setSelectedActor(actor)}
             />
           ))}
@@ -786,12 +792,14 @@ export default function CTIPage() {
 
         {/* Actor detail + MITRE */}
         <div className="lg:col-span-2 space-y-5 min-w-0">
-          <AnimatePresence mode="wait">
-            <ActorDetail key={selectedActor.id} actor={selectedActor} />
-          </AnimatePresence>
+          {selectedActor && (
+            <AnimatePresence mode="wait">
+              <ActorDetail key={selectedActor.id} actor={selectedActor} />
+            </AnimatePresence>
+          )}
 
           {/* Investigation graph (Power User only) */}
-          {isPower && (
+          {isPower && graph && (
             <div className="glass border border-white/5 rounded-xl p-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">

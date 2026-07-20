@@ -441,6 +441,14 @@ export default function NetworkMapPage() {
           </div>
           <p className="text-xs text-ink-500 mt-0.5">Asset topology · drag to pan, pinch to zoom, click for detail</p>
         </div>
+        {/* Honesty banner: the base topology is an illustrative scaffold. Only
+            nodes carrying a LIVE badge are discovered assets, so an analyst
+            never mistakes the example firewalls/servers for real infrastructure. */}
+        {nodes.some((n) => !n.live && n.type !== 'internet') && (
+          <div className="w-full order-last text-[11px] text-amber bg-amber/10 border border-amber/25 rounded-lg px-3 py-1.5">
+            Illustrative topology — nodes without a <span className="font-semibold">LIVE</span> badge are an example, not discovered assets. Connect asset sources to map your real network.
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-600" />

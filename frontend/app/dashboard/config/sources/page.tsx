@@ -395,7 +395,9 @@ export default function DataSourcesPage() {
   // matching source is actively ingesting (anything but offline).
   useEffect(() => {
     fetchSiemSources().then((sources: LogSource[]) => {
-      if (sources.length === 0) return
+      // Derive from live sources unconditionally: with zero live sources every
+      // built-in connector resolves to `unconfigured`. (Bailing on empty left
+      // the hardcoded "Connected" seed on screen for a fresh deployment.)
       const liveNames = sources
         .filter((s) => s.status !== 'offline')
         .map((s) => s.name.toLowerCase())
