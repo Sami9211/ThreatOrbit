@@ -426,9 +426,15 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     with a direct link. (`?alert=` deep-linking exists - extend to scroll+flash.)
 13. **[ ] CTI CVE actions** (carried from Audit 3 #13) - still dead per this
     audit's item 14/21; fold into the dead-link sweep.
-14. **[ ] Every IOC action works.** investigate / pivot / related alerts /
-    related cases / search IntelScope / send to SIEM / export / create case -
-    none may dead-end.
+14. **[~] Every IOC action works.** The IOC lifecycle panel now wires the full
+    action set: Open in IntelScope (scanner), Matching alerts (SIEM `?q=`),
+    Record sighting, Mark/Un- known-good, Enrich, FP likelihood, STIX export,
+    and NEW (2026-07-22) **Send to SIEM** (raises a manual alert via
+    `/siem/alerts`, then links to it) and **Create case** (opens an
+    investigation case via `/soar/cases` seeded with the indicator as an
+    entity, then links to it) - both with confirm+link feedback. Remaining:
+    related-cases lookup surfaced inline (the case link + entity seeding cover
+    the create path).
 15. **[ ] Per-investigation graph.** Investigation Graph looks generic/static;
     each investigation must render its own graph from that incident's real
     relationships (not one shared viz).

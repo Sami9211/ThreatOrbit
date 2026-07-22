@@ -6,13 +6,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
   TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search, BookOpen,
+  Send, FolderPlus, ArrowUpRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
-  fetchStixBundle, enrichIoc, fetchIocFpAssessment, type Ioc, type IocDetail, type EnrichmentResult,
-  type FpAssessment,
+  fetchStixBundle, enrichIoc, fetchIocFpAssessment, createAlert, createCase,
+  type Ioc, type IocDetail, type EnrichmentResult, type FpAssessment,
 } from '@/lib/api'
 
 // Analyst context per indicator TYPE - honest, generic SOC guidance keyed on
@@ -119,6 +120,7 @@ export default function IocLifecyclePanel() {
   const [enriching, setEnriching] = useState(false)
   const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
   const [fpChecking, setFpChecking] = useState(false)
+  const [actionMsg, setActionMsg] = useState<{ text: string; href: string; label: string } | null>(null)
 
   const load = useCallback(() => {
     const params: Record<string, string> = { limit: '60', sort: 'last_seen', order: 'desc' }
@@ -130,6 +132,7 @@ export default function IocLifecyclePanel() {
   function open(id: string) {
     setEnrichment(null)
     setFpAssessment(null)
+    setActionMsg(null)
     fetchIoc(id).then(setDetail).catch(() => {})
   }
   function enrich() {
@@ -158,6 +161,36 @@ export default function IocLifecyclePanel() {
     setBusy(true)
     const fn = detail.lifecycle.status === 'known-good' ? removeIocKnownGood : setIocKnownGood
     fn(detail.id).then(() => refreshDetail(detail.id)).catch(() => {}).finally(() => setBusy(false))
+  }
+  // Raise a SIEM alert to investigate this indicator, then link straight to it.
+  function sendToSiem() {
+    if (!detail || busy) return
+    setBusy(true); setActionMsg(null)
+    createAlert({
+      title: `Investigate indicator: ${detail.value}`,
+      severity: detail.severity,
+      description: `${detail.threatType || detail.type} indicator from ${detail.source || 'CTI'} escalated from the IOC console for investigation.`,
+      srcIp: detail.type === 'ip' ? detail.value : undefined,
+      ruleName: 'IOC escalation',
+    })
+      .then((a) => setActionMsg({ text: 'Alert raised in the SIEM.', href: `/dashboard/siem?alert=${a.id}`, label: 'Open alert' }))
+      .catch(() => setActionMsg({ text: 'Could not raise the alert (needs siem.write).', href: '', label: '' }))
+      .finally(() => setBusy(false))
+  }
+  // Open an investigation case seeded with this indicator as an entity.
+  function createCaseFromIoc() {
+    if (!detail || busy) return
+    setBusy(true); setActionMsg(null)
+    createCase({
+      title: `Investigation: ${detail.value}`,
+      severity: detail.severity,
+      type: 'investigation',
+      description: `Case opened from the IOC console for the ${detail.type} indicator ${detail.value} (${detail.threatType || 'unclassified'}, source ${detail.source || 'CTI'}).`,
+      entities: [{ type: detail.type, value: detail.value }],
+    })
+      .then((c) => setActionMsg({ text: 'Case created.', href: `/dashboard/soar?case=${c.id}`, label: 'Open case' }))
+      .catch(() => setActionMsg({ text: 'Could not create the case (needs soar.write).', href: '', label: '' }))
+      .finally(() => setBusy(false))
   }
   function decay() {
     setDecaying(true)
@@ -357,7 +390,27 @@ export default function IocLifecyclePanel() {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-violet/12 border border-violet/30 text-violet hover:bg-violet/20 transition-colors">
                   {fpChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gauge className="w-3.5 h-3.5" />} FP likelihood
                 </button>
+                <button onClick={sendToSiem} disabled={busy}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-surface-2 border border-white/10 text-ink-300 hover:text-white transition-colors">
+                  <Send className="w-3.5 h-3.5" /> Send to SIEM
+                </button>
+                <button onClick={createCaseFromIoc} disabled={busy}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-surface-2 border border-white/10 text-ink-300 hover:text-white transition-colors">
+                  <FolderPlus className="w-3.5 h-3.5" /> Create case
+                </button>
               </div>
+
+              {/* Feedback for the create actions: confirm + link the new record */}
+              {actionMsg && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-surface-2/50 px-3 py-2">
+                  <span className="text-[11px] text-ink-300">{actionMsg.text}</span>
+                  {actionMsg.href && (
+                    <a href={actionMsg.href} className="flex items-center gap-1 text-[11px] font-semibold text-magenta hover:underline shrink-0">
+                      {actionMsg.label} <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* FP-likelihood assessment - advisory only, never auto-acts */}
               {fpAssessment && (
