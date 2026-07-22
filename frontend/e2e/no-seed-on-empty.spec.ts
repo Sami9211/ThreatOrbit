@@ -56,4 +56,22 @@ test.describe('No seed data leaks on an empty (but reachable) API', () => {
     // The distinctive seed actor must never render on an empty store.
     await expect(page.getByText('Lazarus Group')).toHaveCount(0)
   })
+
+  test('config/sources shows no "Connected" vendor with zero live sources (B1)', async ({ authedPage: page }) => {
+    await stubEmpty(page, '/siem/sources')
+    await page.goto('/dashboard/config/sources')
+    // A catalogue card must be on screen before the badge assertion means anything.
+    await expect(page.getByText('Amazon Web Services')).toBeVisible({ timeout: 20_000 })
+    // With no live log sources, every vendor must resolve to "Not configured" -
+    // the exact-cased "Connected" badge (the old fabricated state) never settles.
+    await expect(page.getByText('Connected', { exact: true })).toHaveCount(0)
+  })
+
+  test('assets/network labels the example topology as illustrative (B7)', async ({ authedPage: page }) => {
+    await page.goto('/dashboard/assets/network')
+    await expect(page.getByRole('heading', { name: /Network Map/i })).toBeVisible({ timeout: 20_000 })
+    // The seed firewalls/servers may render, but only under an explicit
+    // "illustrative" banner so they can't be mistaken for discovered assets.
+    await expect(page.getByText(/Illustrative topology/i)).toBeVisible({ timeout: 15_000 })
+  })
 })

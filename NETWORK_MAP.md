@@ -744,6 +744,14 @@ and external `<a target=_blank>` actions (external flag added #90).
 **All B1–B8 map findings are now resolved.** The dashboard shows no fabricated
 data on an empty deployment and has no dead controls in the audited set.
 
+- Regression fence `e2e/no-seed-on-empty.spec.ts` now covers the **whole B8
+  family** (6 tests): seed absence on empty API for siem/rules, siem/sources,
+  config/users, cti; **B1** — no exact-cased "Connected" vendor badge settles on
+  `config/sources` with zero live log sources; **B7** — `assets/network` must
+  show the "Illustrative topology" banner whenever example nodes render.
+- Post-fix dead-button rescan: **0 real hits** (only the known `WorldMap.tsx:210`
+  hover-row false positive).
+
 ## Appendix B — Backend API surface
 
 Every `fetchX`/`createX`/… in `frontend/lib/api.ts` maps to a FastAPI route under
