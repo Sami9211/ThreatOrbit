@@ -5,7 +5,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
-import { usePerfProfile, useInViewport, useScrollIdle, clampDelta } from '@/lib/usePerf'
+import { usePerfProfile, useInViewport, clampDelta } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 import RoundPoints from '@/components/effects/RoundPoints'
 
@@ -265,8 +265,8 @@ export default function ThreatGlobe() {
   // tear down the context, or scrolling back shows a blank while it rebuilds.
   // The render loop pauses off-screen instead (frameloop demand).
   const { ref, visible } = useInViewport<HTMLDivElement>('800px')
-  // Pause while actively scrolling (WebGL loops measured ~60% of scroll cost).
-  const scrolling = useScrollIdle()
+  // NOTE: no pause-while-scrolling - frozen scenes mid-scroll read as broken.
+  // Cost is managed by the dpr cap + AdaptiveDpr/PerformanceMonitor instead.
   const [mounted, setMounted] = useState(false)
   useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
@@ -288,12 +288,12 @@ export default function ThreatGlobe() {
     <div ref={ref} className="w-full h-full" style={edgeFade}>
       {mounted ? (
         <Canvas
-          frameloop={animate && visible && !scrolling ? 'always' : 'demand'}
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0, 6.2], fov: 42 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           // Phone sharpness: cap dpr at 1.75-2 (was 1.25-1.5, visibly pixelated
           // on dpr≈3 phones); AdaptiveDpr still lowers it under real load.
-          dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
+          dpr={degraded ? 1 : [1, 1.75]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
           <ambientLight intensity={0.5} />

@@ -30,35 +30,15 @@ export function usePerfProfile() {
 }
 
 /**
- * True while the user is actively scrolling (and for `idleMs` after the last
- * scroll event). Heavy render loops pause on this signal: during a scroll the
- * scene's last frame stays composited (imperceptible - the page content is
- * moving) and animation resumes the moment scrolling settles. Measured on the
- * production export at 4x CPU throttle, the landing page's WebGL loops cost
- * ~60% of scroll frame time - this recovers it without degrading idle visuals.
- */
-export function useScrollIdle(idleMs = 180): boolean {
-  const [scrolling, setScrolling] = useState(false)
-  useEffect(() => {
-    let t: number | undefined
-    const onScroll = () => {
-      setScrolling(true)
-      window.clearTimeout(t)
-      t = window.setTimeout(() => setScrolling(false), idleMs)
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => { window.removeEventListener('scroll', onScroll); window.clearTimeout(t) }
-  }, [idleMs])
-  return scrolling
-}
-
-/**
  * Clamp a frame delta before integrating it into an animation. With
  * `frameloop: demand` the R3F clock keeps running while a scene is paused
- * (off-screen or mid-scroll), so the first resumed frame receives the WHOLE
- * pause as one delta - objects visibly snap to where they "would have been"
- * (the audit's "hero moves unexpectedly when scrolling back to top").
- * Clamping makes a resume continue smoothly from the frozen pose.
+ * (off-screen), so the first resumed frame receives the WHOLE pause as one
+ * delta - objects visibly snap to where they "would have been" (the audit's
+ * "hero moves unexpectedly when scrolling back to top"). Clamping makes a
+ * resume continue smoothly from the frozen pose.
+ *
+ * (A `useScrollIdle` pause-while-scrolling hook used to live here; it was
+ * removed on purpose - freezing the scenes during scroll read as broken.)
  */
 export const clampDelta = (dt: number, max = 0.05): number => (dt > max ? max : dt)
 

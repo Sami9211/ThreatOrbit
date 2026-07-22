@@ -6,7 +6,7 @@ import { AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/dre
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
-import { usePerfProfile, useInViewport, useScrollIdle, clampDelta } from '@/lib/usePerf'
+import { usePerfProfile, useInViewport, clampDelta } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 /* -- Orbit definitions: a planet circled by rings of dots -- */
@@ -170,10 +170,10 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
   // the orbit briefly vanishing. Render loop pauses (frameloop demand) while
   // off-screen, so the last frame stays put at zero GPU cost.
   const { ref, visible } = useInViewport<HTMLDivElement>('800px')
-  // Pause while actively scrolling like the other scenes. The scroll-linked
-  // planet rotation reads a spring-smoothed value, so on idle it catches up
-  // smoothly from the frozen pose - no snap.
-  const scrolling = useScrollIdle()
+  // NOTE: no pause-while-scrolling. This scene lives in a scroll-driven story
+  // section - the user is *always* scrolling while looking at it, so the old
+  // mid-scroll freeze made the orbit appear permanently stopped ("the first
+  // orbit is not moving"). It must animate through the scroll.
   const [mounted, setMounted] = useState(false)
   useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
@@ -204,12 +204,13 @@ export default function OrbitalScene({ scrollY, mouseX, mouseY }: {
     <div ref={ref} className="w-full h-full" style={edgeFade}>
       {mounted ? (
         <Canvas
-          frameloop={animate && visible && !scrolling ? 'always' : 'demand'}
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0.8, camZ], fov: 46 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
-          // Phone sharpness: cap dpr at 1.75-2 (was 1.25-1.5, visibly pixelated
-          // on dpr≈3 phones); AdaptiveDpr still lowers it under real load.
-          dpr={degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]}
+          // Cap dpr at 1.75 everywhere: sharp on phones, and the invisible step
+          // down from 2 on retina desktops buys the budget to keep animating
+          // during scroll; AdaptiveDpr still lowers it under real load.
+          dpr={degraded ? 1 : [1, 1.75]}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
           <ambientLight intensity={0.12} />

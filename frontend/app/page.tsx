@@ -1,7 +1,6 @@
 import Navbar from '@/components/layout/Navbar'
 import LandingSidebar from '@/components/layout/LandingSidebar'
 import Footer from '@/components/layout/Footer'
-import SmoothScroll from '@/components/effects/SmoothScroll'
 import CursorGlow from '@/components/effects/CursorGlow'
 import CursorParticles from '@/components/effects/CursorParticles'
 import Preloader from '@/components/effects/Preloader'
@@ -27,8 +26,12 @@ import Contact from '@/components/sections/Contact'
 import CTA from '@/components/sections/CTA'
 
 export default function Home() {
+  // Native scrolling on purpose: the Lenis smooth-scroll wrapper animated every
+  // wheel tick over ~1.2s, which read as input lag and kept the "scrolling"
+  // signal high so the WebGL scenes froze for the whole glide. Framer's
+  // scroll-linked sections read native scroll just as well.
   return (
-    <SmoothScroll>
+    <>
       <Preloader />
       <ScrollProgress />
       <CursorGlow />
@@ -57,6 +60,6 @@ export default function Home() {
       <Footer />
       <ScrollToTop />
       <Chatbot />
-    </SmoothScroll>
+    </>
   )
 }

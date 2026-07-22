@@ -614,7 +614,9 @@
   }
 
   html {
-    scroll-behavior: auto; /* Lenis handles smooth scroll */
+    /* Native scrolling (Lenis removed - it added input lag); keep anchor
+       jumps smooth via CSS, which costs nothing per-frame. */
+    scroll-behavior: smooth;
   }
 
   body {

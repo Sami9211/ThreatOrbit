@@ -6,7 +6,7 @@ import { AdaptiveDpr, PerformanceMonitor, PointMaterial } from '@react-three/dre
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import type { MotionValue } from 'framer-motion'
 import * as THREE from 'three'
-import { usePerfProfile, useInViewport, useScrollIdle, clampDelta } from '@/lib/usePerf'
+import { usePerfProfile, useInViewport, clampDelta } from '@/lib/usePerf'
 import ScenePlaceholder from '@/components/effects/ScenePlaceholder'
 
 /* -- Floating solid objects --
@@ -155,25 +155,27 @@ export default function HeroScene({ mouseX, mouseY }: {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { if (visible) setMounted(true) }, [visible])
   const [degraded, setDegraded] = useState(false)
-  // Pause the loop while the user is actively scrolling: the WebGL loops were
-  // ~60% of scroll frame time (measured at 4x CPU throttle on the export).
-  const scrolling = useScrollIdle()
+  // NOTE: no pause-while-scrolling. An earlier version froze the loop during
+  // scroll to save frame time, but frozen shapes mid-scroll read as broken
+  // ("everything stops until I let go"). Cost is managed by the dpr cap +
+  // AdaptiveDpr + PerformanceMonitor degradation instead, and off-screen
+  // scenes still pause via `visible`.
 
   const objects   = isLowPower ? OBJECTS.slice(0, 6) : OBJECTS
   const animate   = !prefersReducedMotion
   const bloomOn   = !isLowPower && !degraded
   const bright    = !bloomOn   // brighten emissive when bloom can't carry the glow
   const starCount = isLowPower ? 50 : 120
-  // Phones are dpr≈3: capping at 1.25-1.5 read as visibly pixelated. Cap at
-  // 1.75-2 for sharpness; AdaptiveDpr (smooth, not nearest-neighbour) still
-  // lowers resolution under real GPU load, and bloom drops out when degraded.
-  const dpr: [number, number] | number = degraded ? 1 : isLowPower ? [1, 1.75] : [1, 2]
+  // Cap dpr at 1.75: phones (dpr≈3) stay sharp, and on retina desktops the
+  // step down from 2 is invisible while cutting bloom pixel work ~23% - the
+  // budget that keeps the loop running during scroll without jank.
+  const dpr: [number, number] | number = degraded ? 1 : [1, 1.75]
 
   return (
     <div ref={ref} className="w-full h-full">
       {mounted ? (
         <Canvas
-          frameloop={animate && visible && !scrolling ? 'always' : 'demand'}
+          frameloop={animate && visible ? 'always' : 'demand'}
           camera={{ position: [0, 0, 6.5], fov: 56 }}
           gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           dpr={dpr}
