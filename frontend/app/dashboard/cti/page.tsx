@@ -787,7 +787,10 @@ export default function CTIPage() {
               key={actor.id}
               actor={actor}
               selected={selectedActor?.id === actor.id}
-              onSelect={() => setSelectedActor(actor)}
+              // Toggle: clicking the selected actor again collapses it. The
+              // rotating chevron implied an expand/collapse but only ever
+              // selected, so it never closed ("does not collapse correctly").
+              onSelect={() => setSelectedActor((prev) => prev?.id === actor.id ? null : actor)}
             />
           ))}
         </div>

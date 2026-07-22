@@ -468,10 +468,14 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     threat context, community intel, ATT&CK mappings, risk, evidence - toward
     VirusTotal-grade depth plus own value-add. (Audit 3 #9 shipped tabbed
     results + RDAP; this asks for more depth + the typed-input redesign.)
-16. **[ ] Threat Actor profiles.** Expand arrow implies detail but shows none
-    and doesn't collapse right. Add bios, campaigns, target industries/regions,
-    malware families, ATT&CK techniques, attribution confidence, active years,
-    aliases; filters by industry/region/motivation/sophistication/status/country.
+16. **[~] Threat Actor profiles.** Collapse bug FIXED (2026-07-22): the actor
+    card's rotating chevron implied expand/collapse but `onSelect` only ever
+    selected, so it never closed - now it toggles (click the open actor again
+    to collapse). The detail panel already carries bio, aliases, origin, type,
+    sophistication, first/last seen, motivation, ATT&CK TTPs (linked), and
+    target sectors. Remaining (larger): campaigns, target regions, malware
+    families, attribution confidence, active years, and the filter bar
+    (industry/region/motivation/sophistication/status/country).
 18. **[ ] Reporting depth.** Charts, statistics, trend analysis, geo maps,
     executive summaries, analyst findings, visual dashboards, supporting
     metrics - management-grade and analyst-grade. (Audit-1 shipped multi-format
