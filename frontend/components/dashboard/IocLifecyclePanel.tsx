@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
-  TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search,
+  TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search, BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -14,6 +14,65 @@ import {
   fetchStixBundle, enrichIoc, fetchIocFpAssessment, type Ioc, type IocDetail, type EnrichmentResult,
   type FpAssessment,
 } from '@/lib/api'
+
+// Analyst context per indicator TYPE - honest, generic SOC guidance keyed on
+// what the indicator actually is (not fabricated threat specifics). The "why"
+// line is built from the record's REAL fields (source/confidence/actor/tags).
+const IOC_TYPE_CONTEXT: Record<string, { what: string; impact: string; action: string }> = {
+  ip: {
+    what: 'An IP address flagged as malicious - typically attacker infrastructure (command-and-control, scanning, or a compromised host).',
+    impact: 'Traffic to or from this address can indicate C2 beaconing, data exfiltration, or an active intrusion attempt.',
+    action: 'Hunt your firewall/proxy/flow logs for connections to it, block it at the perimeter if confirmed, and investigate any internal host that communicated with it.',
+  },
+  domain: {
+    what: 'A domain name linked to malicious activity - phishing, malware delivery, or command-and-control.',
+    impact: 'DNS resolutions or web requests to it can indicate a phished user or a host beaconing to attacker infrastructure.',
+    action: 'Block/sinkhole it at DNS or the web proxy, hunt DNS logs for resolutions, and investigate any host that queried it.',
+  },
+  url: {
+    what: 'A specific URL hosting or delivering malicious content - a phishing page, exploit kit, or malware payload.',
+    impact: 'A user who opened this URL may have been phished or served malware.',
+    action: 'Block it at the email gateway / web proxy and check which users or hosts requested it.',
+  },
+  hash: {
+    what: 'A cryptographic file hash (MD5/SHA-1/SHA-256) identified as malicious.',
+    impact: 'The presence of this file on an endpoint indicates a likely malware infection.',
+    action: 'Search EDR/endpoint telemetry for the hash, quarantine matching files, and isolate affected hosts.',
+  },
+  email: {
+    what: 'An email address used in malicious activity - a phishing sender or an abused/compromised account.',
+    impact: 'Messages from this address may be phishing or business-email-compromise attempts.',
+    action: 'Block the sender, search the mail gateway for other recipients, and warn any targeted users.',
+  },
+  cve: {
+    what: 'A published vulnerability identifier (CVE) - not attacker infrastructure, but a weakness that may be exploited.',
+    impact: 'Unpatched assets running the affected software are exposed to exploitation.',
+    action: 'Scan the fleet for the affected software/versions, prioritise patching by exposure, and add detection for exploitation attempts.',
+  },
+}
+
+function iocContext(d: {
+  type: string; severity: string; source?: string; actor?: string
+  threatType?: string; confidence?: number; effectiveConfidence?: number
+  tags?: string[]; sightings?: number
+}): { what: string; why: string; impact: string; action: string } {
+  const base = IOC_TYPE_CONTEXT[d.type] ?? {
+    what: `An indicator of type "${d.type}" reported as associated with malicious activity.`,
+    impact: 'It may point to attacker infrastructure, tooling, or activity relevant to your environment.',
+    action: 'Pivot into IntelScope and your SIEM to establish whether it appears in your own telemetry.',
+  }
+  const parts: string[] = []
+  parts.push(`Reported by ${d.source || 'an intelligence source'}`)
+  if (d.actor) parts.push(`attributed to ${d.actor}`)
+  if (d.threatType) parts.push(`classified as ${d.threatType}`)
+  const conf = d.confidence ?? d.effectiveConfidence
+  if (typeof conf === 'number') parts.push(`${conf}% confidence`)
+  parts.push(`${d.severity} severity`)
+  if (typeof d.sightings === 'number') parts.push(`${d.sightings} sighting${d.sightings === 1 ? '' : 's'} recorded`)
+  let why = parts.join(', ') + '.'
+  if (d.tags && d.tags.length) why += ` Tags: ${d.tags.join(', ')}.`
+  return { what: base.what, why, impact: base.impact, action: base.action }
+}
 
 const FP_BAND_STYLE: Record<string, { color: string; label: string }> = {
   'likely-fp': { color: tk('safe'), label: 'Likely false positive' },
@@ -247,6 +306,33 @@ export default function IocLifecyclePanel() {
                   <Eye className="w-3.5 h-3.5" /> Matching alerts
                 </a>
               </div>
+
+              {/* Analyst context: what the indicator is, why it's flagged (from
+                  its real fields), likely impact, and the recommended first
+                  action - so an indicator is never shown without explanation. */}
+              {(() => {
+                const ctx = iocContext(detail)
+                const rows: Array<[string, string]> = [
+                  ['What it is', ctx.what],
+                  ['Why it’s flagged', ctx.why],
+                  ['Potential impact', ctx.impact],
+                  ['Recommended action', ctx.action],
+                ]
+                return (
+                  <div className="rounded-xl border border-white/8 bg-surface-2/40 p-4 space-y-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-ink-400" />
+                      <span className="text-[10px] text-ink-500 uppercase tracking-wider">Context</span>
+                    </div>
+                    {rows.map(([label, body]) => (
+                      <div key={label}>
+                        <p className="text-[10px] font-semibold text-ink-400">{label}</p>
+                        <p className="text-[11px] text-ink-200 leading-relaxed mt-0.5">{body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-wrap">

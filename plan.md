@@ -477,9 +477,14 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     metrics - management-grade and analyst-grade. (Audit-1 shipped multi-format
     /multi-audience text reports + a severity donut; this asks for richer
     visuals.)
-19. **[ ] Per-IOC context in Threat Feeds.** Each IOC needs a concise
-    explanation: what it is, why malicious/suspicious, potential impact,
-    recommended analyst action.
+19. **[~] Per-IOC context.** DONE for the IOC detail panel (2026-07-22): the
+    IocLifecyclePanel (the canonical IOC drill-down across CTI) now renders a
+    "Context" block - What it is / Why it's flagged / Potential impact /
+    Recommended action. Type-keyed honest SOC guidance (ip/domain/url/hash/
+    email/cve), with the "why" line built from the record's REAL fields
+    (source, actor, threatType, confidence, severity, sightings, tags) - not
+    fabricated specifics. Remaining: surface the same context on the IntelScope
+    result page (folds into #13).
 
 ### UI polish
 
