@@ -714,6 +714,36 @@ function LiveThreatFeed({ seed }: { seed: LiveFeedItem[] }) {
   )
 }
 
+/* -- Security posture (health) from REAL operational signals --------
+ * The old gauge was posture = 100 − avg_asset_risk, so open critical alerts
+ * and active incidents never moved it (a fresh org with criticals but
+ * low-risk assets read a bogus 100%). Posture now starts at the prevention
+ * baseline (inverse average asset risk = patch/hardening posture) and is
+ * pulled down by live threat pressure: open critical/high alerts, active
+ * incidents, and SLA breaches. Shared by both modes so they never diverge. */
+function computePosture(
+  kpis: { score: number; threats?: number },
+  siem: SiemKpis | null,
+  soar: SoarMetrics | null,
+  incidents: Incident[],
+): { score: number; band: string; color: string } {
+  const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
+  const openInc = incidents.filter((i) => !['resolved', 'closed'].includes(i.status))
+  const openCritInc = openInc.filter((i) => i.severity === 'critical').length
+  // Prevention baseline: inverse of average asset risk.
+  const prevention = 100 - Number(kpis.score ?? 0)
+  // Live threat pressure (what was missing).
+  const activeThreats  = Number(kpis.threats ?? 0)   // open critical/high alerts
+  const criticalAlerts = siem?.critical ?? 0         // of which, critical
+  const threatPen = Math.min(45, activeThreats * 5 + criticalAlerts * 4)
+  const incPen    = Math.min(20, openInc.length * 4 + openCritInc * 4)
+  const slaPen    = Math.min(15, (soar?.slaBreached ?? 0) * 5)
+  const score = clamp(prevention - threatPen - incPen - slaPen)
+  const band  = score >= 80 ? 'Strong' : score >= 60 ? 'Good' : score >= 40 ? 'At risk' : 'Critical'
+  const color = score >= 60 ? 'text-safe' : score >= 40 ? 'text-amber' : 'text-threat'
+  return { score, band, color }
+}
+
 /* -- Normal Mode Dashboard ----------------------------------------- */
 function NormalDashboard({ count, alerts, incidents, siem, soar }: {
   count: { threats: number; iocs: number; sources: number; score: number }
@@ -726,20 +756,19 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
     .sort((a, b) => (sevRank[b.severity] ?? 0) - (sevRank[a.severity] ?? 0))
     .slice(0, 5)
   const openIncidents = incidents.filter((i) => !['resolved', 'closed'].includes(i.status))
-  // `count.score` is the org RISK (higher = worse); this gauge shows security
-  // HEALTH (higher = better), so invert it. A healthy/empty org now reads as
-  // high health instead of the bogus 0 it showed before.
-  const score = Math.max(0, Math.min(100, 100 - Math.round(Number(count.score ?? 0))))
-  const band = score >= 80 ? 'Strong' : score >= 60 ? 'Good' : score >= 40 ? 'At risk' : 'Critical'
-  const bandColor = score >= 60 ? 'text-safe' : score >= 40 ? 'text-amber' : 'text-threat'
   const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
+  // Overall posture now reflects live threat pressure, not asset risk alone.
+  const { score, band, color: bandColor } = computePosture(count, siem, soar, incidents)
+  // Prevention pillar stays the pure asset-risk (patch/hardening) posture, so
+  // the three pillars decompose the overall score honestly.
+  const preventionScore = clampPct(100 - Number(count.score ?? 0))
   // Posture pillars from REAL telemetry (not fixed demo numbers): Detection =
   // inverse of the live false-positive rate; Response = live SLA compliance;
-  // Prevention = the overall health score. Each falls back to the health score.
+  // Prevention = asset-risk posture. Each falls back to the prevention score.
   const pillars = [
-    { label: 'Detection',  score: siem ? clampPct(100 - siem.fpRate) : score },
-    { label: 'Response',   score: soar && soar.openCases > 0 ? clampPct((1 - (soar.slaBreached ?? 0) / soar.openCases) * 100) : (soar ? 100 : score) },
-    { label: 'Prevention', score },
+    { label: 'Detection',  score: siem ? clampPct(100 - siem.fpRate) : preventionScore },
+    { label: 'Response',   score: soar && soar.openCases > 0 ? clampPct((1 - (soar.slaBreached ?? 0) / soar.openCases) * 100) : (soar ? 100 : preventionScore) },
+    { label: 'Prevention', score: preventionScore },
   ].map((p) => ({ ...p, color: p.score >= 60 ? 'text-safe' : p.score >= 40 ? 'text-amber' : 'text-threat' }))
   return (
     <div className="p-6 space-y-6">
@@ -975,12 +1004,12 @@ export default function DashboardOverview() {
 
   if (!isPower) return <NormalDashboard count={kpis} alerts={recentAlerts} incidents={incidents} siem={siemKpis} soar={soarMetrics} />
 
-  // Real security-posture HEALTH (higher = better) = inverse of the org RISK
-  // score the API returns - same derivation the Normal dashboard uses, so the
-  // gauge is never a hardcoded number.
-  const health = Math.max(0, Math.min(100, 100 - Math.round(Number(kpis.score ?? 0))))
-  const healthBand = health >= 80 ? 'Strong' : health >= 60 ? 'Good' : health >= 40 ? 'At risk' : 'Critical'
-  const healthColor = health >= 60 ? 'text-safe' : health >= 40 ? 'text-amber' : 'text-threat'
+  // Real security-posture HEALTH (higher = better) from live operational
+  // signals - same derivation the Normal dashboard uses (open critical/high
+  // alerts + active incidents + SLA breaches pull it down from the prevention
+  // baseline), so the gauge moves with real threat activity instead of asset
+  // risk alone.
+  const { score: health, band: healthBand, color: healthColor } = computePosture(kpis, siemKpis, soarMetrics, incidents)
 
   return (
     <div className="p-6 space-y-6">

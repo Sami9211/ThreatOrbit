@@ -361,13 +361,14 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
 
 ### Data honesty & scoring
 
-3. **[~] Security Posture stuck at 100%.** Root cause found: the Overview
-   gauge computes `posture = 100 - avg_asset_risk` (`app/dashboard/page.tsx`
-   ~L732/L981), and `avg_asset_risk` is the mean *asset* risk - open critical
-   **alerts** and active **incidents** don't move it, so a fresh org with
-   critical alerts but low-risk assets shows 100%. Fix: derive posture from
-   real operational signals (open critical/high alert pressure, active
-   incidents, SLA breaches, connector/system health) - not asset-risk alone.
+3. **[x] Security Posture stuck at 100%.** DONE (2026-07-22): shared
+   `computePosture()` now derives the gauge (both Normal + Power modes) from
+   real operational signals - the prevention baseline (inverse average asset
+   risk) is pulled down by live threat pressure: open critical/high alerts
+   (`kpis.threats` + `siem.critical`), active/critical incidents, and SLA
+   breaches. Critical alerts now visibly move the number instead of leaving it
+   pinned at 100. The three pillars (Detection = inverse FP-rate, Response =
+   SLA compliance, Prevention = asset-risk posture) decompose it honestly.
 4. **[answered] The "same six NVD CVEs".** They are **real CVE records**, not
    fabricated: `vuln_scanner.py::CVE_CATALOGUE` is a hand-curated set of genuine
    well-known CVEs (Log4Shell CVE-2021-44228, Heartbleed CVE-2014-0160,
@@ -399,9 +400,20 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     for inter-burst delay; and a guarantee the bursts are genuine live intel,
     not generated samples. Backend has `IngestionEnginePanel`, jobs, connectors
     - needs an imports/jobs status API + page.
-6. **[ ] Dead links.** Named: SOAR→Alert→Affected Systems, SOC→SLA Breach
-    Queue, CTI→IOC actions, Related Alerts, ATT&CK Navigator actions. Re-run
-    `check-routes.mjs` + a live click-through; wire each to its real record.
+6. **[~] Dead links.** Named: SOAR→Alert→Affected Systems, SOC→SLA Breach
+    Queue, CTI→IOC actions, Related Alerts, ATT&CK Navigator actions.
+    Systemic root cause found + fixed (2026-07-22): most of these DID link, but
+    with `?q=<value>` to a SIEM queue whose filter only matched
+    title/ruleId/ruleName/srcIp - so pivots on a **hostname, username,
+    dest-IP or MITRE technique** landed on an empty-looking queue (reads as
+    dead). Broadened the SIEM `?q=` match to src/dest IP + hostname + username
+    + mitreTech/mitreTechId/mitreTactic, and made Normal mode drop its
+    actionable-only restriction while a search/deep-link is active so the
+    target is findable. Also wired the two non-clickable "Related Alerts" rows
+    (SIEM entity detail) to pivot. This fixes SOAR affected-systems host/user
+    pivots, ATT&CK "View matching alerts", and entity Related-Alerts in one go.
+    SOC SLA breach rows verified already navigating. Remaining: CTI per-IOC
+    action set (folded into #14).
 7. **[ ] SOC Console full redesign.** No longer empty, but must become a true
     SOC: live investigations, analyst assignments, escalations, SLA monitoring,
     incident timelines, active alerts, investigation queues, collaboration,

@@ -878,7 +878,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                     <>
                       <Row label="UEBA Risk Score" value={`${userEntity.risk} / 100`}
                         highlight={userEntity.risk >= 70 ? 'threat' : userEntity.risk >= 45 ? 'amber' : undefined} />
-                      <Row label="Related Alerts" value={`${userEntity.alertCount}`} />
+                      <Row label="Related Alerts" value={`${userEntity.alertCount}`}
+                        pivot={`/dashboard/siem?q=${encodeURIComponent(alert.username)}`} />
                       <Row label="Daily Volume"
                         value={userEntity.baseline.confidence === 'insufficient-history'
                           ? `${userEntity.baseline.current} today (baseline needs ≥3 days)`
@@ -924,7 +925,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
                     <>
                       <Row label="Host Risk Score" value={`${hostEntity.risk} / 100`}
                         highlight={hostEntity.risk >= 70 ? 'threat' : hostEntity.risk >= 45 ? 'amber' : undefined} />
-                      <Row label="Related Alerts" value={`${hostEntity.alertCount}`} />
+                      <Row label="Related Alerts" value={`${hostEntity.alertCount}`}
+                        pivot={`/dashboard/siem?q=${encodeURIComponent(alert.hostname)}`} />
                       {hostEntity.baseline.confidence !== 'insufficient-history' && (
                         <Row label="Baseline Deviation"
                           value={`z = ${hostEntity.baseline.zScore}${hostEntity.baseline.deviating ? ' - DEVIATING' : ' (normal)'}`}
@@ -1476,8 +1478,12 @@ export default function SIEMPage() {
 
   const filteredAlerts = useMemo(() => {
     const rows = alerts.filter((a) => {
-      // Normal mode: only actionable alerts - open status, critical/high severity
-      if (isNormal) {
+      // Normal mode: only actionable alerts - open status, critical/high
+      // severity - EXCEPT when a search/deep-link is active: an explicit pivot
+      // (affected host, entity, technique, related-alerts link) must be able to
+      // find its target even if it's medium/low or already resolved, otherwise
+      // the link reads as dead.
+      if (isNormal && !search) {
         if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
         if (!['critical', 'high'].includes(a.severity)) return false
       }
@@ -1486,12 +1492,15 @@ export default function SIEMPage() {
       if (filterTactic !== 'All' && a.mitreTactic !== filterTactic) return false
       if (search) {
         const q = search.toLowerCase()
-        // rule name included so the Rules Engine "Related Alerts" link
-        // (?q=<rule name>) filters to the alerts this rule produced.
-        if (!a.title.toLowerCase().includes(q) &&
-            !a.ruleId.toLowerCase().includes(q) &&
-            !(a.ruleName ?? '').toLowerCase().includes(q) &&
-            !(a.srcIp).includes(search)) return false
+        // Match every field a pivot can target so no deep-link dead-ends:
+        // rule name (Rules Engine "Related Alerts"), src/dest IP + hostname +
+        // username (SOAR "Affected systems", entity pivots), and the MITRE
+        // technique id/name (ATT&CK navigator "View matching alerts").
+        const hay = [
+          a.title, a.ruleId, a.ruleName, a.srcIp, a.destIp,
+          a.srcHostname, a.hostname, a.username, a.mitreTech, a.mitreTechId, a.mitreTactic,
+        ].filter(Boolean).join(' ').toLowerCase()
+        if (!hay.includes(q)) return false
       }
       return true
     })
