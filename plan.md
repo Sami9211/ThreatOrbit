@@ -442,10 +442,21 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     saved filter sets. Feed Sources: pause/resume/restart/edit/disable/health/
     test-connectivity, admin-gated (greyed / "requires administrator" for
     non-admins).
-11. **[ ] Per-connector config fields.** Setup asks generic type+URL; each
+11. **[~] Per-connector config fields.** Setup asks generic type+URL; each
     connector must present only its real fields - OTX→API key, VirusTotal→API
     key, MISP→URL+key, TheHive→URL+key - and be correctly wired. `connectors.py`
-    already knows each kind's shape; the config UI must read it.
+    already knows each kind's shape (`KIND_PRESETS`); the config UI must read it.
+    Partial (2026-07-22): **VirusTotal wired the honest way.** VT is an
+    *enrichment* provider (per-IOC lookup), not a feed - it lives alongside
+    GreyNoise/Shodan/WHOIS in `enrichment.py` and was previously env-var-only.
+    Added UI configuration: `enrichment.provider_key()` now reads a settings-
+    stored, encrypted key (env-var fallback preserved); new `GET/PUT
+    /config/enrichment` endpoints (admin-gated, key never returned); a
+    Config → Integrations → **Enrichment providers** panel to paste/save/clear
+    each key with a live status badge. Backend test covers the round-trip +
+    that the key activates the provider. Remaining: MISP/TheHive feed
+    connectors and the per-*feed*-connector field schema in the Add-connector
+    form.
 12. **[ ] Connector marketplace.** Replace low-value "Search Feeds" with a
     catalogue: per-connector description, required config/credentials, features,
     status, one-click wizard (selecting OTX prompts for its API key directly).

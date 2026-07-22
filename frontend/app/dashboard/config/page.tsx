@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import { Toggle as Switch } from '@/components/dashboard/Toggle'
+import EnrichmentProvidersPanel from '@/components/dashboard/EnrichmentProvidersPanel'
 import FloatingSave from '@/components/dashboard/FloatingSave'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
@@ -1839,9 +1840,14 @@ export default function ConfigPage() {
           {tab === 'security' && <AuditTrail />}
 
           {tab === 'integrations' && (
-            <Section title="Integrations" icon={Plug} color={tk('amber')}>
-              <LiveIntegrations />
-            </Section>
+            <>
+              <Section title="Integrations" icon={Plug} color={tk('amber')}>
+                <LiveIntegrations />
+              </Section>
+              <Section title="Enrichment providers" icon={Key} color={tk('amber')}>
+                <EnrichmentProvidersPanel />
+              </Section>
+            </>
           )}
         </motion.div>
       </div>

@@ -417,16 +417,36 @@ _PROVIDER_CALLS = {
 }
 
 
+def provider_key(provider: str) -> str:
+    """Resolve an external provider's API key. A key saved through the admin UI
+    (settings table, encrypted) takes precedence; otherwise fall back to the
+    environment variable, so env-configured deployments keep working unchanged.
+    A DB read only happens on an enrichment cache-miss, so this is cheap."""
+    try:
+        from dashboard_api.db import get_conn
+        from dashboard_api.secretstore import decrypt
+        with get_conn() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key=?",
+                               (f"enrich_key:{provider}",)).fetchone()
+        if row and row[0]:
+            k = decrypt(row[0])
+            if k:
+                return k
+    except Exception:  # settings unavailable - fall through to env
+        pass
+    return os.environ.get(EXTERNAL_PROVIDERS.get(provider, ""), "")
+
+
 def _enrich_external(provider: str, value: str, ioc_type: str) -> dict:
     """External provider adapter. Honestly reports unavailable when no API key
     is configured (rather than fabricating a verdict); with a key set it makes
     the real provider call, and a failed call is reported as a failure - never
     a made-up verdict."""
     env = EXTERNAL_PROVIDERS[provider]
-    key = os.environ.get(env, "")
+    key = provider_key(provider)
     if not key:
         return {"provider": provider, "available": False,
-                "reason": f"no API key configured ({env})",
+                "reason": f"no API key configured (set it in Config → Enrichment, or {env})",
                 "verdict": "unknown", "summary": "not configured", "data": {}}
     try:
         res = _PROVIDER_CALLS[provider](key, value, ioc_type)
@@ -455,7 +475,7 @@ def provider_status() -> list[dict]:
         out.append({"provider": p, "kind": "public",
                     "available": os.environ.get("DASHBOARD_DISABLE_RDAP", "").lower() != "true"})
     for p, env in EXTERNAL_PROVIDERS.items():
-        out.append({"provider": p, "kind": "external", "available": bool(os.environ.get(env)),
+        out.append({"provider": p, "kind": "external", "available": bool(provider_key(p)),
                     "envVar": env})
     return out
 

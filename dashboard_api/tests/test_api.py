@@ -369,6 +369,33 @@ def test_config_settings_and_keys(client, auth):
                for k in client.get("/config/api-keys", headers=auth).json())
 
 
+def test_enrichment_provider_key_config(client, auth):
+    from dashboard_api import enrichment
+    # Listing includes VirusTotal, initially not configured via the UI.
+    providers = client.get("/config/enrichment", headers=auth).json()
+    vt = next(p for p in providers if p["provider"] == "virustotal")
+    assert vt["label"] == "VirusTotal" and vt["source"] in ("none", "env")
+    assert "api_key" not in vt and "key" not in vt  # never leaks the secret
+
+    # Set a key via the UI -> configured, source 'ui'.
+    r = client.put("/config/enrichment/virustotal", json={"api_key": "vt-secret-123"}, headers=auth).json()
+    assert r["configured"] is True and r["source"] == "ui"
+    vt = next(p for p in client.get("/config/enrichment", headers=auth).json()
+              if p["provider"] == "virustotal")
+    assert vt["configured"] is True and vt["source"] == "ui"
+    # The key actually resolves at enrichment time (activates the provider),
+    # and is stored encrypted (not the plaintext).
+    assert enrichment.provider_key("virustotal") == "vt-secret-123"
+
+    # Clearing removes it (source falls back to none, assuming no env var).
+    r = client.put("/config/enrichment/virustotal", json={"api_key": ""}, headers=auth).json()
+    assert r["configured"] is False and r["source"] == "none"
+    assert enrichment.provider_key("virustotal") == ""
+
+    # Unknown provider -> 404.
+    assert client.put("/config/enrichment/nope", json={"api_key": "x"}, headers=auth).status_code == 404
+
+
 def test_viewer_cannot_create_user(client):
     # log in as the seeded viewer
     tok = client.post("/auth/login", json={"email": "tom.okafor@threatorbit.space", "password": "Password123!"}).json()["token"]

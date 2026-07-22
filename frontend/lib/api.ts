@@ -1383,6 +1383,21 @@ export const createApiKey    = (name: string, scope = 'read', orgId?: string) =>
   api<ApiKey & { secret: string }>('/config/api-keys', { method: 'POST', body: JSON.stringify({ name, scope, ...(orgId ? { orgId } : {}) }) })
 export const revokeApiKey    = (id: string) =>
   api<void>(`/config/api-keys/${id}`, { method: 'DELETE' })
+
+// Enrichment providers (VirusTotal / GreyNoise / Shodan / WHOIS) - per-IOC
+// lookup services, configured with an API key (stored encrypted server-side).
+export interface EnrichmentProvider {
+  provider: string
+  label: string
+  configured: boolean
+  source: 'ui' | 'env' | 'none'
+  envVar: string
+}
+export const fetchEnrichmentProviders = () => api<EnrichmentProvider[]>('/config/enrichment')
+export const setEnrichmentProviderKey = (provider: string, apiKey: string) =>
+  api<{ provider: string; configured: boolean; source: string }>(
+    `/config/enrichment/${provider}`, { method: 'PUT', body: JSON.stringify({ api_key: apiKey }) })
+
 export interface Webhook {
   id: string
   url: string

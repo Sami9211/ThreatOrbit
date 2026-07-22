@@ -591,3 +591,66 @@ def delete_webhook(webhook_id: str, actor: dict = Depends(require_perm("config.m
         audit(conn, actor["email"], "webhook.delete", webhook_id)
         conn.commit()
     return None
+
+
+# -- Enrichment providers (VirusTotal / GreyNoise / Shodan / WHOIS) ---------------
+# These are per-IOC lookup providers, not feed connectors. They were previously
+# configurable only via environment variables; this lets an admin set the API
+# key from the UI (stored encrypted, read at enrichment time with an env-var
+# fallback). The key value is never returned - only whether one is configured.
+_ENRICH_LABELS = {
+    "virustotal": "VirusTotal",
+    "greynoise": "GreyNoise",
+    "shodan": "Shodan",
+    "whois": "WHOIS",
+}
+
+
+class EnrichKeyBody(BaseModel):
+    api_key: str = ""
+
+
+@router.get("/enrichment")
+def list_enrichment_providers(user: dict = Depends(require_perm("config.manage"))):
+    """Configuration status of each external enrichment provider. Never leaks
+    the key - only whether one is set, and from where (UI vs env)."""
+    from dashboard_api import enrichment
+    out = []
+    with get_conn() as conn:
+        for provider, env in enrichment.EXTERNAL_PROVIDERS.items():
+            row = conn.execute("SELECT value FROM settings WHERE key=?",
+                               (f"enrich_key:{provider}",)).fetchone()
+            from_ui = bool(row and row[0])
+            from_env = bool(os.environ.get(env))
+            out.append({
+                "provider": provider,
+                "label": _ENRICH_LABELS.get(provider, provider.title()),
+                "configured": from_ui or from_env,
+                "source": "ui" if from_ui else ("env" if from_env else "none"),
+                "envVar": env,
+            })
+    return out
+
+
+@router.put("/enrichment/{provider}")
+def set_enrichment_provider(provider: str, body: EnrichKeyBody,
+                            user: dict = Depends(require_perm("config.manage"))):
+    """Set (or clear, with an empty value) an enrichment provider's API key.
+    Stored encrypted in settings; an env-var key still applies as a fallback."""
+    from dashboard_api import enrichment
+    from dashboard_api.secretstore import encrypt
+    if provider not in enrichment.EXTERNAL_PROVIDERS:
+        raise HTTPException(status_code=404, detail="Unknown enrichment provider")
+    key = (body.api_key or "").strip()
+    with get_conn() as conn:
+        if key:
+            conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                         (f"enrich_key:{provider}", encrypt(key)))
+            audit(conn, user["email"], "enrichment.key.set", provider)
+        else:
+            conn.execute("DELETE FROM settings WHERE key=?", (f"enrich_key:{provider}",))
+            audit(conn, user["email"], "enrichment.key.clear", provider)
+        conn.commit()
+    from_env = bool(os.environ.get(enrichment.EXTERNAL_PROVIDERS[provider]))
+    return {"provider": provider, "configured": bool(key) or from_env,
+            "source": "ui" if key else ("env" if from_env else "none")}
