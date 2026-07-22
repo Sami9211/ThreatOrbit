@@ -15,6 +15,7 @@ import { usePermissions } from '@/lib/usePermissions'
 import { fetchRules, patchRule, deleteRule, exportSigmaRule, testRule, type RuleDefinition } from '@/lib/api'
 import RuleEditor from '@/components/dashboard/RuleEditor'
 import SuppressionsPanel from '@/components/dashboard/SuppressionsPanel'
+import { Toggle as Switch } from '@/components/dashboard/Toggle'
 import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
 import StarterPackButton from '@/components/dashboard/StarterPackButton'
 import { tk } from '@/lib/colors'
@@ -431,19 +432,11 @@ function SeverityPill({ severity }: { severity: Severity }) {
 
 function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onToggle() }}
-      className={cn(
-        'relative w-8 h-4.5 rounded-full transition-colors duration-200 shrink-0',
-        enabled ? 'bg-safe/30 border border-safe/40' : 'bg-white/10 border border-white/15',
-      )}
-      title={enabled ? 'Disable rule' : 'Enable rule'}
-    >
-      <span className={cn(
-        'absolute top-0.5 w-3 h-3 rounded-full transition-transform duration-200 shadow-xs',
-        enabled ? 'translate-x-4 bg-safe' : 'translate-x-0.5 bg-ink-600',
-      )} />
-    </button>
+    <Switch
+      checked={enabled}
+      onChange={() => onToggle()}
+      label={enabled ? 'Disable rule' : 'Enable rule'}
+    />
   )
 }
 

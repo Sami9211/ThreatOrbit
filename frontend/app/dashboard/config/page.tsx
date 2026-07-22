@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
+import { Toggle as Switch } from '@/components/dashboard/Toggle'
 import FloatingSave from '@/components/dashboard/FloatingSave'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
@@ -279,15 +280,7 @@ function Toggle({ label, description, checked, value, onChange }: {
         <p className="text-xs font-medium text-ink-200">{label}</p>
         <p className="text-[10px] text-ink-600 mt-0.5">{description}</p>
       </div>
-      <button
-        onClick={toggle}
-        role="switch"
-        aria-checked={isOn}
-        aria-label={label}
-        className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', isOn ? 'bg-safe' : 'bg-ink-600')}
-      >
-        <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all', isOn ? 'left-[18px]' : 'left-0.5')} />
-      </button>
+      <Switch checked={isOn} onChange={() => toggle()} label={label} />
     </div>
   )
 }
@@ -474,15 +467,7 @@ function LiveFeedSources() {
             : 'bg-white/5 text-ink-400 border-white/10')}>
             {f.status}
           </span>
-          <button
-            onClick={() => toggle(f)}
-            role="switch"
-            aria-checked={f.enabled}
-            aria-label={`Toggle ${f.name}`}
-            className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', f.enabled ? 'bg-safe' : 'bg-ink-600')}
-          >
-            <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all', f.enabled ? 'left-[18px]' : 'left-0.5')} />
-          </button>
+          <Switch checked={f.enabled} onChange={() => toggle(f)} label={`Toggle ${f.name}`} />
         </div>
       ))}
     </div>

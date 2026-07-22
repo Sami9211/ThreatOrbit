@@ -330,6 +330,156 @@ artifact.
 
 ---
 
+## Audit 4 (2026-07-22) - owner's enterprise-readiness audit
+
+Owner's fourth deep audit. Standing directive reaffirmed: **complete existing
+workflows, eliminate dead links, improve usability, validate integrations -
+not surface-level features.** The bar is "survive a professional enterprise
+audit with no obvious functional issues." Items carry code-level triage notes
+found while reading the tree on 2026-07-22.
+
+Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG)
+· `[answered]` investigation question resolved in-thread.
+
+### Administration & identity
+
+1. **[ ] Admin Panel + RBAC + sign-up validation.** No dedicated admin
+   surface. Need: user CRUD (create/edit/disable/delete), role assignment,
+   RBAC policy editing, security-policy config, audit-log viewer, lock/unlock,
+   password reset, API-integration management, global settings - Entra-ID-class
+   control. Backend already has users/roles/audit_log/capabilities tables and
+   RBAC enforcement (`permissions.py`); this is mostly an admin UI + a few
+   admin endpoints (lock/unlock, force-reset, disable). **Sign-up** (`app/
+   signup`) accepts any email, no verification/ownership check: add email
+   verification, password-complexity (backend `password_policy.py` exists -
+   wire it to signup), duplicate-account prevention, input validation. *Large.*
+2. **[~] Account Settings page.** Profile menu "Profile & settings"
+   (`TopBar.tsx:288`) routes to `/dashboard/config` (admin config, not a
+   personal profile). Build a dedicated Account Settings page: profile, change
+   password, 2FA enrol, active sessions, notification prefs, personal UI prefs,
+   personal API tokens. (In progress this session.)
+
+### Data honesty & scoring
+
+3. **[~] Security Posture stuck at 100%.** Root cause found: the Overview
+   gauge computes `posture = 100 - avg_asset_risk` (`app/dashboard/page.tsx`
+   ~L732/L981), and `avg_asset_risk` is the mean *asset* risk - open critical
+   **alerts** and active **incidents** don't move it, so a fresh org with
+   critical alerts but low-risk assets shows 100%. Fix: derive posture from
+   real operational signals (open critical/high alert pressure, active
+   incidents, SLA breaches, connector/system health) - not asset-risk alone.
+4. **[answered] The "same six NVD CVEs".** They are **real CVE records**, not
+   fabricated: `vuln_scanner.py::CVE_CATALOGUE` is a hand-curated set of genuine
+   well-known CVEs (Log4Shell CVE-2021-44228, Heartbleed CVE-2014-0160,
+   regreSSHion CVE-2024-6387, sudo CVE-2021-3156, SMBGhost CVE-2020-0796, …)
+   with accurate CVSS + affected-version ranges. In **demo mode** (`seed()`)
+   the scanner matches them against **seeded demo assets** - deterministic
+   (`SEED_RANDOM` fixed), hence always the same six. In **live mode**
+   (`bootstrap_live()`) there are no seeded assets; CVEs appear only from the
+   live NVD connector (`connectors.py::_fetch_nvd`, real `services.nvd.nist.gov`
+   API) matched against real scanned assets. So: CVEs genuine, the *assets*
+   they're found on are demo. **Follow-up (open):** the UI doesn't badge
+   demo-seeded findings vs live findings - add a clear "sample data" marker in
+   demo mode so it can't be mistaken for live intel.
+17. **[answered] Dark-web data genuine?** Partly plumbing, not a live source.
+    `darkweb_logic.py` has **real** logic - credential-leak matching against
+    the actual user directory (with public-domain guarding), a takedown
+    workflow, and a `darkweb-json` connector sink that imports findings from any
+    real leak-DB / paste-monitor API. But the platform does **not** itself crawl
+    the dark web: absent a configured `darkweb-json` connector, the findings
+    shown are **demonstration data** (demo seed). To make them genuine, wire a
+    real leak-database/paste-monitor feed via the connector. (Owner previously
+    deferred dark-web implementation until core is fixed - unchanged.)
+
+### Navigation & workflow completeness
+
+5. **[ ] Live Processing Engine → Imports page (OpenCTI-style).** New page:
+    active imports, import queue, connector status, processing progress,
+    success/failure logs, indicators imported in real time; an admin setting
+    for inter-burst delay; and a guarantee the bursts are genuine live intel,
+    not generated samples. Backend has `IngestionEnginePanel`, jobs, connectors
+    - needs an imports/jobs status API + page.
+6. **[ ] Dead links.** Named: SOAR→Alert→Affected Systems, SOC→SLA Breach
+    Queue, CTI→IOC actions, Related Alerts, ATT&CK Navigator actions. Re-run
+    `check-routes.mjs` + a live click-through; wire each to its real record.
+7. **[ ] SOC Console full redesign.** No longer empty, but must become a true
+    SOC: live investigations, analyst assignments, escalations, SLA monitoring,
+    incident timelines, active alerts, investigation queues, collaboration,
+    search/filter.
+8. **[ ] Undo for destructive analyst actions.** Block-IOC and dismiss-alert
+    are irreversible. Prior undo work (task #92) covered some actions; extend to
+    these with undo affordance + action history + confirm prompts.
+9. **[ ] SIEM deep-link on "Send to SIEM".** Today opens the SIEM page; must
+    open the exact record, auto-scroll to it, highlight the new alert, and toast
+    with a direct link. (`?alert=` deep-linking exists - extend to scroll+flash.)
+13. **[ ] CTI CVE actions** (carried from Audit 3 #13) - still dead per this
+    audit's item 14/21; fold into the dead-link sweep.
+14. **[ ] Every IOC action works.** investigate / pivot / related alerts /
+    related cases / search IntelScope / send to SIEM / export / create case -
+    none may dead-end.
+15. **[ ] Per-investigation graph.** Investigation Graph looks generic/static;
+    each investigation must render its own graph from that incident's real
+    relationships (not one shared viz).
+21. **[ ] ATT&CK Navigator dead links** - "Related Alerts" and per-entry
+    actions must resolve (overlaps Audit 3 #18).
+
+### Connectors & intelligence quality
+
+10. **[ ] Threat-feed filtering + connector controls.** Filters: severity,
+    source, IOC type, confidence, actor, malware family, tags, time range +
+    saved filter sets. Feed Sources: pause/resume/restart/edit/disable/health/
+    test-connectivity, admin-gated (greyed / "requires administrator" for
+    non-admins).
+11. **[ ] Per-connector config fields.** Setup asks generic type+URL; each
+    connector must present only its real fields - OTX→API key, VirusTotal→API
+    key, MISP→URL+key, TheHive→URL+key - and be correctly wired. `connectors.py`
+    already knows each kind's shape; the config UI must read it.
+12. **[ ] Connector marketplace.** Replace low-value "Search Feeds" with a
+    catalogue: per-connector description, required config/credentials, features,
+    status, one-click wizard (selecting OTX prompts for its API key directly).
+    Owner specifically wants to add VirusTotal - make that path frictionless.
+13b. **[ ] IntelScope redesign** (item 13). Two clear sections - **Search**
+    (URL / IP / domain / hash, with input-type validation so an IP in a URL
+    field is rejected) and **File Upload**. Deeper results: detection history,
+    vendor verdicts, reputation, behaviour, WHOIS/DNS, related indicators,
+    threat context, community intel, ATT&CK mappings, risk, evidence - toward
+    VirusTotal-grade depth plus own value-add. (Audit 3 #9 shipped tabbed
+    results + RDAP; this asks for more depth + the typed-input redesign.)
+16. **[ ] Threat Actor profiles.** Expand arrow implies detail but shows none
+    and doesn't collapse right. Add bios, campaigns, target industries/regions,
+    malware families, ATT&CK techniques, attribution confidence, active years,
+    aliases; filters by industry/region/motivation/sophistication/status/country.
+18. **[ ] Reporting depth.** Charts, statistics, trend analysis, geo maps,
+    executive summaries, analyst findings, visual dashboards, supporting
+    metrics - management-grade and analyst-grade. (Audit-1 shipped multi-format
+    /multi-audience text reports + a severity donut; this asks for richer
+    visuals.)
+19. **[ ] Per-IOC context in Threat Feeds.** Each IOC needs a concise
+    explanation: what it is, why malicious/suspicious, potential impact,
+    recommended analyst action.
+
+### UI polish
+
+20. **[~] Toggle switches inverted / overflow.** Root cause: three divergent
+    ad-hoc toggle geometries (config `w-9 h-5`/knob `w-4`; siem-rules
+    `w-8 h-4.5`/knob `w-3` vertically off-centre `top-0.5`; feeds-sources
+    variant). Fix: one shared `Toggle` component - correct on/off semantics,
+    perfect centring (flex `items-center`), no overflow (padded travel), eased
+    knob - swapped in everywhere. (In progress this session.)
+22. **[ ] Text scaling consistency + smooth slider.** Font-size setting isn't
+    applied to all text; slider is stepped. Make scaling rem-based app-wide;
+    replace the stepped control with a continuous percentage.
+23. **[~] Sidebar collapse polish.** Expand (hover) is smooth; collapse is
+    "abrupt/uneven" - width uses a direction-asymmetric spring
+    (`Sidebar.tsx:262`) while label content unmounts instantly. Fix: symmetric
+    eased tween for width + coordinated content fade. (In progress this session.)
+
+**This session's batch (2026-07-22):** #2, #20, #23, #3 first (self-contained,
+verifiable); the large items (#1 Admin Panel, #5 Imports, #7 SOC redesign, #13
+IntelScope, #18 reporting) are staged as tracked follow-ups.
+
+---
+
 ## Open roadmap (remaining work only - finished items live in the CHANGELOG)
 
 **Shipped & complete** (full detail in the CHANGELOG below): Phase 0

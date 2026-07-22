@@ -6,6 +6,7 @@ import { fetchFeeds, toggleFeed as apiToggleFeed, createFeed, fetchFeedsSummary,
 import CreateModal from '@/components/dashboard/CreateModal'
 import IngestionEnginePanel from '@/components/dashboard/IngestionEnginePanel'
 import ConnectorsPanel from '@/components/dashboard/ConnectorsPanel'
+import { Toggle as Switch } from '@/components/dashboard/Toggle'
 import {
   Radio, Plus, RefreshCw, XCircle, Link2,
   Clock, Tag, Activity, ShieldCheck, Pause, Play,
@@ -242,21 +243,11 @@ export default function FeedSourcesPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    onClick={e => { e.stopPropagation(); toggleFeed(feed.id) }}
-                    className={cn(
-                      'relative w-9 h-5 rounded-full transition-colors',
-                      feed.enabled ? 'bg-safe/40' : 'bg-white/10',
-                    )}
-                    aria-label="Toggle feed"
-                  >
-                    <span
-                      className={cn(
-                        'absolute top-0.5 w-4 h-4 rounded-full transition-all',
-                        feed.enabled ? 'left-4 bg-safe' : 'left-0.5 bg-ink-500',
-                      )}
-                    />
-                  </button>
+                  <Switch
+                    checked={feed.enabled}
+                    onChange={() => toggleFeed(feed.id)}
+                    label="Toggle feed"
+                  />
                 </td>
               </motion.tr>
             ))}

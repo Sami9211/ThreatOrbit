@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, RefreshCw, AlertTriangle, Search, Command, Menu, Zap, LogOut, Settings } from 'lucide-react'
+import { Bell, RefreshCw, AlertTriangle, Search, Command, Menu, Zap, LogOut, Settings, User } from 'lucide-react'
 import { fetchNotifications, markNotificationRead, type Notification } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -285,10 +285,16 @@ export default function TopBar() {
                   <div className="text-[10px] text-ink-500 truncate">{user?.email ?? ''}</div>
                 </div>
                 <button
-                  onClick={() => { setUserOpen(false); router.push('/dashboard/config') }}
+                  onClick={() => { setUserOpen(false); router.push('/dashboard/account') }}
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-ink-200 hover:bg-white/5 transition-colors"
                 >
-                  <Settings className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" /> Profile &amp; settings
+                  <User className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" /> Account settings
+                </button>
+                <button
+                  onClick={() => { setUserOpen(false); router.push('/dashboard/config') }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-ink-200 hover:bg-white/5 transition-colors border-t border-white/5"
+                >
+                  <Settings className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" /> Configuration
                 </button>
                 <button
                   onClick={() => { setUserOpen(false); logout(); router.push('/login') }}

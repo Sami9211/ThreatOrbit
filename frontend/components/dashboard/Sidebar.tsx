@@ -259,7 +259,11 @@ export default function Sidebar() {
         <motion.aside
           className="h-full flex flex-col bg-surface border-r border-white/5 overflow-hidden select-none"
           animate={{ width: expanded ? 232 : 56 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+          // A symmetric eased tween, not a spring: the spring's velocity/overshoot
+          // differed by direction, so collapse (pointer-leave) read as abrupt and
+          // uneven next to a smooth expand. One easing curve both ways = identical,
+          // predictable motion on open and close.
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           onMouseEnter={() => { if (!pinned && !isCoarse) setHovered(true) }}
           onMouseLeave={() => { if (!pinned && !isCoarse) setHovered(false) }}
         >
