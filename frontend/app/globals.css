@@ -1,6 +1,12 @@
 @import 'tailwindcss';
 
-@theme {
+/* `inline` is load-bearing: these tokens reference runtime-switchable variables
+   (--magenta, --surface-2, …) that the dashboard's [data-theme] blocks and
+   ThemeScope's custom-accent override redefine per subtree. A plain @theme
+   substitutes var() at :root, freezing every utility at the default palette
+   (the "themes stopped working" regression after the Tailwind 3->4 migration);
+   `inline` keeps the var() reference in each utility so it resolves per element. */
+@theme inline {
   --color-bg: rgb(var(--bg));
   --color-surface: rgb(var(--surface));
   --color-surface-2: rgb(var(--surface-2));
