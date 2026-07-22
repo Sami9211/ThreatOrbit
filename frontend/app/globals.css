@@ -614,9 +614,12 @@
   }
 
   html {
-    /* Native scrolling (Lenis removed - it added input lag); keep anchor
-       jumps smooth via CSS, which costs nothing per-frame. */
-    scroll-behavior: smooth;
+    /* Native, instant scrolling (Lenis removed - it added input lag).
+       Deliberately NOT `smooth`: this rule is global (dashboard included) and
+       CSS smooth-scrolling makes programmatic scrolls animate, which breaks
+       WebKit's element-stability checks in the e2e suite (mobile-safari
+       "Assign to me" click timed out) and adds latency to in-app jumps. */
+    scroll-behavior: auto;
   }
 
   body {

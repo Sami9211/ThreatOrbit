@@ -1431,7 +1431,11 @@ def test_log_analysis_creates_real_siem_alerts(client, auth, monkeypatch):
     assert r.json()["alertsCreated"] == 2
     after = client.get("/siem/alerts?sort=ts&order=desc&limit=10", headers=auth).json()
     assert after["total"] == before + 2
-    bf = next(a for a in after["items"] if "brute force" in a["title"].lower())
+    # Find the created alert by search, not by page position: earlier tests in
+    # the same run also create alerts in the same wall-clock second, and the
+    # uuid tie-breaker can push this one off a 10-row first page (flaked in CI).
+    hits = client.get("/siem/alerts?q=brute+force&sort=ts&order=desc&limit=50", headers=auth).json()
+    bf = next(a for a in hits["items"] if "brute force" in a["title"].lower())
     assert bf["severity"] == "critical" and bf["src_ip"] == "45.9.1.2"
     assert bf["mitre_tech_id"] == "T1110" and bf["mitre_tactic"] == "Credential Access"
     assert bf["rule_name"].startswith("LogEngine")
