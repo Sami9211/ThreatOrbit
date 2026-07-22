@@ -1,0 +1,12 @@
+{
+  "name": "threatorbit-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Repo-root manifest. The app lives in frontend/; this file exists so Vercel picks a supported Node version (Next 16 needs >=20.9) when the project's Root Directory is the repository root rather than frontend/.",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build"
+  }
+}
