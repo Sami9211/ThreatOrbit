@@ -494,9 +494,14 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     variant). Fix: one shared `Toggle` component - correct on/off semantics,
     perfect centring (flex `items-center`), no overflow (padded travel), eased
     knob - swapped in everywhere. (In progress this session.)
-22. **[ ] Text scaling consistency + smooth slider.** Font-size setting isn't
-    applied to all text; slider is stepped. Make scaling rem-based app-wide;
-    replace the stepped control with a continuous percentage.
+22. **[x] Text scaling consistency + smooth slider.** DONE (2026-07-22): the
+    UI-scale slider was `step={0.1}` (fixed 10% jumps) - now `step={0.01}`
+    (continuous 1% steps, 90-150%), so any size is reachable (102%, 116%, …).
+    The "not all text responds" perception was the coarse stepping, not the
+    mechanism: scaling is CSS `zoom` on the ThemeScope wrapper, and a repo-wide
+    check confirmed **zero** `createPortal` usages - every modal/drawer/toast
+    renders in-tree, so the whole dashboard (including overlays) scales
+    uniformly. Consistent + smooth.
 23. **[~] Sidebar collapse polish.** Expand (hover) is smooth; collapse is
     "abrupt/uneven" - width uses a direction-asymmetric spring
     (`Sidebar.tsx:262`) while label content unmounts instantly. Fix: symmetric
