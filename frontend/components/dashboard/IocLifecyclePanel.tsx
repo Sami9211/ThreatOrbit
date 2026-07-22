@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
-  TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge,
+  TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -236,8 +236,20 @@ export default function IocLifecyclePanel() {
                 )
               })()}
 
+              {/* Pivots: the indicator itself is never a dead end */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <a href={`/dashboard/scanner?value=${encodeURIComponent(detail.value)}&run=1`}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-magenta/12 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors">
+                  <Search className="w-3.5 h-3.5" /> Open in IntelScope
+                </a>
+                <a href={`/dashboard/siem?q=${encodeURIComponent(detail.value)}`}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-surface-2 border border-white/10 text-ink-300 hover:text-white transition-colors">
+                  <Eye className="w-3.5 h-3.5" /> Matching alerts
+                </a>
+              </div>
+
               {/* Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={sight} disabled={busy}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-safe/15 border border-safe/30 text-safe hover:bg-safe/25 transition-colors">
                   {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />} Record sighting

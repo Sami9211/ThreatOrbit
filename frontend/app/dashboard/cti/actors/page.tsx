@@ -513,7 +513,9 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           <SectionHead icon={Bug} title="Tools &amp; Malware" />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {actor.malware.map((m) => (
-              <span key={m} className="text-[10px] px-2 py-0.5 rounded-sm bg-threat/10 text-threat border border-threat/20">{m}</span>
+              <a key={m} href={`https://attack.mitre.org/software/?search=${encodeURIComponent(m)}`}
+                target="_blank" rel="noopener noreferrer" title={`${m} on MITRE ATT&CK`}
+                className="text-[10px] px-2 py-0.5 rounded-sm bg-threat/10 text-threat border border-threat/20 hover:bg-threat/20 hover:text-white transition-colors">{m}</a>
             ))}
           </div>
         </section>
@@ -549,7 +551,9 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           <SectionHead icon={Crosshair} title="Associated IOCs" />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {actor.iocs.map((ioc) => (
-              <span key={ioc} className="text-[10px] px-2 py-0.5 rounded-sm bg-magenta/10 text-magenta font-mono border border-magenta/20">{ioc}</span>
+              <a key={ioc} href={`/dashboard/scanner?value=${encodeURIComponent(ioc)}&run=1`}
+                title="Look up in IntelScope"
+                className="text-[10px] px-2 py-0.5 rounded-sm bg-magenta/10 text-magenta font-mono border border-magenta/20 hover:bg-magenta/20 hover:text-white transition-colors">{ioc}</a>
             ))}
           </div>
         </section>
@@ -603,6 +607,13 @@ function FilterSelect({
 /* --- Page ------------------------------------------------------------ */
 export default function ActorProfilesPage() {
   const [search, setSearch] = useState('')
+
+  // Deep-link: ?q=<actor> pre-fills the search - dark-web findings and other
+  // surfaces link a named threat actor straight to their profile here.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
   const [filterOrigin, setFilterOrigin] = useState<string>('all')
   const [filterMotivation, setFilterMotivation] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')

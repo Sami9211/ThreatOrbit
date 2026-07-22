@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, User, Server, Globe, X, ExternalLink, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -41,6 +41,20 @@ export default function EntityRiskPage() {
   function openEntity(e: RiskEntity) {
     fetchEntityDetail(e.type, e.value).then(setSelected).catch(() => {})
   }
+
+  // Deep-link: ?type=host&value=SRV-01 opens that entity's drawer directly -
+  // alert-detail hostname/username rows and case observables link here, and
+  // "go to the Entity Risk module" is not an answer to "show me THIS host".
+  const deepLinked = useRef(false)
+  useEffect(() => {
+    if (deepLinked.current) return
+    deepLinked.current = true
+    const p = new URLSearchParams(window.location.search)
+    const t = p.get('type'); const v = p.get('value')
+    if (t && v && ['user', 'host', 'ip'].includes(t)) {
+      fetchEntityDetail(t, v).then(setSelected).catch(() => {})
+    }
+  }, [])
 
   const kpis = [
     { label: 'Entities tracked', value: data?.summary.tracked ?? 0, color: 'text-white' },

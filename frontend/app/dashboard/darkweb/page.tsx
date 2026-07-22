@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   EyeOff, KeyRound, ShoppingCart, AtSign, MessageSquare, Network,
-  ShieldAlert, Search, X, ExternalLink, CheckCircle, Clock,
+  ShieldAlert, Search, X, Copy, CheckCircle, Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -50,6 +50,8 @@ export default function DarkWebPage() {
   const [catFilter, setCatFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<DarkWebFinding | null>(null)
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  useEffect(() => { setCopiedUrl(false) }, [selected?.id])
 
   const load = useCallback(() => {
     fetchDarkWebFindings({ limit: '200' })
@@ -200,20 +202,41 @@ export default function DarkWebPage() {
                       </div>
                     </div>
 
-                    {[['Affected entity', selected.entity], ['Threat actor', selected.actor || '-'], ['Source', selected.source]].map(([k, v]) => (
-                      <div key={k} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 text-xs">
-                        <span className="text-ink-500">{k}</span><span className="text-ink-200 font-mono text-right truncate">{v}</span>
-                      </div>
-                    ))}
+                    {/* Entity + actor drill down to their records - they were dead text. */}
+                    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 text-xs">
+                      <span className="text-ink-500">Affected entity</span>
+                      <a href={`/dashboard/scanner?value=${encodeURIComponent(selected.entity)}&run=1`}
+                        title="Look up in IntelScope"
+                        className="text-ink-200 font-mono text-right truncate underline-offset-2 hover:underline hover:text-magenta transition-colors">{selected.entity}</a>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 text-xs">
+                      <span className="text-ink-500">Threat actor</span>
+                      {selected.actor ? (
+                        <a href={`/dashboard/cti/actors?q=${encodeURIComponent(selected.actor)}`}
+                          title="Open actor profile"
+                          className="text-ink-200 font-mono text-right truncate underline-offset-2 hover:underline hover:text-magenta transition-colors">{selected.actor}</a>
+                      ) : <span className="text-ink-200 font-mono">-</span>}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 text-xs">
+                      <span className="text-ink-500">Source</span><span className="text-ink-200 font-mono text-right truncate">{selected.source}</span>
+                    </div>
 
                     <div>
                       <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-1.5">Detail</p>
                       <p className="text-xs text-ink-300 leading-relaxed">{selected.detail}</p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/8 text-[10px] text-ink-500 font-mono">
-                      <ExternalLink className="w-3 h-3 shrink-0" /><span className="truncate">{selected.url}</span>
-                    </div>
+                    {/* Dark-web source URL: deliberately NOT an outbound link
+                        (often .onion / hostile); copying is the real action.
+                        The old ExternalLink icon looked clickable but did nothing. */}
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(selected.url).then(() => setCopiedUrl(true)).catch(() => {}) }}
+                      title="Copy source URL"
+                      className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/8 text-[10px] text-ink-500 font-mono hover:border-white/20 hover:text-ink-300 transition-colors">
+                      {copiedUrl ? <CheckCircle className="w-3 h-3 shrink-0 text-safe" /> : <Copy className="w-3 h-3 shrink-0" />}
+                      <span className="truncate">{selected.url}</span>
+                      {copiedUrl && <span className="ml-auto text-safe shrink-0">copied</span>}
+                    </button>
 
                     <div>
                       <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-2">Triage</p>

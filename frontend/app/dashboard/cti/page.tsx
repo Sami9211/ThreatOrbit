@@ -265,7 +265,9 @@ function ActorDetail({ actor }: { actor: Actor }) {
           <p className="text-[10px] text-ink-600 uppercase tracking-wide mb-2">Key TTPs</p>
           <div className="flex flex-wrap gap-1">
             {actor.ttps.map((t) => (
-              <span key={t} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20">{t}</span>
+              <a key={t} href={`/dashboard/siem/attack?technique=${encodeURIComponent(t)}`}
+                title={`View ${t} coverage in the ATT&CK Navigator`}
+                className="text-[9px] px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 hover:text-white transition-colors">{t}</a>
             ))}
           </div>
         </div>

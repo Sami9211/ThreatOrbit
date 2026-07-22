@@ -847,14 +847,17 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
         {tab === 'network' && (
           <>
             <Section title="Source">
-              <Row label="IP Address" value={alert.srcIp} mono />
-              <Row label="Hostname" value={alert.srcHostname} mono />
+              <Row label="IP Address" value={alert.srcIp} mono
+                pivot={alert.srcIp && alert.srcIp !== '-' ? `/dashboard/scanner?value=${encodeURIComponent(alert.srcIp)}&type=ip&run=1` : undefined} />
+              <Row label="Hostname" value={alert.srcHostname} mono
+                pivot={alert.srcHostname && alert.srcHostname !== 'unknown' && alert.srcHostname !== '-' ? `/dashboard/siem/entities?type=host&value=${encodeURIComponent(alert.srcHostname)}` : undefined} />
               <Row label="Country" value={alert.srcCountry} />
               <Row label="ASN" value={alert.srcAsn} mono />
               <Row label="Port" value={alert.srcPort > 0 ? `${alert.srcPort}` : '-'} mono />
             </Section>
             <Section title="Destination">
-              <Row label="IP Address" value={alert.destIp} mono />
+              <Row label="IP Address" value={alert.destIp} mono
+                pivot={alert.destIp && alert.destIp !== '-' ? `/dashboard/scanner?value=${encodeURIComponent(alert.destIp)}&type=ip&run=1` : undefined} />
               <Row label="Port" value={`${alert.destPort}`} mono />
               <Row label="Service" value={alert.destService} />
               <Row label="Bytes Out" value={fmtBytes(alert.bytesOut)} highlight={alert.bytesOut > 1000000 ? 'threat' : undefined} />
@@ -869,7 +872,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <Section title="User Context">
               {alert.username ? (
                 <>
-                  <Row label="Username" value={alert.username} mono />
+                  <Row label="Username" value={alert.username} mono
+                    pivot={`/dashboard/siem/entities?type=user&value=${encodeURIComponent(alert.username)}`} />
                   {userEntity ? (
                     <>
                       <Row label="UEBA Risk Score" value={`${userEntity.risk} / 100`}
@@ -912,7 +916,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
             <Section title="Asset Profile">
               {alert.hostname ? (
                 <>
-                  <Row label="Hostname" value={alert.hostname} mono />
+                  <Row label="Hostname" value={alert.hostname} mono
+                    pivot={`/dashboard/siem/entities?type=host&value=${encodeURIComponent(alert.hostname)}`} />
                   <Row label="IP Address" value={alert.srcIp} mono />
                   <Row label="Asset Criticality" value={alert.hostCriticality.toUpperCase()} highlight={alert.hostCriticality === 'critical' ? 'threat' : alert.hostCriticality === 'high' ? 'amber' : undefined} />
                   {hostEntity ? (
@@ -979,12 +984,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Row({ label, value, mono, highlight }: { label: string; value: string; mono?: boolean; highlight?: 'threat' | 'amber' | 'safe' }) {
+function Row({ label, value, mono, highlight, pivot }: { label: string; value: string; mono?: boolean; highlight?: 'threat' | 'amber' | 'safe'; pivot?: string }) {
   const vc = highlight === 'threat' ? 'text-threat' : highlight === 'amber' ? 'text-amber' : highlight === 'safe' ? 'text-safe' : 'text-ink-200'
   return (
     <div className="flex items-start justify-between gap-4 px-3 py-2 border-b border-white/4 last:border-b-0">
       <span className="text-[11px] text-ink-500 shrink-0">{label}</span>
-      <span className={cn('text-[11px] text-right break-all', mono && 'font-mono', vc)}>{value}</span>
+      {/* `pivot` turns the value into a live drill-down (IntelScope / Entity
+          Risk) so entity values in the detail are never dead text. */}
+      {pivot ? (
+        <a href={pivot} className={cn('text-[11px] text-right break-all underline-offset-2 hover:underline hover:text-magenta transition-colors', mono && 'font-mono', vc)}>
+          {value}
+        </a>
+      ) : (
+        <span className={cn('text-[11px] text-right break-all', mono && 'font-mono', vc)}>{value}</span>
+      )}
     </div>
   )
 }

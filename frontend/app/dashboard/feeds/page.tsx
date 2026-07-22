@@ -449,11 +449,20 @@ function ThreatCard({
                 <div>
                   <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-1.5">Extracted IOCs</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {entry.iocs.map(ioc => (
-                      <span key={ioc} className="text-[10px] font-mono px-2 py-0.5 rounded-sm bg-black/30 text-ink-300 border border-white/8">
-                        {ioc}
-                      </span>
-                    ))}
+                    {entry.iocs.map(ioc => {
+                      // Each extracted IOC pivots to a live IntelScope lookup -
+                      // these chips were dead text before.
+                      const t = classifyIoc(ioc)
+                      return (
+                        <Link key={ioc}
+                          href={`/dashboard/scanner?value=${encodeURIComponent(ioc)}${t ? `&type=${t}` : ''}&run=1`}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Look up in IntelScope"
+                          className="text-[10px] font-mono px-2 py-0.5 rounded-sm bg-black/30 text-ink-300 border border-white/8 hover:text-white hover:border-magenta/40 transition-colors">
+                          {ioc}
+                        </Link>
+                      )
+                    })}
                   </div>
                 </div>
               )}

@@ -7,7 +7,7 @@ import {
   FileText, MessageSquare, Play, RefreshCw,
   BarChart2, Paperclip, Eye,
   GitBranch, Activity, TrendingUp, TrendingDown,
-  Circle, Lock, Server, Globe, Clock,
+  Circle, Lock, Server, Globe, Clock, ArrowUpRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -395,6 +395,19 @@ function fmtTimelineTs(ts: string | null): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+/* Where a case observable drills down to: IOC-ish values get a live IntelScope
+   lookup, hosts/users open their Entity Risk record, anything else falls back
+   to a SIEM search. Keeps every entity in a case detail actionable. */
+function entityHref(type: string, value: string): string {
+  const t = (type || '').toLowerCase()
+  const v = encodeURIComponent(value)
+  if (t === 'host' || t === 'hostname') return `/dashboard/siem/entities?type=host&value=${v}`
+  if (t === 'user' || t === 'username') return `/dashboard/siem/entities?type=user&value=${v}`
+  if (t === 'ip') return `/dashboard/scanner?value=${v}&type=ip&run=1`
+  if (['domain', 'url', 'hash', 'cve', 'email'].includes(t)) return `/dashboard/scanner?value=${v}&run=1`
+  return `/dashboard/siem?q=${v}`
+}
+
 /* Attack-timeline event styling by source type. */
 const TIMELINE_STYLE: Record<string, { color: string; label: string }> = {
   alert:    { color: tk('threat'),  label: 'alert' },
@@ -567,10 +580,14 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
               <p className="text-[10px] text-ink-600 uppercase tracking-widest mb-2">Entities / Observables</p>
               <div className="space-y-1.5">
                 {c.entities.map((e, i) => (
-                  <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/5">
+                  // Every observable drills down to its record (IntelScope /
+                  // Entity Risk / SIEM search) - these rows were dead text.
+                  <a key={i} href={entityHref(e.type, e.value)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2/60 border border-white/5 hover:border-magenta/30 hover:bg-magenta/5 transition-colors group">
                     <span className="text-[10px] text-ink-600 w-20 shrink-0">{e.type}</span>
-                    <span className="text-[11px] font-mono text-ink-200 truncate">{e.value}</span>
-                  </div>
+                    <span className="text-[11px] font-mono text-ink-200 truncate flex-1 group-hover:text-white">{e.value}</span>
+                    <ArrowUpRight className="w-3 h-3 text-ink-700 group-hover:text-magenta shrink-0" />
+                  </a>
                 ))}
               </div>
             </div>
