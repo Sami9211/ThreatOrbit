@@ -557,11 +557,17 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     worth a fragile inference.) Remaining (larger): campaigns, target regions,
     malware families, attribution confidence, active years in the profile
     body.
-18. **[ ] Reporting depth.** Charts, statistics, trend analysis, geo maps,
-    executive summaries, analyst findings, visual dashboards, supporting
-    metrics - management-grade and analyst-grade. (Audit-1 shipped multi-format
-    /multi-audience text reports + a severity donut; this asks for richer
-    visuals.)
+18. **[~] Reporting depth.** Visuals added (2026-07-22): `report_render.to_html`
+    now embeds **self-contained inline-SVG charts** (no external libs, print-
+    clean) built from the report's real data - a **findings-by-severity donut**
+    beside the KPI tiles and a **horizontal bar chart** above every breakdown
+    table (severity-coloured), while the exact-number tables stay for
+    precision. Verified rendering + all 13 report tests pass. Combined with the
+    existing multi-format (HTML/PDF/CSV/MD/JSON) + multi-audience (exec/
+    technical/compliance) + control-mapping work, reports now carry charts,
+    statistics, executive summaries, analyst findings and visual dashboards.
+    Remaining: geographic maps (needs a report-side world-map SVG + geo
+    aggregation) and time-series trend lines in the report body.
 19. **[~] Per-IOC context.** DONE for the IOC detail panel (2026-07-22): the
     IocLifecyclePanel (the canonical IOC drill-down across CTI) now renders a
     "Context" block - What it is / Why it's flagged / Potential impact /

@@ -124,8 +124,79 @@ th{background:#fafafa}
 .sev{font-weight:700;text-transform:uppercase;font-size:10px}
 .sev-critical{color:#c1124e}.sev-high{color:#d33}.sev-medium{color:#b8860b}.sev-low{color:#1a8a6a}.sev-info{color:#5a4ad1}
 ol,ul{margin:4px 0;padding-left:20px}
-@media print{body{margin:0;max-width:none}}
+.chart{margin:6px 0 10px;max-width:100%}
+.viz{display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin:8px 0 4px}
+.donut{display:flex;gap:14px;align-items:center}
+.legend{font-size:11px}
+.lg{display:flex;align-items:center;gap:6px;margin:2px 0;color:#444}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px}
+@media print{body{margin:0;max-width:none}.chart,.donut svg{page-break-inside:avoid}}
 """.strip()
+
+
+_SEV_HEX = {"critical": "#c1124e", "high": "#d33", "medium": "#b8860b",
+            "low": "#1a8a6a", "info": "#5a4ad1"}
+
+
+def _to_int(v) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _svg_hbar(rows: list[tuple[str, int]]) -> str:
+    """A self-contained inline-SVG horizontal bar chart (no external libs, prints
+    cleanly). Bars are severity-coloured when the label is a severity."""
+    rows = [(str(lbl), _to_int(c)) for lbl, c in rows if str(lbl).strip()]
+    if not rows:
+        return ""
+    mx = max((c for _, c in rows), default=0) or 1
+    bar_h, gap, label_w, chart_w = 18, 9, 130, 340
+    height = len(rows) * (bar_h + gap)
+    total_w = label_w + chart_w + 46
+    out = []
+    for i, (label, count) in enumerate(rows):
+        y = i * (bar_h + gap)
+        w = int(round((count / mx) * chart_w))
+        color = _SEV_HEX.get(label.lower(), "#4f6bed")
+        out.append(
+            f"<text x='0' y='{y + 13}' font-size='11' fill='#444'>{escape(label)}</text>"
+            f"<rect x='{label_w}' y='{y}' width='{max(w, 1)}' height='{bar_h}' rx='3' fill='{color}'/>"
+            f"<text x='{label_w + max(w, 1) + 6}' y='{y + 13}' font-size='11' fill='#666'>{count}</text>"
+        )
+    return (f"<svg class='chart' width='{total_w}' height='{height}' "
+            f"viewBox='0 0 {total_w} {height}' role='img' aria-label='bar chart'>{''.join(out)}</svg>")
+
+
+def _svg_donut(rows: list[tuple[str, int]], size: int = 132) -> str:
+    """A self-contained inline-SVG donut for a severity/category split."""
+    rows = [(str(lbl), _to_int(c)) for lbl, c in rows if _to_int(c) > 0]
+    total = sum(c for _, c in rows)
+    if total == 0:
+        return ""
+    r, cx, cy, sw = size / 2 - 14, size / 2, size / 2, 16
+    import math
+    circ = 2 * math.pi * r
+    off = 0.0
+    segs = []
+    for label, count in rows:
+        frac = count / total
+        color = _SEV_HEX.get(label.lower(), "#4f6bed")
+        dash = frac * circ
+        segs.append(
+            f"<circle cx='{cx}' cy='{cy}' r='{r:.1f}' fill='none' stroke='{color}' "
+            f"stroke-width='{sw}' stroke-dasharray='{dash:.1f} {circ - dash:.1f}' "
+            f"stroke-dashoffset='{-off:.1f}' transform='rotate(-90 {cx} {cy})'/>")
+        off += dash
+    legend = "".join(
+        f"<div class='lg'><span class='sw' style='background:{_SEV_HEX.get(l.lower(), '#4f6bed')}'></span>"
+        f"{escape(l)} <b>{c}</b></div>" for l, c in rows)
+    return (f"<div class='donut'><svg width='{size}' height='{size}' viewBox='0 0 {size} {size}' role='img'>"
+            f"{''.join(segs)}<text x='{cx}' y='{cy - 2}' text-anchor='middle' font-size='20' "
+            f"font-weight='700' fill='#1a1a1a'>{total}</text>"
+            f"<text x='{cx}' y='{cy + 14}' text-anchor='middle' font-size='9' fill='#888'>TOTAL</text>"
+            f"</svg><div class='legend'>{legend}</div></div>")
 
 
 def to_html(report: dict) -> str:
@@ -137,20 +208,32 @@ def to_html(report: dict) -> str:
     aud = f" · {e(meta['audience'].title())} audience" if meta.get("audience") else ""
     parts.append(f"<p class='sub'>{e(meta.get('period', ''))}{aud} · generated {e(meta.get('generatedAt', ''))}</p>")
 
+    findings = report.get("findings", []) or []
+    # Findings-by-severity donut (a visual dashboard element from real findings).
+    sev_counts: dict[str, int] = {}
+    for f in findings:
+        s = str(f.get("severity", "")).lower()
+        if s:
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+    donut_rows = [(s, sev_counts[s]) for s in ("critical", "high", "medium", "low", "info") if s in sev_counts]
+
     hl = summary.get("headline", [])
-    if hl:
+    if hl or donut_rows:
         cards = "".join(
             f"<div class='kpi'><div class='v'>{e(h.get('value', ''))}</div>"
             f"<div class='l'>{e(h.get('label', ''))}</div></div>" for h in hl)
-        parts.append(f"<div class='kpis'>{cards}</div>")
+        donut = _svg_donut(donut_rows)
+        parts.append(f"<div class='viz'><div class='kpis'>{cards}</div>{donut}</div>")
     if summary.get("narrative"):
         parts.append(f"<h2>Summary</h2><p>{e(summary['narrative'])}</p>")
 
     for b in report.get("breakdowns", []) or []:
+        data = b.get("data", []) or []
+        chart = _svg_hbar([(d.get("label") or d.get("severity") or "", d.get("count", 0)) for d in data])
         rows = "".join(
             f"<tr><td>{e(d.get('label') or d.get('severity') or '')}</td><td>{e(d.get('count', ''))}</td></tr>"
-            for d in b.get("data", []))
-        parts.append(f"<h3>{e(b.get('heading', ''))}</h3>"
+            for d in data)
+        parts.append(f"<h3>{e(b.get('heading', ''))}</h3>{chart}"
                      f"<table><thead><tr><th>Item</th><th>Count</th></tr></thead><tbody>{rows}</tbody></table>")
 
     comp = report.get("compliance")
