@@ -830,8 +830,10 @@ function ThemeCard({ saveTick }: { saveTick: number }) {
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-ink-600 select-none">A</span>
             {/* Continuous 1% steps (was fixed 10% jumps) so any size is
-                reachable - 102%, 116%, whatever reads best. */}
-            <input type="range" min={0.9} max={1.5} step={0.01} value={dPrefs.scale}
+                reachable - 102%, 116%, whatever reads best. Range 90-200%
+                (max raised for accessibility; matches the clamp in
+                useDashboardTheme so a saved value is never snapped back). */}
+            <input type="range" min={0.9} max={2} step={0.01} value={dPrefs.scale}
               onChange={(e) => editPrefs({ scale: parseFloat(e.target.value) })}
               aria-label="UI scale"
               className="flex-1 h-1.5 accent-magenta cursor-pointer" />

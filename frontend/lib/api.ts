@@ -1684,6 +1684,10 @@ export interface ConnectorKind {
   label: string
   description: string
   needs_key: boolean
+  /** Whether the operator supplies the endpoint URL. Managed providers (OTX,
+   *  NVD, the bundled engine) set false - the UI hides the URL field and the
+   *  backend uses default_url internally. */
+  needs_url: boolean
   default_url: string
   default_interval: number
 }

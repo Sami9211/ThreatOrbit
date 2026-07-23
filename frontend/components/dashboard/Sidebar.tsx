@@ -132,6 +132,30 @@ const NAV: NavGroup[] = [
   },
 ]
 
+/** Trailing-slash-insensitive path (Next `trailingSlash: true` yields "/x/"). */
+const stripSlash = (p: string | null | undefined) => (p || '').replace(/\/+$/, '') || '/'
+
+/** True when `href` is `pathname` or an ancestor segment of it (never a partial
+ *  segment - so /feeds/imports does NOT match /feeds/import). */
+function segMatches(pathname: string | null | undefined, href: string): boolean {
+  const p = stripSlash(pathname), h = stripSlash(href)
+  return p === h || p.startsWith(h + '/')
+}
+
+/** The single sub-item that should be highlighted: the longest href that
+ *  segment-matches the current path ("most specific wins"), so sibling
+ *  prefixes like Imports vs Import IOCs can never both light up. */
+function bestSubMatch(pathname: string | null | undefined, subs: SubItem[]): string | null {
+  let best: string | null = null, bestLen = -1
+  for (const s of subs) {
+    if (segMatches(pathname, s.href)) {
+      const len = stripSlash(s.href).length
+      if (len > bestLen) { best = s.href; bestLen = len }
+    }
+  }
+  return best
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
   const [hovered, setHovered] = useState(false)
@@ -213,7 +237,7 @@ export default function Sidebar() {
     if (!item.sub?.length) return false
     const parentActive = item.href === '/dashboard'
       ? pathname === '/dashboard' || pathname === '/dashboard/'
-      : pathname?.startsWith(item.href)
+      : segMatches(pathname, item.href)
     return parentActive || manualExpanded.has(item.href)
   }
 
@@ -343,29 +367,36 @@ export default function Sidebar() {
               // space-y-1 between rows: they used to stack flush (0px), which
               // read as cramped/overlapping at real-world zoom levels.
               <div key={section ?? '__root'} className="space-y-1">
-                <AnimatePresence initial={false}>
-                  {expanded && section && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                      className="px-4 pt-5 pb-1.5 overflow-hidden"
-                    >
-                      <span className="block text-[10px] leading-none font-semibold tracking-widest uppercase text-ink-600">
-                        {section}
-                      </span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {section && (
+                  // Grid-rows 0fr↔1fr is a jump-free height reveal: the browser
+                  // interpolates the track size, so there's none of framer's
+                  // `height:auto` measure-then-snap. Always mounted and driven by
+                  // the same 260ms curve as the rail width, so the heading grows
+                  // in lockstep with the expand - no item repositioning.
+                  <div
+                    className="grid transition-[grid-template-rows] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                    style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
+                    aria-hidden={!expanded}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="px-4 pt-5 pb-1.5">
+                        <span className="block text-[10px] leading-none font-semibold tracking-widest uppercase text-ink-600 whitespace-nowrap">
+                          {section}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {items.map((navItem) => {
                   const { href, label, icon: Icon, sub } = navItem
                   const active = href === '/dashboard'
                     ? pathname === '/dashboard' || pathname === '/dashboard/'
-                    : pathname?.startsWith(href)
+                    : segMatches(pathname, href)
                   const hasSub = !!sub?.length
                   const subOpen = isSubVisible(navItem)
+                  // Exactly one sub-item highlights - the most specific match.
+                  const activeSubHref = hasSub ? bestSubMatch(pathname, sub!) : null
 
                   return (
                     <div key={href}>
@@ -426,28 +457,24 @@ export default function Sidebar() {
                         )}
                       </div>
 
-                      {/* Sub-items */}
-                      <AnimatePresence initial={false}>
-                        {hasSub && subOpen && expanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                            className="overflow-hidden"
-                          >
+                      {/* Sub-items - same jump-free grid-rows reveal as the
+                          section headings, gated on expand + open. */}
+                      {hasSub && (
+                        <div
+                          className="grid transition-[grid-template-rows] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                          style={{ gridTemplateRows: subOpen && expanded ? '1fr' : '0fr' }}
+                          aria-hidden={!(subOpen && expanded)}
+                        >
+                          <div className="overflow-hidden">
                             <div className="ml-4 mr-2 mt-1 mb-2 border-l border-white/8 pl-3 space-y-1">
                               {sub!.map((subItem) => {
-                                const subActive = subItem.href === href
-                                  ? pathname === href || pathname === href + '/'
-                                  : pathname?.startsWith(subItem.href) && subItem.href !== href
-                                    ? true
-                                    : pathname === subItem.href
+                                const subActive = subItem.href === activeSubHref
                                 return (
                                   <Link
                                     key={subItem.href}
                                     href={subItem.href}
                                     onClick={closeNav}
+                                    tabIndex={subOpen && expanded ? 0 : -1}
                                     className={cn(
                                       'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] transition-colors duration-150',
                                       subActive
@@ -466,9 +493,9 @@ export default function Sidebar() {
                                 )
                               })}
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

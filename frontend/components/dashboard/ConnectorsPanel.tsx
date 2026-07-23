@@ -345,7 +345,11 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
             <input value={values.name} onChange={(e) => set('name')(e.target.value)} placeholder="e.g. My ThreatFox feed" className={input} />
           </div>
 
-          {kind !== 'threatorbit' && (
+          {/* URL field only for kinds the operator actually configures a URL for
+              (custom JSON/CSV/STIX/dark-web). Managed providers - OTX, NVD, the
+              bundled engine - hide it; the backend uses their fixed endpoint.
+              (Fallback to the old rule if an older backend omits needs_url.) */}
+          {(preset?.needs_url ?? kind !== 'threatorbit') && (
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Source URL</label>
               <input value={values.url} onChange={(e) => set('url')(e.target.value)} placeholder={preset?.default_url || 'https://your-source/api/indicators'} className={cn(input, 'font-mono text-xs')} />
@@ -452,8 +456,9 @@ function EditConnectorModal({ connector, onClose, onSave }: {
             <input value={values.name} onChange={(e) => set('name')(e.target.value)} className={input} />
           </div>
 
-          {/* Built-in connectors have a fixed source URL; only cadence + key are tunable. */}
-          {!c.builtin && c.kind !== 'threatorbit' && (
+          {/* Built-in + managed-endpoint connectors (OTX/NVD/engine) have a fixed
+              source URL; only cadence + key are tunable. */}
+          {!c.builtin && !['threatorbit', 'nvd', 'otx'].includes(c.kind) && (
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Source URL</label>
               <input value={values.url} onChange={(e) => set('url')(e.target.value)} placeholder="https://your-source/api/indicators" className={cn(input, 'font-mono text-xs')} />
