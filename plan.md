@@ -593,11 +593,20 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     already filtered by origin (region/country), motivation and type + search;
     added **Industry** (built from the actors' sectors) and **Sophistication**
     (1-5) selects - so the audit's filter set (industry/region/motivation/
-    sophistication/country) is covered. (Activity-status dropped for now: the
-    display type carries `recentActivity` text, not a clean active flag - not
-    worth a fragile inference.) Remaining (larger): campaigns, target regions,
-    malware families, attribution confidence, active years in the profile
-    body.
+    sophistication/country) is covered. **Profile body ENRICHED (2026-07-23):**
+    the detail panel already carried campaigns + malware/tooling; added (a) an
+    **Active** header stat showing the actor's operating span (first-seen year →
+    last-seen year, or "present" with a live dot when the record's `active` flag
+    is set - both now threaded from the API `firstSeen`/`lastSeen`/`active`
+    fields), and (b) an **Attribution Assessment** block: a High/Moderate/Low
+    confidence band *derived transparently* from the corroborating evidence
+    actually on the record (named origin, cross-vendor aliases, mapped ATT&CK
+    techniques, attributed tooling, documented campaigns) with the reasons
+    listed beside it, so the band is auditable rather than asserted - and no
+    fabricated percentage. (Target-regions intentionally NOT added: there is no
+    target-geography field in the data and inventing one would be fabrication;
+    `origin` is the actor's own region, already shown.) Build + lint (0 errors)
+    + route-integrity clean.
 18. **[~] Reporting depth.** Visuals added (2026-07-22): `report_render.to_html`
     now embeds **self-contained inline-SVG charts** (no external libs, print-
     clean) built from the report's real data - a **findings-by-severity donut**

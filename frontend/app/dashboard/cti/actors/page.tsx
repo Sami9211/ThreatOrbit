@@ -6,9 +6,9 @@ import { fetchActors, fetchCtiSummary, type Actor as ApiActor, type CtiSummary }
 import {
   UserSearch, Search, X, ExternalLink, Shield,
   Crosshair, Bug, Clock, Activity, Building2, Filter,
-  Globe, Skull, DollarSign, Megaphone, Flame, Users,
+  Globe, Skull, DollarSign, Megaphone, Flame, Users, Fingerprint,
 } from 'lucide-react'
-import { tk } from '@/lib/colors'
+import { tk, withAlpha } from '@/lib/colors'
 
 /* --- Types ----------------------------------------------------------- */
 type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction' | 'Disruption'
@@ -33,12 +33,33 @@ interface ThreatActor {
   sectors: string[]
   campaignCount: number
   firstSeen: string
+  lastSeen?: string
+  active?: boolean
   malware: string[]
   ttps: string[]
   recentActivity: string
   description: string
   campaigns: Campaign[]
   iocs: string[]
+}
+
+/* Attribution confidence, derived transparently from the corroborating
+ * evidence actually present on the record - never a fabricated number. More
+ * independent signals (named origin, cross-vendor aliases, mapped TTPs,
+ * attributed tooling, documented campaigns) = higher confidence. The reasons
+ * are shown alongside the band so the assessment is auditable, not asserted. */
+function attributionAssessment(actor: ThreatActor): { band: 'High' | 'Moderate' | 'Low'; color: string; reasons: string[] } {
+  const reasons: string[] = []
+  const named = actor.origin && !/unknown|^n\/?a$/i.test(actor.origin.trim())
+  if (named) reasons.push(`Named origin (${actor.origin})`)
+  if (actor.aliases.length >= 2) reasons.push(`${actor.aliases.length} cross-vendor aliases`)
+  if (actor.ttps.length >= 3) reasons.push(`${actor.ttps.length} mapped ATT&CK techniques`)
+  if (actor.malware.length >= 1) reasons.push(`${actor.malware.length} attributed tool${actor.malware.length === 1 ? '' : 's'}`)
+  if (actor.campaignCount >= 1) reasons.push(`${actor.campaignCount} documented campaign${actor.campaignCount === 1 ? '' : 's'}`)
+  const score = reasons.length
+  if (score >= 4) return { band: 'High', color: tk('safe'), reasons }
+  if (score >= 2) return { band: 'Moderate', color: tk('amber'), reasons }
+  return { band: 'Low', color: tk('ink'), reasons: reasons.length ? reasons : ['Limited corroborating evidence on file'] }
 }
 
 /* --- Seed data ------------------------------------------------------- */
@@ -466,6 +487,17 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
             <span className="text-sm font-semibold text-white mt-0.5">{actor.campaignCount}</span>
           </div>
           <div className="flex flex-col px-3 py-1.5 rounded-lg bg-surface-2 border border-white/6">
+            <span className="text-[9px] text-ink-600 uppercase tracking-wide">Active</span>
+            <span className="text-sm font-semibold text-white mt-0.5 flex items-center gap-1.5">
+              {actor.firstSeen}
+              {(() => {
+                const end = actor.active ? 'present' : (actor.lastSeen && actor.lastSeen !== actor.firstSeen ? actor.lastSeen : null)
+                return end ? <>–{end}</> : null
+              })()}
+              {actor.active && <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" title="Currently active" />}
+            </span>
+          </div>
+          <div className="flex flex-col px-3 py-1.5 rounded-lg bg-surface-2 border border-white/6">
             <span className="text-[9px] text-ink-600 uppercase tracking-wide">Motivation</span>
             <div className="flex gap-1 mt-1">{actor.motivations.map((m) => <MotivationBadge key={m} m={m} />)}</div>
           </div>
@@ -486,6 +518,30 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           <SectionHead icon={UserSearch} title="Description" />
           <p className="text-xs text-ink-300 leading-relaxed mt-2">{actor.description}</p>
         </section>
+
+        {/* Attribution assessment - transparent, evidence-based confidence band */}
+        {(() => {
+          const att = attributionAssessment(actor)
+          return (
+            <section>
+              <SectionHead icon={Fingerprint} title="Attribution Assessment" />
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border"
+                  style={{ color: att.color, background: withAlpha(att.color, 0.12), borderColor: withAlpha(att.color, 0.25) }}>
+                  {att.band} confidence
+                </span>
+                <span className="text-[10px] text-ink-600">derived from documented evidence</span>
+              </div>
+              <ul className="mt-2 space-y-1">
+                {att.reasons.map((r) => (
+                  <li key={r} className="flex items-center gap-1.5 text-[11px] text-ink-400">
+                    <span className="w-1 h-1 rounded-full bg-ink-600 shrink-0" />{r}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        })()}
 
         <section>
           <SectionHead icon={Activity} title="Recent Activity" />
@@ -647,6 +703,8 @@ export default function ActorProfilesPage() {
             sectors: Array.isArray(a.sectors) ? a.sectors : [],
             campaignCount: a.campaignCount ?? (Array.isArray(a.campaigns) ? a.campaigns.length : 0),
             firstSeen: a.firstSeen?.split('-')[0] ?? 'Unknown',
+            lastSeen: a.lastSeen?.split('-')[0],
+            active: !!a.active,
             malware: seed?.malware ?? (Array.isArray(a.malware) ? a.malware : []),
             ttps: Array.isArray(a.ttps) ? a.ttps : [],
             recentActivity: seed?.recentActivity ?? a.description,
