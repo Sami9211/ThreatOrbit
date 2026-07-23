@@ -1493,12 +1493,18 @@ export default function SIEMPage() {
 
   const filteredAlerts = useMemo(() => {
     const rows = alerts.filter((a) => {
+      // The alert opened in the drawer (or just deep-linked to via ?alert=) is
+      // always kept in the queue so it's visible in context behind the drawer -
+      // otherwise a ?alert= link to a non-actionable alert opens the record but
+      // leaves its row filtered out of the Normal-mode queue, which reads as a
+      // dead link (the row you were sent to isn't there).
+      const pinned = a.id === selectedId || a.id === flashId
       // Normal mode: only actionable alerts - open status, critical/high
       // severity - EXCEPT when a search/deep-link is active: an explicit pivot
       // (affected host, entity, technique, related-alerts link) must be able to
       // find its target even if it's medium/low or already resolved, otherwise
       // the link reads as dead.
-      if (isNormal && !search) {
+      if (isNormal && !search && !pinned) {
         if (!['new', 'assigned', 'in-progress'].includes(a.status)) return false
         if (!['critical', 'high'].includes(a.severity)) return false
       }
@@ -1524,7 +1530,7 @@ export default function SIEMPage() {
       if (alertSort.col === 'riskScore') return (a.riskScore - b.riskScore) * dir
       return (Date.parse(a.ts) - Date.parse(b.ts)) * dir  // ts
     })
-  }, [alerts, search, filterSev, filterStatus, filterTactic, isNormal, alertSort])
+  }, [alerts, search, filterSev, filterStatus, filterTactic, isNormal, alertSort, selectedId, flashId])
 
   // Windowing for very large queues (no-op under 150 rows; row ≈ 57px).
   const alertWindow = useWindowedRows(filteredAlerts, { rowHeight: 57 })
@@ -1536,7 +1542,27 @@ export default function SIEMPage() {
   const openCount = alerts.filter((a) => ['new', 'assigned', 'in-progress'].includes(a.status)).length
   const criticalOpen = alerts.filter((a) => a.severity === 'critical' && ['new', 'assigned', 'in-progress'].includes(a.status)).length
 
-  if (isNormal) return <NormalSIEM alerts={alerts} onUpdate={updateAlert} />
+  if (isNormal) return (
+    <>
+      <NormalSIEM alerts={alerts} onUpdate={updateAlert} />
+      {/* A ?alert=<id> deep-link must open the exact record even in Normal
+          mode, where the triage board has no drawer of its own. The shared
+          deep-link effect already set selectedId (hooks run before this early
+          return); only the drawer needed lifting here. */}
+      <AnimatePresence>
+        {selectedAlert && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
+              onClick={() => setSelectedId(null)}
+            />
+            <AlertDetail alert={selectedAlert} onClose={() => setSelectedId(null)} simplified onUpdate={updateAlert} />
+          </>
+        )}
+      </AnimatePresence>
+    </>
+  )
 
   return (
     <div className="flex h-full overflow-hidden">

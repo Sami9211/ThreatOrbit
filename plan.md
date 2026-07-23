@@ -517,6 +517,14 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     lives, not just the opened drawer. Best-effort for the rendered row; the
     drawer opens regardless, and the existing `?q=` fallback still finds alerts
     outside the loaded window. Build + lint (0 errors) + route-integrity clean.
+    **Normal-mode gap CLOSED (2026-07-23, found via e2e runtime pass):** the app
+    defaults to Normal mode, whose triage board is a *separate* component with
+    no alert drawer - so `?alert=<id>` set `selectedId` but nothing rendered the
+    record (a hard dead-link in the default mode; the `deep-links` e2e caught
+    it). Fixed by lifting the `AlertDetail` drawer into the Normal-mode return
+    so a deep-linked alert opens its exact record in both modes; also pinned the
+    open/deep-linked alert into the Power queue's Normal filter so its row stays
+    visible in context. `deep-links` e2e + all 17 SIEM-touching specs green.
 13. **[ ] CTI CVE actions** (carried from Audit 3 #13) - still dead per this
     audit's item 14/21; fold into the dead-link sweep.
 14. **[~] Every IOC action works.** The IOC lifecycle panel now wires the full
