@@ -21,9 +21,9 @@ import { SEVERITY_COLOR as SEV_COLOR, tk, withAlpha } from '@/lib/colors'
 import { useAuth } from '@/lib/auth-context'
 import {
   fetchTriage, fetchSiemKpis, fetchEngineStatus, fetchAttackCoverage, fetchLogListeners,
-  fetchFeedsSummary, fetchSiemAlerts, patchAlert, createCase,
+  fetchFeedsSummary, fetchSiemAlerts, patchAlert, createCase, fetchAuditLog,
   type SocTriage, type SiemKpis, type EngineStatus, type AttackCoverage, type LogListenerStatus,
-  type FeedsSummary, type SiemAlert,
+  type FeedsSummary, type SiemAlert, type AuditEntry,
 } from '@/lib/api'
 const STATUS_LABEL: Record<string, string> = {
   new: 'New', assigned: 'Assigned', 'in-progress': 'In Progress', pending: 'Pending',
@@ -84,15 +84,16 @@ export default function SocConsolePage() {
   // Inline escalate-to-case feedback: the created case's id + a direct link, so
   // the analyst never has to go hunt for the case they just opened.
   const [escalated, setEscalated] = useState<{ caseId: string; href: string; title: string } | null>(null)
+  const [activity, setActivity] = useState<AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [updated, setUpdated] = useState<Date | null>(null)
 
   const load = useCallback(async () => {
     setRefreshing(true)
-    const [t, k, e, c, l, f, a] = await Promise.allSettled([
+    const [t, k, e, c, l, f, a, ac] = await Promise.allSettled([
       fetchTriage(), fetchSiemKpis(), fetchEngineStatus(), fetchAttackCoverage(), fetchLogListeners(),
-      fetchFeedsSummary(), fetchSiemAlerts({ limit: '150' }),
+      fetchFeedsSummary(), fetchSiemAlerts({ limit: '150' }), fetchAuditLog(60),
     ])
     if (t.status === 'fulfilled') setTriage(t.value)
     if (k.status === 'fulfilled') setKpis(k.value)
@@ -101,6 +102,12 @@ export default function SocConsolePage() {
     if (l.status === 'fulfilled') setListeners(l.value)
     if (f.status === 'fulfilled') setFeeds(f.value)
     if (a.status === 'fulfilled') setAlerts(a.value.items)
+    // Live SOC activity: the operational actions only this console surfaces
+    // (alert triage, assignment, escalation, suppression) - a real floor view.
+    if (ac.status === 'fulfilled') {
+      setActivity(ac.value.filter((r) =>
+        /^(alert|case|suppression|playbook|incident)\./.test(r.action)).slice(0, 12))
+    }
     setUpdated(new Date())
     setLoading(false)
     setRefreshing(false)
@@ -191,7 +198,9 @@ export default function SocConsolePage() {
             <Gauge className="w-4 h-4 text-magenta" />
             <h1 className="text-lg font-display font-semibold text-white">SOC Console</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Live analyst operations - open queue, SLA timers, pipeline health</p>
+          <p className="text-xs text-ink-500 mt-0.5">
+            Shift command center — triage, assign and escalate in place. SIEM investigates a single alert; SOAR runs a single case; this is where you run the floor.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {updated && (
@@ -433,6 +442,35 @@ export default function SocConsolePage() {
                     <span className="font-mono text-safe">{kpis?.totalEps ?? '-'}</span>
                   </div>
                 </div>
+              </Panel>
+
+              {/* Recent SOC activity - the live floor view (triage, assignment,
+                  escalation, suppression). This operational-awareness feed is
+                  what makes the console a workspace rather than a launcher: it
+                  shows what the team is DOING, which neither SIEM (one alert) nor
+                  SOAR (one case) nor Overview (static KPIs) surfaces. Real audit
+                  records only - never fabricated. */}
+              <Panel title="Recent SOC activity" icon={Activity}>
+                {activity.length === 0 ? (
+                  <p className="text-[11px] text-ink-600 py-3 text-center">
+                    No SOC actions recorded yet — assignments, escalations and triage appear here live.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                    {activity.map((r) => (
+                      <div key={r.id} className="flex items-start gap-2 text-[11px]">
+                        <span className="w-1 h-1 rounded-full bg-violet mt-1.5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-ink-300 truncate">
+                            <span className="text-ink-500">{r.actor ?? 'system'}</span>
+                            {' · '}{r.action}{r.target ? <span className="text-ink-600"> · {r.target}</span> : null}
+                          </p>
+                          <p className="text-[9px] text-ink-600 tabular-nums">{age(Math.max(0, (Date.now() - Date.parse(r.ts)) / 60000))} ago</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Panel>
 
               {/* Intel activity - the platform's living side. In live mode the

@@ -171,6 +171,18 @@ export default function ImportsPage() {
           ))}
         </div>
 
+        {/* Explicit idle state - the queue is genuinely empty (real engine
+            telemetry), not hidden behind a bare "0". No fabricated activity. */}
+        {engine && q && q.depth === 0 && q.inFlight === 0 && (
+          <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-white/8 bg-surface text-xs text-ink-400">
+            <CheckCircle className="w-4 h-4 text-safe shrink-0" />
+            <span>
+              The processing queue is empty — no indicators are being ingested right now.
+              Import activity appears here live as your configured connectors run.
+            </span>
+          </div>
+        )}
+
         {/* Import sources */}
         <section>
           <h2 className="text-xs text-ink-400 font-semibold uppercase tracking-wider mb-2">Import sources</h2>
