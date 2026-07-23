@@ -1768,6 +1768,11 @@ export const patchUser  = (id: string, body: Partial<Pick<User, 'name' | 'role' 
     }),
   })
 export const deleteUser = (id: string) => api<void>(`/users/${id}`, { method: 'DELETE' })
+export const resetUserPassword = (id: string, newPassword?: string) =>
+  api<{ ok: boolean; temporary_password: string | null }>(`/users/${id}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify(newPassword ? { new_password: newPassword } : {}),
+  })
 
 // -- Dashboard assistant (security-bounded, read-only agent) -----------
 export interface AssistantNav { label: string; path: string }

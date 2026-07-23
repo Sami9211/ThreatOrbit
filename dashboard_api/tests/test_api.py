@@ -433,6 +433,33 @@ def test_email_verification_flow(client, monkeypatch):
     assert client.post("/auth/verify", json={"token": "not-a-real-token"}).status_code == 400
 
 
+def test_admin_password_reset(client, auth):
+    # Create a managed user.
+    created = client.post("/users", json={
+        "email": "resetme@example.com", "name": "Reset Me", "role": "analyst",
+        "password": "Original-Pass123",
+    }, headers=auth).json()
+    uid = created["id"]
+    assert client.post("/auth/login", json={"email": "resetme@example.com", "password": "Original-Pass123"}).status_code == 200
+
+    # Admin reset with a generated temp password -> returned once, old one dead.
+    r = client.post(f"/users/{uid}/reset-password", json={}, headers=auth).json()
+    temp = r["temporary_password"]
+    assert temp and len(temp) >= 12
+    assert client.post("/auth/login", json={"email": "resetme@example.com", "password": "Original-Pass123"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "resetme@example.com", "password": temp}).status_code == 200
+
+    # Admin reset to an explicit password -> not returned.
+    r2 = client.post(f"/users/{uid}/reset-password",
+                     json={"new_password": "Brand-New-Pass456"}, headers=auth).json()
+    assert r2["temporary_password"] is None
+    assert client.post("/auth/login", json={"email": "resetme@example.com", "password": "Brand-New-Pass456"}).status_code == 200
+
+    # Weak explicit password -> 400; unknown user -> 404.
+    assert client.post(f"/users/{uid}/reset-password", json={"new_password": "weak"}, headers=auth).status_code == 400
+    assert client.post("/users/does-not-exist/reset-password", json={}, headers=auth).status_code == 404
+
+
 def test_viewer_cannot_create_user(client):
     # log in as the seeded viewer
     tok = client.post("/auth/login", json={"email": "tom.okafor@threatorbit.space", "password": "Password123!"}).json()["token"]

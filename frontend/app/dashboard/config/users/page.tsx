@@ -3,7 +3,7 @@ import { tk } from '@/lib/colors'
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchUsers, patchUser, createUser, deleteUser, fetchAuditLog, type User as ApiUser, type UserRole, type AuditEntry } from '@/lib/api'
+import { fetchUsers, patchUser, createUser, deleteUser, resetUserPassword, fetchAuditLog, type User as ApiUser, type UserRole, type AuditEntry } from '@/lib/api'
 
 /* Display role ↔ backend role mapping. The UI exposes richer display names
  * (Senior Analyst, Auditor) that collapse onto the backend's four roles. */
@@ -14,6 +14,7 @@ const ROLE_TO_API: Record<string, UserRole> = {
 import {
   Users, Plus, X, ShieldCheck, ShieldOff, Check, Minus, Mail,
   Clock, Activity, KeyRound, Ban, ChevronDown, Trash2, Loader2,
+  RotateCcw, Copy,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -236,6 +237,18 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
   onDelete: () => void
 }) {
   const color = ROLE_COLORS[user.role]
+  const [tempPw, setTempPw] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [copied, setCopied] = useState(false)
+  async function resetPw() {
+    if (resetting) return
+    setResetting(true); setTempPw(null)
+    try {
+      const r = await resetUserPassword(user.id)
+      setTempPw(r.temporary_password ?? '')
+    } catch { setTempPw('error') }
+    finally { setResetting(false) }
+  }
 
   // Real activity for this user from the audit trail (filtered by actor email),
   // not fabricated samples. Empty is honest - the user simply hasn't acted yet.
@@ -339,6 +352,30 @@ function UserPanel({ user, onClose, onRoleChange, onToggleSuspend, onToggleMfa, 
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber/25 text-amber text-sm font-medium hover:bg-amber/5 transition-colors">
               <KeyRound className="w-4 h-4" /> {user.mfa ? 'Reset MFA' : 'Enable MFA'}
             </button>
+            <button
+              onClick={resetPw} disabled={resetting}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-violet/25 text-violet text-sm font-medium hover:bg-violet/5 disabled:opacity-50 transition-colors">
+              {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />} Reset password
+            </button>
+            {tempPw !== null && (
+              tempPw === 'error' ? (
+                <p className="text-[11px] text-threat text-center">Could not reset (admin permission required).</p>
+              ) : tempPw ? (
+                <div className="p-3 rounded-xl border border-amber/30 bg-amber/8">
+                  <p className="text-[11px] font-semibold text-amber mb-1">Temporary password — share it securely, shown once</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-[12px] font-mono text-ink-100 bg-surface-2 border border-white/8 rounded px-2 py-1.5 break-all">{tempPw}</code>
+                    <button onClick={() => { navigator.clipboard?.writeText(tempPw); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+                      className="p-2 rounded-lg bg-surface-2 border border-white/10 text-ink-300 hover:text-white transition-colors">
+                      {copied ? <Check className="w-4 h-4 text-safe" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-ink-500 mt-1.5">All their existing sessions were signed out.</p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-safe text-center">Password reset. Existing sessions were signed out.</p>
+              )
+            )}
             <button
               onClick={onToggleSuspend}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-threat/25 text-threat text-sm font-medium hover:bg-threat/5 transition-colors">

@@ -360,10 +360,18 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
    bootstrap admin is always active (deployment can't lock itself out); OFF by
    default so existing deployments/tests are unchanged. Backend test covers
    pending→blocked-login→verify→login + single-use/invalid-token.
-   **Remaining:** the dedicated Admin Panel UI (user CRUD/lock/unlock/force-
-   reset consolidated, RBAC policy editor, audit-log viewer). Backend has the
-   users/roles/audit_log/capabilities tables + RBAC enforcement already; this
-   is mostly UI + a few admin endpoints. *Large.*
+   **Admin password reset - SHIPPED (2026-07-22).** The one missing admin
+   user-management capability (the page already had create / edit / role /
+   suspend-unlock / delete / revoke-sessions / MFA-reset): new
+   `POST /users/{id}/reset-password` (`users.manage`) sets an admin-supplied
+   password OR generates a strong temporary one (returned exactly once, never
+   stored in the clear), and bumps the token epoch so every existing session
+   is invalidated. Config → Users panel gains a "Reset password" action that
+   shows + copies the temp password. Tested (generated + explicit + weak-400 +
+   404 + old-password-dead + new-works).
+   **Remaining:** a single consolidated Admin landing page (users + roles +
+   audit-log + policies in one place) and an RBAC policy editor UI - the
+   individual capabilities now all exist and work; this is consolidation. *Med.*
 2. **[~] Account Settings page.** Profile menu "Profile & settings"
    (`TopBar.tsx:288`) routes to `/dashboard/config` (admin config, not a
    personal profile). Build a dedicated Account Settings page: profile, change

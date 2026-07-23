@@ -1,4 +1,6 @@
 """User management routes (admin/manager create & manage; self read)."""
+import secrets
+import string
 import uuid
 from datetime import datetime, timezone
 
@@ -137,3 +139,48 @@ def delete_user(user_id: str, actor: dict = Depends(require_perm("users.delete")
         audit(conn, actor["email"], "user.delete", user_id)
         conn.commit()
     return None
+
+
+class PasswordReset(BaseModel):
+    # If omitted, a strong temporary password is generated and returned once so
+    # the admin can relay it to the user (who should change it after signing in).
+    new_password: str | None = None
+
+
+def _gen_temp_password() -> str:
+    """A 16-char password guaranteed to contain upper, lower and digit."""
+    pool = string.ascii_letters + string.digits
+    return (secrets.choice(string.ascii_uppercase)
+            + secrets.choice(string.ascii_lowercase)
+            + secrets.choice(string.digits)
+            + "".join(secrets.choice(pool) for _ in range(13)))
+
+
+@router.post("/{user_id}/reset-password")
+def reset_password(user_id: str, body: PasswordReset,
+                   actor: dict = Depends(require_perm("users.manage"))):
+    """Admin password reset. Sets a new password (or generates a temporary one),
+    then revokes all of the user's sessions so any old login is invalidated. The
+    generated password is returned exactly once and never stored in the clear."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT email,name FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        u = row_to_dict(row)
+        if body.new_password:
+            pw, generated = body.new_password, False
+            try:
+                validate_password(pw, email=u["email"], name=u["name"])
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        else:
+            pw, generated = _gen_temp_password(), True
+        ph, salt = hash_password(pw)
+        # Reset the credential AND kill every existing session/token (epoch bump).
+        conn.execute("UPDATE users SET password_hash=?, password_salt=?, "
+                     "token_epoch = token_epoch + 1 WHERE id=?", (ph, salt, user_id))
+        conn.execute("UPDATE sessions SET revoked=1 WHERE user_id=? AND revoked=0", (user_id,))
+        audit(conn, actor["email"], "user.reset_password", user_id,
+              "generated" if generated else "set")
+        conn.commit()
+    return {"ok": True, "temporary_password": pw if generated else None}
