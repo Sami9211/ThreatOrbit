@@ -78,6 +78,43 @@ def _sev_breakdown(rows, key="severity") -> list[dict]:
             for s in _SEV_ORDER if counts[s] or s in ("critical", "high", "medium", "low")]
 
 
+def _daily_buckets(items: list, ts_key: str, since: str, until: str) -> list[dict]:
+    """Continuous per-day counts across [since, until], zero-filled, computed in
+    Python from already-fetched rows - DB-agnostic and always consistent with the
+    findings shown. Skips windows too wide to plot cleanly (custom > 60 days)."""
+    def _d(ts):
+        try:
+            return datetime.fromisoformat(str(ts)).date()
+        except (ValueError, TypeError):
+            return None
+    s, u = _d(since), _d(until)
+    if not s or not u or u < s or (u - s).days > 60:
+        return []
+    counts: dict = {}
+    for it in items:
+        raw = it.get(ts_key) if isinstance(it, dict) else it[ts_key]
+        d = _d(raw)
+        if d and s <= d <= u:
+            counts[d] = counts.get(d, 0) + 1
+    out, cur = [], s
+    while cur <= u:
+        out.append({"date": cur.strftime("%m-%d"), "count": counts.get(cur, 0)})
+        cur += timedelta(days=1)
+    return out
+
+
+def _geo_breakdown(items: list, key: str, top: int = 8) -> list[dict]:
+    """Top source countries by volume, from a real geo column - the report's
+    geographic aggregation. Empty when no rows carry a country."""
+    geo: dict[str, int] = {}
+    for it in items:
+        c = (it.get(key) if isinstance(it, dict) else it[key]) or ""
+        c = str(c).strip()
+        if c:
+            geo[c] = geo.get(c, 0) + 1
+    return [{"label": k, "count": v} for k, v in sorted(geo.items(), key=lambda x: -x[1])[:top]]
+
+
 def _meta(kind: str, title: str, label: str, since: str, until: str) -> dict:
     return {
         "kind": kind, "title": title, "period": label,
@@ -131,11 +168,14 @@ def _siem_report(conn, since, until, label) -> dict:
                    if crit else "No critical alerts in this window.")
             ),
         },
+        "series": {"heading": "Alerts per day", "points": _daily_buckets(alerts, "ts", since, until)},
         "breakdowns": [
             {"heading": "Alerts by severity", "type": "severity", "data": _sev_breakdown(alerts)},
             {"heading": "Top MITRE ATT&CK techniques", "type": "bars",
              "data": [{"label": k, "count": v} for k, v in top_tech]},
-        ],
+        ] + ([{"heading": "Alert sources by country", "type": "bars",
+               "data": _geo_breakdown(alerts, "src_country")}]
+             if _geo_breakdown(alerts, "src_country") else []),
         "findings": findings,
         "recommendations": [
             "Triage and disposition all critical alerts within SLA.",
@@ -466,6 +506,7 @@ def _executive_report(conn, since, until, label) -> dict:
             ],
             "narrative": narrative,
         },
+        "series": siem.get("series"),   # daily alert volume - the exec trend line
         "breakdowns": breakdowns,
         "findings": findings,
         "recommendations": recommendations,

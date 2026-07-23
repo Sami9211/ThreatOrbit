@@ -635,8 +635,24 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     existing multi-format (HTML/PDF/CSV/MD/JSON) + multi-audience (exec/
     technical/compliance) + control-mapping work, reports now carry charts,
     statistics, executive summaries, analyst findings and visual dashboards.
-    Remaining: geographic maps (needs a report-side world-map SVG + geo
-    aggregation) and time-series trend lines in the report body.
+    **Time-series + geographic SHIPPED (2026-07-23):**
+    • **Trend line** - the SIEM and executive reports now carry a real, zero-
+      filled **per-day alert-volume series** (`_daily_buckets`, computed in
+      Python from the already-fetched rows so it's DB-agnostic and always
+      consistent with the findings shown; skips windows too wide to plot). A new
+      stdlib inline-SVG `_svg_line` (line + area + dots + date axis, print-clean)
+      renders it in the report body, right under the KPI/donut block. The
+      `series` field survives all three audience reshapes.
+    • **Geographic aggregation** - a **"Alert sources by country"** breakdown
+      (`_geo_breakdown` over the real `src_country` column, top-8) that renders
+      via the existing severity-coloured bar renderer. Only appears when alerts
+      actually carry a country - never fabricated.
+    Backend test added (series present + zero-filled + geo breakdown + both
+    drawn in the HTML render); all report tests pass.
+    Remaining (deferred, disproportionate for a stdlib module): a full
+    **choropleth world-map SVG** - it needs an embedded country-path/centroid
+    dataset (tens of KB) that would bloat the report renderer; the top-country
+    bar communicates the same geographic distribution faithfully.
 19. **[~] Per-IOC context.** DONE for the IOC detail panel (2026-07-22): the
     IocLifecyclePanel (the canonical IOC drill-down across CTI) now renders a
     "Context" block - What it is / Why it's flagged / Potential impact /

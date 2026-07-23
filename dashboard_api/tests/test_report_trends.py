@@ -37,3 +37,33 @@ def test_all_report_kinds_still_build(client, auth):
         assert r.status_code == 200, f"{kind}: {r.text[:200]}"
         body = r.json()
         assert body["summary"]["narrative"], f"{kind} narrative empty"
+
+
+def test_siem_report_series_and_geo(client, auth):
+    """The SIEM report carries a real, zero-filled per-day time series and (when
+    alerts carry a source country) a geographic breakdown; the HTML render draws
+    the trend line and the geo bar."""
+    ts = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+    aid = f"RPTG-{uuid.uuid4().hex[:10]}"
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,"
+            "rule_id,rule_name,description,raw_log,event_count,ti_hits,src_country,org_id) "
+            "VALUES (?,?,?, 'high','new','undetermined','',80,'R-RPTG','rpt','','',1,0,'Russia','org-default')",
+            (aid, ts, "geo trend test"))
+        conn.commit()
+    try:
+        body = client.get("/reports/siem?period=weekly", headers=auth).json()
+        series = body.get("series")
+        assert series and series["points"], "no time series on SIEM report"
+        assert all("date" in p and "count" in p for p in series["points"])
+        assert sum(p["count"] for p in series["points"]) >= 1, "planted alert not counted"
+        assert "Alert sources by country" in [b["heading"] for b in body["breakdowns"]]
+
+        html = client.get("/reports/siem?period=weekly&format=html", headers=auth).text
+        assert "trend line" in html, "trend line SVG missing from HTML"
+        assert "Alert sources by country" in html, "geo breakdown missing from HTML"
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM alerts WHERE id=?", (aid,))
+            conn.commit()

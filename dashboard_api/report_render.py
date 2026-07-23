@@ -199,6 +199,35 @@ def _svg_donut(rows: list[tuple[str, int]], size: int = 132) -> str:
             f"</svg><div class='legend'>{legend}</div></div>")
 
 
+def _svg_line(points: list[tuple[str, int]], color: str = "#7A3CFF") -> str:
+    """A self-contained inline-SVG line+area chart for a time series (no external
+    libs, prints cleanly). `points` is (date-label, count), oldest → newest."""
+    pts = [(str(lbl), _to_int(c)) for lbl, c in points]
+    if len(pts) < 2:
+        return ""
+    mx = max((c for _, c in pts), default=0) or 1
+    w, h, pad_l, pad_b, pad_t = 460, 132, 30, 22, 12
+    plot_w, plot_h, n = w - pad_l - 12, h - pad_b - pad_t, len(pts)
+    px = lambda i: pad_l + (i / (n - 1)) * plot_w          # noqa: E731
+    py = lambda c: pad_t + plot_h - (c / mx) * plot_h      # noqa: E731
+    baseline = pad_t + plot_h
+    line = " ".join(f"{px(i):.1f},{py(c):.1f}" for i, (_, c) in enumerate(pts))
+    area = f"{pad_l:.1f},{baseline:.1f} {line} {pad_l + plot_w:.1f},{baseline:.1f}"
+    dots = "".join(f"<circle cx='{px(i):.1f}' cy='{py(c):.1f}' r='2.5' fill='{color}'/>"
+                   for i, (_, c) in enumerate(pts))
+    idxs = sorted({0, n // 2, n - 1})
+    xlabels = "".join(
+        f"<text x='{px(i):.1f}' y='{h - 6}' font-size='9' fill='#888' text-anchor='middle'>"
+        f"{escape(pts[i][0])}</text>" for i in idxs)
+    return (
+        f"<svg class='chart' width='{w}' height='{h}' viewBox='0 0 {w} {h}' role='img' aria-label='trend line'>"
+        f"<line x1='{pad_l}' y1='{baseline}' x2='{pad_l + plot_w}' y2='{baseline}' stroke='#ddd' stroke-width='1'/>"
+        f"<text x='{pad_l - 4}' y='{pad_t + 8}' font-size='9' fill='#888' text-anchor='end'>{mx}</text>"
+        f"<polygon points='{area}' fill='{color}' fill-opacity='0.10'/>"
+        f"<polyline points='{line}' fill='none' stroke='{color}' stroke-width='2'/>"
+        f"{dots}{xlabels}</svg>")
+
+
 def to_html(report: dict) -> str:
     meta = report.get("meta", {})
     summary = report.get("summary", {})
@@ -226,6 +255,14 @@ def to_html(report: dict) -> str:
         parts.append(f"<div class='viz'><div class='kpis'>{cards}</div>{donut}</div>")
     if summary.get("narrative"):
         parts.append(f"<h2>Summary</h2><p>{e(summary['narrative'])}</p>")
+
+    # Time-series trend line (real per-day volume across the reporting window).
+    series = report.get("series")
+    if series and series.get("points"):
+        pts = [(p.get("date", ""), p.get("count", 0)) for p in series["points"]]
+        line = _svg_line(pts)
+        if line:
+            parts.append(f"<h3>{e(series.get('heading', 'Trend'))}</h3>{line}")
 
     for b in report.get("breakdowns", []) or []:
         data = b.get("data", []) or []
