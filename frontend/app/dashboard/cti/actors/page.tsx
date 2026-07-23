@@ -617,6 +617,8 @@ export default function ActorProfilesPage() {
   const [filterOrigin, setFilterOrigin] = useState<string>('all')
   const [filterMotivation, setFilterMotivation] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')
+  const [filterSector, setFilterSector] = useState<string>('all')
+  const [filterSoph, setFilterSoph] = useState<string>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Empty until the API answers. The curated actor library is backend-seeded in
   // both demo and live mode, so real data always comes back; ACTORS is used only
@@ -676,11 +678,17 @@ export default function ActorProfilesPage() {
     const set = new Set(actors.map((a) => a.origin))
     return Array.from(set).sort()
   }, [actors])
+  const sectors = useMemo(() => {
+    const set = new Set(actors.flatMap((a) => a.sectors))
+    return Array.from(set).sort()
+  }, [actors])
 
   const filtered = useMemo(() => actors.filter((a) => {
     if (filterOrigin !== 'all' && a.origin !== filterOrigin) return false
     if (filterMotivation !== 'all' && !a.motivations.includes(filterMotivation as Motivation)) return false
     if (filterType !== 'all' && a.type !== filterType) return false
+    if (filterSector !== 'all' && !a.sectors.includes(filterSector)) return false
+    if (filterSoph !== 'all' && String(a.sophistication) !== filterSoph) return false
     if (search) {
       const q = search.toLowerCase()
       return (
@@ -692,7 +700,7 @@ export default function ActorProfilesPage() {
       )
     }
     return true
-  }), [actors, search, filterOrigin, filterMotivation, filterType])
+  }), [actors, search, filterOrigin, filterMotivation, filterType, filterSector, filterSoph])
 
   return (
     <div className="flex flex-col h-full bg-[#0A0612]">
@@ -778,6 +786,25 @@ export default function ActorProfilesPage() {
               { value: 'Nation-State', label: 'Nation-State' },
               { value: 'Cybercrime', label: 'Cybercrime' },
               { value: 'Hacktivist', label: 'Hacktivist' },
+            ]}
+          />
+          <FilterSelect
+            value={filterSector}
+            onChange={setFilterSector}
+            icon={Crosshair}
+            options={[{ value: 'all', label: 'All Industries' }, ...sectors.map((s) => ({ value: s, label: s }))]}
+          />
+          <FilterSelect
+            value={filterSoph}
+            onChange={setFilterSoph}
+            icon={Filter}
+            options={[
+              { value: 'all', label: 'Any Sophistication' },
+              { value: '5', label: 'Sophistication 5 (highest)' },
+              { value: '4', label: 'Sophistication 4' },
+              { value: '3', label: 'Sophistication 3' },
+              { value: '2', label: 'Sophistication 2' },
+              { value: '1', label: 'Sophistication 1' },
             ]}
           />
 

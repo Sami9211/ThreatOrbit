@@ -520,9 +520,15 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     selected, so it never closed - now it toggles (click the open actor again
     to collapse). The detail panel already carries bio, aliases, origin, type,
     sophistication, first/last seen, motivation, ATT&CK TTPs (linked), and
-    target sectors. Remaining (larger): campaigns, target regions, malware
-    families, attribution confidence, active years, and the filter bar
-    (industry/region/motivation/sophistication/status/country).
+    target sectors. **Filter bar EXTENDED (2026-07-22):** the actors page
+    already filtered by origin (region/country), motivation and type + search;
+    added **Industry** (built from the actors' sectors) and **Sophistication**
+    (1-5) selects - so the audit's filter set (industry/region/motivation/
+    sophistication/country) is covered. (Activity-status dropped for now: the
+    display type carries `recentActivity` text, not a clean active flag - not
+    worth a fragile inference.) Remaining (larger): campaigns, target regions,
+    malware families, attribution confidence, active years in the profile
+    body.
 18. **[ ] Reporting depth.** Charts, statistics, trend analysis, geo maps,
     executive summaries, analyst findings, visual dashboards, supporting
     metrics - management-grade and analyst-grade. (Audit-1 shipped multi-format
