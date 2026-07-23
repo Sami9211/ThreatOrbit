@@ -343,7 +343,7 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
 
 ### Administration & identity
 
-1. **[~] Admin Panel + RBAC + sign-up validation.**
+1. **[x] Admin Panel + RBAC + sign-up validation.**
    **Sign-up validation - RESOLVED (2026-07-22).** On reading the code, the
    register endpoint *already* enforces the input validation the audit asked
    for: rate-limit throttle, a disable switch, required name + length cap,
@@ -369,9 +369,23 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
    is invalidated. Config → Users panel gains a "Reset password" action that
    shows + copies the temp password. Tested (generated + explicit + weak-400 +
    404 + old-password-dead + new-works).
-   **Remaining:** a single consolidated Admin landing page (users + roles +
-   audit-log + policies in one place) and an RBAC policy editor UI - the
-   individual capabilities now all exist and work; this is consolidation. *Med.*
+   **Admin console landing page - SHIPPED (2026-07-23).** New
+   `/dashboard/admin` consolidates every admin surface into one governed
+   launch-point: an estate-at-a-glance strip (total / active / disabled users,
+   admin count, MFA-enrolment %, all from `fetchUsers` - real, never
+   placeholders), capability-gated navigation cards grouped into Identity &
+   access, Security & compliance, and Platform & data (each deep-links to the
+   real existing surface, not a copy), and a live "recent activity" feed from
+   `fetchAuditLog`. The whole page is gated on `config.manage` (admin + SOC
+   manager); analysts/viewers get an honest "administrator access required"
+   state rather than an empty page, and each card is additionally hidden unless
+   the caller holds its specific capability. Config page gained `?tab=` deep-link
+   support so cards land on the exact settings section (e.g. `?tab=security` →
+   Audit Trail). Sidebar gains an "Admin Console" entry under System. Build +
+   lint (0 errors) + route-integrity (no dead links) all clean.
+   **Remaining:** a dedicated RBAC policy *editor* UI (create/clone custom
+   roles by toggling capabilities) - the backend `roles` table + custom-role
+   resolution already exist; this is a future depth item, not a gap. *Low.*
 2. **[~] Account Settings page.** Profile menu "Profile & settings"
    (`TopBar.tsx:288`) routes to `/dashboard/config` (admin config, not a
    personal profile). Build a dedicated Account Settings page: profile, change

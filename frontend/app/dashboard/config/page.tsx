@@ -1689,6 +1689,14 @@ export default function ConfigPage() {
     settings[key] === undefined ? fallback : settings[key] === 'true'
   const setBoolSetting = (key: string) => (v: boolean) => setSettings((s) => ({ ...s, [key]: String(v) }))
 
+  // Deep-link support: /dashboard/config?tab=security selects a tab on load.
+  // Admin console cards and other surfaces link straight to a settings section.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const want = new URLSearchParams(window.location.search).get('tab')
+    if (want && TABS.some((t) => t.id === want)) setTab(want)
+  }, [])
+
   useEffect(() => {
     fetchSettings()
       .then((remote) => setSettings((s) => ({ ...s, ...remote })))

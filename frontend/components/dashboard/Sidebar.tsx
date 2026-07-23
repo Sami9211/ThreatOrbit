@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Search, Activity, Zap, Brain, Radio, Settings, Home,
-  AlertTriangle, Wifi, Server, EyeOff,
+  AlertTriangle, Wifi, Server, EyeOff, ShieldCheck,
   PanelLeftOpen, PanelLeftClose, X, ChevronDown, Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -115,6 +115,7 @@ const NAV: NavGroup[] = [
   {
     section: 'System',
     items: [
+      { href: '/dashboard/admin', label: 'Admin Console', icon: ShieldCheck, feature: 'config' },
       {
         href: '/dashboard/config',
         label: 'Configuration',
