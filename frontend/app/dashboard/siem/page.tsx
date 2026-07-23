@@ -1284,6 +1284,10 @@ export default function SIEMPage() {
   const [alertsPending, setAlertsPending] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedAlert = alerts.find((a) => a.id === selectedId) ?? null
+  // A deep-linked alert (?alert=<id>) briefly flashes its queue row so the
+  // analyst sees *where* in their queue the record they were sent to sits,
+  // not just the opened drawer. Cleared after the pulse (see effect below).
+  const [flashId, setFlashId] = useState<string | null>(null)
 
   const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
   const [correlations, setCorrelations] = useState<Correlation[]>([])
@@ -1463,9 +1467,20 @@ export default function SIEMPage() {
     alertDeepLinked.current = true
     const id = new URLSearchParams(window.location.search).get('alert')
     if (!id) return
-    if (alerts.some((a) => a.id === id)) setSelectedId(id)
-    else setSearch(id)
+    if (alerts.some((a) => a.id === id)) {
+      setSelectedId(id)   // open the exact record
+      setFlashId(id)      // and flash + scroll its queue row (see AlertRow)
+    } else {
+      setSearch(id)       // outside the loaded window: filter to it so it's findable
+    }
   }, [alerts])
+  // Clear the flash once the pulse has played (also covers the ?q= fallback
+  // resolving to a single row, handled where flashId is set on match).
+  useEffect(() => {
+    if (!flashId) return
+    const t = setTimeout(() => setFlashId(null), 2600)
+    return () => clearTimeout(t)
+  }, [flashId])
   const [filterSev, setFilterSev] = useState<Severity | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
   const [filterTactic, setFilterTactic] = useState('All')
@@ -1711,6 +1726,7 @@ export default function SIEMPage() {
                       <AlertRow key={alert.id} alert={alert}
                         idx={alertWindow.virtualized ? 0 : i}
                         selected={selectedId === alert.id}
+                        flash={flashId === alert.id}
                         onClick={() => setSelectedId((id) => id === alert.id ? null : alert.id)} />
                     ))}
                     {alertWindow.bottomPad > 0 && <div style={{ height: alertWindow.bottomPad }} />}
@@ -2055,22 +2071,36 @@ export default function SIEMPage() {
 }
 
 /* -- Alert table row ------------------------------------------------ */
-function AlertRow({ alert, idx, selected, onClick }: {
-  alert: SiemAlert; idx: number; selected: boolean; onClick: () => void
+function AlertRow({ alert, idx, selected, flash, onClick }: {
+  alert: SiemAlert; idx: number; selected: boolean; flash?: boolean; onClick: () => void
 }) {
   const s = SEV[alert.severity]
   const st = STATUS_LABEL[alert.status]
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  // Deep-link landing: bring the flashed row into the middle of the viewport so
+  // the analyst can see it in queue context (the drawer opens the record; this
+  // shows *where* it lives). Best-effort - only fires for a rendered row.
+  useEffect(() => {
+    if (flash) rowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [flash])
 
   return (
     <motion.div
+      ref={rowRef}
       initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: idx * 0.025, duration: 0.25 }}
+      animate={flash
+        ? { opacity: 1, x: 0, backgroundColor: ['rgba(214,49,159,0.22)', 'rgba(214,49,159,0)', 'rgba(214,49,159,0.22)', 'rgba(214,49,159,0)'] }
+        : { opacity: 1, x: 0 }}
+      transition={flash
+        ? { backgroundColor: { duration: 2.4, times: [0, 0.25, 0.5, 1] }, duration: 0.25 }
+        : { delay: idx * 0.025, duration: 0.25 }}
       onClick={onClick}
       className={cn(
         ALERT_GRID, 'px-4 py-2.5 border-b border-white/4 cursor-pointer transition-colors',
+        flash ? 'border-l-2 border-l-magenta' :
         selected ? 'bg-magenta/8 border-l-2 border-l-magenta' : 'hover:bg-white/3',
-        alert.status === 'closed' || alert.status === 'resolved' ? 'opacity-50' : '',
+        (alert.status === 'closed' || alert.status === 'resolved') && !flash ? 'opacity-50' : '',
       )}
     >
       {/* Severity dot */}

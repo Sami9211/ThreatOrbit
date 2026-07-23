@@ -474,9 +474,17 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
 8. **[ ] Undo for destructive analyst actions.** Block-IOC and dismiss-alert
     are irreversible. Prior undo work (task #92) covered some actions; extend to
     these with undo affordance + action history + confirm prompts.
-9. **[ ] SIEM deep-link on "Send to SIEM".** Today opens the SIEM page; must
-    open the exact record, auto-scroll to it, highlight the new alert, and toast
-    with a direct link. (`?alert=` deep-linking exists - extend to scroll+flash.)
+9. **[x] SIEM deep-link on "Send to SIEM".** DONE (2026-07-23). `?alert=<id>`
+    already opened the exact record's detail drawer (not just the module) and
+    the source action ("Send to SIEM" in the IOC panel) already toasts with a
+    direct link before navigating (task #88). The missing piece - now added -
+    is the landing behaviour: the deep-linked alert's **queue row auto-scrolls
+    to viewport centre** (`scrollIntoView({ block:'center', behavior:'smooth' })`)
+    and **flashes** a magenta pulse (keyframed backgroundColor over ~2.4s, then
+    self-clears), so the analyst sees exactly *where* in their queue the record
+    lives, not just the opened drawer. Best-effort for the rendered row; the
+    drawer opens regardless, and the existing `?q=` fallback still finds alerts
+    outside the loaded window. Build + lint (0 errors) + route-integrity clean.
 13. **[ ] CTI CVE actions** (carried from Audit 3 #13) - still dead per this
     audit's item 14/21; fold into the dead-link sweep.
 14. **[~] Every IOC action works.** The IOC lifecycle panel now wires the full
