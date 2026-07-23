@@ -12,12 +12,13 @@ const ROLE_TO_API: Record<string, UserRole> = {
   'Analyst': 'analyst', 'Read-Only': 'viewer', 'Auditor': 'viewer',
 }
 import {
-  Users, Plus, X, ShieldCheck, ShieldOff, Check, Minus, Mail,
+  Users, Plus, X, ShieldCheck, ShieldOff, Check, Mail,
   Clock, Activity, KeyRound, Ban, ChevronDown, Trash2, Loader2,
   RotateCcw, Copy,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
+import RolesEditor from '@/components/dashboard/RolesEditor'
 
 /* -- Types --------------------------------------------------------- */
 type RoleName = 'Admin' | 'SOC Manager' | 'Senior Analyst' | 'Analyst' | 'Read-Only' | 'Auditor'
@@ -554,39 +555,7 @@ export default function UsersRolesPage() {
           </motion.div>
         )}
 
-        {tab === 'roles' && (
-          <motion.div variants={fadeInUp} initial="hidden" animate="show" className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {ROLES.map((role) => (
-              <div key={role.name} className="rounded-xl border border-white/8 bg-surface p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: role.color }} />
-                      <h3 className="text-sm font-semibold text-white">{role.name}</h3>
-                    </div>
-                    <p className="text-[10px] text-ink-500 mt-0.5">{role.description}</p>
-                  </div>
-                  <span className="text-[10px] text-ink-400 bg-white/5 px-2 py-0.5 rounded-full border border-white/8 whitespace-nowrap">
-                    {role.userCount} {role.userCount === 1 ? 'user' : 'users'}
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {PERMISSIONS.map((perm) => {
-                    const allowed = role.permissions[perm]
-                    return (
-                      <div key={perm} className="flex items-center justify-between text-[11px]">
-                        <span className={allowed ? 'text-ink-200' : 'text-ink-600'}>{perm}</span>
-                        {allowed
-                          ? <Check className="w-3.5 h-3.5 text-safe" />
-                          : <Minus className="w-3.5 h-3.5 text-ink-600" />}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </motion.div>
-        )}
+        {tab === 'roles' && <RolesEditor />}
       </div>
 
       <AnimatePresence>

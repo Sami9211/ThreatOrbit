@@ -1768,6 +1768,26 @@ export const patchUser  = (id: string, body: Partial<Pick<User, 'name' | 'role' 
     }),
   })
 export const deleteUser = (id: string) => api<void>(`/users/${id}`, { method: 'DELETE' })
+
+// -- RBAC roles (built-in + operator-defined custom roles) -------------
+export interface RoleDef {
+  id: string
+  name: string
+  description: string | null
+  builtIn: boolean
+  capabilities: string[]
+}
+export interface RolesResponse {
+  roles: RoleDef[]
+  /** capability id → human description (the editor's checkbox catalogue). */
+  capabilities: Record<string, string>
+}
+export const fetchRoles = () => api<RolesResponse>('/roles')
+export const createRole = (body: { id?: string; name: string; description?: string; capabilities: string[] }) =>
+  api<RoleDef>('/roles', { method: 'POST', body: JSON.stringify(body) })
+export const updateRole = (id: string, body: { name: string; description?: string; capabilities: string[] }) =>
+  api<RoleDef>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteRole = (id: string) => api<void>(`/roles/${id}`, { method: 'DELETE' })
 export const resetUserPassword = (id: string, newPassword?: string) =>
   api<{ ok: boolean; temporary_password: string | null }>(`/users/${id}/reset-password`, {
     method: 'POST',

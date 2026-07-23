@@ -383,9 +383,22 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
    support so cards land on the exact settings section (e.g. `?tab=security` →
    Audit Trail). Sidebar gains an "Admin Console" entry under System. Build +
    lint (0 errors) + route-integrity (no dead links) all clean.
-   **Remaining:** a dedicated RBAC policy *editor* UI (create/clone custom
-   roles by toggling capabilities) - the backend `roles` table + custom-role
-   resolution already exist; this is a future depth item, not a gap. *Low.*
+   **RBAC policy editor SHIPPED (2026-07-23) - #1 now COMPLETE.** The Config →
+   Users & Roles "Roles" tab was a *static, hardcoded* permission matrix; it is
+   now a live editor driven by the real `/roles` API (built-ins + custom roles +
+   the capability catalogue). New `RolesEditor` component: built-in roles render
+   read-only (lock badge) with their true capabilities; custom roles can be
+   **created, cloned from any role, edited by toggling capabilities, and
+   deleted**, each card showing the real capability matrix from the API. It
+   honours the backend guarantees - surfaces the actual reason on failure
+   (no-privilege-escalation 403, duplicate 409, "N users still hold this role"
+   delete-409) instead of a generic error, gates every mutation on
+   `users.manage` (view-only otherwise), and two-step-confirms deletes. Added
+   `fetchRoles/createRole/updateRole/deleteRole` helpers; the `/roles` CRUD was
+   already complete + tested (test_roles.py, 7 passing). Build + lint (0 errors)
+   + route-integrity clean. Every sub-part of #1 (RBAC, sign-up validation,
+   email verification, admin password reset, admin console, role editor) is now
+   shipped - **nothing remaining.**
 2. **[~] Account Settings page.** Profile menu "Profile & settings"
    (`TopBar.tsx:288`) routes to `/dashboard/config` (admin config, not a
    personal profile). Build a dedicated Account Settings page: profile, change
