@@ -1,7 +1,7 @@
 # Stage 1: build the Node SSR app.
 # Base images pinned by digest (supply-chain integrity); Dependabot's docker
 # ecosystem bumps both the tag and the digest when a new image ships.
-FROM node:22-alpine@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4 AS build
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -13,7 +13,7 @@ RUN npm run build
 
 # Stage 2: run the Node SSR server (`next start`). No nginx - the Next server
 # serves the app and applies the security headers from next.config headers().
-FROM node:22-alpine@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
