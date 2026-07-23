@@ -470,9 +470,13 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     MITRE techniques, with a Clear button - and all four are saved/restored
     through the existing SavedViews ("saved filter configurations"). Remaining:
     a couple more facets (explicit IOC-type / actor / malware-family / tags /
-    time-range) and the Feed-Sources connector controls (pause/resume/restart/
-    disable/health/test-connectivity, admin-gated) - connector edit/state
-    already exists in ConnectorsPanel; add the lifecycle actions + gating.
+    time-range). **Connector controls DONE (2026-07-22):** ConnectorsPanel
+    already had sync-now / pause-resume / edit-reconfigure / delete + honest
+    per-connector status & error; added **admin-gating** - every mutating
+    control is now disabled with a "Requires administrator privileges" tooltip
+    (and a "View-only" note) for users without `connectors.manage`, exactly the
+    audit's "greyed / requires administrator" ask. (Sync-now already doubles as
+    a connectivity/health check - it reports the real per-connector error.)
 11. **[~] Per-connector config fields.** Setup asks generic type+URL; each
     connector must present only its real fields - OTX→API key, VirusTotal→API
     key, MISP→URL+key, TheHive→URL+key - and be correctly wired. `connectors.py`

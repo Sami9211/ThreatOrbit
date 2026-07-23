@@ -7,6 +7,7 @@ import {
   AlertTriangle, Loader2, Database, Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePermissions } from '@/lib/usePermissions'
 import {
   fetchConnectors, fetchConnectorKinds, createConnector, patchConnector,
   deleteConnector, runConnector,
@@ -44,6 +45,12 @@ export default function ConnectorsPanel() {
   const [msg, setMsg] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<Connector | null>(null)
+  // Connector mutations require the connectors.manage capability. Non-admins
+  // see the state (read-only) with the controls disabled + a clear reason,
+  // rather than buttons that 403 on click.
+  const { can } = usePermissions()
+  const canManage = can('connectors.manage')  // false until confirmed (open-closed)
+  const adminOnly = 'Requires administrator privileges'
 
   const load = () => {
     fetchConnectors().then(setConnectors).catch(() => setUnavailable(true))
@@ -142,7 +149,9 @@ export default function ConnectorsPanel() {
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all">
+          disabled={!canManage}
+          title={canManage ? undefined : adminOnly}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plasma text-white text-xs font-semibold hover:shadow-magenta-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed">
           <Plus className="w-3.5 h-3.5" /> Add Connector
         </button>
       </div>
@@ -180,26 +189,29 @@ export default function ConnectorsPanel() {
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => sync(c)}
-                  disabled={busy === c.id}
-                  title="Sync now"
-                  className="p-1.5 rounded-lg text-ink-400 hover:text-magenta hover:bg-magenta/10 transition-colors disabled:opacity-50">
+                  disabled={busy === c.id || !canManage}
+                  title={canManage ? 'Sync now' : adminOnly}
+                  className="p-1.5 rounded-lg text-ink-400 hover:text-magenta hover:bg-magenta/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-400 disabled:hover:bg-transparent">
                   {busy === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                 </button>
                 <button
                   onClick={() => toggle(c)}
-                  title={c.enabled ? 'Pause auto-sync' : 'Resume auto-sync'}
-                  className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors">
+                  disabled={!canManage}
+                  title={!canManage ? adminOnly : c.enabled ? 'Pause auto-sync' : 'Resume auto-sync'}
+                  className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-400 disabled:hover:bg-transparent">
                   {c.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                 </button>
                 <button
                   onClick={() => setEditing(c)}
-                  title="Edit / reconfigure"
-                  className="p-1.5 rounded-lg text-ink-400 hover:text-violet hover:bg-violet/10 transition-colors">
+                  disabled={!canManage}
+                  title={canManage ? 'Edit / reconfigure' : adminOnly}
+                  className="p-1.5 rounded-lg text-ink-400 hover:text-violet hover:bg-violet/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-400 disabled:hover:bg-transparent">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 {!c.builtin && (
-                  <button onClick={() => remove(c)} title="Delete connector"
-                    className="p-1.5 rounded-lg text-ink-400 hover:text-threat hover:bg-threat/5 transition-colors">
+                  <button onClick={() => remove(c)} disabled={!canManage}
+                    title={canManage ? 'Delete connector' : adminOnly}
+                    className="p-1.5 rounded-lg text-ink-400 hover:text-threat hover:bg-threat/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-400 disabled:hover:bg-transparent">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -207,6 +219,11 @@ export default function ConnectorsPanel() {
             </div>
           )
         })}
+        {connectors && connectors.length > 0 && !canManage && (
+          <p className="text-[10px] text-ink-600 text-center pt-1">
+            View-only — managing connectors requires administrator privileges.
+          </p>
+        )}
       </div>
 
       <AnimatePresence>
