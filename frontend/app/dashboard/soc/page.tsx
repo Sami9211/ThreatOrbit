@@ -13,15 +13,16 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   Gauge, AlertTriangle, Clock, User, Activity, Zap, ShieldCheck,
-  RefreshCw, ArrowUpRight, Wifi, Server, Timer, Inbox, Flame, Rss,
+  RefreshCw, ArrowUpRight, Wifi, Server, Timer, Inbox, Flame, Rss, Search, UserPlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SEVERITY_COLOR as SEV_COLOR, tk, withAlpha } from '@/lib/colors'
+import { useAuth } from '@/lib/auth-context'
 import {
   fetchTriage, fetchSiemKpis, fetchEngineStatus, fetchAttackCoverage, fetchLogListeners,
-  fetchFeedsSummary,
+  fetchFeedsSummary, fetchSiemAlerts, patchAlert,
   type SocTriage, type SiemKpis, type EngineStatus, type AttackCoverage, type LogListenerStatus,
-  type FeedsSummary,
+  type FeedsSummary, type SiemAlert,
 } from '@/lib/api'
 const STATUS_LABEL: Record<string, string> = {
   new: 'New', assigned: 'Assigned', 'in-progress': 'In Progress', pending: 'Pending',
@@ -66,21 +67,27 @@ function Panel({ title, icon: Icon, children, action }: {
 }
 
 export default function SocConsolePage() {
+  const { user } = useAuth()
   const [triage, setTriage] = useState<SocTriage | null>(null)
   const [kpis, setKpis] = useState<SiemKpis | null>(null)
   const [engine, setEngine] = useState<EngineStatus | null>(null)
   const [coverage, setCoverage] = useState<AttackCoverage | null>(null)
   const [listeners, setListeners] = useState<LogListenerStatus | null>(null)
   const [feeds, setFeeds] = useState<FeedsSummary | null>(null)
+  const [alerts, setAlerts] = useState<SiemAlert[]>([])
+  const [qSearch, setQSearch] = useState('')
+  const [qSev, setQSev] = useState('all')
+  const [qAssign, setQAssign] = useState('all') // all | mine | unassigned
+  const [assigning, setAssigning] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [updated, setUpdated] = useState<Date | null>(null)
 
   const load = useCallback(async () => {
     setRefreshing(true)
-    const [t, k, e, c, l, f] = await Promise.allSettled([
+    const [t, k, e, c, l, f, a] = await Promise.allSettled([
       fetchTriage(), fetchSiemKpis(), fetchEngineStatus(), fetchAttackCoverage(), fetchLogListeners(),
-      fetchFeedsSummary(),
+      fetchFeedsSummary(), fetchSiemAlerts({ limit: '150' }),
     ])
     if (t.status === 'fulfilled') setTriage(t.value)
     if (k.status === 'fulfilled') setKpis(k.value)
@@ -88,6 +95,7 @@ export default function SocConsolePage() {
     if (c.status === 'fulfilled') setCoverage(c.value)
     if (l.status === 'fulfilled') setListeners(l.value)
     if (f.status === 'fulfilled') setFeeds(f.value)
+    if (a.status === 'fulfilled') setAlerts(a.value.items)
     setUpdated(new Date())
     setLoading(false)
     setRefreshing(false)
@@ -103,6 +111,41 @@ export default function SocConsolePage() {
   const queue = engine?.queue
   const breaches = triage?.sla.breaches ?? []
   const sevOrder = ['critical', 'high', 'medium', 'low', 'info'] as const
+
+  // --- Investigation queue: the live analyst work surface ---
+  const SEV_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
+  const OPEN_STATUS = ['new', 'assigned', 'in-progress', 'pending']
+  const myName = user?.name ?? user?.email ?? ''
+  const openAlerts = alerts.filter((a) => OPEN_STATUS.includes(a.status))
+  const queueRows = openAlerts.filter((a) => {
+    if (qSev !== 'all' && a.severity !== qSev) return false
+    if (qAssign === 'mine' && a.owner !== myName) return false
+    if (qAssign === 'unassigned' && a.owner) return false
+    if (qSearch) {
+      const q = qSearch.toLowerCase()
+      const hay = [a.title, a.ruleName, a.srcIp, a.hostname, a.username, a.owner]
+        .filter(Boolean).join(' ').toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  }).sort((x, y) => (SEV_RANK[y.severity] - SEV_RANK[x.severity]) || (Date.parse(y.ts) - Date.parse(x.ts)))
+  // Analyst workload: open alerts grouped by assignee (who's carrying what).
+  const workload = Object.entries(
+    openAlerts.reduce<Record<string, number>>((m, a) => {
+      const k = a.owner || 'unassigned'; m[k] = (m[k] ?? 0) + 1; return m
+    }, {}),
+  ).sort((a, b) => b[1] - a[1])
+
+  async function assignToMe(a: SiemAlert) {
+    if (!myName || assigning) return
+    setAssigning(a.id)
+    try {
+      const nextStatus = a.status === 'new' ? 'assigned' : a.status
+      await patchAlert(a.id, { owner: myName, status: nextStatus })
+      setAlerts((prev) => prev.map((x) => x.id === a.id ? { ...x, owner: myName, status: nextStatus } : x))
+    } catch { /* backend enforces perms; leave as-is on failure */ }
+    finally { setAssigning(null) }
+  }
 
   return (
     <div className="flex flex-col h-full bg-bg">
@@ -146,6 +189,84 @@ export default function SocConsolePage() {
           <p className="text-xs text-ink-600 py-16 text-center animate-pulse">Loading live SOC telemetry…</p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* -- Investigation queue: live analyst work surface ---------- */}
+            <div className="lg:col-span-3">
+              <Panel title={`Investigation Queue · ${queueRows.length}`} icon={Inbox}
+                action={<Link href="/dashboard/siem" className="text-[11px] text-magenta hover:underline flex items-center gap-0.5">Open in SIEM<ArrowUpRight className="w-3 h-3" /></Link>}>
+                {/* Search + filters */}
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <div className="relative flex-1 min-w-[180px]">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-600" />
+                    <input value={qSearch} onChange={(e) => setQSearch(e.target.value)}
+                      placeholder="Search title, rule, IP, host, user, owner…" aria-label="Search queue"
+                      className="w-full pl-8 pr-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40" />
+                  </div>
+                  <select value={qSev} onChange={(e) => setQSev(e.target.value)} aria-label="Severity"
+                    className="px-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-300 focus:outline-hidden focus:border-magenta/40">
+                    {['all', 'critical', 'high', 'medium', 'low', 'info'].map((s) => <option key={s} value={s}>{s === 'all' ? 'All severities' : s}</option>)}
+                  </select>
+                  <div className="flex items-center rounded-lg border border-white/8 overflow-hidden">
+                    {(['all', 'mine', 'unassigned'] as const).map((a) => (
+                      <button key={a} onClick={() => setQAssign(a)}
+                        className={cn('px-2.5 py-1.5 text-[11px] capitalize transition-colors',
+                          qAssign === a ? 'bg-magenta/20 text-magenta' : 'text-ink-500 hover:text-ink-200')}>{a}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* Analyst workload */}
+                {workload.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                    <span className="text-[9px] text-ink-600 uppercase tracking-wide">Workload</span>
+                    {workload.slice(0, 6).map(([owner, n]) => (
+                      <span key={owner} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 border border-white/8 text-ink-300">
+                        <User className="w-2.5 h-2.5" />{owner}<span className="text-ink-600">×{n}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Queue rows */}
+                {queueRows.length === 0 ? (
+                  <div className="flex items-center gap-2 py-8 justify-center text-xs text-ink-500">
+                    <ShieldCheck className="w-4 h-4 text-safe" />
+                    {openAlerts.length === 0 ? 'No open alerts — the queue is clear.' : 'No alerts match the current filters.'}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
+                    {queueRows.slice(0, 60).map((a) => (
+                      <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-white/8 bg-surface hover:border-white/15 transition-colors group">
+                        <span className="w-1.5 h-8 rounded-full shrink-0" style={{ background: SEV_COLOR[a.severity] ?? '#666' }} />
+                        <Link href={`/dashboard/siem?alert=${a.id}`} className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-white truncate group-hover:text-magenta">{a.title}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-sm uppercase shrink-0 bg-white/5 text-ink-400">{STATUS_LABEL[a.status] ?? a.status}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-ink-500">
+                            <span className="truncate">{a.ruleName || a.mitreTactic || '—'}</span>
+                            {a.srcIp && <span className="font-mono text-ink-600">{a.srcIp}</span>}
+                          </div>
+                        </Link>
+                        <div className="text-right shrink-0 flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-[10px] text-ink-500">
+                            <User className="w-2.5 h-2.5" />{a.owner || 'unassigned'}
+                          </span>
+                          {a.owner !== myName && myName && (
+                            <button onClick={() => assignToMe(a)} disabled={assigning === a.id}
+                              title="Assign to me"
+                              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-1 rounded-lg border border-white/10 text-ink-300 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50">
+                              <UserPlus className="w-3 h-3" /> me
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {queueRows.length > 60 && (
+                      <p className="text-[10px] text-ink-600 text-center pt-1">+{queueRows.length - 60} more — refine filters or open the SIEM queue</p>
+                    )}
+                  </div>
+                )}
+              </Panel>
+            </div>
+
             {/* -- SLA breach queue (primary work surface) ----------------- */}
             <div className="lg:col-span-2">
               <Panel title={`SLA Breach Queue${triage ? ` · ${triage.sla.breachCount}` : ''}`} icon={AlertTriangle}

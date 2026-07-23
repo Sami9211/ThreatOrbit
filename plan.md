@@ -445,10 +445,18 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     pivots, ATT&CK "View matching alerts", and entity Related-Alerts in one go.
     SOC SLA breach rows verified already navigating. Remaining: CTI per-IOC
     action set (folded into #14).
-7. **[ ] SOC Console full redesign.** No longer empty, but must become a true
-    SOC: live investigations, analyst assignments, escalations, SLA monitoring,
-    incident timelines, active alerts, investigation queues, collaboration,
-    search/filter.
+7. **[~] SOC Console redesign.** Big step done (2026-07-22): the console had
+    KPIs + SLA-breach queue + pipeline health but no analyst work surface. Added
+    a full-width **Investigation Queue** driven by the live alert store
+    (`fetchSiemAlerts`): **search** (title/rule/IP/host/user/owner), **severity**
+    + **assignment** (all/mine/unassigned) filters, an **analyst-workload** chip
+    row (open alerts grouped by assignee), per-alert **Assign to me**
+    (`patchAlert` owner+status, admin-perms enforced server-side), and every row
+    opens the exact alert (`?alert=`). So: active alerts ✓, investigation queue
+    ✓, analyst assignments ✓, search/filter ✓, SLA monitoring ✓ (existing).
+    Escalations/incident-timeline/collaboration reach the SOAR case war-room via
+    the alert→SIEM→case path. Remaining (polish): inline escalate-to-case and a
+    collaboration/notes side-panel directly on the console.
 8. **[ ] Undo for destructive analyst actions.** Block-IOC and dismiss-alert
     are irreversible. Prior undo work (task #92) covered some actions; extend to
     these with undo affordance + action history + confirm prompts.
