@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Radio, CheckCircle2, HelpCircle, X,
   Shield, Zap, ChevronDown,
   Activity, Download,
-  Flame, ExternalLink,
+  Flame, ExternalLink, RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
@@ -300,6 +300,11 @@ function ThreatCard({
   // Action feedback can carry a link straight to the record the action just
   // created - the user must never have to go search for it afterwards.
   const [actionMsg, setActionMsg] = useState<{ text: string; href?: string; hrefLabel?: string } | null>(null)
+  // Block IOCs writes real indicators into the CTI store and there's no
+  // one-click "unblock", so it's confirm-gated: the first click arms, the
+  // second commits. Auto-disarms after a few seconds if not confirmed.
+  const [blockArmed, setBlockArmed] = useState(false)
+  const [blocking, setBlocking] = useState(false)
 
   function note(text: string, href?: string, hrefLabel?: string) {
     setActionMsg({ text, href, hrefLabel })
@@ -326,13 +331,22 @@ function ThreatCard({
   }
 
   // Push this entry's importable indicators into the CTI store as a blocklist.
+  // Confirm-gated (see blockArmed): first click arms, second commits.
   function blockIocs(e: React.MouseEvent) {
     e.stopPropagation()
+    if (blocking) return
     const indicators = entry.iocs.flatMap((v) => {
       const type = classifyIoc(v)
       return type ? [{ type, value: v }] : []
     })
     if (indicators.length === 0) { note('No importable indicators on this entry'); return }
+    if (!blockArmed) {
+      setBlockArmed(true)
+      setTimeout(() => setBlockArmed(false), 4000)  // auto-disarm if not confirmed
+      return
+    }
+    setBlockArmed(false)
+    setBlocking(true)
     importIocs({
       indicators,
       severity: entry.severity === 'info' ? 'low' : entry.severity,
@@ -344,6 +358,7 @@ function ThreatCard({
       .then((out) => note(`${out.imported} IOC${out.imported === 1 ? '' : 's'} added to blocklist (${out.duplicates} already known)`,
         '/dashboard/cti', 'View IOC store →'))
       .catch(() => note('Could not import IOCs - is the dashboard API running?'))
+      .finally(() => setBlocking(false))
   }
 
   return (
@@ -506,10 +521,16 @@ function ThreatCard({
                 </button>
                 <button
                   onClick={blockIocs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-ink-300 border border-white/10 text-xs font-medium hover:bg-white/8 transition-colors"
+                  disabled={blocking}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50',
+                    blockArmed
+                      ? 'bg-amber/15 text-amber border-amber/30 hover:bg-amber/25'
+                      : 'bg-white/5 text-ink-300 border-white/10 hover:bg-white/8',
+                  )}
                 >
                   <Shield className="w-3.5 h-3.5" />
-                  Block IOCs
+                  {blocking ? 'Blocking…' : blockArmed ? 'Confirm block?' : 'Block IOCs'}
                 </button>
                 {actionMsg && (
                   <span className="text-[10px] text-safe basis-full sm:basis-auto" role="status">
@@ -567,6 +588,11 @@ export default function FeedsPage() {
   const [search, setSearch] = useState('')
   const [liveCount, setLiveCount] = useState(0)
   const [pulse, setPulse] = useState(false)
+  // Dismiss is reversible: the just-dismissed card is stashed and an undo toast
+  // offers to restore it into the exact list it came from. Auto-clears (the
+  // dismissal becomes permanent) after the toast window elapses.
+  const [dismissed, setDismissed] = useState<{ entry: ThreatEntry; list: 'confirmed' | 'unconfirmed' } | null>(null)
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // liveMode: the API answered (we show its data, even if empty).
   // demoMode: the API was unreachable → show the seed + simulator as an offline
@@ -647,12 +673,37 @@ export default function FeedsPage() {
     setConfirmed(prev => [{ ...entry, status: 'confirmed' }, ...prev])
   }
 
+  // Stash the dismissed entry and arm the undo toast; the entry is removed
+  // from view immediately but can be restored until the toast auto-clears.
+  function armDismiss(entry: ThreatEntry, list: 'confirmed' | 'unconfirmed') {
+    if (dismissTimer.current) clearTimeout(dismissTimer.current)
+    setDismissed({ entry, list })
+    dismissTimer.current = setTimeout(() => setDismissed(null), 7000)
+  }
+
   function handleDismissUnconfirmed(id: string) {
+    const entry = unconfirmed.find(e => e.id === id)
     setUnconfirmed(prev => prev.filter(e => e.id !== id))
+    if (entry) armDismiss(entry, 'unconfirmed')
   }
 
   function handleDismissConfirmed(id: string) {
+    const entry = confirmed.find(e => e.id === id)
     setConfirmed(prev => prev.filter(e => e.id !== id))
+    if (entry) armDismiss(entry, 'confirmed')
+  }
+
+  // Restore the last-dismissed card into the list it came from (de-duped, in
+  // case a live refresh already re-added it) and dismiss the undo toast.
+  function undoDismiss() {
+    if (!dismissed) return
+    const { entry, list } = dismissed
+    const restore = (prev: ThreatEntry[]) =>
+      prev.some(e => e.id === entry.id) ? prev : [entry, ...prev]
+    if (list === 'confirmed') setConfirmed(restore)
+    else setUnconfirmed(restore)
+    if (dismissTimer.current) clearTimeout(dismissTimer.current)
+    setDismissed(null)
   }
 
   // Download the live IOC store as CSV; fall back to the visible entries'
@@ -921,6 +972,31 @@ export default function FeedsPage() {
           </div>
         </div>
       </div>
+
+      {/* Undo toast - dismiss is reversible until this clears */}
+      <AnimatePresence>
+        {dismissed && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-xl glass border border-white/10 shadow-lg"
+            role="status"
+          >
+            <X className="w-3.5 h-3.5 text-ink-500 shrink-0" />
+            <span className="text-xs text-ink-200">
+              Dismissed <span className="text-ink-400">“{dismissed.entry.title.slice(0, 42)}{dismissed.entry.title.length > 42 ? '…' : ''}”</span>
+            </span>
+            <button
+              onClick={undoDismiss}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-magenta/12 text-magenta border border-magenta/25 text-xs font-medium hover:bg-magenta/20 transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" /> Undo
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

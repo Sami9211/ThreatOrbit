@@ -471,9 +471,22 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     Escalations/incident-timeline/collaboration reach the SOAR case war-room via
     the alert→SIEM→case path. Remaining (polish): inline escalate-to-case and a
     collaboration/notes side-panel directly on the console.
-8. **[ ] Undo for destructive analyst actions.** Block-IOC and dismiss-alert
-    are irreversible. Prior undo work (task #92) covered some actions; extend to
-    these with undo affordance + action history + confirm prompts.
+8. **[x] Undo for destructive analyst actions.** DONE (2026-07-23). Prior undo
+    work (task #92) covered the SIEM triage actions (status / disposition /
+    assign / escalate all offer an "Undo" toast via `flashUndo`). The two the
+    audit named were the Threat-Feeds card actions:
+    • **Dismiss** was a one-way client-side removal - now **reversible**: the
+      dismissed card is stashed with which column it came from
+      (confirmed/unconfirmed) and a bottom-centre **Undo toast** (7s window)
+      restores it into the exact list, de-duped against any live refresh that
+      re-added it. So an accidental dismiss is one click to recover.
+    • **Block IOCs** writes real indicators into the CTI store and there is no
+      one-click "unblock" endpoint, so undo would be dishonest - instead it's
+      **confirm-gated**: the first click arms the button ("Confirm block?",
+      amber), a second within 4s commits (then "Blocking…", disabled), and it
+      auto-disarms if not confirmed. This matches the audit's "confirm prompts"
+      for the genuinely-irreversible action while keeping the reversible one
+      (dismiss) a true undo. Build + lint (0 errors) + route-integrity clean.
 9. **[x] SIEM deep-link on "Send to SIEM".** DONE (2026-07-23). `?alert=<id>`
     already opened the exact record's detail drawer (not just the module) and
     the source action ("Send to SIEM" in the IOC panel) already toasts with a
