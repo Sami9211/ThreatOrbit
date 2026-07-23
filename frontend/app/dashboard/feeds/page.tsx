@@ -562,6 +562,9 @@ export default function FeedsPage() {
   const [feedsSummary, setFeedsSummary] = useState<FeedsSummary | null>(null)
   const [newIds, setNewIds] = useState<Set<string>>(new Set())
   const [severityFilter, setSeverityFilter] = useState<string>('all')
+  const [confidenceFilter, setConfidenceFilter] = useState<string>('all') // all|high|medium|low
+  const [sourceFilter, setSourceFilter] = useState<string>('all')
+  const [search, setSearch] = useState('')
   const [liveCount, setLiveCount] = useState(0)
   const [pulse, setPulse] = useState(false)
 
@@ -684,13 +687,26 @@ export default function FeedsPage() {
     }
   }
 
-  const filteredConfirmed = severityFilter === 'all'
-    ? confirmed
-    : confirmed.filter(e => e.severity === severityFilter)
-
-  const filteredUnconfirmed = severityFilter === 'all'
-    ? unconfirmed
-    : unconfirmed.filter(e => e.severity === severityFilter)
+  // Multi-dimensional filtering (severity + confidence band + source + free
+  // text over title/attack-type/country/IOCs/sources). Saved as a view below.
+  const confBand = (c: number) => (c >= 85 ? 'high' : c >= 65 ? 'medium' : 'low')
+  const allSources = Array.from(
+    new Set([...confirmed, ...unconfirmed].flatMap(e => e.feedSources ?? []))
+  ).sort()
+  const matchEntry = (e: ThreatEntry) => {
+    if (severityFilter !== 'all' && e.severity !== severityFilter) return false
+    if (confidenceFilter !== 'all' && confBand(e.aiConfidence) !== confidenceFilter) return false
+    if (sourceFilter !== 'all' && !(e.feedSources ?? []).includes(sourceFilter)) return false
+    if (search) {
+      const q = search.toLowerCase()
+      const hay = [e.title, e.attackType, e.sourceCountry, ...(e.iocs ?? []),
+        ...(e.feedSources ?? []), ...(e.mitre ?? [])].join(' ').toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  }
+  const filteredConfirmed = confirmed.filter(matchEntry)
+  const filteredUnconfirmed = unconfirmed.filter(matchEntry)
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0A0612]">
@@ -764,7 +780,7 @@ export default function FeedsPage() {
         ))}
       </div>
 
-      {/* Severity filter */}
+      {/* Filters: severity + confidence + source + search (saveable views) */}
       <div className="flex items-center gap-1.5 px-6 py-2 border-b border-white/4 shrink-0 overflow-x-auto">
         {['all', 'critical', 'high', 'medium', 'low'].map(sev => (
           <button
@@ -780,11 +796,40 @@ export default function FeedsPage() {
             {sev === 'all' ? 'All Severities' : sev}
           </button>
         ))}
-        <div className="ml-auto">
+        <span className="w-px h-4 bg-white/10 mx-1 shrink-0" />
+        <select value={confidenceFilter} onChange={(e) => setConfidenceFilter(e.target.value)}
+          aria-label="Confidence" title="Confidence"
+          className="px-2 py-1 rounded-lg bg-white/4 border border-white/8 text-[11px] text-ink-300 focus:outline-hidden focus:border-magenta/40 shrink-0">
+          <option value="all">Any confidence</option>
+          <option value="high">High (≥85%)</option>
+          <option value="medium">Medium (65-84%)</option>
+          <option value="low">Low (&lt;65%)</option>
+        </select>
+        <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}
+          aria-label="Source" title="Feed source"
+          className="px-2 py-1 rounded-lg bg-white/4 border border-white/8 text-[11px] text-ink-300 focus:outline-hidden focus:border-magenta/40 shrink-0 max-w-[160px]">
+          <option value="all">All sources</option>
+          {allSources.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <input value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search title, IOC, actor, technique…" aria-label="Search feeds"
+          className="px-2.5 py-1 rounded-lg bg-white/4 border border-white/8 text-[11px] text-ink-200 placeholder-ink-600 focus:outline-hidden focus:border-magenta/40 shrink-0 w-52" />
+        {(severityFilter !== 'all' || confidenceFilter !== 'all' || sourceFilter !== 'all' || search) && (
+          <button onClick={() => { setSeverityFilter('all'); setConfidenceFilter('all'); setSourceFilter('all'); setSearch('') }}
+            className="px-2 py-1 rounded-lg text-[11px] text-ink-500 hover:text-white border border-white/8 shrink-0">
+            Clear
+          </button>
+        )}
+        <div className="ml-auto shrink-0">
           <SavedViewsButton
             section="feeds"
-            filters={{ severity: severityFilter }}
-            onApply={(f) => setSeverityFilter(f.severity ?? 'all')}
+            filters={{ severity: severityFilter, confidence: confidenceFilter, source: sourceFilter, q: search }}
+            onApply={(f) => {
+              setSeverityFilter(f.severity ?? 'all')
+              setConfidenceFilter(f.confidence ?? 'all')
+              setSourceFilter(f.source ?? 'all')
+              setSearch(f.q ?? '')
+            }}
           />
         </div>
       </div>

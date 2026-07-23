@@ -462,11 +462,17 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
 
 ### Connectors & intelligence quality
 
-10. **[ ] Threat-feed filtering + connector controls.** Filters: severity,
-    source, IOC type, confidence, actor, malware family, tags, time range +
-    saved filter sets. Feed Sources: pause/resume/restart/edit/disable/health/
-    test-connectivity, admin-gated (greyed / "requires administrator" for
-    non-admins).
+10. **[~] Threat-feed filtering + connector controls.** **Filtering SHIPPED
+    (2026-07-22):** the Threat Feeds page had only a severity chip row; now
+    also filters by **confidence band** (high ≥85 / medium 65-84 / low <65),
+    **source** (dropdown built from the feeds actually present), and a **free-
+    text search** over title / attack-type / country / IOCs / feed-sources /
+    MITRE techniques, with a Clear button - and all four are saved/restored
+    through the existing SavedViews ("saved filter configurations"). Remaining:
+    a couple more facets (explicit IOC-type / actor / malware-family / tags /
+    time-range) and the Feed-Sources connector controls (pause/resume/restart/
+    disable/health/test-connectivity, admin-gated) - connector edit/state
+    already exists in ConnectorsPanel; add the lifecycle actions + gating.
 11. **[~] Per-connector config fields.** Setup asks generic type+URL; each
     connector must present only its real fields - OTX→API key, VirusTotal→API
     key, MISP→URL+key, TheHive→URL+key - and be correctly wired. `connectors.py`
