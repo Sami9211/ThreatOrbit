@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import Logo from '@/components/ui/Logo'
 import { PLANS, planById, type PlanId } from '@/lib/plans'
 import { useAuth } from '@/lib/auth-context'
+import { resendVerification } from '@/lib/api'
 
 function strength(pw: string): { score: number; label: string; color: string } {
   let s = 0
@@ -40,6 +41,7 @@ export default function SignUpPage() {
   const [agree, setAgree] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
 
   const selected = planById[plan]
   const pw = strength(form.password)
@@ -60,12 +62,15 @@ export default function SignUpPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await register({
+      const res = await register({
         name: form.name.trim(),
         email: form.email.trim(),
         password: form.password,
         company: form.company.trim() || undefined,
       })
+      // Email-verification deployments have no session yet - tell the user to
+      // check their inbox instead of bouncing them to a login wall.
+      if (res.pending) { setPendingEmail(res.email ?? form.email.trim()); setSubmitting(false); return }
       router.push('/dashboard')
     } catch (err) {
       const msg = err instanceof Error ? err.message : ''
@@ -201,7 +206,35 @@ export default function SignUpPage() {
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
               transition={{ duration: 0.35 }}
               className="grid lg:grid-cols-[1fr_340px] gap-8 max-w-4xl mx-auto items-start">
-              {/* Form */}
+              {/* Post-signup "verify your email" state (email-verification
+                  deployments), otherwise the signup form. */}
+              {pendingEmail ? (
+                <div className="glass border border-white/8 rounded-2xl p-6 sm:p-8 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-safe/15 flex items-center justify-center mx-auto mb-4">
+                    <Mail className="w-6 h-6 text-safe" />
+                  </div>
+                  <h1 className="font-display text-2xl font-bold text-white mb-1">Check your email</h1>
+                  <p className="text-sm text-ink-400 mb-1">
+                    We&apos;ve sent a verification link to
+                  </p>
+                  <p className="text-sm font-semibold text-white mb-5 break-all">{pendingEmail}</p>
+                  <p className="text-xs text-ink-500 mb-6">
+                    Click the link to activate your account, then sign in. The link expires in 24 hours.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                    <button type="button"
+                      onClick={() => { resendVerification(pendingEmail).catch(() => {}); setError('Verification email re-sent.') }}
+                      className="px-4 py-2 rounded-lg text-xs font-medium bg-surface-2 border border-white/10 text-ink-300 hover:text-white transition-colors">
+                      Resend email
+                    </button>
+                    <Link href="/login"
+                      className="px-4 py-2 rounded-lg text-xs font-semibold bg-plasma text-white hover:opacity-90 transition-opacity">
+                      Go to sign in
+                    </Link>
+                  </div>
+                  {error && <p className="text-[11px] text-safe mt-3">{error}</p>}
+                </div>
+              ) : (
               <form onSubmit={submit} className="glass border border-white/8 rounded-2xl p-6 sm:p-8">
                 <button type="button" onClick={() => setStep(1)}
                   className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-white transition-colors mb-5">
@@ -277,6 +310,7 @@ export default function SignUpPage() {
                   By continuing you start a 14-day Professional trial. No charge until it ends.
                 </p>
               </form>
+              )}
 
               {/* Order summary */}
               <div className="glass border border-white/8 rounded-2xl p-6 lg:sticky lg:top-6">

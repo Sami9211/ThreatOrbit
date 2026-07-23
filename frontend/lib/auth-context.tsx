@@ -8,14 +8,14 @@ interface AuthCtx {
   token: string | null
   loading: boolean
   login: (email: string, password: string, code?: string) => Promise<void>
-  register: (body: { name: string; email: string; password: string; company?: string }) => Promise<void>
+  register: (body: { name: string; email: string; password: string; company?: string }) => Promise<{ pending: boolean; email?: string; message?: string }>
   completeSso: (token: string) => Promise<void>
   logout: () => void
 }
 
 const AuthContext = createContext<AuthCtx>({
   user: null, token: null, loading: true,
-  login: async () => {}, register: async () => {}, completeSso: async () => {}, logout: () => {},
+  login: async () => {}, register: async () => ({ pending: false }), completeSso: async () => {}, logout: () => {},
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -64,8 +64,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [storeSession])
 
   const register = useCallback(async (body: { name: string; email: string; password: string; company?: string }) => {
-    const { token: tok, user: u } = await authRegister(body)
-    storeSession(tok, u)
+    const res = await authRegister(body)
+    // Email-verification deployments return no session - the caller shows a
+    // "check your email" state instead of proceeding to the dashboard.
+    if (res.token && res.user) storeSession(res.token, res.user)
+    return { pending: !!res.pending, email: res.email, message: res.message }
   }, [storeSession])
 
   // Complete an SSO sign-in: the backend handed us a session token in the URL

@@ -546,9 +546,20 @@ export const mfaRegenerateRecoveryCodes = (code: string) =>
   api<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { method: 'POST', body: JSON.stringify({ code }) })
 
 export const authRegister = (body: { name: string; email: string; password: string; company?: string }) =>
-  api<{ token: string; user: User }>('/auth/register', {
+  // Either an immediate session ({token, user}) or, when email verification is
+  // required, a pending response ({pending, email, message}) with no session.
+  api<{ token?: string; user?: User; pending?: boolean; email?: string; message?: string }>('/auth/register', {
     method: 'POST',
     body: JSON.stringify(body),
+  })
+
+export const verifyEmail = (token: string) =>
+  api<{ verified: boolean; email: string }>('/auth/verify', {
+    method: 'POST', body: JSON.stringify({ token }),
+  })
+export const resendVerification = (email: string) =>
+  api<{ ok: boolean; message: string }>('/auth/resend-verification', {
+    method: 'POST', body: JSON.stringify({ email }),
   })
 
 export const authMe = () => api<User>('/auth/me')

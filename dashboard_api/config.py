@@ -119,6 +119,16 @@ AUTH_FAILURE_WINDOW_SEC = int(os.environ.get("DASHBOARD_AUTH_FAILURE_WINDOW_SEC"
 # --- Registration --------------------------------------------------------------
 # Public self-service signup can be disabled for closed deployments.
 ALLOW_REGISTRATION = os.environ.get("DASHBOARD_ALLOW_REGISTRATION", "true").lower() != "false"
+# When enabled (and SMTP is configured), a new self-service signup is created in
+# 'pending' status and cannot sign in until it confirms ownership of its email
+# via a link. Off by default so existing deployments (and tests) are unchanged;
+# the very first account (the bootstrap admin) is always active regardless.
+REQUIRE_EMAIL_VERIFICATION = (
+    os.environ.get("DASHBOARD_REQUIRE_EMAIL_VERIFICATION", "false").lower() == "true"
+)
+# Public base URL of the dashboard, used to build links in outbound email
+# (e.g. the email-verification link). Falls back to a relative path.
+APP_BASE_URL = os.environ.get("DASHBOARD_APP_BASE_URL", "").rstrip("/")
 
 # --- Detection pipeline ---------------------------------------------------------
 # Worker count for a pooled backlog drain (detection_pool). The engine's inline

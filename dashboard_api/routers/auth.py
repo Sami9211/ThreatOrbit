@@ -18,9 +18,13 @@ from dashboard_api.auth import (
     create_token, current_session_id, current_user, hash_password,
     record_session, require_perm, verify_password,
 )
-from dashboard_api.config import ALLOW_REGISTRATION, AUTH_FAILURE_WINDOW_SEC, AUTH_MAX_FAILURES
+from dashboard_api.config import (
+    ALLOW_REGISTRATION, AUTH_FAILURE_WINDOW_SEC, AUTH_MAX_FAILURES,
+    REQUIRE_EMAIL_VERIFICATION,
+)
 from dashboard_api.db import audit, get_conn, row_to_dict
 from dashboard_api.password_policy import validate_password
+from dashboard_api import email_verification, mailer
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -97,6 +101,13 @@ def login(body: LoginRequest, request: Request):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if user["status"] == "disabled":
             raise HTTPException(status_code=403, detail="Account disabled")
+        # An unverified self-service signup can't sign in until it confirms its
+        # email. Only reachable when REQUIRE_EMAIL_VERIFICATION is on (that is
+        # the only path that ever sets status='pending').
+        if user["status"] == "pending":
+            raise HTTPException(
+                status_code=403,
+                detail="Please verify your email before signing in - check your inbox for the verification link.")
         # Tenant lifecycle: a suspended workspace can't be signed into (no-op when
         # isolation is off or for the default workspace).
         from dashboard_api import tenancy
@@ -170,24 +181,89 @@ def register(body: RegisterRequest, request: Request):
     ph, salt = hash_password(body.password)
     uid = str(uuid.uuid4())
     now = _now()
+    token_to_send = None
+    sid = None
     with get_conn() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             _record_failure(key)
             raise HTTPException(status_code=409, detail="An account with that email already exists")
         first_user = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0
         role = "admin" if first_user else "analyst"
+        # Email verification gates only NON-first self-service signups, and only
+        # when it can actually send (SMTP configured). The bootstrap admin is
+        # always active so a deployment can never lock itself out.
+        require_verify = REQUIRE_EMAIL_VERIFICATION and mailer.configured() and not first_user
+        status_val = "pending" if require_verify else "active"
         conn.execute(
             "INSERT INTO users (id,email,name,role,status,password_hash,password_salt,"
             "avatar_color,mfa_enabled,last_login,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (uid, email, name, role, "active", ph, salt, "#FF2E97", 0, now, now),
+            (uid, email, name, role, status_val, ph, salt, "#FF2E97", 0,
+             None if require_verify else now, now),
         )
-        detail = f"role={role}" + (f" company={body.company.strip()}" if body.company and body.company.strip() else "")
+        detail = f"role={role} status={status_val}" + (
+            f" company={body.company.strip()}" if body.company and body.company.strip() else "")
         audit(conn, email, "auth.register", uid, detail)
         user = row_to_dict(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
-        sid = record_session(conn, uid, request)
+        if require_verify:
+            token_to_send = email_verification.issue_token(conn, uid)
+        else:
+            sid = record_session(conn, uid, request)
         conn.commit()
     _clear_failures(key)
+    if token_to_send is not None:
+        # Sent after commit so a mail hiccup never rolls back the account.
+        email_verification.send_verification(email, name, token_to_send)
+        return {"pending": True, "email": email,
+                "message": "Check your email to verify your account before signing in."}
     return {"token": create_token(user, sid=sid), "user": _public(user)}
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+@router.post("/verify")
+def verify_email(body: VerifyEmailRequest):
+    """Confirm email ownership from the link in the verification email, moving
+    the account from 'pending' to 'active'. Single-use; invalid/expired -> 400."""
+    with get_conn() as conn:
+        uid = email_verification.verify_token(conn, body.token)
+        if not uid:
+            raise HTTPException(status_code=400,
+                                detail="This verification link is invalid or has expired.")
+        row = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Account not found.")
+        user = row_to_dict(row)
+        if user["status"] == "pending":
+            conn.execute("UPDATE users SET status='active' WHERE id=?", (uid,))
+            audit(conn, user["email"], "auth.email_verified", uid)
+        conn.commit()
+    return {"verified": True, "email": user["email"]}
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
+@router.post("/resend-verification")
+def resend_verification(body: ResendVerificationRequest):
+    """Re-send the verification link for a pending account. Always returns the
+    same response so it can't be used to enumerate accounts."""
+    generic = {"ok": True,
+               "message": "If that account exists and is unverified, a new link has been sent."}
+    email = (body.email or "").strip().lower()
+    if not (REQUIRE_EMAIL_VERIFICATION and mailer.configured()) or not _EMAIL_RE.match(email):
+        return generic
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email=? AND status='pending'", (email,)).fetchone()
+        if not row:
+            return generic
+        user = row_to_dict(row)
+        token = email_verification.issue_token(conn, user["id"])
+        conn.commit()
+    email_verification.send_verification(email, user["name"], token)
+    return generic
 
 
 @router.get("/me")

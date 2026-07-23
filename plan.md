@@ -343,16 +343,27 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
 
 ### Administration & identity
 
-1. **[ ] Admin Panel + RBAC + sign-up validation.** No dedicated admin
-   surface. Need: user CRUD (create/edit/disable/delete), role assignment,
-   RBAC policy editing, security-policy config, audit-log viewer, lock/unlock,
-   password reset, API-integration management, global settings - Entra-ID-class
-   control. Backend already has users/roles/audit_log/capabilities tables and
-   RBAC enforcement (`permissions.py`); this is mostly an admin UI + a few
-   admin endpoints (lock/unlock, force-reset, disable). **Sign-up** (`app/
-   signup`) accepts any email, no verification/ownership check: add email
-   verification, password-complexity (backend `password_policy.py` exists -
-   wire it to signup), duplicate-account prevention, input validation. *Large.*
+1. **[~] Admin Panel + RBAC + sign-up validation.**
+   **Sign-up validation - RESOLVED (2026-07-22).** On reading the code, the
+   register endpoint *already* enforces the input validation the audit asked
+   for: rate-limit throttle, a disable switch, required name + length cap,
+   email-format regex, password complexity (`password_policy.validate_password`),
+   and duplicate prevention (409) - plus client-side strength/format gating.
+   The genuine gap was **email-ownership verification**, now SHIPPED (gated,
+   opt-in): `DASHBOARD_REQUIRE_EMAIL_VERIFICATION=true` (+ SMTP configured)
+   makes a non-first signup land in `status='pending'`; a single-use,
+   24h-expiry token (hash stored in `settings`, no migration) is emailed via
+   the existing `mailer.py`; login is blocked until verified; `POST
+   /auth/verify` activates; `POST /auth/resend-verification` re-sends without
+   account enumeration. Frontend: signup shows a "check your email" state, a
+   new `/verify` page consumes the link, `lib/api` helpers added. The
+   bootstrap admin is always active (deployment can't lock itself out); OFF by
+   default so existing deployments/tests are unchanged. Backend test covers
+   pending→blocked-login→verify→login + single-use/invalid-token.
+   **Remaining:** the dedicated Admin Panel UI (user CRUD/lock/unlock/force-
+   reset consolidated, RBAC policy editor, audit-log viewer). Backend has the
+   users/roles/audit_log/capabilities tables + RBAC enforcement already; this
+   is mostly UI + a few admin endpoints. *Large.*
 2. **[~] Account Settings page.** Profile menu "Profile & settings"
    (`TopBar.tsx:288`) routes to `/dashboard/config` (admin config, not a
    personal profile). Build a dedicated Account Settings page: profile, change

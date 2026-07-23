@@ -396,6 +396,43 @@ def test_enrichment_provider_key_config(client, auth):
     assert client.put("/config/enrichment/nope", json={"api_key": "x"}, headers=auth).status_code == 404
 
 
+def test_email_verification_flow(client, monkeypatch):
+    """With verification required + SMTP available, a signup is pending, can't
+    log in until it verifies via the emailed single-use token, then can."""
+    from dashboard_api import email_verification, mailer
+    from dashboard_api.routers import auth as auth_router
+
+    monkeypatch.setattr(auth_router, "REQUIRE_EMAIL_VERIFICATION", True)
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    captured: dict = {}
+    def fake_send(to, name, token):
+        captured["token"] = token
+        return {"sent": True}
+    monkeypatch.setattr(email_verification, "send_verification", fake_send)
+
+    creds = {"name": "New Analyst", "email": "verifyme@example.com", "password": "Str0ng-Passw0rd!"}
+    r = client.post("/auth/register", json=creds).json()
+    assert r.get("pending") is True and "token" not in r          # no session yet
+    assert captured.get("token")                                   # a link was emailed
+
+    # Login is blocked while pending (error-body shape is app-specific, so match
+    # on the response text rather than a particular key).
+    blocked = client.post("/auth/login", json={"email": creds["email"], "password": creds["password"]})
+    assert blocked.status_code == 403 and "verify" in blocked.text.lower()
+
+    # Verify with the emailed token -> active.
+    v = client.post("/auth/verify", json={"token": captured["token"]})
+    assert v.status_code == 200 and v.json()["verified"] is True
+
+    # Now login works.
+    ok = client.post("/auth/login", json={"email": creds["email"], "password": creds["password"]})
+    assert ok.status_code == 200 and ok.json().get("token")
+
+    # The token is single-use, and garbage is rejected.
+    assert client.post("/auth/verify", json={"token": captured["token"]}).status_code == 400
+    assert client.post("/auth/verify", json={"token": "not-a-real-token"}).status_code == 400
+
+
 def test_viewer_cannot_create_user(client):
     # log in as the seeded viewer
     tok = client.post("/auth/login", json={"email": "tom.okafor@threatorbit.space", "password": "Password123!"}).json()["token"]
