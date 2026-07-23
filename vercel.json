@@ -1,7 +1,8 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/out",
-  "framework": null,
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "_comment": "Node SSR (was a custom static export served from frontend/out). Set the Vercel project Root Directory to 'frontend' so the nextjs framework detects the app and serves it as SSR. Security headers are applied by the Next server itself (frontend/next.config.mjs headers()) so they hold on every host; the block below is retained as defence-in-depth on Vercel's edge.",
   "headers": [
     {
       "source": "/(.*)",

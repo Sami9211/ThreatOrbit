@@ -128,7 +128,9 @@ APP_API_KEY="${APP_API_KEY:-local-dev-key}" \
     nohup "$PY" -m uvicorn log_api.main:app --host 0.0.0.0 --port 8001 \
     > "$RUN_DIR/log.log" 2>&1 & echo $! > "$RUN_DIR/log.pid"
 
-nohup "$PY" scripts/serve_frontend.py 3000 \
+# Node SSR server (was a static file server over frontend/out). `next start`
+# serves the .next build and applies the security headers from next.config.
+nohup sh -c 'cd frontend && exec npx --no-install next start -p 3000' \
     > "$RUN_DIR/frontend.log" 2>&1 & echo $! > "$RUN_DIR/frontend.pid"
 
 say "[6/6] Waiting for the services to come up..."

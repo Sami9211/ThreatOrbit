@@ -1,4 +1,4 @@
-# Stage 1: build the static export.
+# Stage 1: build the Node SSR app.
 # Base images pinned by digest (supply-chain integrity); Dependabot's docker
 # ecosystem bumps both the tag and the digest when a new image ships.
 FROM node:22-alpine@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4 AS build
@@ -11,10 +11,19 @@ ARG NEXT_PUBLIC_API_URL=http://localhost:8002
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
-# Stage 2: serve the export with nginx (digest-pinned, as above).
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/out /usr/share/nginx/html
-EXPOSE 80
+# Stage 2: run the Node SSR server (`next start`). No nginx - the Next server
+# serves the app and applies the security headers from next.config headers().
+FROM node:22-alpine@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+# Production dependencies + the build output + config needed by `next start`.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/next.config.mjs ./next.config.mjs
+EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -q --spider http://127.0.0.1/ || exit 1
+  CMD node -e "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+CMD ["npx", "--no-install", "next", "start", "-p", "3000"]

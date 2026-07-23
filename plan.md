@@ -3162,3 +3162,28 @@ _Move completed items here with the date so the roadmap stays honest._
   items open a real detail view with rows + deep-link actions; wired recent
   alerts, incidents, and the live threat feed. Also wired the dead SIEM
   "Refresh" button and added live polling to the SIEM queue.
+
+- **2026-07-23 · Frontend → Node SSR deployment (was static export).** Migrated
+  the Next.js frontend from `output: 'export'` (static, nginx/CDN-served) to a
+  **Node SSR deployment** (`next start`). Rationale + security handling:
+  • The 9 open Next.js advisories were previously non-applicable because a
+    static export ships no server runtime; SSR makes them apply, so the move is
+    paired with a genuine fix - `next` pinned to **16.3.0-canary.94** (the first
+    build carrying the patches; `npm audit --omit=dev` now reports **zero**
+    high/critical). `.audit-allowlist.json` is empty again (nothing to triage).
+    Re-pin to 16.3.0 stable when it ships (canary is a pre-release).
+  • **Security headers** now come from `next.config.mjs headers()` (X-Frame-
+    Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS,
+    the full CSP) - static export ignored `headers()`, so they used to be set by
+    nginx.conf / vercel.json only. The Node server now enforces them on every
+    response and on every host (verified via `curl -I`).
+  • Scaffolding retargeted: `Dockerfile` runs `next start` on a Node runtime
+    (no nginx); `linux-start.sh` starts the SSR server; `package.json`
+    start/start:e2e use `next start`; `vercel.json` uses `framework: nextjs`
+    (set the Vercel project Root Directory to `frontend`). `serve_frontend.py`
+    is now legacy (unused).
+  • Verified: build clean; `next start` serves with headers; audit-gate passes;
+    lint 0 errors; check:routes clean; 20 e2e (auth/deep-links/workflows/
+    analyst-flow/a11y) green against the live SSR stack.
+  Trade-off recorded honestly: SSR adds a Node server process (vs. a static
+  bundle any host can serve) and pins a Next pre-release until 16.3.0 ships.
