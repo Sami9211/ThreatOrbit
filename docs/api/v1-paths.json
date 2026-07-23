@@ -34,6 +34,7 @@
     "/auth/mfa/verify",
     "/auth/permissions",
     "/auth/register",
+    "/auth/resend-verification",
     "/auth/saml/acs",
     "/auth/saml/login",
     "/auth/saml/status",
@@ -43,6 +44,7 @@
     "/auth/sso/callback",
     "/auth/sso/login",
     "/auth/sso/status",
+    "/auth/verify",
     "/billing/checkout",
     "/billing/portal",
     "/billing/status",
@@ -57,6 +59,8 @@
     "/config/email",
     "/config/email/test",
     "/config/engine",
+    "/config/enrichment",
+    "/config/enrichment/{provider}",
     "/config/jobs",
     "/config/leader",
     "/config/license",
@@ -241,6 +245,7 @@
     "/taxii2/api/collections/{collection_id}/objects/",
     "/users",
     "/users/{user_id}",
+    "/users/{user_id}/reset-password",
     "/users/{user_id}/revoke-sessions"
   ]
 }
