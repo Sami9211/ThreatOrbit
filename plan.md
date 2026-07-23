@@ -580,10 +580,29 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     a specific "switch to the X type" message, the Scan button disables, and a
     manual scan/Enter is blocked. Real-data pivots are never gated. Deeper
     results already exist (Audit 3 #9: Details / Relations / Community / Sources
-    tabs, real RDAP registry data, relations from own stores). Remaining
-    (larger): more result depth (detection history, richer WHOIS/DNS, related
-    indicators, ATT&CK mapping) toward VirusTotal-grade, plus a dedicated
-    Domain tab.
+    tabs, real RDAP registry data, relations from own stores). **Result depth +
+    Domain tab SHIPPED (2026-07-23):**
+    • The Details tab now surfaces the **structured external-provider data**
+      that was previously only a one-line summary - a **VirusTotal detection
+      ratio** card (multi-engine malicious/suspicious/harmless/undetected split
+      with a ratio bar, from `last_analysis_stats`), a **GreyNoise** card
+      (internet-scanner classification / RIOT / actor tag / last-seen), and a
+      **Shodan exposure** card (open ports + known-CVE list, each CVE a
+      one-click re-scan pivot). Every card is gated on the provider's honest
+      `available` flag, so nothing renders (or invents data) when a key isn't
+      configured - real VirusTotal-grade depth exactly when the deployment has
+      wired those providers (see #11).
+    • Added a first-class **Domain** input tab (bare-host lookup, `example.com`)
+      with its own validator that steers full-URL/IP/hash input to the right
+      tab; a domain scan drives the same RDAP registry lookup, so the Details
+      tab renders registrar / registration date / age / nameservers - the
+      WHOIS/DNS depth the audit asked for. (`domain` was already a recognised
+      backend scan type; this gives it a dedicated tab.)
+    Build + lint (0 errors) + route-integrity (283 links, no dead) clean.
+    Remaining (minor): a full historical detection *timeline* (needs
+    per-provider result history retained over time; today only the latest
+    enrichment is cached) and inline ATT&CK technique mapping on non-demo
+    results.
 16. **[~] Threat Actor profiles.** Collapse bug FIXED (2026-07-22): the actor
     card's rotating chevron implied expand/collapse but `onSelect` only ever
     selected, so it never closed - now it toggles (click the open actor again

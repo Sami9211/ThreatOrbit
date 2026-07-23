@@ -138,7 +138,7 @@ const DEMO_RESULTS: Record<string, ScanResult> = {
 
 type ScanResult = {
   target: string
-  type: 'url' | 'ip' | 'hash' | 'file'
+  type: 'url' | 'ip' | 'hash' | 'file' | 'domain'
   verdict: string
   detectionRatio: string
   score: number
@@ -162,10 +162,11 @@ type ScanResult = {
 type ResultTab = 'details' | 'relations' | 'community' | 'sources'
 
 const SCAN_TYPES = [
-  { key: 'url',  label: 'URL',      icon: Link,   placeholder: 'https://example.com/path' },
-  { key: 'ip',   label: 'IP',       icon: Globe,  placeholder: '192.168.1.1' },
-  { key: 'hash', label: 'Hash',     icon: Hash,   placeholder: 'MD5 / SHA1 / SHA256' },
-  { key: 'file', label: 'File',     icon: File,   placeholder: 'Drop a file or browse...' },
+  { key: 'url',    label: 'URL',    icon: Link,    placeholder: 'https://example.com/path' },
+  { key: 'domain', label: 'Domain', icon: Network, placeholder: 'example.com' },
+  { key: 'ip',     label: 'IP',     icon: Globe,   placeholder: '192.168.1.1' },
+  { key: 'hash',   label: 'Hash',   icon: Hash,    placeholder: 'MD5 / SHA1 / SHA256' },
+  { key: 'file',   label: 'File',   icon: File,    placeholder: 'Drop a file or browse...' },
 ]
 
 const _IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
@@ -198,6 +199,13 @@ function validateScanInput(type: string, raw: string): string | null {
     const host = v.replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0]
     if (_DOMAIN.test(host)) return null
     return 'Enter a valid URL or domain (e.g. https://example.com/path).'
+  }
+  if (type === 'domain') {
+    if (_IPV4.test(v) || _IPV6.test(v)) return 'That is an IP address — switch to the IP type.'
+    if (_HASH.test(v)) return 'That is a file hash — switch to the Hash type.'
+    if (/^[a-z]+:\/\//i.test(v) || /[/?#]/.test(v)) return 'That looks like a full URL — switch to the URL type (a domain is just the host, e.g. example.com).'
+    if (_DOMAIN.test(v)) return null
+    return 'Enter a bare domain (e.g. example.com), no scheme or path.'
   }
   return null
 }
@@ -546,6 +554,99 @@ function DetailsTab({ result }: { result: ScanResult }) {
           {heur.summary && <p className="text-[11px] text-ink-400 mt-3">{heur.summary}</p>}
         </Card>
       )}
+
+      {/* VirusTotal multi-engine detection ratio - their core signal. Only
+          rendered when the provider is configured and actually returned stats. */}
+      {(() => {
+        const vt = providerOf(result, 'virustotal')
+        const stats = (vt?.data?.stats as Record<string, number> | undefined) ?? null
+        if (!vt?.available || !stats) return null
+        const mal = Number(stats.malicious ?? 0)
+        const susp = Number(stats.suspicious ?? 0)
+        const total = Object.values(stats).reduce((a, b) => a + (Number(b) || 0), 0)
+        const flagged = mal + susp
+        return (
+          <Card title="VirusTotal Detections"
+            right={<span className={cn('text-xs font-mono font-semibold', flagged > 0 ? 'text-threat' : 'text-safe')}>{flagged}/{total || '—'}</span>}>
+            {total > 0 ? (
+              <div>
+                <div className="h-2 rounded-full bg-white/5 overflow-hidden mb-3">
+                  <div className="h-full rounded-full" style={{ width: `${Math.round((flagged / total) * 100)}%`, background: tk(flagged > 0 ? 'threat' : 'safe') }} />
+                </div>
+                <KV k="Malicious" v={mal} />
+                <KV k="Suspicious" v={susp} />
+                <KV k="Harmless" v={Number(stats.harmless ?? 0)} />
+                <KV k="Undetected" v={Number(stats.undetected ?? 0)} />
+                {vt.summary && <p className="text-[11px] text-ink-400 mt-3">{vt.summary}</p>}
+              </div>
+            ) : (
+              <EmptyNote text={vt.summary || 'Not seen by VirusTotal.'} />
+            )}
+          </Card>
+        )
+      })()}
+
+      {/* GreyNoise internet-scanner classification (IP indicators). */}
+      {(() => {
+        const gn = providerOf(result, 'greynoise')
+        if (!gn?.available) return null
+        const d = (gn.data ?? {}) as Record<string, unknown>
+        return (
+          <Card title="GreyNoise · Internet Scanner">
+            {d.noise ? (
+              <div>
+                <KV k="Classification" v={(d.classification as string) ?? null} mono={false} />
+                <KV k="Actor / tag" v={(d.name as string) ?? null} mono={false} />
+                <KV k="RIOT (common service)" v={d.riot ? 'yes' : 'no'} />
+                <KV k="Last seen scanning" v={(d.last_seen as string) ?? null} />
+                {gn.summary && <p className="text-[11px] text-ink-400 mt-3">{gn.summary}</p>}
+              </div>
+            ) : (
+              <EmptyNote text="Not observed opportunistically scanning the internet (GreyNoise)." />
+            )}
+          </Card>
+        )
+      })()}
+
+      {/* Shodan exposure - open ports / services / known CVEs (IP indicators). */}
+      {(() => {
+        const sh = providerOf(result, 'shodan')
+        if (!sh?.available) return null
+        const d = (sh.data ?? {}) as Record<string, unknown>
+        if (d.found === false) return (
+          <Card title="Shodan · Exposure"><EmptyNote text="No Shodan host records for this address." /></Card>
+        )
+        const ports = Array.isArray(d.ports) ? (d.ports as (number | string)[]) : []
+        const vulns = Array.isArray(d.vulns) ? (d.vulns as string[]) : []
+        return (
+          <Card title="Shodan · Exposure"
+            right={<span className="text-[10px] text-ink-500">{ports.length} port{ports.length === 1 ? '' : 's'}</span>}>
+            <KV k="Organisation" v={(d.org as string) ?? null} mono={false} />
+            {ports.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[10px] text-ink-500 mb-1">Open ports</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ports.slice(0, 30).map((p) => (
+                    <span key={String(p)} className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-surface-3 text-ink-300">{String(p)}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {vulns.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-threat mb-1">Known vulnerabilities</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {vulns.slice(0, 20).map((v) => (
+                    <a key={v} href={`/dashboard/scanner?value=${encodeURIComponent(v)}&run=1`} title="Look up this CVE"
+                      className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-threat/10 text-threat border border-threat/20 hover:bg-threat/20 transition-colors">{v}</a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {sh.summary && <p className="text-[11px] text-ink-400 mt-3">{sh.summary}</p>}
+          </Card>
+        )
+      })()}
 
       {result.fileInfo && (
         <Card title="File Details">
