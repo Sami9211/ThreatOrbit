@@ -492,10 +492,17 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     that the key activates the provider. Remaining: MISP/TheHive feed
     connectors and the per-*feed*-connector field schema in the Add-connector
     form.
-12. **[ ] Connector marketplace.** Replace low-value "Search Feeds" with a
-    catalogue: per-connector description, required config/credentials, features,
-    status, one-click wizard (selecting OTX prompts for its API key directly).
-    Owner specifically wants to add VirusTotal - make that path frictionless.
+12. **[x] Connector marketplace.** DONE (2026-07-22): a "Browse catalogue"
+    toggle on the connector panel shows every supported integration
+    (`fetchConnectorKinds`) as a card - label, description, an "API key
+    required / no key needed" badge, a "configured" tick if one already exists,
+    and a one-click **Configure →** that opens the add form pre-set to that
+    kind (new `initialKind` prop → the right fields, e.g. OTX opens straight to
+    its API-key field). Admin-gated. (There was no separate "Search Feeds"
+    route; the catalogue lives with the connectors it configures. VirusTotal
+    isn't here because it's an *enrichment* provider, configured in its own
+    panel - see #11.) Minor remaining: hide the (fixed) URL field for
+    managed keyed kinds like OTX so only the key shows.
 13b. **[ ] IntelScope redesign** (item 13). Two clear sections - **Search**
     (URL / IP / domain / hash, with input-type validation so an IP in a URL
     field is rejected) and **File Upload**. Deeper results: detection history,
