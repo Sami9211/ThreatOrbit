@@ -469,8 +469,14 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     opens the exact alert (`?alert=`). So: active alerts ✓, investigation queue
     ✓, analyst assignments ✓, search/filter ✓, SLA monitoring ✓ (existing).
     Escalations/incident-timeline/collaboration reach the SOAR case war-room via
-    the alert→SIEM→case path. Remaining (polish): inline escalate-to-case and a
-    collaboration/notes side-panel directly on the console.
+    the alert→SIEM→case path. **Inline escalate-to-case SHIPPED (2026-07-23):**
+    every Investigation-Queue row now has a one-click **"case"** button that
+    opens a real SOAR investigation case seeded with the alert's entities
+    (`createCase`, ip/host/user), marks the alert in-progress + owned so the
+    queue stays honest, and pops a confirmation toast with a **direct link to
+    the new case** - no leaving the console to escalate. Build + lint (0 errors)
+    + route-integrity clean. Remaining (minor polish): a collaboration/notes
+    side-panel inline on the console (notes already live in the SOAR case).
 8. **[x] Undo for destructive analyst actions.** DONE (2026-07-23). Prior undo
     work (task #92) covered the SIEM triage actions (status / disposition /
     assign / escalate all offer an "Undo" toast via `flashUndo`). The two the

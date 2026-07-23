@@ -14,13 +14,14 @@ import { motion } from 'framer-motion'
 import {
   Gauge, AlertTriangle, Clock, User, Activity, Zap, ShieldCheck,
   RefreshCw, ArrowUpRight, Wifi, Server, Timer, Inbox, Flame, Rss, Search, UserPlus,
+  Briefcase, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SEVERITY_COLOR as SEV_COLOR, tk, withAlpha } from '@/lib/colors'
 import { useAuth } from '@/lib/auth-context'
 import {
   fetchTriage, fetchSiemKpis, fetchEngineStatus, fetchAttackCoverage, fetchLogListeners,
-  fetchFeedsSummary, fetchSiemAlerts, patchAlert,
+  fetchFeedsSummary, fetchSiemAlerts, patchAlert, createCase,
   type SocTriage, type SiemKpis, type EngineStatus, type AttackCoverage, type LogListenerStatus,
   type FeedsSummary, type SiemAlert,
 } from '@/lib/api'
@@ -79,6 +80,10 @@ export default function SocConsolePage() {
   const [qSev, setQSev] = useState('all')
   const [qAssign, setQAssign] = useState('all') // all | mine | unassigned
   const [assigning, setAssigning] = useState<string | null>(null)
+  const [escalating, setEscalating] = useState<string | null>(null)
+  // Inline escalate-to-case feedback: the created case's id + a direct link, so
+  // the analyst never has to go hunt for the case they just opened.
+  const [escalated, setEscalated] = useState<{ caseId: string; href: string; title: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [updated, setUpdated] = useState<Date | null>(null)
@@ -145,6 +150,36 @@ export default function SocConsolePage() {
       setAlerts((prev) => prev.map((x) => x.id === a.id ? { ...x, owner: myName, status: nextStatus } : x))
     } catch { /* backend enforces perms; leave as-is on failure */ }
     finally { setAssigning(null) }
+  }
+
+  // Escalate an alert straight into a SOAR investigation case without leaving
+  // the console: opens a real case seeded with the alert's entities, marks the
+  // alert in-progress + owned, and surfaces a direct link to the new case.
+  async function escalateToCase(a: SiemAlert) {
+    if (escalating) return
+    setEscalating(a.id)
+    try {
+      const c = await createCase({
+        title: a.title,
+        severity: ['critical', 'high', 'medium', 'low'].includes(a.severity) ? a.severity : 'medium',
+        type: 'Investigation',
+        description: `Escalated from SIEM alert ${a.id}${a.ruleName ? ` (${a.ruleName})` : ''}.${a.description ? ` ${a.description}` : ''}`,
+        owner: myName || undefined,
+        alertCount: 1,
+        entities: [
+          ...(a.srcIp ? [{ type: 'ip', value: a.srcIp }] : []),
+          ...(a.hostname ? [{ type: 'host', value: a.hostname }] : []),
+          ...(a.username ? [{ type: 'user', value: a.username }] : []),
+        ],
+      })
+      // Reflect the escalation on the alert so the queue stays honest.
+      patchAlert(a.id, { owner: myName || a.owner, status: 'in-progress' }).catch(() => {})
+      setAlerts((prev) => prev.map((x) => x.id === a.id
+        ? { ...x, owner: myName || x.owner, status: 'in-progress' } : x))
+      setEscalated({ caseId: c.id, href: `/dashboard/soar?case=${encodeURIComponent(c.id)}`, title: a.title })
+      setTimeout(() => setEscalated((e) => (e?.caseId === c.id ? null : e)), 12000)
+    } catch { /* backend enforces perms; surfaced by no toast appearing */ }
+    finally { setEscalating(null) }
   }
 
   return (
@@ -256,6 +291,11 @@ export default function SocConsolePage() {
                               <UserPlus className="w-3 h-3" /> me
                             </button>
                           )}
+                          <button onClick={() => escalateToCase(a)} disabled={escalating === a.id}
+                            title="Escalate to a SOAR investigation case"
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-1 rounded-lg border border-magenta/25 bg-magenta/10 text-magenta hover:bg-magenta/20 transition-colors disabled:opacity-50">
+                            <Briefcase className="w-3 h-3" /> {escalating === a.id ? '…' : 'case'}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -503,6 +543,29 @@ export default function SocConsolePage() {
           </div>
         )}
       </div>
+
+      {/* Escalate-to-case confirmation - direct link to the new SOAR case */}
+      {escalated && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-xl glass border border-white/10 shadow-lg"
+          role="status"
+        >
+          <Briefcase className="w-3.5 h-3.5 text-magenta shrink-0" />
+          <span className="text-xs text-ink-200">
+            Case created from <span className="text-ink-400">“{escalated.title.slice(0, 36)}{escalated.title.length > 36 ? '…' : ''}”</span>
+          </span>
+          <Link href={escalated.href}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-magenta/12 text-magenta border border-magenta/25 text-xs font-medium hover:bg-magenta/20 transition-colors">
+            Open case <ArrowUpRight className="w-3 h-3" />
+          </Link>
+          <button onClick={() => setEscalated(null)} aria-label="Dismiss"
+            className="text-ink-600 hover:text-ink-300 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </motion.div>
+      )}
     </div>
   )
 }
