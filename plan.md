@@ -413,12 +413,24 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
 
 ### Navigation & workflow completeness
 
-5. **[ ] Live Processing Engine → Imports page (OpenCTI-style).** New page:
-    active imports, import queue, connector status, processing progress,
-    success/failure logs, indicators imported in real time; an admin setting
-    for inter-burst delay; and a guarantee the bursts are genuine live intel,
-    not generated samples. Backend has `IngestionEnginePanel`, jobs, connectors
-    - needs an imports/jobs status API + page.
+5. **[x] Live Processing Engine → Imports page (OpenCTI-style).** DONE
+    (2026-07-22): new `/dashboard/feeds/imports` page (nav: Threat Feeds →
+    Imports), all from real endpoints, auto-refreshing every 15s:
+    • pipeline summary - processing-queue depth + in-flight, engine burst
+      cadence (`tickSeconds`), queue lag/shedding, total indicators
+      (`fetchEngineStatus`);
+    • import sources - every connector's live status / last-import / indicator
+      count / last error, with an **admin-settable per-source cadence** (the
+      "delay between processing bursts" - `interval_minutes` via
+      `patchConnector`) and an Import-now button, both admin-gated;
+    • recent import jobs (`fetchJobs`) with status + progress = the
+      success/failure log;
+    • recently-imported indicators (`fetchIocs`, newest first-seen) as the
+      real-time import stream, each linking to IntelScope.
+    Genuine live intel by construction (reads the same stores the pipeline
+    writes - nothing generated). The global engine tick stays env-config
+    (`DASHBOARD_ENGINE_TICK_SECONDS`) since it's a background-thread constant;
+    the per-source cadence is the settable knob.
 6. **[~] Dead links.** Named: SOAR→Alert→Affected Systems, SOC→SLA Breach
     Queue, CTI→IOC actions, Related Alerts, ATT&CK Navigator actions.
     Systemic root cause found + fixed (2026-07-22): most of these DID link, but

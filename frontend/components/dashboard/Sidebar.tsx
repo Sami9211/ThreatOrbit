@@ -51,6 +51,7 @@ const NAV: NavGroup[] = [
         sub: [
           { href: '/dashboard/feeds',         label: 'Live Feed',   feature: 'feeds' },
           { href: '/dashboard/feeds/sources',  label: 'Sources',     feature: 'feeds' },
+          { href: '/dashboard/feeds/imports',  label: 'Imports',     feature: 'feeds' },
           { href: '/dashboard/feeds/import',   label: 'Import IOCs', feature: 'feeds' },
         ],
       },
