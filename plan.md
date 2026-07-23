@@ -454,9 +454,17 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     entity, then links to it) - both with confirm+link feedback. Remaining:
     related-cases lookup surfaced inline (the case link + entity seeding cover
     the create path).
-15. **[ ] Per-investigation graph.** Investigation Graph looks generic/static;
-    each investigation must render its own graph from that incident's real
-    relationships (not one shared viz).
+15. **[~] Per-investigation graph.** DONE for the CTI investigation graph
+    (2026-07-22): `buildGraph()` was already per-actor but always emitted the
+    same fixed 4-ring template (Campaigns/TTPs/IOCs/Sectors) with generic IOC
+    buckets, so every actor's graph looked structurally identical. Now it (a)
+    adds an **Aliases** ring from the actor's real aliases (previously unused),
+    (b) drops **empty** groups and zero-count IOC buckets, so a rich actor
+    renders more rings/nodes and a sparse one renders fewer - each
+    investigation's graph is visibly its own. (SOAR cases already carry their
+    own per-incident relationship view: Affected-systems + Attack-timeline.)
+    Remaining: a malware-family ring (needs the field threaded onto the CTI
+    display type) and edge-level relationship weighting.
 21. **[ ] ATT&CK Navigator dead links** - "Related Alerts" and per-entry
     actions must resolve (overlaps Audit 3 #18).
 

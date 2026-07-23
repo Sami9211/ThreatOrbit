@@ -300,30 +300,28 @@ function buildGraph(actor: Actor): GraphData {
   const hashK = Math.round(actor.iocCount * 0.55)
   const domK = Math.round(actor.iocCount * 0.25)
   const ipK = actor.iocCount - hashK - domK
+  // Only IOC buckets that actually have indicators (a fresh actor shows none).
+  const iocNodes = ([['File Hashes', hashK], ['Domains', domK], ['IP Addresses', ipK]] as const)
+    .filter(([, k]) => k > 0)
+    .map(([label, k], i) => ({ id: `i-${actor.id}-${i}`, label, meta: k.toLocaleString() }))
+  // Every group is built from THIS actor's real fields, and empty groups are
+  // dropped - so each investigation renders a graph unique to its own
+  // relationships (aliases, campaigns, TTPs, IOCs, sectors) instead of the
+  // same fixed 4-ring template for every actor.
+  const groups = [
+    { kind: 'Campaigns', color: tk('magenta'),
+      nodes: campaigns.map((c, i) => ({ id: `c-${actor.id}-${i}`, label: c })) },
+    { kind: 'TTPs', color: tk('violet'),
+      nodes: actor.ttps.map((t) => ({ id: `t-${actor.id}-${t}`, label: t, meta: 'MITRE' })) },
+    { kind: 'Aliases', color: tk('safe'),
+      nodes: actor.aliases.map((a, i) => ({ id: `al-${actor.id}-${i}`, label: a })) },
+    { kind: 'IOCs', color: tk('amber'), nodes: iocNodes },
+    { kind: 'Target Sectors', color: tk('teal'),
+      nodes: actor.sectors.map((s, i) => ({ id: `s-${actor.id}-${i}`, label: s })) },
+  ].filter((g) => g.nodes.length > 0)
   return {
     center: { label: actor.name, sub: `${actor.flag} ${actor.origin} · ${actor.type}` },
-    groups: [
-      {
-        kind: 'Campaigns', color: tk('magenta'),
-        nodes: campaigns.map((c, i) => ({ id: `c-${actor.id}-${i}`, label: c })),
-      },
-      {
-        kind: 'TTPs', color: tk('violet'),
-        nodes: actor.ttps.map((t) => ({ id: `t-${actor.id}-${t}`, label: t, meta: 'MITRE' })),
-      },
-      {
-        kind: 'IOCs', color: tk('amber'),
-        nodes: [
-          { id: `i-${actor.id}-hash`, label: 'File Hashes', meta: hashK.toLocaleString() },
-          { id: `i-${actor.id}-dom`,  label: 'Domains',     meta: domK.toLocaleString() },
-          { id: `i-${actor.id}-ip`,   label: 'IP Addresses', meta: ipK.toLocaleString() },
-        ],
-      },
-      {
-        kind: 'Target Sectors', color: tk('teal'),
-        nodes: actor.sectors.map((s, i) => ({ id: `s-${actor.id}-${i}`, label: s })),
-      },
-    ],
+    groups,
   }
 }
 
