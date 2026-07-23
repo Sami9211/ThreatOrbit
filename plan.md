@@ -3187,3 +3187,54 @@ _Move completed items here with the date so the roadmap stays honest._
     analyst-flow/a11y) green against the live SSR stack.
   Trade-off recorded honestly: SSR adds a Node server process (vs. a static
   bundle any host can serve) and pins a Next pre-release until 16.3.0 ships.
+
+- **2026-07-23 · Audit-5 stability / enterprise-readiness pass (9 items).**
+  Refinement, not new surface - eliminate UI inconsistencies, remove any
+  placeholder behaviour, improve real performance, make connectors intuitive,
+  clarify module responsibilities.
+  1. **Sidebar expand/collapse jump (fixed).** The framer `height:'auto'`
+     measure-then-snap made items drop then jump back. Replaced with a
+     CSS-grid `grid-template-rows: 0fr↔1fr` transition (`Sidebar.tsx`) - the
+     container animates its own height with no measurement pass, so items glide.
+  2. **Nav highlight prefix collision (fixed).** "Imports" also lit "Import
+     IOCs" because matching was prefix-based. Added segment-aware,
+     most-specific-match matching (`segMatches`/`bestSubMatch`) so only the
+     deepest matching route highlights.
+  3. **Imports page - placeholders removed, honest empty states.** Confirmed the
+     page reads only real endpoints (no fabricated queue rows); added an
+     explicit "processing queue is empty" idle banner so an empty queue reads as
+     *genuinely idle*, not broken.
+  4. **IOC import throughput - batch redesign (`connectors.py _import`).** The
+     old path did a `SELECT` + `INSERT` per indicator (O(N) DB round trips) and
+     collapsed under a large pull. Rebuilt as: (a) normalise + intra-batch dedup
+     in memory, (b) resolve existing values with chunked `value IN (...)` probes
+     (≤900/chunk, a handful of round trips), (c) write every new row with one
+     `executemany` bulk INSERT. Critical-intel alerting preserved (capped).
+     Fenced by `test_import_uses_bounded_round_trips_not_per_row` - a large
+     batch must issue one bulk INSERT and `ceil(n/chunk)` probes, never one
+     write per row. Architecture now scales toward OTX-in-OpenCTI feed volumes.
+  5. **AlienVault OTX connector - API-key config, not Source URL.** OTX uses an
+     API key against a fixed endpoint; the form no longer asks for a Source URL.
+     `KIND_PRESETS` gained `needs_url` (False for managed kinds threatorbit/nvd/
+     otx, True for json/csv/stix/darkweb-json); the Add/Edit modals hide the URL
+     field for managed providers and the backend fills `default_url` internally.
+  6. **SOC Console identity (kept + sharpened, not consolidated).** Given a
+     distinct "run the floor" workspace framing (triage/assign/escalate in
+     place, vs. SIEM investigating one alert or SOAR running one case) plus a
+     live "Recent SOC activity" panel sourced from the real audit log.
+  7. **UI scaling - max raised to 200%, save bug fixed.** Slider now `0.9..2.0`;
+     the clamp in `useDashboardTheme` was capping at 1.4 (so 150% saved back as
+     140%) - raised to 2.0 so the saved value matches the chosen value.
+  8. **Landing shapes animate on first scroll-in.** Browsers defer
+     IntersectionObserver callbacks during momentum scroll, so a scene stayed
+     static until the scroll settled. `useInViewport` keeps IO as the primary
+     signal but adds a rAF-throttled passive scroll/resize fallback that
+     recomputes visibility from `getBoundingClientRect`, so a scene starts
+     animating *as* it scrolls in, on the first pass.
+  9. **VirusTotal ↔ IntelScope documented (`docs/INTEGRATIONS.md`, new).**
+     Answers can-it-connect (yes, first-class enrichment provider), how (scan →
+     `POST /cti/scan/enrich` → VT API v3 `last_analysis_stats` → Details card),
+     which tier (public/free fully supported; premium only raises rate limits),
+     what data by indicator type, and the config required (the API key only -
+     endpoint/auth/routing handled internally). CVE/email honestly reported as
+     "not covered by VirusTotal".

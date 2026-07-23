@@ -280,3 +280,68 @@ def test_companion_threat_api_url_passes_ssrf_guard(monkeypatch):
         conn_mod._http_get("http://127.0.0.1:9999/steal")
     with pytest.raises(UnsafeUrlError):
         conn_mod._http_get("http://169.254.169.254/latest/meta-data/")
+
+
+def test_import_uses_bounded_round_trips_not_per_row(monkeypatch):
+    """IOC import must scale to enterprise feed volumes: a large batch issues a
+    *bounded* number of DB round trips - one bulk INSERT plus a handful of
+    chunked existence probes - never a SELECT + INSERT per indicator. This fences
+    the O(N)-round-trip regression that would cap throughput far below the
+    thousands-of-indicators/second an OTX-class feed demands.
+    """
+    import contextlib
+    import math
+
+    from dashboard_api.db import get_conn as real_get_conn
+
+    calls = {"execute_insert": 0, "existence_probe": 0, "executemany_insert": 0}
+
+    class _CountingConn:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, params=()):
+            s = " ".join(sql.split()).upper()
+            if s.startswith("INSERT INTO IOCS"):
+                calls["execute_insert"] += 1        # per-row insert = the regression
+            elif s.startswith("SELECT VALUE FROM IOCS WHERE VALUE IN"):
+                calls["existence_probe"] += 1
+            return self._inner.execute(sql, params)
+
+        def executemany(self, sql, seq):
+            if " ".join(sql.split()).upper().startswith("INSERT INTO IOCS"):
+                calls["executemany_insert"] += 1    # one bulk insert for the whole batch
+            return self._inner.executemany(sql, seq)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    @contextlib.contextmanager
+    def _counting_get_conn():
+        with real_get_conn() as c:
+            yield _CountingConn(c)
+
+    monkeypatch.setattr(conn_mod, "get_conn", _counting_get_conn)
+
+    # More than one existence-probe chunk (_EXISTS_CHUNK == 900) to prove the
+    # probe loop stays bounded rather than growing per row.
+    n = conn_mod._EXISTS_CHUNK + 200
+    src = "batch-perf-fence"
+    indicators = [{"type": "domain", "value": f"perf-fence-{i}.example.test"} for i in range(n)]
+
+    try:
+        res = conn_mod._import(indicators, src)
+
+        assert res["imported"] == n and res["duplicates"] == 0 and res["skipped"] == 0
+        # The whole batch was written with a SINGLE bulk INSERT...
+        assert calls["executemany_insert"] == 1
+        # ...and NOT one INSERT per indicator.
+        assert calls["execute_insert"] == 0
+        # Existence checks are chunked: ceil(n / chunk) probes, not n probes.
+        expected_probes = math.ceil(n / conn_mod._EXISTS_CHUNK)
+        assert calls["existence_probe"] == expected_probes
+        assert calls["existence_probe"] < n
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source=?", (src,))
+            c.commit()

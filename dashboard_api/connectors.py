@@ -260,42 +260,101 @@ def _to_confidence(raw, default: int = 50) -> int:
 _MAX_INTEL_ALERTS_PER_RUN = 10
 
 
+# Chunk size for the `value IN (...)` existence probe. SQLite caps a statement
+# at 999 bound variables; Postgres allows far more, so 900 is safe for both and
+# keeps each existence query to a single round trip.
+_EXISTS_CHUNK = 900
+
+
 def _import(indicators: list[dict], source: str) -> dict:
-    """Dedup-by-value upsert of normalised indicators into the IOC store.
-    Critical indicators also raise a (capped) SIEM 'threat intel match' alert,
-    so the SIEM reflects newly ingested high-confidence threats."""
+    """Batch dedup-by-value insert of normalised indicators into the IOC store.
+
+    Built for enterprise-scale feed throughput (OTX-in-OpenCTI-class volumes -
+    thousands of indicators per second). A naive per-row `SELECT` + `INSERT`
+    makes ingest cost O(N) database round trips and collapses under a large pull,
+    so this instead:
+
+      1. normalises and de-duplicates the batch in memory (one pass, no DB),
+      2. resolves which values already exist with chunked `value IN (...)`
+         probes (a handful of round trips, not one per row),
+      3. writes every new row with a single `executemany` bulk INSERT.
+
+    Critical indicators still raise a (capped) SIEM 'threat intel match' alert so
+    the SIEM reflects newly ingested high-confidence threats."""
     from dashboard_api.detections import alert_from_intel
     now = _now()
     imported = duplicates = skipped = alerts = 0
+
+    # 1. Normalise + intra-batch dedup in memory. `seen` collapses repeats of the
+    #    same value within this batch: a later repeat of a *new* value counts as a
+    #    duplicate, matching a row-by-row import that would find its own
+    #    just-inserted row. `candidates` keeps feed order for stable alerting.
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for ind in indicators:
+        value = (ind.get("value") or "").strip()
+        itype = (ind.get("type") or "").strip().lower() or (guess_type(value) or "")
+        if not value or itype not in _IOC_TYPES:
+            skipped += 1
+            continue
+        if value in seen:
+            duplicates += 1
+            continue
+        seen.add(value)
+        conf = _to_confidence(ind.get("confidence"))
+        severity = ind.get("severity") or _severity_from_confidence(conf)
+        candidates.append({
+            "value": value, "itype": itype, "conf": conf, "severity": severity,
+            "threat_type": ind.get("threat_type") or "",
+            "actor": ind.get("actor") or "",
+            "source": ind.get("source") or source,
+            "row": (str(uuid.uuid4()), itype, value,
+                    ind.get("threat_type") or "malicious-activity", conf, severity,
+                    ind.get("source") or source, ind.get("actor") or "",
+                    ind.get("first_seen") or now, ind.get("last_seen") or now,
+                    dumps(list(ind.get("tags") or []))),
+        })
+
+    if not candidates:
+        return {"imported": 0, "duplicates": duplicates, "skipped": skipped,
+                "total": len(indicators), "alertsRaised": 0}
+
     with get_conn() as conn:
-        for ind in indicators:
-            value = (ind.get("value") or "").strip()
-            itype = (ind.get("type") or "").strip().lower() or (guess_type(value) or "")
-            if not value or itype not in _IOC_TYPES:
-                skipped += 1
-                continue
-            if conn.execute("SELECT 1 FROM iocs WHERE value=?", (value,)).fetchone():
-                duplicates += 1
-                continue
-            conf = _to_confidence(ind.get("confidence"))
-            severity = ind.get("severity") or _severity_from_confidence(conf)
-            conn.execute(
+        # 2. Bulk existence check - chunked so each query stays within the bound
+        #    variable ceiling. `row["value"]` reads on both sqlite3.Row and the
+        #    Postgres row wrapper.
+        existing: set[str] = set()
+        values = [c["value"] for c in candidates]
+        for i in range(0, len(values), _EXISTS_CHUNK):
+            part = values[i:i + _EXISTS_CHUNK]
+            placeholders = ",".join("?" * len(part))
+            rows = conn.execute(
+                f"SELECT value FROM iocs WHERE value IN ({placeholders})", tuple(part)
+            ).fetchall()
+            existing.update(r["value"] for r in rows)
+
+        # 3. Everything not already present is new - bulk INSERT it in one call.
+        new = [c for c in candidates if c["value"] not in existing]
+        duplicates += len(candidates) - len(new)
+        if new:
+            conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
                 "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (str(uuid.uuid4()), itype, value,
-                 ind.get("threat_type") or "malicious-activity", conf, severity,
-                 ind.get("source") or source, ind.get("actor") or "",
-                 ind.get("first_seen") or now, ind.get("last_seen") or now,
-                 dumps(list(ind.get("tags") or []))),
+                [c["row"] for c in new],
             )
-            imported += 1
-            if severity == "critical" and alerts < _MAX_INTEL_ALERTS_PER_RUN:
-                alert_from_intel(conn, value=value, ioc_type=itype, severity=severity,
-                                 confidence=conf, threat_type=ind.get("threat_type") or "",
-                                 actor_name=ind.get("actor") or "",
-                                 source=ind.get("source") or source)
-                alerts += 1
+            imported = len(new)
+            # Raise capped critical-intel alerts for the newly inserted rows only.
+            for c in new:
+                if alerts >= _MAX_INTEL_ALERTS_PER_RUN:
+                    break
+                if c["severity"] == "critical":
+                    alert_from_intel(conn, value=c["value"], ioc_type=c["itype"],
+                                     severity=c["severity"], confidence=c["conf"],
+                                     threat_type=c["threat_type"], actor_name=c["actor"],
+                                     source=c["source"])
+                    alerts += 1
         conn.commit()
+
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
             "total": len(indicators), "alertsRaised": alerts}
 
