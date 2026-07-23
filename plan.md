@@ -503,13 +503,18 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done (moved to CHANGELOG
     isn't here because it's an *enrichment* provider, configured in its own
     panel - see #11.) Minor remaining: hide the (fixed) URL field for
     managed keyed kinds like OTX so only the key shows.
-13b. **[ ] IntelScope redesign** (item 13). Two clear sections - **Search**
-    (URL / IP / domain / hash, with input-type validation so an IP in a URL
-    field is rejected) and **File Upload**. Deeper results: detection history,
-    vendor verdicts, reputation, behaviour, WHOIS/DNS, related indicators,
-    threat context, community intel, ATT&CK mappings, risk, evidence - toward
-    VirusTotal-grade depth plus own value-add. (Audit 3 #9 shipped tabbed
-    results + RDAP; this asks for more depth + the typed-input redesign.)
+13b. **[~] IntelScope redesign** (item 13). **Input-type validation SHIPPED
+    (2026-07-22):** the scanner already had URL/IP/Hash/File type tabs + a File
+    upload section (the two-section layout the audit asked for); now each tab
+    validates the entered value against its type - an IP typed in the URL field
+    (or a URL/hash in the IP field, a non-hash in the Hash field) is caught with
+    a specific "switch to the X type" message, the Scan button disables, and a
+    manual scan/Enter is blocked. Real-data pivots are never gated. Deeper
+    results already exist (Audit 3 #9: Details / Relations / Community / Sources
+    tabs, real RDAP registry data, relations from own stores). Remaining
+    (larger): more result depth (detection history, richer WHOIS/DNS, related
+    indicators, ATT&CK mapping) toward VirusTotal-grade, plus a dedicated
+    Domain tab.
 16. **[~] Threat Actor profiles.** Collapse bug FIXED (2026-07-22): the actor
     card's rotating chevron implied expand/collapse but `onSelect` only ever
     selected, so it never closed - now it toggles (click the open actor again

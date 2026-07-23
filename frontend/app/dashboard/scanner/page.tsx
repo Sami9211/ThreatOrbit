@@ -168,6 +168,40 @@ const SCAN_TYPES = [
   { key: 'file', label: 'File',     icon: File,   placeholder: 'Drop a file or browse...' },
 ]
 
+const _IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
+const _IPV6 = /^(([0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{0,4}|::1|::)$/
+const _HASH = /^([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/
+const _DOMAIN = /^(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(\.[a-zA-Z0-9-]{1,63})+$/
+
+/**
+ * Validate that the entered value actually matches the selected search type,
+ * so an IP in the URL field (or a URL in the IP field) is caught before a
+ * scan runs - the audit's "accepting an IP address in a URL field". Returns a
+ * user-facing message (with the right type to switch to) or null when valid.
+ */
+function validateScanInput(type: string, raw: string): string | null {
+  const v = raw.trim()
+  if (!v) return null
+  if (type === 'ip') {
+    if (_IPV4.test(v) || _IPV6.test(v)) return null
+    if (_HASH.test(v)) return 'That looks like a file hash — switch to the Hash type.'
+    if (_DOMAIN.test(v) || /^https?:\/\//i.test(v)) return 'That looks like a URL/domain — switch to the URL type.'
+    return 'Enter a valid IPv4 or IPv6 address.'
+  }
+  if (type === 'hash') {
+    if (_HASH.test(v)) return null
+    return 'A hash must be 32 (MD5), 40 (SHA-1) or 64 (SHA-256) hexadecimal characters.'
+  }
+  if (type === 'url') {
+    if (_IPV4.test(v) || _IPV6.test(v)) return 'That is an IP address — switch to the IP type.'
+    if (_HASH.test(v)) return 'That is a file hash — switch to the Hash type.'
+    const host = v.replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0]
+    if (_DOMAIN.test(host)) return null
+    return 'Enter a valid URL or domain (e.g. https://example.com/path).'
+  }
+  return null
+}
+
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
@@ -817,6 +851,9 @@ export default function ScannerPage() {
       if (pivotType && SCAN_TYPES.some((s) => s.key === pivotType)) setScanType(pivotType)
     }
     if (!target && typ !== 'file') return
+    // Block a manual scan whose value doesn't match the chosen type (an IP in
+    // the URL field, etc.). Pivots come from real records, so never gate them.
+    if (!pivotValue && validateScanInput(typ, target)) return
     setScanning(true)
     setResult(null)
     setSaved(false)
@@ -1078,7 +1115,7 @@ export default function ScannerPage() {
               </div>
               <button
                 onClick={() => handleScan()}
-                disabled={!query.trim() || scanning}
+                disabled={!query.trim() || scanning || !!validateScanInput(scanType, query)}
                 className="px-6 py-3 rounded-xl bg-plasma text-white font-semibold text-sm transition-all hover:shadow-magenta-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {scanning ? (
@@ -1088,6 +1125,14 @@ export default function ScannerPage() {
                 )}
               </button>
             </div>
+          )}
+
+          {/* Input-type validation: catch a mismatched value before scanning */}
+          {scanType !== 'file' && query.trim() && validateScanInput(scanType, query) && (
+            <p className="flex items-center gap-1.5 text-[11px] text-amber mt-2" role="alert">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {validateScanInput(scanType, query)}
+            </p>
           )}
 
           {/* Example targets */}
