@@ -45,12 +45,13 @@
     "@types/topojson-client": "^3.1.5",
     "eslint": "^9",
     "eslint-config-next": "^16.2.10",
-    "postcss": "^8",
+    "postcss": "^8.5.12",
     "tailwindcss": "^4.3.2",
     "typescript": "^5",
     "world-countries": "^5.1.0"
   },
   "overrides": {
-    "sharp": "^0.35.0"
+    "sharp": "^0.35.0",
+    "postcss": "^8.5.12"
   }
 }

@@ -1,4 +1,21 @@
 {
-  "_doc": "Triaged npm-audit advisories. scripts/audit-gate.mjs fails the build for any high/critical advisory NOT listed here (each needs a reason + expiry), and for any listed entry past its expiry, so triage decisions cannot rot silently. As of 2026-06-14 this list is empty: the Next.js 14 SERVER advisories that used to live here were FIXED by upgrading to next@16 (the production audit now has no high/critical). Two moderate, build-time advisories remain (postcss CSS-stringify XSS, reached only during the build) - below this gate's high/critical threshold.",
-  "allow": []
+  "_doc": "Triaged npm-audit advisories. scripts/audit-gate.mjs fails the build for any high/critical advisory NOT listed here (each needs a reason + expiry), and for any listed entry past its expiry, so triage decisions cannot rot silently. The postcss advisories are resolved at source via an overrides pin in package.json (postcss ^8.5.12), not triaged here.",
+  "allow": [
+    {
+      "advisories": [
+        "GHSA-6gpp-xcg3-4w24",
+        "GHSA-m99w-x7hq-7vfj",
+        "GHSA-89xv-2m56-2m9x",
+        "GHSA-68g3-v927-f742",
+        "GHSA-4633-3j49-mh5q",
+        "GHSA-4c39-4ccg-62r3",
+        "GHSA-p9j2-gv94-2wf4",
+        "GHSA-q8wf-6r8g-63ch",
+        "GHSA-955p-x3mx-jcvp"
+      ],
+      "package": "next",
+      "reason": "Not reachable in this deployment. The frontend is a pure static export (next.config.mjs output:'export') served as plain HTML/JS/CSS - it ships NO Next.js server runtime. Every one of these advisories targets server-side machinery this build never emits: middleware/proxy bypass (no middleware), Server Actions DoS/SSRF (static export cannot run Server Actions), custom-server SSRF, response-body cache confusion (no server cache), unbounded Edge-runtime payloads (no edge runtime), rewrite-destination SSRF (no runtime rewrites), /_next/image optimizer DoS (image optimizer is disabled under output:'export'), and internal Server Function endpoint disclosure (no server functions). No stable patched next exists yet (latest is 16.2.11, still inside the advisory range; the fix lands in 16.3.x) - re-triage when it ships.",
+      "expires": "2026-10-23"
+    }
+  ]
 }
