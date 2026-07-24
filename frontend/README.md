@@ -8,24 +8,27 @@ Tailwind, Framer Motion, and a React-Three-Fiber 3D layer.
 
 | Concern        | Choice |
 |----------------|--------|
-| Framework      | Next.js 16 App Router, **static export** (`output: 'export'`) |
+| Framework      | Next.js 16 App Router, **Node SSR** (`next start`) |
 | Styling        | Tailwind CSS 4 (CSS-first `@theme` in `globals.css`) + a small design layer |
 | Animation      | Framer Motion (scroll, springs, layout) |
 | 3D / WebGL     | `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing` |
 | Icons          | `lucide-react` |
 | Smooth scroll  | `lenis` |
 
-Static export means `next build` writes plain HTML/CSS/JS to `out/`, hostable
-on any static platform (Netlify, Cloudflare Pages, Vercel, a CDN). No Node
-runtime is required in production.
+`next build` compiles the app to `.next` and `next start` serves it as a **Node
+SSR server** (deployable on Vercel or any Node host). The security headers
+(CSP, HSTS, X-Frame-Options, …) are applied by the Next server itself via
+`next.config.mjs headers()` - so every host enforces them, not just a fronting
+proxy. (This replaced the earlier `output: 'export'` static build, whose
+`out/` bundle silently ignored `headers()`.)
 
 ## Develop
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
-npm run build      # static export → out/
-npx serve out      # preview the production build locally
+npm run dev        # http://localhost:3000 (dev server)
+npm run build      # production build → .next
+npm run start      # serve the SSR production build (next start)
 ```
 
 ## Test
@@ -44,12 +47,12 @@ npm run check:live       # crawl every dashboard route against a RUNNING
 
 The e2e suite runs against a production build plus the dashboard API - CI
 boots both (see `.github/workflows/e2e.yml`); locally set `E2E_BASE_URL` to
-point at an already-running instance, or let the `webServer` hook serve
-`out/` for you.
+point at an already-running instance, or let the `webServer` hook run
+`next start` for you.
 
 > Note: a `next dev` server can occasionally serve a nested route unstyled
 > after a `.next` wipe + restart (a dev-only CSS-injection quirk). The
-> production build in `out/` is always correct - verify with `npx serve out`.
+> production SSR build is always correct - verify with `npm run build && npm run start`.
 
 ## Architecture
 
@@ -77,15 +80,15 @@ lib/
 
 ### Operator dashboard (`app/dashboard/**`)
 
-27 pages - overview, the SOC command view, SIEM (queue/analytics/rules/
+30 pages - overview, the SOC command view, SIEM (queue/analytics/rules/
 sources/hunt/entities/ATT&CK coverage), SOAR (cases/playbooks/integrations/
 metrics), CTI (overview/actors/hunt), assets (inventory/network/vulns),
-dark-web monitoring, feeds (overview/sources/import), the IntelScope scanner,
-and config (general incl. the live System Health card/API keys/users/data
-sources). Every page fetches
+dark-web monitoring, feeds (overview/sources/import/imports), the IntelScope
+scanner, the admin console, account settings, and config (general incl. the
+live System Health card/API keys/users/data sources). Every page fetches
 live data from the Dashboard API (`:8002`) on mount and falls back to built-in
-deterministic demo data when the API is unreachable, so the static export
-remains fully browsable standalone. Mutations (alert triage, rule toggles,
+deterministic demo data when the API is unreachable, so the dashboard
+remains fully browsable even when the backend is down. Mutations (alert triage, rule toggles,
 playbook runs, feed toggles, user role/status changes, API keys, IOC imports,
 risk recompute, settings) persist via the API with optimistic UI and rollback
 on failure. Point at a non-default API with `NEXT_PUBLIC_API_URL`.

@@ -3294,3 +3294,20 @@ _Move completed items here with the date so the roadmap stays honest._
   • **Honesty fix:** two marketing surfaces still marked TAXII/MISP as "planned"
     though both ship (TAXII server + client; MISP import + export) — corrected
     `OpenCTISection` statuses to 'active' and the Chatbot reply to match reality.
+
+- **2026-07-24 · Full README accuracy pass.** Brought the top-level `README.md`,
+  `frontend/README.md` and `dashboard_api/README.md` back in line with the code:
+  • **SSR, not static export** — corrected every "static export / `output:
+    'export'` / `frontend/out` / `serve_frontend.py` / `npx serve out`" reference
+    to the Node SSR reality (`next build` → `.next`, `next start`), including the
+    footprint table and the frontend stack/deploy/dev sections.
+  • **Counts** — dashboard pages 26→**30** (added soc/admin/account/imports),
+    routers "18"/"26"→**25**, routes "200+"/"220+"→**290+** (main + dashboard_api
+    READMEs), test count 147→**600+**.
+  • **Honesty fix** — §14/§15 said SSO/SCIM were "on the roadmap, not shipped",
+    contradicting the intro and the actual `routers/saml.py|scim.py|sso.py`
+    (15 routes). Reconciled to "implemented but exploratory / not
+    independently security-audited".
+  • **New capabilities documented** — TAXII 2.1 client connector, VirusTotal via
+    `docs/INTEGRATIONS.md`, and the measured ~23-39k indicators/sec feed-import
+    throughput added to the Project-status line. Dropped a stale "- *new*" marker.

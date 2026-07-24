@@ -19,7 +19,7 @@ mid-size team, with the same code path either way.
   cases, cases drive playbooks, and indicators flow back into CTI.
 * **Real OSINT** ingestion (abuse.ch, NVD, RSS, OTX, TAXII, custom connectors)
   with trust scoring, dedup, VirusTotal enrichment, and STIX 2.1 / OpenCTI.
-* A full **operator dashboard** (26 pages) - SIEM, SOAR, CTI, Assets, Dark Web,
+* A full **operator dashboard** (30 pages) - SIEM, SOAR, CTI, Assets, Dark Web,
   plus a security-bounded **AI assistant**, an 11-theme customizable
   **Appearance** system, per-user **TOTP MFA**, optional **multi-tenancy**,
   Prometheus **observability**, and a complete **audit trail**.
@@ -41,9 +41,10 @@ An ambitious, security-aware platform - **not a production-audited product.** Th
 honest framing (the strong parts stand on their own without inflating the rest):
 
 * **Single-node by default.** WAL-mode SQLite with an opt-in, staged Postgres
-  backend. Measured ~10k EPS ingest / ~7k EPS detection on 4 vCPU
-  ([`docs/LOAD_LIMITS.md`](docs/LOAD_LIMITS.md)); for higher sustained load, move
-  to Postgres / externalise the event store.
+  backend. Measured ~10k EPS ingest / ~7k EPS detection, and ~23-39k
+  indicators/sec feed import (filtered + deduped, even at a 1M-row store), on
+  4 vCPU ([`docs/LOAD_LIMITS.md`](docs/LOAD_LIMITS.md)); for higher sustained
+  load, move to Postgres / externalise the event store.
 * **The ML layer is unsupervised outlier _ranking_ for triage**, not trained
   ground-truth detection - it surfaces the most unusual sources (corroborated by
   a concrete signal), it doesn't assert "this is an attack".
@@ -72,7 +73,7 @@ ThreatOrbit is made of three backend services and a Next.js frontend (marketing 
 * **Dashboard API** (`dashboard_api`, FastAPI, port 8002)
   The unified backend powering the operator dashboard: JWT auth (login + self-service registration with brute-force throttling) and role-based users, SIEM alerts with computed SOC metrics (MTTD/MTTA/MTTR), a correlation engine and a live hunt-query engine, SOAR case lifecycle (create, war-room notes, task workflow), CTI actors/IOCs with lookup + bulk import + scanner history, an asset surface with a transparent CVSS-style risk model, threat feeds, settings, API keys, webhooks, a full audit trail - and a **service bridge** that proxies the Threat API and Log API server-side so the browser never handles their API keys. See [`dashboard_api/README.md`](dashboard_api/README.md).
 * **Frontend** (`frontend`, Next.js 16 + TypeScript)
-  Marketing site **and** the operator dashboard (`/dashboard/**`, 26 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Deployable on Vercel (static export) or any Node host.
+  Marketing site **and** the operator dashboard (`/dashboard/**`, 30 wired pages) that consumes the Dashboard API live, with seeded demo data as graceful fallback. Runs as a **Node SSR server** (`next start`) - deployable on Vercel or any Node host; the security headers are applied by the Next server itself (`next.config.mjs`).
 
 All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion APIs use an async job model and a two-tier API key scheme; the Dashboard API uses JWT bearer auth.
 
@@ -100,7 +101,7 @@ All APIs use WAL-mode SQLite and CORS for browser clients. The two ingestion API
                               +----------------------+
                                | WAL SQLite (dashboard.db, auto-seeded)
 
-   Browser ------------------> Frontend (Next.js, Vercel)
+   Browser ------------------> Frontend (Next.js SSR - Vercel / any Node host)
                                 ├-- marketing site (/)
                                 └-- operator dashboard (/dashboard/**) ---> Dashboard API
 ```
@@ -202,7 +203,7 @@ ThreatOrbit-V2/
 │   ├-- licensing.py / webhooks.py / mailer.py / enrichment.py
 │   ├-- log_listeners.py / events_stream.py / ingest.py   # log intake + SSE
 │   ├-- seed.py                  # deterministic, internally-consistent demo data
-│   ├-- routers/                 # 26 routers, 220+ routes: auth, users, orgs,
+│   ├-- routers/                 # 25 routers, 290+ routes: auth, users, orgs,
 │   │                            #   overview, siem, soar, cti, assets, feeds,
 │   │                            #   connectors, darkweb, platform, reports,
 │   │                            #   services, stream, taxii, assistant, config,
@@ -213,12 +214,13 @@ ThreatOrbit-V2/
 └-- frontend/                    # Next.js 16 - marketing site + operator dashboard
     ├-- app/
     │   ├-- page.tsx             # marketing landing
-    │   └-- dashboard/           # operator dashboard (26 pages, all API-wired):
-    │                            #   overview, siem(+rules/sources/hunt/entities/
-    │                            #   attack), soar(+playbooks/integrations/metrics),
-    │                            #   cti(+actors/hunt), assets(+network/vulns),
-    │                            #   darkweb, feeds(+sources/import), scanner,
-    │                            #   config(+api/users/sources)
+    │   └-- dashboard/           # operator dashboard (30 pages, all API-wired):
+    │                            #   overview, soc, siem(+rules/sources/hunt/
+    │                            #   entities/attack), soar(+playbooks/
+    │                            #   integrations/metrics), cti(+actors/hunt),
+    │                            #   assets(+network/vulns), darkweb,
+    │                            #   feeds(+sources/import/imports), scanner,
+    │                            #   admin, account, config(+api/users/sources)
     ├-- components/
     │   ├-- dashboard/           # AuthGuard, Sidebar, TopBar, CommandPalette,
     │   │                        #   AssistantWidget, ThemeScope, WorldMap,
@@ -245,9 +247,11 @@ runbook), **`SUPPORTED_SOURCES.md`** (the parser/source matrix - which vendor
 log shapes normalise onto the detection vocabulary), **`API_VERSIONING.md`**
 (the `/v1` contract + deprecation policy), **`GOING_LIVE.md`** (the real-data
 production runbook: AD/Windows, AWS, Linux log forwarding, hardening),
-**`PII_HANDLING.md`** (what is stored, redaction, DSAR reach) and **`DATA_RESIDENCY.md`** (every
-external egress point + how to pin/disable each for in-region installs). HA/scale
-deployers: see **`POSTGRES_HA.md`** (multi-AZ Postgres) and **`LOAD_LIMITS.md`**.
+**`PII_HANDLING.md`** (what is stored, redaction, DSAR reach), **`DATA_RESIDENCY.md`** (every
+external egress point + how to pin/disable each for in-region installs) and
+**`INTEGRATIONS.md`** (the enrichment providers - VirusTotal, GreyNoise, Shodan,
+RDAP - how IntelScope uses each, and the config required). HA/scale deployers:
+see **`POSTGRES_HA.md`** (multi-AZ Postgres) and **`LOAD_LIMITS.md`**.
 
 ---
 
@@ -365,7 +369,7 @@ exactly how each ingests, processes, and displays data:
   from live SIEM alert pressure, so triaging alerts lowers asset risk.
 * **Display:** inventory, vulnerability rollup, and the interactive network map.
 
-**Dark Web - external exposure** (`/dashboard/darkweb`) - *new*
+**Dark Web - external exposure** (`/dashboard/darkweb`)
 * **Ingest:** the engine's dark-web monitoring stage produces findings across
   five categories (credential leak, data for sale, brand mention, actor chatter,
   access listing).
@@ -527,7 +531,7 @@ Windows and macOS are fully supported for evaluation and development
 | Repo checkout | ~50 MB |
 | Python virtualenv (all three APIs) | ~380 MB |
 | `frontend/node_modules` (build-time only) | ~880 MB |
-| Built static site (`frontend/out`) | ~9 MB |
+| Next.js SSR build output (`frontend/.next`) | ~40 MB |
 | Database at first boot (live mode) | <1 MB |
 | Database growth | depends on your EPS and the retention window (default 90 days); plan 1-10 GB for a small org |
 
@@ -753,7 +757,7 @@ can bridge to them.) Shortcuts if you have `make`: `make dev-api`,
 For **real data** instead of demo data, start the dashboard API with
 `DASHBOARD_DATA_MODE=live` and the Threat API running (see
 [§4a](#4a-real-data-vs-demo-mode)). For **fast page loads** use
-`npm run build` then `python scripts/serve_frontend.py 3000` instead of
+`npm run build` then `npm run start` (the Node SSR server) instead of
 `npm run dev` (the dev server compiles each page on first visit).
 </details>
 
@@ -1016,9 +1020,10 @@ You can also export STIX bundles from both services and import them through the 
 ### Dashboard API (`:8002`)
 
 JWT bearer auth (`POST /auth/login`, self-service `POST /auth/register`).
-200+ routes across 18 routers (auth, users, orgs, overview, SIEM, SOAR, CTI,
-assets, feeds, connectors, darkweb, platform, reports, services, stream, taxii,
-assistant, config) - including computed SOC metrics, an
+290+ routes across 25 routers (auth, users, orgs, roles, overview, SIEM, SOAR,
+CTI, assets, feeds, connectors, darkweb, platform, reports, services, stream,
+taxii, assistant, config, billing, compliance, privacy, saml, scim, sso) -
+including computed SOC metrics, an
 alert-correlation engine, a live hunt-query engine, SOAR case lifecycle
 (notes/tasks), a transparent asset risk model with per-axis breakdowns, IOC
 lookup/bulk-import/scanner history, webhooks, and a full audit trail. The
@@ -1036,7 +1041,7 @@ complete endpoint map and algorithm notes live in
 Or run any suite directly (works on every OS - run each line separately):
 
 ```bash
-python -m pytest dashboard_api/tests -q   # from the repo root (147 tests)
+python -m pytest dashboard_api/tests -q   # from the repo root (600+ tests)
 cd threat_api
 python -m pytest -q
 cd ../log_api
@@ -1127,7 +1132,8 @@ screen that doesn't trace back to the API. Near-term direction:
   under load, wire E2E (Playwright) into CI, complete an external pentest, and
   run a real-log pilot. These are the Tier-1 items in `plan.md` under
   *Production readiness*.
-* **Identity** - SSO (OIDC/SAML) and SCIM provisioning for larger orgs.
+* **Identity** - harden the existing SSO (SAML) and SCIM provisioning to
+  audited enterprise grade (they ship today as exploratory - see §15).
 * **Billing** - Stripe-backed plans/seats on top of the existing licensing.
 * **Connectors** - broaden first-class connectors (EDR/cloud/identity) beyond
   the current OSINT/NVD/TAXII set.
@@ -1157,8 +1163,11 @@ yet, or only does under specific conditions:
   audit trail), and `SECURITY.md` states plainly that a third-party
   penetration test has **not** been performed. Treat it accordingly before
   exposing it to untrusted networks.
-* **Auth scope.** Email+password (JWT) with optional TOTP MFA today. SSO
-  (OIDC/SAML) and SCIM are on the roadmap, not shipped.
+* **Auth scope.** Email+password (JWT) with optional TOTP MFA is the primary,
+  best-tested path. SSO (SAML) and SCIM provisioning **are implemented**
+  (`routers/saml.py`, `scim.py`, `sso.py`) but are **exploratory / not
+  independently security-audited** - treat them as such, not as hardened
+  enterprise SSO.
 * **Billing.** Licensing/seat limits exist; payment (Stripe) does not.
 * **Appearance prefs are per-browser.** Theme, accent, scale, motion and
   density are stored in `localStorage` and sync across your open tabs - they
