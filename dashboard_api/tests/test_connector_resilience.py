@@ -413,3 +413,56 @@ def test_import_indicators_shares_alert_budget_across_subbatches(monkeypatch):
         with real_get_conn() as c:
             c.execute("DELETE FROM iocs WHERE source=?", (src,))
             c.commit()
+
+
+def test_taxii_client_pulls_and_paginates_collection(monkeypatch):
+    """The TAXII 2.1 client connector pulls STIX indicators from a collection's
+    objects endpoint, walks the `more`/`next` pagination, and parses each
+    indicator with the shared STIX parser (non-indicator objects are skipped)."""
+    pages = {
+        None: {"objects": [
+            {"type": "indicator", "name": "bad-ip",
+             "pattern": "[ipv4-addr:value = '203.0.113.7']", "labels": ["malicious"]},
+            {"type": "indicator", "name": "bad-domain",
+             "pattern": "[domain-name:value = 'evil-taxii.test']"},
+            {"type": "malware", "name": "not-an-indicator"}],       # skipped
+            "more": True, "next": "cursor-2"},
+        "cursor-2": {"objects": [
+            {"type": "indicator", "pattern": "[url:value = 'http://bad.test/x']"}],
+            "more": False},
+    }
+
+    class _R:
+        def __init__(self, d):
+            self._d = d
+
+        def json(self):
+            return self._d
+
+    seen = []
+
+    def fake_get(url, headers=None, params=None):
+        assert headers["Accept"].startswith("application/taxii+json")
+        assert url.endswith("/objects/")
+        seen.append(params.get("next"))
+        return _R(pages[params.get("next")])
+
+    monkeypatch.setattr(conn_mod, "_http_get", fake_get)
+    url = "https://taxii.example/taxii2/api/collections/abc/objects/"
+    out = conn_mod._fetch_taxii({"url": url, "api_key": "Bearer tok"})
+    assert {o["value"] for o in out} == {"203.0.113.7", "evil-taxii.test", "http://bad.test/x"}
+    assert {o["type"] for o in out} == {"ip", "domain", "url"}
+    assert seen == [None, "cursor-2"]        # page 1 (more) -> page 2 (no more -> stop)
+    assert all(o["source"] == "taxii" for o in out)
+
+    import pytest
+    with pytest.raises(ValueError):
+        conn_mod._fetch_taxii({})            # requires the collection URL
+
+
+def test_taxii_and_stix_registered_and_presented():
+    """Both STIX and the new TAXII kind are wired as fetchers and surfaced as
+    connector presets (so the Add-connector UI offers TAXII)."""
+    assert "taxii" in conn_mod._FETCHERS and "stix" in conn_mod._FETCHERS
+    assert conn_mod.KIND_PRESETS["taxii"]["needs_url"] is True
+    assert conn_mod.KIND_PRESETS["taxii"]["label"] == "TAXII 2.1 collection"

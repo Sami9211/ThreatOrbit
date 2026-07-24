@@ -3273,3 +3273,24 @@ _Move completed items here with the date so the roadmap stays honest._
   • **OTX config (Audit-5 #5) re-verified end-to-end**: `needs_url:false` preset,
     key-only fetch against the fixed endpoint, and both Add/Edit modals hide the
     URL field for `otx` — confirmed in committed code, not just claimed.
+
+- **2026-07-24 · TAXII 2.1 client connector + Docker start-on-boot docs.**
+  • **TAXII client (new connector kind `taxii`).** ThreatOrbit already *served*
+    TAXII 2.1 (re-publishing its own indicators at `/taxii2/`); it can now also
+    *pull* from any external TAXII 2.1 server (OpenCTI, MISP, Anomali, …).
+    `_fetch_taxii` walks a collection's objects endpoint with `more`/`next`
+    pagination (bounded by `DASHBOARD_TAXII_MAX_PAGES/_PAGE_LIMIT/_MAX_INDICATORS`),
+    sends the TAXII 2.1 Accept header, reuses the api_key/auth_header pair for
+    auth. Factored the STIX indicator parser into `_stix_indicator_to_ioc` shared
+    by the `stix` and `taxii` fetchers. Preset surfaces in the Add-connector UI
+    via `/kinds` (no frontend change needed). Fenced by
+    `test_taxii_client_pulls_and_paginates_collection` +
+    `test_taxii_and_stix_registered_and_presented`.
+  • **README (§4 Path B):** documented starting the Docker stack automatically on
+    every boot — the services already declare `restart: unless-stopped`, so the
+    addition is enabling the Docker daemon at boot (`systemctl enable --now
+    docker` on Linux; Docker Desktop "start when you sign in" on Mac/Windows),
+    with the `restart: always` opt-in noted. Added the TAXII connector to §4a.
+  • **Honesty fix:** two marketing surfaces still marked TAXII/MISP as "planned"
+    though both ship (TAXII server + client; MISP import + export) — corrected
+    `OpenCTISection` statuses to 'active' and the Chatbot reply to match reality.

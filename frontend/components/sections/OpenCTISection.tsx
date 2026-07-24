@@ -11,8 +11,8 @@ const INTEGRATIONS = [
   { label: 'OpenCTI GraphQL API', status: 'active' },
   { label: 'Indicator sync', status: 'active' },
   { label: 'TLP classification', status: 'active' },
-  { label: 'TAXII server export', status: 'planned' },
-  { label: 'MISP integration', status: 'planned' },
+  { label: 'TAXII 2.1 (server + client)', status: 'active' },
+  { label: 'MISP import & export', status: 'active' },
 ]
 
 const ENDPOINTS = [

@@ -10,6 +10,7 @@ uses. Supported kinds:
   json         ANY JSON endpoint + a field map  → fully custom source
   csv          ANY CSV endpoint + a column map   → fully custom source
   stix         ANY STIX 2.x bundle of indicators → fully custom source
+  taxii        ANY TAXII 2.1 collection (paginated STIX pull, e.g. OpenCTI/MISP)
 
 Every kind funnels through `_import()` which dedups by value and writes the
 normalised indicator. `run_connector()` is what the scheduler and the
@@ -159,6 +160,14 @@ KIND_PRESETS = {
     "stix": {
         "label": "Custom STIX 2.x bundle",
         "description": "Any endpoint returning a STIX 2.x bundle; indicator objects are imported.",
+        "needs_key": False,
+        "needs_url": True,
+        "default_url": "",
+        "default_interval": 60,
+    },
+    "taxii": {
+        "label": "TAXII 2.1 collection",
+        "description": "Pull indicators from any TAXII 2.1 server collection (OpenCTI, MISP, Anomali, …). Paste the collection objects URL (…/collections/<id>/objects/); add an Authorization value only if the server requires auth. The paginated feed is walked automatically.",
         "needs_key": False,
         "needs_url": True,
         "default_url": "",
@@ -570,6 +579,31 @@ def _fetch_csv(c: dict) -> list[dict]:
     return [_apply_field_map(rec, fm) for rec in reader]
 
 
+def _stix_indicator_to_ioc(obj, source: str) -> dict | None:
+    """Parse one STIX 2.x `indicator` object into a normalised indicator dict, or
+    None if it isn't an importable indicator. Shared by the STIX-bundle (`stix`)
+    and TAXII 2.1 (`taxii`) connectors so both speak the exact same STIX dialect."""
+    if not isinstance(obj, dict) or obj.get("type") != "indicator":
+        return None
+    # STIX patterns look like: [ipv4-addr:value = '1.2.3.4']
+    m = re.search(r"(ipv4-addr|ipv6-addr|domain-name|url|email-addr|file:hashes[^=]*)"
+                  r"[^=]*=\s*'([^']+)'", obj.get("pattern", ""))
+    if not m:
+        return None
+    kind, value = m.group(1), m.group(2)
+    t = ("ip" if "ipv" in kind else "domain" if "domain" in kind
+         else "url" if "url" in kind else "email" if "email" in kind
+         else "hash" if "hashes" in kind or "file" in kind else None)
+    if not t:
+        return None
+    return {
+        "type": t, "value": value,
+        "threat_type": obj.get("name") or "stix-indicator",
+        "confidence": _to_confidence(obj.get("confidence"), default=60),
+        "source": source, "tags": list(obj.get("labels") or []),
+    }
+
+
 def _fetch_stix(c: dict) -> list[dict]:
     if not c.get("url"):
         raise ValueError("Custom STIX connector requires a URL")
@@ -581,24 +615,58 @@ def _fetch_stix(c: dict) -> list[dict]:
         raise ValueError("STIX source did not return a bundle object")
     out = []
     for obj in bundle.get("objects", []):
-        if not isinstance(obj, dict) or obj.get("type") != "indicator":
-            continue
-        # STIX patterns look like: [ipv4-addr:value = '1.2.3.4']
-        pattern = obj.get("pattern", "")
-        m = re.search(r"(ipv4-addr|ipv6-addr|domain-name|url|email-addr|file:hashes[^=]*)"
-                      r"[^=]*=\s*'([^']+)'", pattern)
-        if not m:
-            continue
-        kind, value = m.group(1), m.group(2)
-        t = ("ip" if "ipv" in kind else "domain" if "domain" in kind
-             else "url" if "url" in kind else "email" if "email" in kind
-             else "hash" if "hashes" in kind or "file" in kind else None)
-        out.append({
-            "type": t, "value": value,
-            "threat_type": obj.get("name") or "stix-indicator",
-            "confidence": _to_confidence(obj.get("confidence"), default=60),
-            "source": "stix", "tags": list(obj.get("labels") or []),
-        })
+        ioc = _stix_indicator_to_ioc(obj, "stix")
+        if ioc:
+            out.append(ioc)
+    return out
+
+
+# TAXII 2.1 client pull sizing (mirrors the OTX caps): bound how far a sync walks
+# a collection so it can't run unbounded. Env-tunable for larger deployments.
+_TAXII_PAGE_LIMIT = int(os.environ.get("DASHBOARD_TAXII_PAGE_LIMIT", "100"))
+_TAXII_MAX_PAGES = int(os.environ.get("DASHBOARD_TAXII_MAX_PAGES", "50"))
+_TAXII_MAX_INDICATORS = int(os.environ.get("DASHBOARD_TAXII_MAX_INDICATORS", "100000"))
+_TAXII_ACCEPT = "application/taxii+json;version=2.1"
+
+
+def _fetch_taxii(c: dict) -> list[dict]:
+    """Pull STIX indicators from a TAXII 2.1 collection's objects endpoint.
+
+    The operator supplies the collection *objects* URL
+    (`…/taxii2/…/collections/<id>/objects/`); auth, when the server requires it,
+    reuses the same api_key/auth_header pair as the STIX connector - paste the
+    full Authorization value ("Bearer <token>" or "Basic <base64>"). The TAXII
+    envelope is paginated via `more`/`next`; we walk it (bounded by the caps
+    above) and parse each STIX indicator object with the shared parser. Lets
+    ThreatOrbit consume any TAXII 2.1 server - OpenCTI, MISP, Anomali, etc."""
+    url = c.get("url")
+    if not url:
+        raise ValueError("TAXII connector requires the collection objects URL "
+                         "(…/collections/<id>/objects/)")
+    headers = {"Accept": _TAXII_ACCEPT}
+    if c.get("api_key"):
+        headers[c.get("auth_header") or "Authorization"] = c["api_key"]
+    out: list[dict] = []
+    next_cursor = None
+    for _page in range(_TAXII_MAX_PAGES):
+        params = {"limit": _TAXII_PAGE_LIMIT}
+        if next_cursor:
+            params["next"] = next_cursor
+        env = _http_get(url, headers=headers, params=params).json()
+        if not isinstance(env, dict):
+            raise ValueError("TAXII source did not return a JSON envelope")
+        for obj in env.get("objects", []):
+            ioc = _stix_indicator_to_ioc(obj, "taxii")
+            if ioc:
+                out.append(ioc)
+                if len(out) >= _TAXII_MAX_INDICATORS:
+                    return out
+        # TAXII 2.1 pagination: continue only while the server flags `more`.
+        if not env.get("more"):
+            break
+        next_cursor = env.get("next")
+        if not next_cursor:
+            break
     return out
 
 
@@ -631,7 +699,7 @@ def _fetch_darkweb_json(c: dict) -> list[dict]:
 _FETCHERS = {
     "threatorbit": _fetch_threatorbit, "otx": _fetch_otx, "nvd": _fetch_nvd,
     "json": _fetch_json, "csv": _fetch_csv, "stix": _fetch_stix,
-    "darkweb-json": _fetch_darkweb_json,
+    "taxii": _fetch_taxii, "darkweb-json": _fetch_darkweb_json,
 }
 
 

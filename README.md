@@ -659,6 +659,33 @@ Sign in at http://localhost:3000/dashboard (`admin@threatorbit.space` /
 trigger live OSINT ingestion and **SIEM → Sources** can analyse uploaded log
 files out of the box. Stop with `docker compose down`.
 
+#### Keep it running - start automatically on every boot
+
+The Compose services already declare `restart: unless-stopped`, so Docker
+restarts them if they crash **and brings them back whenever the Docker daemon
+starts**. To have the whole stack come up on its own **every time the machine is
+powered on**, make sure Docker itself starts at boot - then you never have to
+re-run the command:
+
+* **Linux (systemd):** enable the daemon once, then start the stack detached:
+  ```bash
+  sudo systemctl enable --now docker      # Docker starts on every boot
+  docker compose up --build -d            # `-d` = detached; unless-stopped does the rest
+  ```
+  After a reboot the containers return automatically. Verify with `sudo reboot`,
+  then `docker compose ps` once you're back.
+* **Mac / Windows (Docker Desktop):** Docker Desktop → **Settings → General →
+  "Start Docker Desktop when you sign in"** (and allow it to open at login in the
+  OS). With the stack started once via `docker compose up -d`, it relaunches on
+  each login.
+
+Want it to restart **even after you manually `docker compose stop`**? Change
+`restart: unless-stopped` to `restart: always` for the services in
+`docker-compose.yml`. `unless-stopped` (the default here) is usually what you
+want: it respects a deliberate stop but survives reboots and crashes. To turn
+auto-start back off, just `docker compose down` (removes the containers) or
+`sudo systemctl disable docker`.
+
 ### Path C - Linux / Mac, no Docker (one command, REAL live data)
 
 **You need Python 3.11+ and Node.js 18+, then one command.**
@@ -805,7 +832,14 @@ automatically. New indicators appear across CTI, the scanner, and feeds.
 Click **Add Connector**. Besides the presets you can register **any** source:
 
 * **AlienVault OTX** - pick *AlienVault OTX*, paste your free key from
-  otx.alienvault.com (Settings → API). Your subscribed pulses flow in.
+  otx.alienvault.com (Settings → API); the endpoint is handled for you (no URL
+  to enter). A sync **pages through your whole subscribed feed**, not just the
+  first page.
+* **TAXII 2.1 collection** - consume indicators from **any** TAXII 2.1 server
+  (OpenCTI, MISP, Anomali, …). Paste the collection *objects* URL
+  (`…/collections/<id>/objects/`); add an Authorization value only if the server
+  needs auth. The paginated feed is walked automatically and STIX indicator
+  objects are imported.
 * **Custom JSON** - point it at any URL that returns a JSON array of
   indicators, then map which fields hold the value / type / threat-type /
   confidence / severity / tags. (Leave *type* blank to auto-detect
@@ -814,8 +848,10 @@ Click **Add Connector**. Besides the presets you can register **any** source:
 * **Custom STIX 2.x** - point it at a STIX bundle URL; indicator objects are imported.
 
 So if you build your own intel system (your own “AlienVault”), expose a
-JSON/CSV/STIX endpoint and connect it here by URL + key - no code changes.
+JSON/CSV/STIX/TAXII endpoint and connect it here by URL + key - no code changes.
 API keys you enter are stored server-side and **never sent back to the browser**.
+(ThreatOrbit is *also* a TAXII 2.1 **server** - it re-serves its own indicators
+at `/taxii2/` for other platforms to consume, so it both pulls and publishes.)
 
 > **Why might a connector show an error?** Usually no internet, a wrong URL, or
 > a missing/expired API key - the connector row shows the exact message and the

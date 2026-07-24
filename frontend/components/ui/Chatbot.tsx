@@ -42,7 +42,7 @@ const KB: { keys: string[]; reply: string }[] = [
   {
     keys: ['opencti', 'stix', 'taxii'],
     reply:
-      'ThreatOrbit integrates natively with OpenCTI over its GraphQL API. You can read indicators, check status, and push enriched STIX 2.1 bundles. TAXII and MISP export are on the roadmap.',
+      'ThreatOrbit integrates natively with OpenCTI over its GraphQL API. You can read indicators, check status, and push enriched STIX 2.1 bundles. It is also a TAXII 2.1 server (re-serving its indicators at /taxii2/) and a TAXII 2.1 client (pull from any collection), and supports MISP import and export.',
   },
   {
     keys: ['deploy', 'docker', 'install', 'setup', 'self-host'],
