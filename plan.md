@@ -3213,6 +3213,12 @@ _Move completed items here with the date so the roadmap stays honest._
      Fenced by `test_import_uses_bounded_round_trips_not_per_row` - a large
      batch must issue one bulk INSERT and `ceil(n/chunk)` probes, never one
      write per row. Architecture now scales toward OTX-in-OpenCTI feed volumes.
+     The **manual/UI import route** (`POST /cti/iocs/import`, the path behind the
+     Imports page and CSV uploads) was a *second* O(N) per-row loop - batched the
+     same way while keeping it workspace-scoped (per-row `org_id`, `scope_sql`
+     existence predicate). Fenced by `test_import_route_batches_writes_not_per_row`.
+     (The MISP-event import stays row-by-row: a single MISP event carries a
+     modest attribute set, not a feed-scale batch.)
   5. **AlienVault OTX connector - API-key config, not Source URL.** OTX uses an
      API key against a fixed endpoint; the form no longer asks for a Source URL.
      `KIND_PRESETS` gained `needs_url` (False for managed kinds threatorbit/nvd/

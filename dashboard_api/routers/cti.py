@@ -17,6 +17,12 @@ router = APIRouter(prefix="/cti", tags=["cti"], dependencies=[Depends(current_us
 
 _IOC_TYPES = {"ip", "domain", "url", "hash", "email", "cve"}
 
+# Values per chunk in the bulk `value IN (...)` existence probe on import. Kept
+# well under SQLite's 999-bind ceiling, leaving headroom for the workspace-scope
+# bind appended by tenancy.scope_sql; Postgres allows far more, so this is safe
+# on both.
+_IMPORT_PROBE_CHUNK = 800
+
 
 class IocImportItem(BaseModel):
     type: str
@@ -137,27 +143,53 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     tags_json = json.dumps(body.tags, separators=(",", ":"))
     imported = duplicates = skipped = 0
+    org = tenancy.org_of(user)
     # Dedup within the caller's workspace only: another tenant's indicators must
     # be neither an existence oracle nor a silent drop for this import.
-    sc, sp = tenancy.scope_sql(tenancy.org_of(user))
+    sc, sp = tenancy.scope_sql(org)
+    conf = max(0, min(100, body.confidence))
+
+    # Batch, not row-by-row: a large paste / CSV upload must not cost one SELECT
+    # + one INSERT per indicator (O(N) round trips). Normalise + intra-batch
+    # dedup in memory, resolve existing values with chunked workspace-scoped
+    # `value IN (...)` probes, then write every new row with one bulk INSERT.
+    seen: set[str] = set()
+    candidates: list[tuple[str, str]] = []
+    for item in body.indicators:
+        val = item.value.strip()
+        itype = item.type.strip().lower()
+        if not val or itype not in _IOC_TYPES:
+            skipped += 1
+            continue
+        if val in seen:
+            duplicates += 1
+            continue
+        seen.add(val)
+        candidates.append((val, itype))
+
     with get_conn() as conn:
-        for item in body.indicators:
-            val = item.value.strip()
-            itype = item.type.strip().lower()
-            if not val or itype not in _IOC_TYPES:
-                skipped += 1
-                continue
-            if conn.execute(f"SELECT 1 FROM iocs WHERE value=? {sc}", (val, *sp)).fetchone():
-                duplicates += 1
-                continue
-            conn.execute(
+        existing: set[str] = set()
+        vals = [v for v, _ in candidates]
+        # Keep each probe within SQLite's 999-bind ceiling, with headroom for the
+        # scope param appended by scope_sql.
+        for i in range(0, len(vals), _IMPORT_PROBE_CHUNK):
+            part = vals[i:i + _IMPORT_PROBE_CHUNK]
+            ph = ",".join("?" * len(part))
+            found = conn.execute(
+                f"SELECT value FROM iocs WHERE value IN ({ph}) {sc}", (*part, *sp)
+            ).fetchall()
+            existing.update(r["value"] for r in found)
+
+        new = [(v, t) for v, t in candidates if v not in existing]
+        duplicates += len(candidates) - len(new)
+        if new:
+            conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
                 "first_seen,last_seen,tags,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (str(uuid.uuid4()), itype, val, body.threat_type,
-                 max(0, min(100, body.confidence)), body.severity, body.source, body.actor,
-                 now, now, tags_json, tenancy.org_of(user)),
+                [(str(uuid.uuid4()), t, v, body.threat_type, conf, body.severity,
+                  body.source, body.actor, now, now, tags_json, org) for v, t in new],
             )
-            imported += 1
+            imported = len(new)
         _record_import(conn, body.source or "manual import", "manual", imported, duplicates,
                        skipped, user["email"])
         audit(conn, user["email"], "ioc.import", None,

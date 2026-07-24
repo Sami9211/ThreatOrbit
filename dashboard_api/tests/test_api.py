@@ -4161,3 +4161,61 @@ def test_fp_feedback_bumps_rule_fp_rate(client, auth):
     client.patch(f"/siem/alerts/{alert['id']}", json={"disposition": "false-positive"}, headers=auth)
     after = next(r for r in client.get("/siem/rules", headers=auth).json() if r["id"] == "R-BRUTEFORCE")["fp_rate"]
     assert after == min(100, before + 2)
+
+
+def test_import_route_batches_writes_not_per_row(client, auth, monkeypatch):
+    """The manual/UI import route must scale to a large paste / CSV upload: the
+    batch is written with ONE bulk INSERT and a bounded number of workspace-scoped
+    existence probes, never a SELECT + INSERT per indicator (the O(N)-round-trip
+    regression that would cap import throughput)."""
+    import contextlib
+    import math
+
+    from dashboard_api.db import get_conn as real_get_conn
+    from dashboard_api.routers import cti as cti_mod
+
+    calls = {"execute_insert": 0, "probe": 0, "executemany_insert": 0}
+
+    class _Counting:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, params=()):
+            s = " ".join(sql.split()).upper()
+            if s.startswith("INSERT INTO IOCS"):
+                calls["execute_insert"] += 1
+            elif s.startswith("SELECT VALUE FROM IOCS WHERE VALUE IN"):
+                calls["probe"] += 1
+            return self._inner.execute(sql, params)
+
+        def executemany(self, sql, seq):
+            if " ".join(sql.split()).upper().startswith("INSERT INTO IOCS"):
+                calls["executemany_insert"] += 1
+            return self._inner.executemany(sql, seq)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    @contextlib.contextmanager
+    def _counting_get_conn():
+        with real_get_conn() as c:
+            yield _Counting(c)
+
+    monkeypatch.setattr(cti_mod, "get_conn", _counting_get_conn)
+
+    n = 1000                                   # > one probe chunk (_IMPORT_PROBE_CHUNK)
+    src = "route-perf-fence"
+    body = {"indicators": [{"type": "domain", "value": f"route-fence-{i}.example.test"}
+                           for i in range(n)],
+            "source": src, "severity": "medium", "confidence": 50}
+    try:
+        res = client.post("/cti/iocs/import", json=body, headers=auth).json()
+        assert res["imported"] == n and res["duplicates"] == 0 and res["skipped"] == 0
+        assert calls["executemany_insert"] == 1          # one bulk INSERT for the batch
+        assert calls["execute_insert"] == 0              # never one INSERT per row
+        expected = math.ceil(n / cti_mod._IMPORT_PROBE_CHUNK)
+        assert calls["probe"] == expected and calls["probe"] < n
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source=?", (src,))
+            c.commit()
