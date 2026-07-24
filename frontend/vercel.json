@@ -1,7 +1,8 @@
 {
-  "outputDirectory": "out",
+  "framework": "nextjs",
   "buildCommand": "npm run build",
-  "framework": null,
+  "installCommand": "npm install",
+  "_comment": "Node SSR (was a static export served from out/). With the Vercel project Root Directory set to 'frontend', THIS file is the one Vercel reads. It must declare the nextjs framework and must NOT set outputDirectory:'out' - `next build` (SSR) emits .next, which Vercel serves natively; a stale outputDirectory:'out' made the deploy fail with 'No Output Directory named out found'. Security headers are applied by the Next server itself (next.config.mjs headers()); the block below is defence-in-depth on Vercel's edge.",
   "headers": [
     {
       "source": "/(.*)",

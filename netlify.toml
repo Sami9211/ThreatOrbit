@@ -1,12 +1,13 @@
+# Node SSR deployment (was a static export published from frontend/out).
+# Netlify's built-in Next.js runtime auto-detects the app under `base` and
+# serves it (SSR + functions). Do NOT set `publish = "out"` - `next build` emits
+# .next, not out/, so the old value made the deploy fail. Do NOT add a SPA
+# catch-all redirect either; the Next server handles routing. The security
+# headers below are defence-in-depth (the Next server also sets them via
+# next.config.mjs headers()).
 [build]
   base    = "frontend"
   command = "npm run build"
-  publish = "out"
-
-[[redirects]]
-  from   = "/*"
-  to     = "/:splat"
-  status = 200
 
 [[headers]]
   for = "/*"

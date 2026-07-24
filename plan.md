@@ -3311,3 +3311,16 @@ _Move completed items here with the date so the roadmap stays honest._
   • **New capabilities documented** — TAXII 2.1 client connector, VirusTotal via
     `docs/INTEGRATIONS.md`, and the measured ~23-39k indicators/sec feed-import
     throughput added to the Project-status line. Dropped a stale "- *new*" marker.
+
+- **2026-07-24 · Fix Vercel/Netlify deploy failure (stale static-export config).**
+  The SSR migration left two deploy configs pinned to the old static export:
+  `frontend/vercel.json` had `"outputDirectory": "out"` + `"framework": null`,
+  and `netlify.toml` had `publish = "out"` + a SPA catch-all redirect. With the
+  Vercel **Root Directory = `frontend`** (the documented setup), Vercel reads
+  `frontend/vercel.json`, disables Next detection, builds, then fails looking for
+  an `out/` directory that SSR (`next build` → `.next`) never produces ("No
+  Output Directory named 'out' found"). Fixed both: `frontend/vercel.json` now
+  declares `framework: nextjs` with no `outputDirectory`; `netlify.toml` drops
+  `publish=out` and the SPA redirect so Netlify's Next.js runtime serves the SSR
+  app. README Path D clarified (Root Directory = frontend, SSR auto-detected, no
+  static output). Root `vercel.json` was already SSR-correct.

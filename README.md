@@ -766,9 +766,13 @@ For **real data** instead of demo data, start the dashboard API with
 The simplest production split:
 
 1. **Frontend → [Vercel](https://vercel.com) (free tier works).** Import the
-   GitHub repo, set **Root Directory** to `frontend`, add the environment
-   variable `NEXT_PUBLIC_API_URL=https://your-api-domain` and click Deploy.
-   (Netlify works identically; `netlify.toml` is included.)
+   GitHub repo and set **Root Directory** to `frontend` - Vercel then
+   auto-detects the Next.js app and serves it as a **Node SSR** deployment
+   (`frontend/vercel.json` declares `framework: nextjs`; there is **no** static
+   output directory - SSR emits `.next`, which Vercel serves natively). Add the
+   environment variable `NEXT_PUBLIC_API_URL=https://your-api-domain` and click
+   Deploy. (Netlify works the same way via `netlify.toml` - its built-in Next.js
+   runtime serves the SSR app; no static `out/` publish.)
 2. **Backend → any Linux server with Docker** (a $5 VPS is fine):
    ```bash
    git clone https://github.com/Sami9211/ThreatOrbit-V2.git && cd ThreatOrbit-V2
