@@ -3324,3 +3324,16 @@ _Move completed items here with the date so the roadmap stays honest._
   `publish=out` and the SPA redirect so Netlify's Next.js runtime serves the SSR
   app. README Path D clarified (Root Directory = frontend, SSR auto-detected, no
   static output). Root `vercel.json` was already SSR-correct.
+
+- **2026-07-24 · OTX connector URL-field: hardened frontend fallback.** Verified
+  end-to-end at runtime that the backend is correct: `/connectors/kinds` returns
+  `needs_url:false` for otx and `POST /connectors {kind:otx, api_key}` (no url)
+  returns 201 with the endpoint auto-filled. A user still seeing "Source URL" for
+  OTX is running a stale/cached JS bundle. Hardened the Add-connector modal so
+  even a stale `/kinds` response can't regress: the URL-field fallback now lists
+  the managed kinds explicitly (`!['threatorbit','nvd','otx'].includes(kind)`)
+  instead of `kind !== 'threatorbit'`, so OTX/NVD never ask for a URL. (Edit
+  modal already excluded otx.) Clarified for the operator: the ~30 IOC/20s they
+  see is the synthetic Live Processing Engine (`ENGINE_EVENTS_PER_TICK`), a demo
+  detection trickle - real feed volume comes from the OTX/TAXII connectors, which
+  page the full subscribed feed and import at tens of thousands/sec.

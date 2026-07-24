@@ -346,10 +346,12 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
           </div>
 
           {/* URL field only for kinds the operator actually configures a URL for
-              (custom JSON/CSV/STIX/dark-web). Managed providers - OTX, NVD, the
-              bundled engine - hide it; the backend uses their fixed endpoint.
-              (Fallback to the old rule if an older backend omits needs_url.) */}
-          {(preset?.needs_url ?? kind !== 'threatorbit') && (
+              (custom JSON/CSV/STIX/TAXII/dark-web). Managed providers - OTX, NVD,
+              the bundled engine - hide it; the backend uses their fixed endpoint.
+              The fallback lists the managed kinds explicitly so that even if the
+              `/kinds` response is stale or omits needs_url, OTX/NVD never wrongly
+              ask for a URL. */}
+          {(preset?.needs_url ?? !['threatorbit', 'nvd', 'otx'].includes(kind)) && (
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Source URL</label>
               <input value={values.url} onChange={(e) => set('url')(e.target.value)} placeholder={preset?.default_url || 'https://your-source/api/indicators'} className={cn(input, 'font-mono text-xs')} />
