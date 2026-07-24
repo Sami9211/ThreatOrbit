@@ -3366,3 +3366,15 @@ _Move completed items here with the date so the roadmap stays honest._
     alone is thousands). Now pages via `offset` until a short page - the same
     treatment OTX/TAXII got. Fenced by
     `test_threatorbit_fetch_pages_full_corpus`.
+
+- **2026-07-24 · Connector errors now report what actually failed.** The Add/Edit
+  connector modals replaced the server's real message with a guess ("Could not
+  add the connector. Check the URL and that you have admin access."), which is
+  actively misleading: that copy only ever appeared for a **422** (validation) or
+  a **403** (`Requires permission: connectors.manage`) - never for a URL problem.
+  Both modals now surface `err.message` verbatim. Also fixed `api()`: FastAPI
+  returns a 422 `detail` as an ARRAY of `{loc,msg}` objects, which stringified to
+  "[object Object]" and destroyed the diagnostic - it is now flattened to
+  "field: message". Verified against the live backend: OTX with key-only returns
+  **201**; the only failure modes are 400 (no key), 422 (bad field), 403
+  (non-admin).

@@ -312,9 +312,12 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
     try {
       await onAdd({ ...values, kind })
     } catch (err) {
-      setError(err instanceof Error && err.message.includes('key')
-        ? 'This source needs an API key.'
-        : 'Could not add the connector. Check the URL and that you have admin access.')
+      // Show what the server ACTUALLY said. The old copy guessed ("check the URL
+      // and that you have admin access"), which sent operators hunting a URL
+      // problem when the real cause was something else entirely.
+      setError(err instanceof Error && err.message
+        ? err.message
+        : 'Could not add the connector.')
       setSubmitting(false)
     }
   }
@@ -437,8 +440,10 @@ function EditConnectorModal({ connector, onClose, onSave }: {
     setError(null)
     try {
       await onSave(c, values)
-    } catch {
-      setError('Could not update the connector. Check the URL and that you have admin access.')
+    } catch (err) {
+      setError(err instanceof Error && err.message
+        ? err.message
+        : 'Could not update the connector.')
       setSubmitting(false)
     }
   }

@@ -89,7 +89,23 @@ async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     // The API wraps errors as {"error": ...}; older/3rd-party paths use {"detail": ...}.
-    try { const j = await res.json(); msg = j.detail ?? j.error ?? msg } catch { /* ignore */ }
+    // FastAPI validation (422) returns `detail` as an ARRAY of {loc,msg} objects -
+    // stringifying that gave "[object Object]" and hid the real cause, so flatten
+    // it into "field: message" instead.
+    try {
+      const j = await res.json()
+      const d = j.detail ?? j.error
+      if (Array.isArray(d)) {
+        msg = d.map((e) => {
+          const field = Array.isArray(e?.loc) ? e.loc[e.loc.length - 1] : undefined
+          return field ? `${field}: ${e?.msg ?? 'invalid'}` : (e?.msg ?? JSON.stringify(e))
+        }).join('; ') || msg
+      } else if (typeof d === 'string' && d) {
+        msg = d
+      } else if (d) {
+        msg = JSON.stringify(d)
+      }
+    } catch { /* ignore */ }
     throw new ApiError(msg, res.status)
   }
   if (res.status === 204) return undefined as T
