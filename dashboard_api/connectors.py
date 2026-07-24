@@ -265,8 +265,35 @@ _MAX_INTEL_ALERTS_PER_RUN = 10
 # keeps each existence query to a single round trip.
 _EXISTS_CHUNK = 900
 
+# Sub-batch size for `import_indicators()`. An OTX-scale pull can be hundreds of
+# thousands of indicators; ingesting it as one in-memory list + one transaction
+# would spike memory and hold the write lock for seconds. Slicing into bounded
+# sub-batches keeps memory + transaction size flat at any feed volume while the
+# per-batch engine still runs at tens of thousands of indicators/second.
+_IMPORT_BATCH = int(os.environ.get("DASHBOARD_IMPORT_BATCH", "10000"))
 
-def _import(indicators: list[dict], source: str) -> dict:
+
+def import_indicators(indicators: list[dict], source: str) -> dict:
+    """Ingest an arbitrarily large feed in bounded sub-batches.
+
+    Thin, scale-safe wrapper over `_import`: it slices the fetched indicators
+    into `_IMPORT_BATCH`-sized chunks so a very large pull (OTX-in-OpenCTI class)
+    ingests with flat memory and bounded transactions instead of one giant list /
+    lock hold, while preserving exact counts and the *per-run* critical-alert cap
+    (the alert budget is shared across sub-batches, not reset each chunk)."""
+    totals = {"imported": 0, "duplicates": 0, "skipped": 0,
+              "total": len(indicators), "alertsRaised": 0}
+    budget = _MAX_INTEL_ALERTS_PER_RUN
+    for i in range(0, len(indicators), _IMPORT_BATCH):
+        r = _import(indicators[i:i + _IMPORT_BATCH], source, alert_budget=budget)
+        for k in ("imported", "duplicates", "skipped", "alertsRaised"):
+            totals[k] += r[k]
+        budget -= r["alertsRaised"]
+    return totals
+
+
+def _import(indicators: list[dict], source: str,
+            *, alert_budget: int = _MAX_INTEL_ALERTS_PER_RUN) -> dict:
     """Batch dedup-by-value insert of normalised indicators into the IOC store.
 
     Built for enterprise-scale feed throughput (OTX-in-OpenCTI-class volumes -
@@ -280,7 +307,9 @@ def _import(indicators: list[dict], source: str) -> dict:
       3. writes every new row with a single `executemany` bulk INSERT.
 
     Critical indicators still raise a (capped) SIEM 'threat intel match' alert so
-    the SIEM reflects newly ingested high-confidence threats."""
+    the SIEM reflects newly ingested high-confidence threats. `alert_budget` caps
+    how many this call may raise (threaded through by `import_indicators` so the
+    cap stays per-run when a large feed is split across sub-batches)."""
     from dashboard_api.detections import alert_from_intel
     now = _now()
     imported = duplicates = skipped = alerts = 0
@@ -345,7 +374,7 @@ def _import(indicators: list[dict], source: str) -> dict:
             imported = len(new)
             # Raise capped critical-intel alerts for the newly inserted rows only.
             for c in new:
-                if alerts >= _MAX_INTEL_ALERTS_PER_RUN:
+                if alerts >= alert_budget:
                     break
                 if c["severity"] == "critical":
                     alert_from_intel(conn, value=c["value"], ioc_type=c["itype"],
@@ -393,30 +422,55 @@ _OTX_TYPE = {"IPv4": "ip", "IPv6": "ip", "domain": "domain", "hostname": "domain
              "FileHash-SHA256": "hash", "email": "email", "CVE": "cve"}
 
 
+# OTX pull sizing. The subscribed-pulses feed is paginated; walking it the way
+# OpenCTI's OTX connector does is what turns a sync from "one page, ~a handful of
+# pulses" into a real feed of tens of thousands of indicators. Bounded so a sync
+# can't run unbounded: at most _OTX_MAX_PAGES pages of _OTX_PAGE_LIMIT pulses, and
+# a hard indicator ceiling. All three are env-tunable for larger deployments.
+_OTX_PAGE_LIMIT = int(os.environ.get("DASHBOARD_OTX_PAGE_LIMIT", "50"))
+_OTX_MAX_PAGES = int(os.environ.get("DASHBOARD_OTX_MAX_PAGES", "50"))
+_OTX_MAX_INDICATORS = int(os.environ.get("DASHBOARD_OTX_MAX_INDICATORS", "100000"))
+
+
 def _fetch_otx(c: dict) -> list[dict]:
     if not c.get("api_key"):
         raise ValueError("OTX requires an API key (otx.alienvault.com → Settings → API)")
     base = (c.get("url") or "https://otx.alienvault.com").rstrip("/")
     headers = {"X-OTX-API-KEY": c["api_key"]}
-    data = _http_get(f"{base}/api/v1/pulses/subscribed",
-                     headers=headers, params={"limit": 30}).json()
-    out = []
-    for pulse in (data.get("results", []) if isinstance(data, dict) else []):
-        if not isinstance(pulse, dict):
-            continue
-        name = pulse.get("name", "OTX pulse")
-        tags = list(pulse.get("tags") or [])[:5]
-        for ind in pulse.get("indicators", []):
-            if not isinstance(ind, dict):
+    out: list[dict] = []
+    # Page through the subscribed pulses (page increments against the fixed base -
+    # not by following the API-supplied `next` URL, which would widen the SSRF
+    # surface) until OTX signals no further page, the page cap, or the indicator
+    # ceiling. This is the difference between importing a handful of pulses and a
+    # full subscribed feed.
+    for page in range(1, _OTX_MAX_PAGES + 1):
+        data = _http_get(f"{base}/api/v1/pulses/subscribed", headers=headers,
+                         params={"limit": _OTX_PAGE_LIMIT, "page": page}).json()
+        results = data.get("results", []) if isinstance(data, dict) else []
+        if not results:
+            break
+        for pulse in results:
+            if not isinstance(pulse, dict):
                 continue
-            t = _OTX_TYPE.get(ind.get("type"))
-            if not t:
-                continue
-            out.append({
-                "type": t, "value": ind.get("indicator"),
-                "threat_type": name, "confidence": 70, "source": "alienvault-otx",
-                "actor": (pulse.get("adversary") or ""), "tags": tags,
-            })
+            name = pulse.get("name", "OTX pulse")
+            tags = list(pulse.get("tags") or [])[:5]
+            for ind in pulse.get("indicators", []):
+                if not isinstance(ind, dict):
+                    continue
+                t = _OTX_TYPE.get(ind.get("type"))
+                if not t:
+                    continue
+                out.append({
+                    "type": t, "value": ind.get("indicator"),
+                    "threat_type": name, "confidence": 70, "source": "alienvault-otx",
+                    "actor": (pulse.get("adversary") or ""), "tags": tags,
+                })
+                if len(out) >= _OTX_MAX_INDICATORS:
+                    return out
+        # Stop when the API reports no further page (guards against a server that
+        # keeps returning the same page and would otherwise loop to the cap).
+        if not (isinstance(data, dict) and data.get("next")):
+            break
     return out
 
 
@@ -606,7 +660,7 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             from dashboard_api.darkweb_logic import import_findings
             result = import_findings(indicators, connector["name"])
         else:
-            result = _import(indicators, connector["name"])
+            result = import_indicators(indicators, connector["name"])
         with get_conn() as conn:
             if connector["kind"] == "darkweb-json":
                 total_count = conn.execute(

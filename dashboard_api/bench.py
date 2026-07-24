@@ -109,10 +109,27 @@ def bench_drain(n: int, workers: int) -> dict:
             "seconds": round(dt, 3), "eps": round(res["events"] / dt) if dt else 0}
 
 
+def bench_ioc_import(n: int) -> dict:
+    """CTI IOC import throughput: `n` fresh indicators through the connector
+    import engine (normalise → intra-batch dedup → chunked existence probe →
+    bulk `executemany` insert, in bounded sub-batches). This is the OTX-scale
+    feed path - the eps column is indicators/sec."""
+    from dashboard_api import connectors
+    inds = [{"type": "ip",
+             "value": f"{(i >> 24) & 255}.{(i >> 16) & 255}.{(i >> 8) & 255}.{i & 255}",
+             "confidence": 60} for i in range(n)]
+    t0 = time.perf_counter()
+    res = connectors.import_indicators(inds, "bench")
+    dt = time.perf_counter() - t0
+    return {"stage": "ioc import", "events": res["imported"], "alerts": 0,
+            "seconds": round(dt, 3), "eps": round(res["imported"] / dt) if dt else 0}
+
+
 def run(quick: bool = False) -> dict:
     _setup()
     n_ing = 500 if quick else 5000
     n_drn = 1000 if quick else 10000
+    n_ioc = 2000 if quick else 50000
     ingest = bench_ingest(n_ing)
     # Clear whatever the ingest stage left pending so the timed drains below each
     # measure exactly their own seeded backlog.
@@ -120,7 +137,8 @@ def run(quick: bool = False) -> dict:
     run_pool(workers=1, batch=500)
     rows = [ingest,
             bench_drain(n_drn, 1),
-            bench_drain(n_drn, 4)]
+            bench_drain(n_drn, 4),
+            bench_ioc_import(n_ioc)]
     return {"env": _env(), "results": rows}
 
 

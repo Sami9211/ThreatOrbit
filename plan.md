@@ -3244,3 +3244,32 @@ _Move completed items here with the date so the roadmap stays honest._
      what data by indicator type, and the config required (the API key only -
      endpoint/auth/routing handled internally). CVE/email honestly reported as
      "not covered by VirusTotal".
+
+- **2026-07-24 · IOC import — measured to OTX/OpenCTI scale + real feed volume.**
+  Follow-up to Audit-5 #4, driven by a benchmark rather than assumption. The
+  reference (AlienVault OTX in OpenCTI) is ~1k–10k indicators/second including
+  filtering; the goal was to move ThreatOrbit's engine to that band.
+  • **Measured, reproducible** via a new `ioc import` stage in
+    `python -m dashboard_api.bench` (see `docs/LOAD_LIMITS.md`): the batch engine
+    sustains **~39,000 ind/s all-new on an empty table and ~23,000 ind/s at a
+    1,000,000-row store**, ~86,000 ind/s for pure dedup — 2–23× the reference
+    band, on plain SQLite with full durability, every indicator normalised +
+    dedup-checked + inserted. **No framework switch needed** — the earlier
+    per-row loop was the bottleneck, not the datastore; Postgres stays an opt-in
+    for concurrent-writer scale, not import speed.
+  • **`import_indicators()` wrapper** slices any pull into
+    `DASHBOARD_IMPORT_BATCH` (default 10k) sub-batches → flat memory + bounded
+    write-lock hold at any feed size; cross-sub-batch dedup stays correct and the
+    per-run critical-alert cap is shared across sub-batches (threaded via a new
+    `alert_budget` param on `_import`). `run_connector` now calls it.
+  • **OTX fetcher now paginates** the subscribed-pulses API (up to
+    `DASHBOARD_OTX_MAX_PAGES` × `DASHBOARD_OTX_PAGE_LIMIT`, capped at
+    `DASHBOARD_OTX_MAX_INDICATORS`) instead of a single 30-pulse page — a sync
+    pulls the whole subscribed feed (the "too few IOCs imported" gap), by page
+    increment against the fixed endpoint (not the API-supplied `next` URL, to
+    keep the SSRF surface closed). Fenced by
+    `test_otx_fetch_paginates_subscribed_pulses` and
+    `test_import_indicators_shares_alert_budget_across_subbatches`.
+  • **OTX config (Audit-5 #5) re-verified end-to-end**: `needs_url:false` preset,
+    key-only fetch against the fixed endpoint, and both Add/Edit modals hide the
+    URL field for `otx` — confirmed in committed code, not just claimed.

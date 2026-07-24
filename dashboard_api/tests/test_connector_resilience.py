@@ -345,3 +345,71 @@ def test_import_uses_bounded_round_trips_not_per_row(monkeypatch):
         with real_get_conn() as c:
             c.execute("DELETE FROM iocs WHERE source=?", (src,))
             c.commit()
+
+
+def test_otx_fetch_paginates_subscribed_pulses(monkeypatch):
+    """OTX sync must walk the paginated subscribed-pulses feed (like OpenCTI's
+    connector), not stop after the first page - that is the difference between
+    importing a handful of pulses and a full subscribed feed. It stops when the
+    API reports no further page, and requires an API key."""
+    pages = {
+        1: {"results": [{"name": "P1", "tags": ["apt"], "indicators": [
+                {"type": "IPv4", "indicator": "203.0.113.1"},
+                {"type": "domain", "indicator": "evil-otx.test"}]}],
+            "next": "https://otx/api/v1/pulses/subscribed?page=2"},
+        2: {"results": [{"name": "P2", "indicators": [
+                {"type": "IPv4", "indicator": "203.0.113.2"}]}],
+            "next": None},
+    }
+
+    class _R:
+        def __init__(self, d):
+            self._d = d
+
+        def json(self):
+            return self._d
+
+    seen_pages = []
+
+    def fake_get(url, headers=None, params=None):
+        assert headers.get("X-OTX-API-KEY") == "the-key"      # key, fixed endpoint
+        assert url.endswith("/api/v1/pulses/subscribed")
+        seen_pages.append(params["page"])
+        return _R(pages.get(params["page"], {"results": [], "next": None}))
+
+    monkeypatch.setattr(conn_mod, "_http_get", fake_get)
+
+    out = conn_mod._fetch_otx({"api_key": "the-key"})
+    assert {o["value"] for o in out} == {"203.0.113.1", "evil-otx.test", "203.0.113.2"}
+    assert seen_pages == [1, 2]                                # page 1 (has next) -> 2 (next None -> stop)
+
+    # No key -> refuses (never a silent empty sync)
+    import pytest
+    with pytest.raises(ValueError):
+        conn_mod._fetch_otx({})
+
+
+def test_import_indicators_shares_alert_budget_across_subbatches(monkeypatch):
+    """A large feed split into sub-batches must still honour the *per-run* SIEM
+    alert cap - the budget is shared across sub-batches, not reset each chunk -
+    so a big critical-heavy pull can't flood the alert queue."""
+    from dashboard_api.db import get_conn as real_get_conn
+    import dashboard_api.detections as det
+
+    raised = []
+    monkeypatch.setattr(det, "alert_from_intel", lambda conn, **kw: raised.append(kw["value"]))
+    monkeypatch.setattr(conn_mod, "_IMPORT_BATCH", 10)        # force multiple sub-batches
+
+    src = "budget-fence"
+    inds = [{"type": "ip", "value": f"203.0.113.{i}", "confidence": 95}   # 95 -> critical
+            for i in range(25)]
+    try:
+        res = conn_mod.import_indicators(inds, src)
+        assert res["imported"] == 25 and res["skipped"] == 0 and res["duplicates"] == 0
+        # 25 criticals across 3 sub-batches, but the per-run cap still holds.
+        assert res["alertsRaised"] == conn_mod._MAX_INTEL_ALERTS_PER_RUN
+        assert len(raised) == conn_mod._MAX_INTEL_ALERTS_PER_RUN
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source=?", (src,))
+            c.commit()

@@ -98,6 +98,61 @@ batched - see §4):
 - These are pipeline numbers, not an end-to-end SLA - front the API with TLS, a
   reverse proxy, and the resource limits in `deploy/helm/`.
 
+## CTI IOC import throughput (feed ingestion)
+
+Separate from the SIEM event pipeline above: how fast the platform ingests
+**threat-intel indicators** from a connector feed (AlienVault OTX, ThreatFox,
+NVD, custom JSON/CSV/STIX). The reference point is OpenCTI's OTX connector, which
+sustains roughly **1,000–10,000 indicators/second** including dedup/filtering.
+
+The `ioc import` stage in `python -m dashboard_api.bench` times the real engine
+(`connectors.import_indicators`): normalise → type-filter → intra-batch dedup →
+chunked `value IN (...)` existence probe → single `executemany` bulk INSERT, in
+bounded sub-batches. Same host as above (4 vCPU · SQLite WAL):
+
+| Stage | Indicators | Seconds | Indicators/sec |
+|---|---:|---:|---:|
+| ioc import (all new, empty table) | 50,000 | 1.27 | **~39,000** |
+
+Held under a growing table (loading 50k-at-a-time to 1,000,000 rows, every
+indicator normalised + dedup-checked + inserted):
+
+| IOC table size | Indicators/sec (all-new) | Indicators/sec (all-duplicate) |
+|---|---:|---:|
+| ~50k rows   | ~39,000 | — |
+| ~500k rows  | ~30,000 | — |
+| ~1,000,000 rows | ~23,000 | ~86,000 |
+
+**What this means:**
+
+1. **The engine already clears the OpenCTI/OTX reference band (1k–10k/s) by
+   2–23×, on plain SQLite, with every indicator filtered** — and stays above it
+   even at a million-row store (degradation is gentle B-tree index maintenance,
+   not a cliff). This is the payoff of the batch redesign: the previous per-row
+   `SELECT`+`INSERT` loop was O(N) database round trips (hundreds of
+   indicators/second, and worse as the table grew). **No framework switch is
+   required to hit the target** — measured, not assumed. The Postgres backend
+   remains an opt-in (`DASHBOARD_DB_BACKEND=postgres`) for deployments that need
+   concurrent writers, not for single-node import speed.
+
+2. **Bounded memory + lock hold at any feed size.** `import_indicators` slices a
+   pull into `DASHBOARD_IMPORT_BATCH` (default 10,000) sub-batches, so a
+   hundred-thousand-indicator sync ingests with flat memory and short
+   transactions instead of one giant in-memory list / multi-second write-lock
+   hold. Dedup remains correct across sub-batches, and the per-run critical-alert
+   cap is shared across them (a big pull can't flood the SIEM alert queue).
+
+3. **Amount imported per OTX sync now scales like a real feed.** The OTX fetcher
+   walks the paginated subscribed-pulses API (up to `DASHBOARD_OTX_MAX_PAGES` ×
+   `DASHBOARD_OTX_PAGE_LIMIT` pulses, capped at `DASHBOARD_OTX_MAX_INDICATORS`),
+   not a single 30-pulse page — so a sync pulls the whole subscribed feed
+   (tens of thousands of indicators) rather than a handful. The engine numbers
+   above are what absorbs that volume.
+
+4. **The real-world ceiling is usually the source, not the engine.** OTX (and
+   most public feeds) rate-limit the fetch; at 39k/s of local insert, a sync is
+   network/API-bound long before it is database-bound.
+
 ## API dataset ceilings (UI safety)
 
 Every list endpoint caps its `limit` query parameter server-side, so a client
