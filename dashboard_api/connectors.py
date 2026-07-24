@@ -403,12 +403,29 @@ _THREATORBIT_TYPE = {"ip": "ip", "domain": "domain", "url": "url", "hash": "hash
                      "md5": "hash", "sha1": "hash", "sha256": "hash", "email": "email"}
 
 
+# The ThreatOrbit OSINT engine's /iocs endpoint caps `limit` at 1000 per request
+# but supports `offset`. Paging it is what lets our own engine deliver its FULL
+# corpus (abuse.ch Feodo alone is thousands of live malicious IPs) instead of the
+# first page - the same treatment OTX and TAXII get.
+_THREATORBIT_PAGE = 1000
+_THREATORBIT_MAX_PAGES = int(os.environ.get("DASHBOARD_THREATORBIT_MAX_PAGES", "50"))
+
+
 def _fetch_threatorbit(c: dict) -> list[dict]:
     base = (c.get("url") or THREAT_API_URL).rstrip("/")
     headers = {"X-API-Key": SERVICES_API_KEY} if SERVICES_API_KEY else {}
-    rows = _http_get(f"{base}/iocs", headers=headers, params={"limit": 1000}).json()
+    rows: list = []
+    for page in range(_THREATORBIT_MAX_PAGES):
+        batch = _http_get(f"{base}/iocs", headers=headers,
+                          params={"limit": _THREATORBIT_PAGE,
+                                  "offset": page * _THREATORBIT_PAGE}).json()
+        if not isinstance(batch, list) or not batch:
+            break
+        rows.extend(batch)
+        if len(batch) < _THREATORBIT_PAGE:      # short page = last page
+            break
     out = []
-    for it in rows if isinstance(rows, list) else []:
+    for it in rows:
         if not isinstance(it, dict):
             continue
         t = _THREATORBIT_TYPE.get((it.get("ioc_type") or "").lower())

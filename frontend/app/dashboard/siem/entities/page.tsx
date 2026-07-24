@@ -211,7 +211,7 @@ export default function EntityRiskPage() {
                       <span className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ background: SEV_COLOR[a.severity] }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-[11px] text-ink-200 truncate group-hover:text-white">{a.title}</p>
-                        <p className="text-[9px] text-ink-600">{a.rule_name} · {relTime(a.ts)} · {a.status}</p>
+                        <p className="text-[9px] text-ink-600">{a.ruleName} · {relTime(a.ts)} · {a.status}</p>
                       </div>
                       <ExternalLink className="w-3 h-3 text-ink-700 group-hover:text-magenta shrink-0 mt-0.5" />
                     </a>

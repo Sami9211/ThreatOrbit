@@ -3337,3 +3337,32 @@ _Move completed items here with the date so the roadmap stays honest._
   see is the synthetic Live Processing Engine (`ENGINE_EVENTS_PER_TICK`), a demo
   detection trickle - real feed volume comes from the OTX/TAXII connectors, which
   page the full subscribed feed and import at tens of thousands/sec.
+
+- **2026-07-24 · ROOT CAUSE: OTX connector impossible to create (camelCase
+  response-mapping bug) + ThreatOrbit engine capped at 1000/sync.**
+  The reported "OTX asks for Source URL / won't accept my key" was NOT a cache
+  issue (my earlier diagnosis was wrong) - it was a real, shipped bug.
+  • **Cause:** `api()` runs every response through `toCamel`, but the
+    `ConnectorKind` interface declared `needs_key` / `needs_url` / `default_url` /
+    `default_interval` in snake_case. The `as T` cast can't catch the mismatch, so
+    all four reads were `undefined` at runtime. Cascade: (1) `needs_key !==
+    undefined` was false → **API-key field hidden**; (2) `needs_url` undefined →
+    fallback → **Source URL shown for OTX**; (3) interval init `String(undefined)`
+    → `Number(...)`=NaN → serialised `null` → **HTTP 422**; (4) the 422's *list*
+    detail failed the `includes('key')` check → the misleading "Could not add the
+    connector. Check the URL…" message. All four symptoms, one bug.
+  • **Fixed:** interface + all 9 reads → camelCase; key field now gated on the
+    KIND (not on preset presence) so it can never vanish; NaN interval never sent.
+  • **Fence (new):** `frontend/scripts/check-api-casing.mjs` (`npm run
+    check:api-casing`) fails on any snake_case field in a response interface -
+    verified it catches the original bug. It immediately found **4 more live
+    instances** of the same class: `EntityDetail.rule_name` (UEBA entity timeline
+    rendered `undefined` for the rule name - real user-visible bug),
+    `EntityDetail.mitre_tech_id`, `SavedView.created_at`, `ScanContext.risk_score`,
+    plus `ScanContextAlert.src_ip/dest_ip`. All corrected.
+  • **ThreatOrbit OSINT engine parity:** `_fetch_threatorbit` pulled
+    `limit=1000` with **no pagination**, so our own engine capped at 1000
+    indicators per sync while the upstream store holds far more (abuse.ch Feodo
+    alone is thousands). Now pages via `offset` until a short page - the same
+    treatment OTX/TAXII got. Fenced by
+    `test_threatorbit_fetch_pages_full_corpus`.

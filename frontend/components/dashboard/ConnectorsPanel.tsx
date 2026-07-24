@@ -99,11 +99,15 @@ export default function ConnectorsPanel() {
     for (const k of ['value', 'type', 'threat_type', 'confidence', 'severity', 'tags']) {
       if (values[`fm_${k}`]?.trim()) fieldMap[k] = values[`fm_${k}`].trim()
     }
+    // Only send an interval when it parses to a real number. `Number("undefined")`
+    // is NaN, which serialises to null and makes the API reject the whole create
+    // with a 422 - never let a bad field value block an otherwise valid connector.
+    const interval = Number(values.interval_minutes)
     const created = await createConnector({
       name: values.name, kind: values.kind,
       url: values.url || undefined,
       api_key: values.api_key || undefined,
-      interval_minutes: values.interval_minutes ? Number(values.interval_minutes) : undefined,
+      interval_minutes: Number.isFinite(interval) && interval > 0 ? interval : undefined,
       field_map: Object.keys(fieldMap).length ? fieldMap : undefined,
     })
     setConnectors((prev) => [...(prev ?? []), created])
@@ -185,8 +189,8 @@ export default function ConnectorsPanel() {
                   <p className="text-[10px] text-ink-500 leading-relaxed flex-1">{k.description}</p>
                   <div className="flex items-center justify-between gap-2 mt-2">
                     <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border',
-                      k.needs_key ? 'text-amber border-amber/25 bg-amber/10' : 'text-safe border-safe/25 bg-safe/10')}>
-                      {k.needs_key ? 'API key required' : 'No key needed'}
+                      k.needsKey ? 'text-amber border-amber/25 bg-amber/10' : 'text-safe border-safe/25 bg-safe/10')}>
+                      {k.needsKey ? 'API key required' : 'No key needed'}
                     </span>
                     <button
                       onClick={() => { setPresetKind(k.kind); setShowAdd(true); setShowCatalog(false) }}
@@ -289,8 +293,8 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
   const [kind, setKind] = useState(initialKind ?? 'json')
   const initPreset = kinds.find((k) => k.kind === (initialKind ?? 'json'))
   const [values, setValues] = useState<Record<string, string>>({
-    name: '', url: initPreset?.default_url ?? '', api_key: '',
-    interval_minutes: initPreset ? String(initPreset.default_interval) : '',
+    name: '', url: initPreset?.defaultUrl ?? '', api_key: '',
+    interval_minutes: initPreset ? String(initPreset.defaultInterval) : '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -302,7 +306,7 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!values.name.trim() || submitting) return
-    if (preset?.needs_key && !values.api_key.trim()) { setError('This source needs an API key.'); return }
+    if (preset?.needsKey && !values.api_key.trim()) { setError('This source needs an API key.'); return }
     setSubmitting(true)
     setError(null)
     try {
@@ -334,7 +338,7 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Source type</label>
-            <select value={kind} onChange={(e) => { setKind(e.target.value); const p = kinds.find(k => k.kind === e.target.value); if (p) setValues(s => ({ ...s, url: p.default_url, interval_minutes: String(p.default_interval) })) }} className={input}>
+            <select value={kind} onChange={(e) => { setKind(e.target.value); const p = kinds.find(k => k.kind === e.target.value); if (p) setValues(s => ({ ...s, url: p.defaultUrl, interval_minutes: String(p.defaultInterval) })) }} className={input}>
               {kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
             </select>
             {preset && <p className="text-[10px] text-ink-600 mt-1">{preset.description}</p>}
@@ -351,18 +355,22 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
               The fallback lists the managed kinds explicitly so that even if the
               `/kinds` response is stale or omits needs_url, OTX/NVD never wrongly
               ask for a URL. */}
-          {(preset?.needs_url ?? !['threatorbit', 'nvd', 'otx'].includes(kind)) && (
+          {(preset?.needsUrl ?? !['threatorbit', 'nvd', 'otx'].includes(kind)) && (
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">Source URL</label>
-              <input value={values.url} onChange={(e) => set('url')(e.target.value)} placeholder={preset?.default_url || 'https://your-source/api/indicators'} className={cn(input, 'font-mono text-xs')} />
+              <input value={values.url} onChange={(e) => set('url')(e.target.value)} placeholder={preset?.defaultUrl || 'https://your-source/api/indicators'} className={cn(input, 'font-mono text-xs')} />
             </div>
           )}
 
-          {preset?.needs_key !== undefined && kind !== 'threatorbit' && kind !== 'nvd' && (
+          {/* Key field for every kind that can take one. Gated on the KIND, not on
+              the preset being loaded: keying it off `preset?.needsKey !== undefined`
+              meant a missing/renamed field silently hid the field entirely, so an
+              OTX connector could never be created. */}
+          {kind !== 'threatorbit' && kind !== 'nvd' && (
             <div>
               <label className="block text-xs font-medium text-ink-300 mb-1.5">
-                API key {preset?.needs_key && <span className="text-magenta">*</span>}
-                {!preset?.needs_key && <span className="text-ink-600">(optional)</span>}
+                API key {preset?.needsKey && <span className="text-magenta">*</span>}
+                {!preset?.needsKey && <span className="text-ink-600">(optional)</span>}
               </label>
               <input type="password" value={values.api_key} onChange={(e) => set('api_key')(e.target.value)} placeholder="paste your key" className={cn(input, 'font-mono text-xs')} />
             </div>
@@ -387,7 +395,7 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
 
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (minutes)</label>
-            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} placeholder={String(preset?.default_interval ?? 60)} className={input} />
+            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} placeholder={String(preset?.defaultInterval ?? 60)} className={input} />
           </div>
 
           {error && <p className="flex items-center gap-2 px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}</p>}

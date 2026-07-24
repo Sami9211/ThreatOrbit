@@ -466,3 +466,33 @@ def test_taxii_and_stix_registered_and_presented():
     assert "taxii" in conn_mod._FETCHERS and "stix" in conn_mod._FETCHERS
     assert conn_mod.KIND_PRESETS["taxii"]["needs_url"] is True
     assert conn_mod.KIND_PRESETS["taxii"]["label"] == "TAXII 2.1 collection"
+
+
+def test_threatorbit_fetch_pages_full_corpus(monkeypatch):
+    """The bundled OSINT engine connector must page through /iocs (which caps
+    limit at 1000/request but supports offset), not stop at the first page -
+    otherwise our own engine looks weaker than it is, capped at 1000 indicators
+    per sync while the store holds far more."""
+    total = 2300
+    store = [{"ioc_type": "ip", "value": f"198.51.{i // 256}.{i % 256}",
+              "confidence": 70, "source": "abuse.ch"} for i in range(total)]
+
+    class _R:
+        def __init__(self, d):
+            self._d = d
+
+        def json(self):
+            return self._d
+
+    seen = []
+
+    def fake_get(url, headers=None, params=None):
+        off, lim = params["offset"], params["limit"]
+        seen.append((off, lim))
+        return _R(store[off:off + lim])
+
+    monkeypatch.setattr(conn_mod, "_http_get", fake_get)
+    out = conn_mod._fetch_threatorbit({})
+    assert len(out) == total, f"only pulled {len(out)} of {total} indicators"
+    assert seen[0] == (0, 1000) and seen[1] == (1000, 1000)   # offset advances
+    assert len(seen) == 3                                      # 1000+1000+300 -> stops on short page

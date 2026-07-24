@@ -680,7 +680,7 @@ export const createAlert = (body: {
     body: JSON.stringify({
       title: body.title, severity: body.severity, description: body.description,
       src_ip: body.srcIp, src_country: body.srcCountry,
-      mitre_tech_id: body.mitreTechId, mitre_tactic: body.mitreTactic,
+      mitreTechId: body.mitreTechId, mitre_tactic: body.mitreTactic,
       ...(body.ruleName ? { rule_name: body.ruleName } : {}),
       hostname: body.hostname, username: body.username,
       ...(body.tiHits !== undefined ? { ti_hits: body.tiHits } : {}),
@@ -820,7 +820,7 @@ export interface EntityDetail {
   timeline: Array<{ day: string; count: number }>
   topTechniques: Array<{ technique: string; count: number }>
   baseline: { mean: number; stdDev: number; current: number; zScore: number; deviating: boolean; confidence: string }
-  alerts: Array<{ id: string; title: string; severity: string; ts: string; status: string; rule_name: string; mitre_tech_id: string }>
+  alerts: Array<{ id: string; title: string; severity: string; ts: string; status: string; ruleName: string; mitreTechId: string }>
 }
 export const fetchEntityDetail = (type: string, value: string) =>
   api<EntityDetail>(`/siem/entities/detail?type=${type}&value=${encodeURIComponent(value)}`)
@@ -857,7 +857,7 @@ export const setMySlackRouting = (webhook_url: string | null, min_severity: stri
   api<SlackRouting>('/auth/me/slack', { method: 'PUT', body: JSON.stringify({ webhook_url, min_severity }) })
 export const testMySlackRouting = () => api<{ delivered: boolean }>('/auth/me/slack/test', { method: 'POST' })
 
-export interface SavedView { id: string; section: string; name: string; filters: Record<string, string>; created_at: string }
+export interface SavedView { id: string; section: string; name: string; filters: Record<string, string>; createdAt: string }
 export const fetchSavedViews = (section: string) => api<SavedView[]>(`/saved-views?section=${section}`)
 export const createSavedView = (section: string, name: string, filters: Record<string, string>) =>
   api<SavedView>('/saved-views', { method: 'POST', body: JSON.stringify({ section, name, filters }) })
@@ -1228,7 +1228,8 @@ export const fetchScanEnrich = (value: string, type = '', refresh = false) =>
  * indicator - real stored records with deep-linkable ids, never invented. */
 export interface ScanContextAlert {
   id: string; ts: string; title: string; severity: string; status: string
-  src_ip: string | null; dest_ip: string | null; hostname: string | null; username: string | null
+  // camelCase: responses pass through toCamel (the API sends src_ip / dest_ip).
+  srcIp: string | null; destIp: string | null; hostname: string | null; username: string | null
 }
 export interface ScanContextIoc {
   id: string; value: string; type: string; severity: string; confidence: number; actor: string | null
@@ -1241,7 +1242,7 @@ export interface ScanContext {
   alerts: { total: number; items: ScanContextAlert[] }
   cases: Array<{ id: string; title: string; severity: string; status: string; owner: string | null; created: string }>
   darkWeb: { total: number; items: Array<{ id: string; ts: string; category: string; severity: string; source: string | null; title: string; entity: string | null }> }
-  assets: Array<{ id: string; name: string; type: string; value: string; criticality: string; status: string; risk_score: number }>
+  assets: Array<{ id: string; name: string; type: string; value: string; criticality: string; status: string; riskScore: number }>
   events: { count: number; capped: boolean }
   relatedEntities: { ips: string[]; hostnames: string[]; usernames: string[]; emails: string[] }
   analystActivity: { scans: number; byVerdict: Record<string, number>; lastScan: string | null }
@@ -1679,17 +1680,23 @@ export interface Connector {
   createdAt: string
   createdBy: string | null
 }
+/** NOTE: these fields are camelCase because every response goes through
+ *  `toCamel` (the backend sends needs_key / needs_url / default_url /
+ *  default_interval). Declaring them snake_case here silently made every read
+ *  `undefined` at runtime - the `as T` cast can't catch it - which hid the API-key
+ *  field and wrongly showed the Source URL field for OTX. Keep these in sync with
+ *  the mapper, not with the wire format. */
 export interface ConnectorKind {
   kind: string
   label: string
   description: string
-  needs_key: boolean
+  needsKey: boolean
   /** Whether the operator supplies the endpoint URL. Managed providers (OTX,
    *  NVD, the bundled engine) set false - the UI hides the URL field and the
-   *  backend uses default_url internally. */
-  needs_url: boolean
-  default_url: string
-  default_interval: number
+   *  backend uses defaultUrl internally. */
+  needsUrl: boolean
+  defaultUrl: string
+  defaultInterval: number
 }
 export const fetchConnectors = () => api<Connector[]>('/connectors')
 export const fetchConnectorKinds = () => api<ConnectorKind[]>('/connectors/kinds')
