@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 import httpx
 
 from dashboard_api.config import THREAT_API_URL, SERVICES_API_KEY
-from dashboard_api.db import audit, dumps, get_conn, record_job
+from dashboard_api.db import audit, dumps, get_conn, record_ioc_import, record_job
 
 _TIMEOUT = 20.0
 # Cap the response body a feed may return (DoS guard). httpx reads the whole
@@ -776,6 +776,12 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             )
             record_job(conn, f"connector.{connector['kind']}", "completed",
                        {"connector": connector["name"], **result, "actor": actor})
+            # Also log it as an IMPORT. The Feeds → Import history reads
+            # ioc_imports; without this a connector could pull thousands of
+            # indicators and the operator would still see an empty import log.
+            record_ioc_import(conn, connector["name"], f"connector:{connector['kind']}",
+                              result.get("imported", 0), result.get("duplicates", 0),
+                              result.get("skipped", 0), actor)
             audit(conn, actor, "connector.run", cid,
                   f"kind={connector['kind']} imported={result['imported']}")
             conn.commit()
@@ -788,6 +794,10 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
                          (_now(), msg, cid))
             record_job(conn, f"connector.{connector['kind']}", "failed",
                        {"connector": connector["name"], "error": msg, "actor": actor})
+            # A failed sync belongs in the import log too - silence is what made
+            # "nothing shows up at imports" impossible to diagnose.
+            record_ioc_import(conn, connector["name"], f"connector:{connector['kind']}",
+                              0, 0, 0, actor, error=msg)
             conn.commit()
         return {"error": msg}
 
@@ -817,6 +827,12 @@ def seed_builtin_connectors():
 # a hard floor keeps a misconfigured connector from hammering a third-party feed
 # (and getting the deployment rate-limited or banned).
 MIN_INTERVAL_SECONDS = int(os.environ.get("DASHBOARD_MIN_CONNECTOR_SECONDS", "5"))
+
+# How long a connector may sit at status='running' before the scheduler assumes
+# the run died and retries it. Generous vs the bounded fetch (_TIMEOUT per HTTP
+# hop, plus paging), so a healthy long sync is never pre-empted - but a wedged
+# one recovers on its own instead of needing a restart.
+STUCK_RUNNING_AFTER = int(os.environ.get("DASHBOARD_CONNECTOR_STUCK_SECONDS", "900"))
 
 
 def connector_interval_seconds(c: dict) -> int:
@@ -870,7 +886,20 @@ def run_due_connectors() -> list[dict]:
                 due = now - last >= timedelta(seconds=connector_interval_seconds(c))
             except ValueError:
                 due = True
-        if due and c.get("status") != "running":
+        # Skip a connector that is genuinely mid-sync, but don't let 'running'
+        # become a permanent state: a hung fetch (or a kill between the status
+        # write and the result write) would otherwise wedge this feed forever.
+        # After STUCK_RUNNING_AFTER with no completion, treat it as dead and
+        # re-run - the fetch itself is bounded by _TIMEOUT, so a genuine sync is
+        # never this old.
+        stuck = False
+        if c.get("status") == "running":
+            try:
+                last = datetime.fromisoformat(c["last_run"]) if c.get("last_run") else None
+            except ValueError:
+                last = None
+            stuck = last is None or (now - last) >= timedelta(seconds=STUCK_RUNNING_AFTER)
+        if due and (c.get("status") != "running" or stuck):
             res = run_connector(c, actor="scheduler")
             ran.append({"connector": c["name"], **res})
     return ran

@@ -3421,3 +3421,25 @@ _Move completed items here with the date so the roadmap stays honest._
     resolver, or an unusable AAAA beside a good A record).
   • Verified: **612 backend tests pass**; tsc clean, lint 0 errors, casing fence
     passes.
+
+- **2026-07-25 · ROOT CAUSE of "nothing shows up at imports" (days-long).**
+  The Feeds → Import history reads the `ioc_imports` table - and that table was
+  written by **exactly one place**: the manual/MISP import route. Connector syncs
+  wrote only a `jobs` row. So OTX, NVD, TAXII and the bundled engine could pull
+  **any** number of real indicators and the import log stayed empty, with no
+  signal at all when a sync failed. Not a display bug - a missing write.
+  • New shared `db.record_ioc_import()`; `run_connector` now records an import
+    row on **success and failure** (failures carry the error, so a broken sync is
+    visible instead of silent). Manual/MISP paths keep their behaviour.
+  • **End-to-end fences** (the verification that never existed):
+    `test_connector_sync_appears_in_import_history_end_to_end` asserts the whole
+    chain - indicators land in the store, the sync appears in import history with
+    real counts, and a job is recorded - and
+    `test_failed_connector_sync_is_visible_in_import_history` asserts failures
+    surface too.
+  • **Second "sync in progress" cause fixed:** startup recovery handled a killed
+    process, but a *hung* fetch still wedged a connector at `running` forever
+    (the scheduler skips 'running' rows). Added `STUCK_RUNNING_AFTER` (900s, env
+    tunable): a connector stuck that long is retried rather than wedged. Bounded
+    well above the per-hop `_TIMEOUT`, so a healthy long sync is never pre-empted.
+  • Verified: **613 backend tests pass, 1 skipped.**

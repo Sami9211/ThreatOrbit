@@ -572,3 +572,89 @@ def test_stuck_running_connector_is_recovered_and_runs_again(monkeypatch):
     finally:
         with real_get_conn() as c:
             c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
+
+
+def test_connector_sync_appears_in_import_history_end_to_end(monkeypatch):
+    """END-TO-END: a connector sync must land indicators AND show up in the
+    Feeds → Import history.
+
+    This is the gap that made the product look broken for days: `ioc_imports`
+    (what the Import page reads) was written ONLY by the manual/MISP routes, so
+    a connector could pull thousands of real indicators and the import log stayed
+    empty - "nothing shows up at imports" with no way to tell why.
+    """
+    from dashboard_api.db import get_conn as real_get_conn
+
+    feed = [{"type": "ip", "value": "203.0.113.201", "confidence": 70},
+            {"type": "domain", "value": "e2e-import-check.test", "confidence": 70},
+            {"type": "ip", "value": "203.0.113.201", "confidence": 70}]   # dup in batch
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", lambda c: feed)
+
+    cid = "e2e-" + uuid.uuid4().hex[:8]
+    name = "E2E Feed " + cid
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','idle',0,?)",
+            (cid, name, "json", "https://example.test/feed", conn_mod._now()))
+        c.commit()
+    try:
+        with real_get_conn() as c:
+            row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+        res = conn_mod.run_connector(row, actor="tester")
+        assert res.get("imported") == 2 and res.get("duplicates") == 1, res
+
+        with real_get_conn() as c:
+            # 1. the indicators are really in the store
+            got = c.execute("SELECT COUNT(*) AS n FROM iocs WHERE source=?", (name,)).fetchone()["n"]
+            assert got == 2, f"indicators not stored (found {got})"
+            # 2. the sync is visible in the IMPORT history, with real counts
+            imp = c.execute(
+                "SELECT * FROM ioc_imports WHERE source=? ORDER BY ts DESC", (name,)).fetchone()
+            assert imp is not None, "connector sync missing from import history"
+            assert imp["imported"] == 2 and imp["duplicates"] == 1
+            assert imp["method"] == "connector:json" and imp["status"] == "completed"
+            # 3. and as a job (the Imports page pipeline view)
+            assert c.execute("SELECT COUNT(*) AS n FROM jobs WHERE kind=?",
+                             ("connector.json",)).fetchone()["n"] >= 1
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source=?", (name,))
+            c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_failed_connector_sync_is_visible_in_import_history(monkeypatch):
+    """A sync that FAILS must appear in the import log with the error - silence is
+    what made 'nothing shows up at imports' undiagnosable."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    def boom(c):
+        raise ValueError("URL resolves to a private or reserved address (feed.test -> 0.0.0.0)")
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", boom)
+
+    cid = "e2ef-" + uuid.uuid4().hex[:8]
+    name = "E2E Fail " + cid
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','idle',0,?)",
+            (cid, name, "json", "https://feed.test/x", conn_mod._now()))
+        c.commit()
+    try:
+        with real_get_conn() as c:
+            row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+        res = conn_mod.run_connector(row, actor="tester")
+        assert "error" in res
+        with real_get_conn() as c:
+            imp = c.execute("SELECT * FROM ioc_imports WHERE source=?", (name,)).fetchone()
+            assert imp is not None, "failed sync missing from import history"
+            assert imp["status"] == "failed" and imp["imported"] == 0
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()

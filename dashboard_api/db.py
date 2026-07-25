@@ -761,6 +761,31 @@ def audit(conn: sqlite3.Connection, actor: str | None, action: str,
         pass
 
 
+def record_ioc_import(conn, source: str, method: str, imported: int, duplicates: int,
+                      skipped: int, actor: str, error: str | None = None) -> str:
+    """Insert an `ioc_imports` row (caller commits) - the Feeds → Import log.
+
+    EVERY path that puts indicators into the store must call this, not just the
+    manual/MISP routes: connector syncs used to write only a `jobs` row, so an
+    OTX or NVD pull of thousands of indicators left the import history empty and
+    the operator saw "no imports" no matter how much real intel had landed.
+    Failures are recorded too (imported=0 + the error), because a sync that
+    failed is exactly what an operator needs to see."""
+    import datetime
+    import uuid
+    status = ("failed" if error else
+              "completed" if imported and not skipped else
+              "partial" if imported else "failed")
+    iid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO ioc_imports (id,source,method,imported,duplicates,skipped,status,actor,ts) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (iid, (source or "unknown")[:120], method, imported, duplicates, skipped, status, actor,
+         datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()),
+    )
+    return iid
+
+
 def record_job(conn: sqlite3.Connection, kind: str, status: str, meta: dict | None = None) -> str:
     """Insert a jobs row inside an open connection (caller must commit)."""
     import datetime
