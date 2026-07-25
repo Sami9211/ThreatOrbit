@@ -218,6 +218,19 @@ def _is_companion(url: str) -> bool:
     return bool(base) and (url == base or url.startswith(base + "/"))
 
 
+def validate_feed_url(url: str) -> None:
+    """SSRF-validate a user-supplied feed URL for REGISTRATION (create/update).
+
+    Single source of truth with the send-time check below: both allow the
+    deployment's own companion threat service, which is operator configuration
+    (THREAT_API_URL) rather than user input and is loopback/private on every
+    non-cloud install. Without this, registering the bundled OSINT engine
+    connector fails with "URL resolves to a private or reserved address" even
+    though syncing it is explicitly allowed. Raises UnsafeUrlError otherwise."""
+    from dashboard_api.net_guard import validate_external_url
+    validate_external_url(url, allow_private=True if _is_companion(url) else None)
+
+
 def _http_get(url: str, headers: dict | None = None, params: dict | None = None):
     # Re-validate at SEND time (not just when the connector was registered) so a
     # name can't rebind to an internal IP between configuration and fetch.

@@ -103,9 +103,15 @@ export default function ConnectorsPanel() {
     // is NaN, which serialises to null and makes the API reject the whole create
     // with a 422 - never let a bad field value block an otherwise valid connector.
     const interval = Number(values.interval_minutes)
+    // Managed providers (OTX/NVD/the bundled engine) advertise needsUrl:false and
+    // the UI hides their URL field - so don't send one. The backend fills its own
+    // fixed endpoint. Echoing the preset's default back would also (correctly)
+    // trip the SSRF guard for the bundled engine, whose endpoint is loopback.
+    const kindPreset = kinds.find((k) => k.kind === values.kind)
+    const sendUrl = kindPreset?.needsUrl === false ? undefined : (values.url || undefined)
     const created = await createConnector({
       name: values.name, kind: values.kind,
-      url: values.url || undefined,
+      url: sendUrl,
       api_key: values.api_key || undefined,
       interval_minutes: Number.isFinite(interval) && interval > 0 ? interval : undefined,
       field_map: Object.keys(fieldMap).length ? fieldMap : undefined,

@@ -81,9 +81,10 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("c
     if KIND_PRESETS[body.kind]["needs_key"] and not (body.api_key or "").strip():
         raise HTTPException(status_code=400, detail=f"{KIND_PRESETS[body.kind]['label']} requires an API key")
     if (body.url or "").strip():  # SSRF guard on the user-supplied feed URL
-        from dashboard_api.net_guard import validate_external_url, UnsafeUrlError
+        from dashboard_api.connectors import validate_feed_url
+        from dashboard_api.net_guard import UnsafeUrlError
         try:
-            validate_external_url(body.url)
+            validate_feed_url(body.url)
         except UnsafeUrlError as e:
             raise HTTPException(status_code=400, detail=str(e))
     from dashboard_api.licensing import check_limit
@@ -112,9 +113,10 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("c
 def update_connector(connector_id: str, body: ConnectorUpdate,
                      user: dict = Depends(require_perm("connectors.manage"))):
     if (body.url or "").strip():  # SSRF guard on the user-supplied feed URL
-        from dashboard_api.net_guard import validate_external_url, UnsafeUrlError
+        from dashboard_api.connectors import validate_feed_url
+        from dashboard_api.net_guard import UnsafeUrlError
         try:
-            validate_external_url(body.url)
+            validate_feed_url(body.url)
         except UnsafeUrlError as e:
             raise HTTPException(status_code=400, detail=str(e))
     fields, values = [], []

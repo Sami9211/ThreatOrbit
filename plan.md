@@ -3378,3 +3378,24 @@ _Move completed items here with the date so the roadmap stays honest._
   "field: message". Verified against the live backend: OTX with key-only returns
   **201**; the only failure modes are 400 (no key), 422 (bad field), 403
   (non-admin).
+
+- **2026-07-24 · Fix "URL resolves to a private or reserved address" when adding
+  the bundled OSINT engine (regression from the camelCase fix).** `THREAT_API_URL`
+  defaults to `http://127.0.0.1:8000`, and the connector **send** path has long
+  had a `_is_companion()` allowance for it - but the **create/update** path called
+  `validate_external_url()` with no such allowance. It never surfaced before
+  because the broken snake_case read made `default_url` `undefined`, so the form
+  sent no URL and the backend filled its own. Repairing that read meant selecting
+  a managed kind now echoes its default back - and for the bundled engine that
+  default is loopback, so registration was refused.
+  • **Backend (real fix):** new `connectors.validate_feed_url()` is the single
+    source of truth for feed-URL policy, applying the same companion allowance at
+    registration as at send time; `routers/connectors.py` create + update now use
+    it. Verified the allowance stays narrow - cloud metadata (169.254.169.254),
+    other loopback ports, 10.x and 192.168.x are all still refused (400).
+  • **Frontend:** managed kinds (`needsUrl === false`) no longer send a URL at
+    all - the backend fills its fixed endpoint, matching "the endpoint is handled
+    for you".
+  • Fenced by `test_registering_companion_engine_allowed_but_ssrf_still_blocked`,
+    which clears the conftest's `DASHBOARD_ALLOW_PRIVATE_URLS=true` so it asserts
+    the real production posture rather than the test-only relaxation.

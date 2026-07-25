@@ -8,6 +8,8 @@ schedule. `httpx.get()`/`.post()` read the whole body into memory before
 dump would OOM the dashboard. `_read_capped` streams and rejects past
 `_MAX_FEED_BYTES`; `run_connector` catches the resulting ValueError.
 """
+import os
+
 import pytest
 
 import dashboard_api.connectors as conn_mod
@@ -496,3 +498,36 @@ def test_threatorbit_fetch_pages_full_corpus(monkeypatch):
     assert len(out) == total, f"only pulled {len(out)} of {total} indicators"
     assert seen[0] == (0, 1000) and seen[1] == (1000, 1000)   # offset advances
     assert len(seen) == 3                                      # 1000+1000+300 -> stops on short page
+
+
+def test_registering_companion_engine_allowed_but_ssrf_still_blocked():
+    """Registering the bundled OSINT engine must not be blocked by the SSRF guard.
+
+    THREAT_API_URL is operator configuration (loopback on every non-cloud
+    install), and syncing it is already allowed at send time - so create/update
+    must use the SAME companion allowance, or the bundled connector can never be
+    registered ("URL resolves to a private or reserved address"). The allowance
+    is narrow: any OTHER private/reserved target is still refused.
+    """
+    from dashboard_api.config import THREAT_API_URL
+    from dashboard_api.net_guard import UnsafeUrlError
+
+    # conftest sets DASHBOARD_ALLOW_PRIVATE_URLS=true so the webhook tests can
+    # post to a local sink. Clear it here so this exercises the REAL production
+    # posture (the flag is read per call, so scoping it is enough).
+    prev = os.environ.pop("DASHBOARD_ALLOW_PRIVATE_URLS", None)
+    try:
+        # The deployment's own companion service - allowed, base and sub-path.
+        conn_mod.validate_feed_url(THREAT_API_URL)
+        conn_mod.validate_feed_url(THREAT_API_URL + "/iocs")
+
+        # Everything else private/reserved is still blocked - the guard still guards.
+        for bad in ("http://169.254.169.254/latest/meta-data/",   # cloud metadata
+                    "http://127.0.0.1:9999/steal",                # other loopback port
+                    "http://10.0.0.5/internal",                   # private range
+                    "http://192.168.1.1/admin"):
+            with pytest.raises(UnsafeUrlError):
+                conn_mod.validate_feed_url(bad)
+    finally:
+        if prev is not None:
+            os.environ["DASHBOARD_ALLOW_PRIVATE_URLS"] = prev
