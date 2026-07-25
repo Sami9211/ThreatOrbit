@@ -658,3 +658,33 @@ def test_failed_connector_sync_is_visible_in_import_history(monkeypatch):
             c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
             c.execute("DELETE FROM connectors WHERE id=?", (cid,))
             c.commit()
+
+
+def test_abusech_connector_parses_real_blocklist_shape(monkeypatch):
+    """The keyless abuse.ch Feodo connector turns the public C2 blocklist into
+    indicators. This is the connector that gives a fresh install REAL threat
+    intel on first sync - no API key, no URL, no companion service - so the
+    dashboard is never dependent on the SIMULATED engine for data."""
+    sample = [
+        {"ip_address": "45.142.212.61", "port": 443, "status": "online",
+         "malware": "Emotet", "first_seen": "2026-07-01 10:00:00",
+         "last_online": "2026-07-24"},
+        {"ip_address": "185.99.133.72", "malware": "QakBot"},
+        {"ip_address": "", "malware": "Junk"},          # skipped: no value
+        "not-a-dict",                                    # skipped: malformed
+    ]
+
+    class _R:
+        def json(self): return sample
+
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, **kw: _R())
+    out = conn_mod._fetch_abusech({})
+    assert [o["value"] for o in out] == ["45.142.212.61", "185.99.133.72"]
+    assert all(o["type"] == "ip" and o["source"] == "abuse.ch:feodo" for o in out)
+    assert "Emotet" in out[0]["threat_type"] and out[0]["actor"] == "Emotet"
+    assert out[0]["confidence"] == 90
+
+    # Registered as a kind, and keyless/URL-less so the UI asks for nothing.
+    assert conn_mod._FETCHERS["abusech"] is conn_mod._fetch_abusech
+    preset = conn_mod.KIND_PRESETS["abusech"]
+    assert preset["needs_key"] is False and preset["needs_url"] is False

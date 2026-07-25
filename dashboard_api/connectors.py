@@ -39,6 +39,10 @@ _TIMEOUT = 20.0
 # and reject past this bound. 64 MB is generous for an OSINT indicator feed.
 _MAX_FEED_BYTES = int(os.environ.get("DASHBOARD_MAX_FEED_BYTES", str(64 * 1024 * 1024)))
 _IOC_TYPES = {"ip", "domain", "url", "hash", "email", "cve"}
+# Keyless, high-volume public blocklist. Direct dashboard pull - no companion
+# service and no key - so a fresh install has REAL indicators after one sync.
+ABUSECH_FEODO_URL = os.environ.get(
+    "ABUSECH_FEODO_URL", "https://feodotracker.abuse.ch/downloads/ipblocklist.json")
 _MAX_REDIRECTS = 5
 
 
@@ -164,6 +168,14 @@ KIND_PRESETS = {
         "needs_url": True,
         "default_url": "",
         "default_interval": 60,
+    },
+    "abusech": {
+        "label": "abuse.ch Feodo Tracker (no key)",
+        "description": "Live botnet C2 IP blocklist from abuse.ch - thousands of real, current malicious IPs. Completely free, NO API key and no URL to configure. The fastest way to get genuine threat intel flowing.",
+        "needs_key": False,
+        "needs_url": False,
+        "default_url": ABUSECH_FEODO_URL,
+        "default_interval": 30,
     },
     "taxii": {
         "label": "TAXII 2.1 collection",
@@ -726,10 +738,41 @@ def _fetch_darkweb_json(c: dict) -> list[dict]:
     return out
 
 
+def _fetch_abusech(c: dict) -> list[dict]:
+    """abuse.ch Feodo Tracker botnet C2 blocklist - real, current, keyless.
+
+    Exists so a fresh install has genuine threat intelligence immediately: no API
+    key, no URL to configure, and no dependency on the companion threat service.
+    The feed is a JSON array of active C2 hosts (typically thousands)."""
+    rows = _http_get(c.get("url") or ABUSECH_FEODO_URL).json()
+    if not isinstance(rows, list):
+        raise ValueError("abuse.ch feed did not return a JSON array")
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        ip = (r.get("ip_address") or "").strip()
+        if not ip:
+            continue
+        malware = (r.get("malware") or "").strip()
+        out.append({
+            "type": "ip", "value": ip,
+            "threat_type": f"botnet-c2{f' ({malware})' if malware else ''}",
+            # Confirmed-active C2 from a curated blocklist: high confidence.
+            "confidence": 90,
+            "actor": malware,
+            "source": "abuse.ch:feodo",
+            "tags": [t for t in ("abusech", "feodo", "c2", malware.lower()) if t],
+            "first_seen": r.get("first_seen") or None,
+            "last_seen": r.get("last_online") or None,
+        })
+    return out
+
+
 _FETCHERS = {
     "threatorbit": _fetch_threatorbit, "otx": _fetch_otx, "nvd": _fetch_nvd,
     "json": _fetch_json, "csv": _fetch_csv, "stix": _fetch_stix,
-    "taxii": _fetch_taxii, "darkweb-json": _fetch_darkweb_json,
+    "taxii": _fetch_taxii, "abusech": _fetch_abusech, "darkweb-json": _fetch_darkweb_json,
 }
 
 
@@ -806,6 +849,10 @@ def seed_builtin_connectors():
     """Ensure the bundled connectors exist (idempotent). Called on live boot."""
     now = _now()
     builtins = [
+        # Keyless + high-volume + no companion dependency: this is what makes a
+        # fresh install show REAL indicators after one sync, instead of only the
+        # simulated engine data.
+        ("abuse.ch Feodo Tracker", "abusech", ABUSECH_FEODO_URL, 30),
         ("ThreatOrbit OSINT Engine", "threatorbit", THREAT_API_URL, 30),
         ("NVD CVE Feed", "nvd", "https://services.nvd.nist.gov/rest/json/cves/2.0", 720),
     ]

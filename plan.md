@@ -3443,3 +3443,26 @@ _Move completed items here with the date so the roadmap stays honest._
     tunable): a connector stuck that long is retried rather than wedged. Bounded
     well above the per-hop `_TIMEOUT`, so a healthy long sync is never pre-empted.
   • Verified: **613 backend tests pass, 1 skipped.**
+
+- **2026-07-25 · Real data without the simulated engine + full seconds cadence.**
+  Operator report: "without resuming the engine there is no data imported
+  anywhere" - the product depended on SIMULATED data to look alive. Two fixes:
+  • **Keyless real feed (new `abusech` kind, seeded built-in).** abuse.ch Feodo
+    Tracker - thousands of live botnet C2 IPs, **no API key, no URL, no companion
+    service**. Every prior real source needed either a key (OTX), a working
+    companion hop (threatorbit → threat_api), or manual config, so a fresh
+    install had nothing genuine on first sync. This one pulls straight into the
+    store: real indicators immediately.
+  • **Provenance is now visible.** `isSimulatedSource()` (utils) flags anything
+    tagged `engine:*`. The Imports page badges such indicators **Simulated**, the
+    IOC detail Source row says "SIMULATED, not real intel", and the Config engine
+    panel carries an explicit warning that it *generates* values (random IPs and
+    hashes) and is not observed intelligence. Confirmed by reading `engine.py`:
+    `_pub_ip()` is `IPv4Address(rng.randint(...))`, `_md5`/`_sha256` are random
+    hex - so yes, engine IOC values are fabricated, and the UI now says so.
+  • **Seconds cadence everywhere:** the last minutes-only editor
+    (Config → Sources polling interval) now offers 5s/15s/30s alongside the
+    minute options; both connector modals and the Imports inline editor were
+    already switched.
+  • Verified: **614 backend tests pass, 1 skipped**; tsc clean, lint 0 errors,
+    casing fence passes, production build succeeds.

@@ -93,7 +93,7 @@ function ConfigPanel({ connector, onClose, onConnected }: {
   // acme.* endpoint read like a real configured value on an unconfigured source.
   const [endpoint, setEndpoint] = useState('')
   const [authMethod, setAuthMethod] = useState('API Key')
-  const [interval, setIntervalSel] = useState('Every 5 minutes')
+  const [interval, setIntervalSel] = useState('Every 30 seconds')
 
   // Hydrate previously-saved connector config from the settings store.
   useEffect(() => {
@@ -194,6 +194,9 @@ function ConfigPanel({ connector, onClose, onConnected }: {
               value={interval}
               onChange={(e) => setIntervalSel(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl bg-surface-2 border border-white/8 text-sm text-ink-100 focus:outline-hidden focus:border-magenta/40">
+              <option>Every 5 seconds</option>
+              <option>Every 15 seconds</option>
+              <option>Every 30 seconds</option>
               <option>Every 1 minute</option>
               <option>Every 5 minutes</option>
               <option>Every 15 minutes</option>

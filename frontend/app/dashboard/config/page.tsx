@@ -1459,8 +1459,16 @@ function LiveEngineCard() {
         </span>
         {status && <span className="text-[11px] text-ink-500">telemetry every {status.tickSeconds}s</span>}
       </div>
+      <p className="text-[11px] mb-3 leading-relaxed px-3 py-2 rounded-lg border border-amber/30 bg-amber/10 text-amber">
+        <b>Simulated data.</b> This engine <b>generates</b> telemetry — including indicator
+        values (random IPs and hashes) — so the detection pipeline has something to act on
+        before your own logs are forwarded. Everything it writes is tagged{' '}
+        <span className="font-mono">engine:*</span> and shown as <b>Simulated</b> in the UI.
+        It is <b>not</b> observed threat intelligence. For real intel only, leave this paused
+        and use the connectors (OTX, NVD, TAXII, abuse.ch).
+      </p>
       <p className="text-[11px] text-ink-500 mb-4 leading-relaxed">
-        The engine continuously generates environment telemetry and runs it through the real
+        The generated telemetry runs through the real
         detect → correlate → escalate pipeline. It has produced{' '}
         <b className="text-ink-200">{status?.totalAlerts ?? 0}</b> SIEM alerts and{' '}
         <b className="text-ink-200">{status?.darkWebFindings ?? 0}</b> dark-web findings so far.

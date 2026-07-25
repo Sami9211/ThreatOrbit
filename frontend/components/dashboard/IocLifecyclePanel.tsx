@@ -8,7 +8,7 @@ import {
   TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search, BookOpen,
   Send, FolderPlus, ArrowUpRight,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, isSimulatedSource } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
@@ -474,7 +474,12 @@ export default function IocLifecyclePanel() {
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 {[
                   ['Severity', detail.severity], ['Threat type', detail.threatType || '-'],
-                  ['Actor', detail.actor || '-'], ['Source', detail.source || '-'],
+                  ['Actor', detail.actor || '-'],
+                  // Provenance matters: engine:* indicators are SIMULATED (random
+                  // values from the Live Processing Engine), not observed intel.
+                  ['Source', isSimulatedSource(detail.source)
+                    ? `${detail.source} — SIMULATED, not real intel`
+                    : (detail.source || '-')],
                   ['First seen', relTime(detail.firstSeen)], ['Last seen', relTime(detail.lastSeen)],
                 ].map(([k, v]) => (
                   <div key={k} className="px-3 py-2 rounded-lg bg-surface-2/40 border border-white/5">
