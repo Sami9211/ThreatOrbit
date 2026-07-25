@@ -1686,6 +1686,8 @@ export interface Connector {
   authHeader: string | null
   enabled: number
   intervalMinutes: number
+  /** Cadence in seconds (source of truth; intervalMinutes is kept in step). */
+  intervalSeconds: number
   fieldMap: Record<string, string>
   status: string
   lastRun: string | null
@@ -1717,12 +1719,13 @@ export interface ConnectorKind {
 export const fetchConnectors = () => api<Connector[]>('/connectors')
 export const fetchConnectorKinds = () => api<ConnectorKind[]>('/connectors/kinds')
 export const createConnector = (body: {
-  name: string; kind: string; url?: string; api_key?: string
+  name: string; kind: string; url?: string; api_key?: string; interval_seconds?: number
   auth_header?: string; interval_minutes?: number; field_map?: Record<string, string>
 }) => api<Connector>('/connectors', { method: 'POST', body: JSON.stringify(body) })
 export const patchConnector = (id: string, body: Partial<{
   name: string; url: string; api_key: string; auth_header: string
-  interval_minutes: number; field_map: Record<string, string>; enabled: boolean
+  interval_minutes: number; interval_seconds: number
+  field_map: Record<string, string>; enabled: boolean
 }>) => api<Connector>(`/connectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const deleteConnector = (id: string) =>
   api<void>(`/connectors/${id}`, { method: 'DELETE' })

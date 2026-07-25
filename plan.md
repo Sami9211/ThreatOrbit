@@ -3399,3 +3399,25 @@ _Move completed items here with the date so the roadmap stays honest._
   • Fenced by `test_registering_companion_engine_allowed_but_ssrf_still_blocked`,
     which clears the conftest's `DASHBOARD_ALLOW_PRIVATE_URLS=true` so it asserts
     the real production posture rather than the test-only relaxation.
+
+- **2026-07-24 · Connector cadence in seconds, crash recovery, honest SSRF error.**
+  • **Sub-minute cadence.** New `connectors.interval_seconds` column (schema v5,
+    additive migration); `connector_interval_seconds()` is the single accessor
+    (seconds wins, legacy `interval_minutes*60` fallback, floored by
+    `MIN_INTERVAL_SECONDS`=5 so a misconfigured connector can't get the
+    deployment rate-limited). API accepts/returns it; both connector UIs now read
+    and write **seconds**. `CONNECTOR_TICK_SECONDS` 60→5 so a sub-minute cadence
+    can actually fire; the report-schedule check is throttled to ~60s so the
+    faster tick doesn't multiply that work.
+  • **Stuck "sync in progress" fixed.** `run_due_connectors` skips rows already
+    `status='running'` (so syncs can't overlap) - which meant a service killed
+    mid-sync left the row stuck at 'running' **forever**: permanent "sync in
+    progress" in the UI and that feed never syncing again. New
+    `reset_stuck_connectors()` runs at startup (nothing can legitimately be
+    running then) and records an honest `last_error`.
+  • **SSRF error now names the address.** "URL resolves to a private or reserved
+    address" was undiagnosable; it now reports `host -> ip` and points at DNS,
+    since the cause is environmental (sinkhole returning 0.0.0.0, split-horizon
+    resolver, or an unusable AAAA beside a good A record).
+  • Verified: **612 backend tests pass**; tsc clean, lint 0 errors, casing fence
+    passes.

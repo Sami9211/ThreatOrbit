@@ -280,7 +280,10 @@ SAML_ALLOWED_DOMAINS = [d.strip().lower() for d in
 DATA_MODE = os.environ.get("DASHBOARD_DATA_MODE", "demo").lower()
 
 # How often the connector scheduler wakes to run due connectors (live mode).
-CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "60"))
+# How often the scheduler checks for due connectors. Must be <= the smallest
+# connector interval or a sub-minute cadence can never actually fire; the
+# check is a single indexed query, so a short tick is cheap.
+CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "5"))
 
 # Live processing engine (live mode): how often it generates a telemetry batch
 # and how many events per batch. Lower the interval for a more active demo.

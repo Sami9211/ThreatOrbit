@@ -42,11 +42,12 @@ function SourceRow({ c, canManage, onChanged }: {
   c: Connector; canManage: boolean; onChanged: () => void
 }) {
   const st = CONN_STATUS[c.status] ?? CONN_STATUS.idle
-  const [interval, setInterval] = useState(String(c.intervalMinutes))
+  const secsOf = (x: typeof c) => x.intervalSeconds || x.intervalMinutes * 60
+  const [interval, setInterval] = useState(String(secsOf(c)))
   const [busy, setBusy] = useState<'sync' | 'save' | null>(null)
-  useEffect(() => { setInterval(String(c.intervalMinutes)) }, [c.intervalMinutes])
+  useEffect(() => { setInterval(String(secsOf(c))) }, [c.intervalSeconds, c.intervalMinutes])
 
-  const dirty = interval !== String(c.intervalMinutes) && Number(interval) > 0
+  const dirty = interval !== String(secsOf(c)) && Number(interval) > 0
 
   async function sync() {
     if (busy) return
@@ -56,7 +57,7 @@ function SourceRow({ c, canManage, onChanged }: {
   async function saveInterval() {
     if (!dirty || busy) return
     setBusy('save')
-    try { await patchConnector(c.id, { interval_minutes: Number(interval) }) } catch { /* ignore */ }
+    try { await patchConnector(c.id, { interval_seconds: Number(interval) }) } catch { /* ignore */ }
     finally { setBusy(null); onChanged() }
   }
 
@@ -82,7 +83,7 @@ function SourceRow({ c, canManage, onChanged }: {
           onChange={(e) => setInterval(e.target.value)}
           title={canManage ? 'Minutes between auto-imports' : 'Requires administrator privileges'}
           className="w-14 px-2 py-1 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 text-center focus:outline-hidden focus:border-magenta/40 disabled:opacity-50" />
-        <span className="text-[10px] text-ink-500">min</span>
+        <span className="text-[10px] text-ink-500">sec</span>
         {dirty && canManage && (
           <button onClick={saveInterval} disabled={busy === 'save'} title="Save cadence"
             className="p-1.5 rounded-lg text-safe hover:bg-safe/10 transition-colors">

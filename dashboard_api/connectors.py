@@ -813,6 +813,41 @@ def seed_builtin_connectors():
         conn.commit()
 
 
+# Floor on how often a connector may poll. Sub-minute cadence is supported, but
+# a hard floor keeps a misconfigured connector from hammering a third-party feed
+# (and getting the deployment rate-limited or banned).
+MIN_INTERVAL_SECONDS = int(os.environ.get("DASHBOARD_MIN_CONNECTOR_SECONDS", "5"))
+
+
+def connector_interval_seconds(c: dict) -> int:
+    """A connector's sync cadence in seconds.
+
+    `interval_seconds` is the source of truth; rows predating it (or set to 0)
+    fall back to the legacy `interval_minutes`. Never returns less than
+    MIN_INTERVAL_SECONDS."""
+    secs = int(c.get("interval_seconds") or 0)
+    if secs <= 0:
+        secs = int(c.get("interval_minutes") or 60) * 60
+    return max(MIN_INTERVAL_SECONDS, secs)
+
+
+def reset_stuck_connectors() -> int:
+    """Clear connectors left mid-sync by a crash/kill (status='running').
+
+    `run_due_connectors` skips anything already 'running' so a sync can't overlap
+    itself - but that means a process killed mid-sync leaves the row stuck at
+    'running' FOREVER: the UI shows a permanent "sync in progress" and the
+    connector never syncs again. Called at startup, when nothing can legitimately
+    be running yet. Returns how many rows were recovered."""
+    with get_conn() as conn:
+        n = conn.execute(
+            "UPDATE connectors SET status='idle', "
+            "last_error='Interrupted - the service restarted mid-sync' "
+            "WHERE status='running'").rowcount
+        conn.commit()
+    return n or 0
+
+
 def run_due_connectors() -> list[dict]:
     """Run every enabled connector whose interval has elapsed. The scheduler
     calls this on a tick; returns a summary per connector that ran."""
@@ -832,7 +867,7 @@ def run_due_connectors() -> list[dict]:
         if c.get("last_run"):
             try:
                 last = datetime.fromisoformat(c["last_run"])
-                due = now - last >= timedelta(minutes=c.get("interval_minutes") or 60)
+                due = now - last >= timedelta(seconds=connector_interval_seconds(c))
             except ValueError:
                 due = True
         if due and c.get("status") != "running":

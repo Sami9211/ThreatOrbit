@@ -31,6 +31,13 @@ function relTime(iso: string | null): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
 }
 
+/** Render a cadence in seconds as a compact, human label (45s / 5m / 2h). */
+function fmtEvery(secs: number): string {
+  if (!secs || secs < 60) return `${secs || 0}s`
+  if (secs < 3600) return secs % 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs / 60}m`
+  return secs % 3600 ? `${Math.floor(secs / 3600)}h ${Math.round((secs % 3600) / 60)}m` : `${secs / 3600}h`
+}
+
 /**
  * Connector manager - the real-data control surface. Lists every threat-intel
  * connector (built-in OSINT engine, NVD, plus any custom source you add),
@@ -102,6 +109,9 @@ export default function ConnectorsPanel() {
     // Only send an interval when it parses to a real number. `Number("undefined")`
     // is NaN, which serialises to null and makes the API reject the whole create
     // with a 422 - never let a bad field value block an otherwise valid connector.
+    // NOTE: values.interval_minutes holds SECONDS (the field is labelled in
+    // seconds); it is sent as interval_seconds, which the API treats as the
+    // source of truth. Sending it as minutes would read 30s as 30 minutes.
     const interval = Number(values.interval_minutes)
     // Managed providers (OTX/NVD/the bundled engine) advertise needsUrl:false and
     // the UI hides their URL field - so don't send one. The backend fills its own
@@ -113,7 +123,7 @@ export default function ConnectorsPanel() {
       name: values.name, kind: values.kind,
       url: sendUrl,
       api_key: values.api_key || undefined,
-      interval_minutes: Number.isFinite(interval) && interval > 0 ? interval : undefined,
+      interval_seconds: Number.isFinite(interval) && interval > 0 ? interval : undefined,
       field_map: Object.keys(fieldMap).length ? fieldMap : undefined,
     })
     setConnectors((prev) => [...(prev ?? []), created])
@@ -128,9 +138,10 @@ export default function ConnectorsPanel() {
     const patch: Parameters<typeof patchConnector>[1] = {}
     if (values.name?.trim() && values.name.trim() !== c.name) patch.name = values.name.trim()
     if (values.url !== undefined && values.url.trim() !== (c.url ?? '')) patch.url = values.url.trim()
-    if (values.interval_minutes?.trim()) {
+    if (values.interval_minutes?.trim()) {          // holds SECONDS - see add()
       const n = Number(values.interval_minutes)
-      if (Number.isFinite(n) && n > 0 && n !== c.intervalMinutes) patch.interval_minutes = n
+      const currentSecs = c.intervalSeconds || c.intervalMinutes * 60
+      if (Number.isFinite(n) && n > 0 && n !== currentSecs) patch.interval_seconds = n
     }
     if (values.api_key?.trim()) patch.api_key = values.api_key.trim()
     if (['json', 'csv', 'stix'].includes(c.kind)) {
@@ -237,7 +248,7 @@ export default function ConnectorsPanel() {
                   </span>
                 </div>
                 <p className="text-[10px] text-ink-600 mt-0.5 truncate">
-                  {c.kind} · {c.indicatorCount.toLocaleString()} indicators · every {c.intervalMinutes}m · last {relTime(c.lastRun)}
+                  {c.kind} · {c.indicatorCount.toLocaleString()} indicators · every {fmtEvery(c.intervalSeconds || c.intervalMinutes * 60)} · last {relTime(c.lastRun)}
                   {c.lastError ? <span className="text-threat"> · {c.lastError.slice(0, 60)}</span> : ''}
                 </p>
               </div>
@@ -300,7 +311,7 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
   const initPreset = kinds.find((k) => k.kind === (initialKind ?? 'json'))
   const [values, setValues] = useState<Record<string, string>>({
     name: '', url: initPreset?.defaultUrl ?? '', api_key: '',
-    interval_minutes: initPreset ? String(initPreset.defaultInterval) : '',
+    interval_minutes: initPreset ? String(initPreset.defaultInterval * 60) : '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -347,7 +358,7 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Source type</label>
-            <select value={kind} onChange={(e) => { setKind(e.target.value); const p = kinds.find(k => k.kind === e.target.value); if (p) setValues(s => ({ ...s, url: p.defaultUrl, interval_minutes: String(p.defaultInterval) })) }} className={input}>
+            <select value={kind} onChange={(e) => { setKind(e.target.value); const p = kinds.find(k => k.kind === e.target.value); if (p) setValues(s => ({ ...s, url: p.defaultUrl, interval_minutes: String(p.defaultInterval * 60) })) }} className={input}>
               {kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
             </select>
             {preset && <p className="text-[10px] text-ink-600 mt-1">{preset.description}</p>}
@@ -403,8 +414,8 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (minutes)</label>
-            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} placeholder={String(preset?.defaultInterval ?? 60)} className={input} />
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (seconds)</label>
+            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} placeholder={String((preset?.defaultInterval ?? 60) * 60)} className={input} />
           </div>
 
           {error && <p className="flex items-center gap-2 px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}</p>}
@@ -431,7 +442,7 @@ function EditConnectorModal({ connector, onClose, onSave }: {
   const [values, setValues] = useState<Record<string, string>>(() => ({
     name: c.name,
     url: c.url ?? '',
-    interval_minutes: String(c.intervalMinutes ?? ''),
+    interval_minutes: String(c.intervalSeconds || (c.intervalMinutes ?? 0) * 60 || ''),
     api_key: '',
     ...Object.fromEntries(Object.entries(c.fieldMap ?? {}).map(([k, v]) => [`fm_${k}`, String(v)])),
   }))
@@ -511,7 +522,7 @@ function EditConnectorModal({ connector, onClose, onSave }: {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (minutes)</label>
+            <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (seconds)</label>
             <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} className={input} />
           </div>
 

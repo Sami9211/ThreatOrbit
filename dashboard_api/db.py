@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class SchemaVersionError(RuntimeError):
@@ -780,6 +780,10 @@ def record_job(conn: sqlite3.Connection, kind: str, status: str, meta: dict | No
 # never alters an existing table, so additive columns are applied here for
 # databases created before the column existed. (table, column, DDL type/default)
 _MIGRATIONS = [
+    # Sub-minute connector cadence. `interval_seconds` is the source of truth;
+    # `interval_minutes` is kept in sync for backward compatibility. 0/NULL means
+    # "fall back to interval_minutes * 60".
+    ("connectors", "interval_seconds", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),

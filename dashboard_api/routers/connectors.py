@@ -15,7 +15,7 @@ from dashboard_api.secretstore import encrypt
 router = APIRouter(prefix="/connectors", tags=["connectors"], dependencies=[Depends(current_user)])
 
 # api_key is never returned to the browser; we expose only whether one is set.
-_PUBLIC = ("id, name, kind, url, auth_header, enabled, interval_minutes, field_map, "
+_PUBLIC = ("id, name, kind, url, auth_header, enabled, interval_minutes, interval_seconds, field_map, "
            "status, last_run, last_error, indicator_count, builtin, created_at, created_by")
 
 
@@ -26,6 +26,7 @@ class ConnectorCreate(BaseModel):
     api_key: str | None = None
     auth_header: str | None = None
     interval_minutes: int = 60
+    interval_seconds: int | None = None
     field_map: dict = {}
     enabled: bool = True
 
@@ -36,6 +37,7 @@ class ConnectorUpdate(BaseModel):
     api_key: str | None = None
     auth_header: str | None = None
     interval_minutes: int | None = None
+    interval_seconds: int | None = None
     field_map: dict | None = None
     enabled: bool | None = None
 
@@ -71,6 +73,16 @@ def list_connectors(user: dict = Depends(current_user)):
     return rows_to_dicts(rows)
 
 
+def _secs(body) -> int:
+    """Cadence in seconds. Explicit `interval_seconds` wins; otherwise derive it
+    from `interval_minutes`. Floored by MIN_INTERVAL_SECONDS so a misconfigured
+    connector can't hammer a third-party feed into rate-limiting us."""
+    from dashboard_api.connectors import MIN_INTERVAL_SECONDS
+    raw = body.interval_seconds if body.interval_seconds is not None else \
+        (body.interval_minutes or 60) * 60
+    return max(MIN_INTERVAL_SECONDS, int(raw))
+
+
 @router.post("", status_code=201)
 def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("connectors.manage"))):
     if body.kind not in KIND_PRESETS:
@@ -96,11 +108,11 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("c
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO connectors (id,name,kind,url,api_key,auth_header,enabled,"
-            "interval_minutes,field_map,status,builtin,created_at,created_by,org_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?, 'idle',0,?,?,?)",
+            "interval_minutes,interval_seconds,field_map,status,builtin,created_at,created_by,org_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?, 'idle',0,?,?,?)",
             (cid, name, body.kind, (body.url or KIND_PRESETS[body.kind]["default_url"]) or None,
              encrypt(body.api_key or None), body.auth_header or None, 1 if body.enabled else 0,
-             max(5, body.interval_minutes), dumps(body.field_map or {}), _now(), user["email"],
+             max(1, round(_secs(body) / 60)), _secs(body), dumps(body.field_map or {}), _now(), user["email"],
              tenancy.org_of(user)),
         )
         audit(conn, user["email"], "connector.create", cid, f"kind={body.kind} name={name}")
@@ -120,10 +132,21 @@ def update_connector(connector_id: str, body: ConnectorUpdate,
         except UnsafeUrlError as e:
             raise HTTPException(status_code=400, detail=str(e))
     fields, values = [], []
+    if body.interval_seconds is not None:
+        # Seconds is the source of truth; keep interval_minutes in step so older
+        # readers (and the legacy fallback) stay consistent.
+        from dashboard_api.connectors import MIN_INTERVAL_SECONDS
+        secs = max(MIN_INTERVAL_SECONDS, int(body.interval_seconds))
+        fields.append("interval_seconds=?"); values.append(secs)
+        fields.append("interval_minutes=?"); values.append(max(1, round(secs / 60)))
     for col in ("name", "url", "auth_header", "interval_minutes"):
+        if col == "interval_minutes" and body.interval_seconds is not None:
+            continue          # already set above from the authoritative seconds
         v = getattr(body, col)
         if v is not None:
             fields.append(f"{col}=?"); values.append(v)
+    if body.interval_minutes is not None and body.interval_seconds is None:
+        fields.append("interval_seconds=?"); values.append(max(1, body.interval_minutes) * 60)
     if body.api_key is not None:
         fields.append("api_key=?"); values.append(encrypt(body.api_key or None))
     if body.field_map is not None:

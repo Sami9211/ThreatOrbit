@@ -107,8 +107,19 @@ def _connector_scheduler():
     """Background loop (live mode): run due connectors so real threat intel
     keeps flowing in without anyone pressing a button."""
     import time
-    from dashboard_api.connectors import run_due_connectors
+    from dashboard_api.connectors import run_due_connectors, reset_stuck_connectors
     from dashboard_api import leader
+    # Crash recovery: a service killed mid-sync leaves connectors at
+    # status='running', which run_due_connectors skips forever - the UI then shows
+    # a permanent "sync in progress" and that feed never updates again. Nothing can
+    # legitimately be running at startup, so clear them.
+    try:
+        recovered = reset_stuck_connectors()
+        if recovered:
+            logger.info("Recovered %d connector(s) left mid-sync by a restart", recovered)
+    except Exception:
+        logger.exception("Connector crash-recovery failed")
+    _last_report_check = [0.0]
     # Small initial delay so the companion services have time to come up.
     time.sleep(8)
     while True:
@@ -118,11 +129,16 @@ def _connector_scheduler():
         if not leader.is_leader():
             time.sleep(CONNECTOR_TICK_SECONDS)
             continue
-        try:
-            from dashboard_api.routers.platform import run_due_report_schedules
-            run_due_report_schedules()
-        except Exception:
-            logger.exception("Report schedule tick failed")
+        # Report schedules are hourly-or-longer by nature; with the connector tick
+        # now in the seconds range, only check them about once a minute so the
+        # faster cadence doesn't multiply this work.
+        if time.monotonic() - _last_report_check[0] >= 60:
+            _last_report_check[0] = time.monotonic()
+            try:
+                from dashboard_api.routers.platform import run_due_report_schedules
+                run_due_report_schedules()
+            except Exception:
+                logger.exception("Report schedule tick failed")
         try:
             ran = run_due_connectors()
             for r in ran:

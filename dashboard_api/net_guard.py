@@ -83,8 +83,17 @@ def validate_external_url(url: str, *, allow_private: bool | None = None) -> str
     except socket.gaierror:
         return value
     for info in infos:
-        if _blocked(info[4][0]):
-            raise UnsafeUrlError("URL resolves to a private or reserved address")
+        ip = info[4][0]
+        if _blocked(ip):
+            # Name the host AND the offending address. A bare "resolves to a
+            # private address" is undiagnosable: the cause is almost always
+            # environmental (a DNS sinkhole returning 0.0.0.0, split-horizon
+            # corporate DNS, or an unusable IPv6 record alongside a fine A
+            # record) and the operator cannot tell which without the address.
+            raise UnsafeUrlError(
+                f"URL resolves to a private or reserved address "
+                f"({host} -> {ip}). Check DNS on this host: a blocker or "
+                f"internal resolver may be sinkholing this domain.")
     return value
 
 
@@ -114,7 +123,10 @@ def _safe_connect_ip(parsed, allow: bool) -> str | None:
     ips = [i[4][0] for i in infos]
     for ip in ips:
         if _blocked(ip):
-            raise UnsafeUrlError("URL resolves to a private or reserved address")
+            raise UnsafeUrlError(
+                f"URL resolves to a private or reserved address ({host} -> {ip}). "
+                f"Check DNS on this host: a blocker or internal resolver may be "
+                f"sinkholing this domain.")
     return ips[0] if ips else None
 
 

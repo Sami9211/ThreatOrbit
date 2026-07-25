@@ -9,6 +9,7 @@ dump would OOM the dashboard. `_read_capped` streams and rejects past
 `_MAX_FEED_BYTES`; `run_connector` catches the resulting ValueError.
 """
 import os
+import uuid
 
 import pytest
 
@@ -531,3 +532,43 @@ def test_registering_companion_engine_allowed_but_ssrf_still_blocked():
     finally:
         if prev is not None:
             os.environ["DASHBOARD_ALLOW_PRIVATE_URLS"] = prev
+
+
+def test_connector_cadence_supports_seconds_and_floors():
+    """Connector cadence is configurable in SECONDS (sub-minute polling), with a
+    floor so a misconfigured connector can't hammer a third-party feed. Rows
+    predating interval_seconds fall back to the legacy interval_minutes."""
+    assert conn_mod.connector_interval_seconds({"interval_seconds": 30}) == 30
+    # legacy row (no seconds) -> minutes * 60
+    assert conn_mod.connector_interval_seconds({"interval_minutes": 2}) == 120
+    assert conn_mod.connector_interval_seconds({"interval_seconds": 0, "interval_minutes": 5}) == 300
+    # floor protects the upstream feed
+    assert conn_mod.connector_interval_seconds({"interval_seconds": 1}) == conn_mod.MIN_INTERVAL_SECONDS
+    # nothing set at all -> the 60-minute default, not zero (which would spin)
+    assert conn_mod.connector_interval_seconds({}) == 3600
+
+
+def test_stuck_running_connector_is_recovered_and_runs_again(monkeypatch):
+    """A service killed mid-sync leaves status='running'. run_due_connectors skips
+    'running' rows so the connector would never sync again and the UI would show a
+    permanent "sync in progress". Startup recovery must clear it."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    cid = "stuck-" + uuid.uuid4().hex[:8]
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','running',0,?)",
+            (cid, "Stuck Feed", "json", "https://example.test/feed", conn_mod._now()))
+        c.commit()
+    try:
+        recovered = conn_mod.reset_stuck_connectors()
+        assert recovered >= 1
+        with real_get_conn() as c:
+            row = c.execute("SELECT status, last_error FROM connectors WHERE id=?", (cid,)).fetchone()
+        assert row["status"] == "idle"
+        assert "restarted" in (row["last_error"] or "").lower()   # honest about why
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
