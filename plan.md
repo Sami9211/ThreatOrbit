@@ -3466,3 +3466,21 @@ _Move completed items here with the date so the roadmap stays honest._
     already switched.
   • Verified: **614 backend tests pass, 1 skipped**; tsc clean, lint 0 errors,
     casing fence passes, production build succeeds.
+
+- **2026-07-26 · Live mode is now INCAPABLE of fabricating data (not "paused").**
+  Standing requirement since early in the project: real data only. The engine was
+  merely *paused* in live mode - `DASHBOARD_ENGINE` still defaulted to `on`, the
+  Config panel still offered **Resume engine** and **Generate burst now**, and the
+  "telemetry every 20s" chip implied a synthetic clock was running. One click put
+  invented IPs/hashes beside real intel. That is the defect, not the display.
+  • New `config.SYNTHETIC_ALLOWED` (`False` whenever `DATA_MODE=live`, override
+    `DASHBOARD_ALLOW_SYNTHETIC=true` for a deliberate pipeline smoke test).
+  • The engine loop **returns immediately** in live mode - it never generates.
+  • `POST /config/engine {generate}` **refuses with HTTP 409** in live mode, so
+    the button cannot fabricate even if called directly.
+  • `GET /config/engine` reports `syntheticAllowed`; the UI hides the Resume/Burst
+    controls and the tick chip entirely in live mode and points at Feeds → Sources
+    instead. Demo/evaluation mode keeps the feature unchanged.
+  • Fenced by `test_live_mode_refuses_synthetic_generation` (409 + indicator count
+    unchanged) and `test_demo_mode_still_allows_synthetic_generation`.
+  • Verified: **616 backend tests pass, 1 skipped**; lint 0 errors, build clean.

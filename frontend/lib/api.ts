@@ -1642,6 +1642,8 @@ export interface EngineStatus {
   totalAlerts: number
   darkWebFindings: number
   queue?: EngineQueue
+  /** False in live mode: synthetic generation is refused by the API. */
+  syntheticAllowed?: boolean
 }
 export const fetchEngineStatus = () => api<EngineStatus>('/config/engine')
 

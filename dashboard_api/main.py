@@ -163,7 +163,12 @@ def _engine_loop():
     engine_enabled setting so it can be paused from the UI."""
     import time
     from dashboard_api.engine import process_tick
-    from dashboard_api.config import ENGINE_TICK_SECONDS, ENGINE_EVENTS_PER_TICK
+    from dashboard_api.config import (ENGINE_TICK_SECONDS, ENGINE_EVENTS_PER_TICK,
+                                      SYNTHETIC_ALLOWED)
+    if not SYNTHETIC_ALLOWED:
+        logger.info('Live mode: synthetic telemetry generation is disabled - '
+                    'the dashboard shows real connector/log data only.')
+        return
     from dashboard_api import leader
     time.sleep(5)
     while True:

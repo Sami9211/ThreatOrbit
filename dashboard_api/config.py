@@ -302,6 +302,13 @@ ENGINE_EVENTS_PER_TICK = int(os.environ.get("DASHBOARD_ENGINE_EVENTS_PER_TICK", 
 #                     unaffected. See docs/GOING_LIVE.md.
 ENGINE_MODE = os.environ.get("DASHBOARD_ENGINE", "on").strip().lower()
 
+# Synthetic telemetry is a DEMO facility. In live mode the platform must show
+# only real, externally sourced data, so generation is not merely "paused" (a
+# state a click could undo) - it is refused outright. Set
+# DASHBOARD_ALLOW_SYNTHETIC=true to override for a pipeline smoke test.
+SYNTHETIC_ALLOWED = (DATA_MODE != "live"
+                     or os.environ.get("DASHBOARD_ALLOW_SYNTHETIC", "false").lower() == "true")
+
 # Ingest backpressure: the max detection backlog (pending events) before the
 # /siem/ingest endpoint sheds load with HTTP 429 instead of growing the queue
 # unboundedly. Generous by default so normal use never hits it; 0 disables the

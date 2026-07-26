@@ -77,3 +77,37 @@ def test_engine_off_pauses_and_produces_nothing():
     assert res["engineEnabled"] == "false", "engine must boot paused when off"
     for table in ("alerts", "iocs", "events", "cases", "dark_web_findings"):
         assert res["counts"][table] == 0, f"{table} should be empty with engine off"
+
+
+def test_live_mode_refuses_synthetic_generation(client, auth, monkeypatch):
+    """In live mode the platform must be INCAPABLE of fabricating indicators - not
+    merely "paused". A paused engine is one click away from inventing random IPs
+    and hashes and placing them beside real intel, which is exactly what makes a
+    live deployment untrustworthy. The API must refuse the burst outright."""
+    import dashboard_api.config as cfg
+
+    # Live posture: synthetic generation is forbidden (the endpoint reads this
+    # flag at call time, so patching the module attribute exercises the real guard).
+    monkeypatch.setattr(cfg, "SYNTHETIC_ALLOWED", False)
+
+    st = client.get("/config/engine", headers=auth).json()
+    assert st["syntheticAllowed"] is False
+    assert st["running"] is False, "nothing synthetic may run in live mode"
+
+    before = client.get("/cti/iocs", headers=auth).json()
+    before_n = len(before.get("items", before))
+
+    r = client.post("/config/engine", json={"generate": 3}, headers=auth)
+    assert r.status_code == 409, f"live mode generated synthetic data (HTTP {r.status_code})"
+
+    after = client.get("/cti/iocs", headers=auth).json()
+    assert len(after.get("items", after)) == before_n, "indicators were fabricated"
+
+
+def test_demo_mode_still_allows_synthetic_generation(client, auth, monkeypatch):
+    """The demo/evaluation path must keep working - the guard is about LIVE mode,
+    not about removing the feature."""
+    import dashboard_api.config as cfg
+    monkeypatch.setattr(cfg, "SYNTHETIC_ALLOWED", True)
+    r = client.post("/config/engine", json={"generate": 1}, headers=auth)
+    assert r.status_code == 200, r.text

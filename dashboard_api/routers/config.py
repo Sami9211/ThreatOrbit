@@ -369,7 +369,8 @@ def leader_status(_: dict = Depends(current_user)):
 @router.get("/engine")
 def engine_status(_: dict = Depends(current_user)):
     """Live processing engine state + how much live data it has produced."""
-    from dashboard_api.config import DATA_MODE, ENGINE_TICK_SECONDS, INGEST_MAX_BACKLOG
+    from dashboard_api.config import (DATA_MODE, ENGINE_TICK_SECONDS, INGEST_MAX_BACKLOG,
+                                      SYNTHETIC_ALLOWED)
     from dashboard_api import event_queue
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
@@ -382,7 +383,11 @@ def engine_status(_: dict = Depends(current_user)):
     queue["shedding"] = bool(INGEST_MAX_BACKLOG) and queue["depth"] >= INGEST_MAX_BACKLOG
     return {
         "mode": DATA_MODE,
-        "running": DATA_MODE == "live" and (row is None or row["value"] != "false"),
+        # In live mode nothing synthetic runs, whatever the stored toggle says.
+        "running": (SYNTHETIC_ALLOWED
+                    and DATA_MODE == "live" and (row is None or row["value"] != "false")),
+        # The UI uses this to hide the Resume/Burst controls and say why.
+        "syntheticAllowed": SYNTHETIC_ALLOWED,
         "enabled": (row is None or row["value"] != "false"),
         "tickSeconds": ENGINE_TICK_SECONDS,
         "alertsProduced": alerts, "totalAlerts": total_alerts, "darkWebFindings": dark,
@@ -403,6 +408,14 @@ def engine_control(body: EngineControl, user: dict = Depends(require_perm("confi
             conn.commit()
         result["enabled"] = body.enabled
     if body.generate:
+        # Hard refusal, not a paused state: generating fabricated indicators in a
+        # live deployment would put invented IPs/hashes next to real intel.
+        from dashboard_api.config import SYNTHETIC_ALLOWED
+        if not SYNTHETIC_ALLOWED:
+            raise HTTPException(
+                status_code=409,
+                detail="This deployment is in live mode - synthetic data generation is "
+                       "disabled. Indicators come from connectors and forwarded logs only.")
         from dashboard_api.engine import process_tick
         ticks = max(1, min(body.generate, 30))
         agg = {"events": 0, "alerts": 0, "iocs": 0, "darkWeb": 0, "casesEscalated": 0}

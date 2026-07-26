@@ -1457,33 +1457,53 @@ function LiveEngineCard() {
           <span className={cn('w-1.5 h-1.5 rounded-full', status?.running ? 'bg-safe animate-pulse' : 'bg-amber')} />
           {status?.running ? 'Running' : 'Paused'}
         </span>
-        {status && <span className="text-[11px] text-ink-500">telemetry every {status.tickSeconds}s</span>}
+        {status && status.syntheticAllowed !== false && (
+          <span className="text-[11px] text-ink-500">telemetry every {status.tickSeconds}s</span>
+        )}
       </div>
-      <p className="text-[11px] mb-3 leading-relaxed px-3 py-2 rounded-lg border border-amber/30 bg-amber/10 text-amber">
-        <b>Simulated data.</b> This engine <b>generates</b> telemetry — including indicator
-        values (random IPs and hashes) — so the detection pipeline has something to act on
-        before your own logs are forwarded. Everything it writes is tagged{' '}
-        <span className="font-mono">engine:*</span> and shown as <b>Simulated</b> in the UI.
-        It is <b>not</b> observed threat intelligence. For real intel only, leave this paused
-        and use the connectors (OTX, NVD, TAXII, abuse.ch).
-      </p>
+      {status?.syntheticAllowed === false ? (
+        <p className="text-[11px] mb-3 leading-relaxed px-3 py-2 rounded-lg border border-safe/30 bg-safe/10 text-safe">
+          <b>Real data only.</b> This deployment runs in <b>live mode</b>, so synthetic
+          telemetry generation is <b>disabled</b> — not paused. Indicators come exclusively
+          from connectors (abuse.ch, NVD, OTX, TAXII) and forwarded logs. The controls below
+          cannot produce fabricated data.
+        </p>
+      ) : (
+        <p className="text-[11px] mb-3 leading-relaxed px-3 py-2 rounded-lg border border-amber/30 bg-amber/10 text-amber">
+          <b>Simulated data.</b> This engine <b>generates</b> telemetry — including indicator
+          values (random IPs and hashes) — so the detection pipeline has something to act on
+          before your own logs are forwarded. Everything it writes is tagged{' '}
+          <span className="font-mono">engine:*</span> and shown as <b>Simulated</b> in the UI.
+          It is <b>not</b> observed threat intelligence.
+        </p>
+      )}
       <p className="text-[11px] text-ink-500 mb-4 leading-relaxed">
-        The generated telemetry runs through the real
-        detect → correlate → escalate pipeline. It has produced{' '}
+        The detect → correlate → escalate pipeline has produced{' '}
         <b className="text-ink-200">{status?.totalAlerts ?? 0}</b> SIEM alerts and{' '}
         <b className="text-ink-200">{status?.darkWebFindings ?? 0}</b> dark-web findings so far.
       </p>
       {msg && <p className="text-[11px] text-safe mb-3">{msg}</p>}
-      <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={toggle} disabled={busy || !status}
-          className="px-3 py-2 rounded-xl text-xs font-semibold bg-surface-2 border border-white/10 text-ink-200 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50">
-          {status?.enabled ? 'Pause engine' : 'Resume engine'}
-        </button>
-        <button onClick={generate} disabled={busy}
-          className="px-3 py-2 rounded-xl text-xs font-semibold bg-plasma text-white hover:shadow-magenta-sm transition-all disabled:opacity-50">
-          {busy ? 'Generating…' : 'Generate burst now'}
-        </button>
-      </div>
+      {/* Live mode: no synthetic controls at all. Showing a "Resume"/"Burst"
+          button that fabricates indicators is precisely how invented data ends
+          up beside real intel. */}
+      {status?.syntheticAllowed === false ? (
+        <p className="text-[11px] text-ink-500">
+          Synthetic controls are unavailable in live mode. To bring in data, add or sync a
+          connector under <span className="text-violet">Feeds → Sources</span>, or forward
+          logs (<span className="text-violet">SIEM → Sources</span>).
+        </p>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={toggle} disabled={busy || !status}
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-surface-2 border border-white/10 text-ink-200 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50">
+            {status?.enabled ? 'Pause engine' : 'Resume engine'}
+          </button>
+          <button onClick={generate} disabled={busy}
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-plasma text-white hover:shadow-magenta-sm transition-all disabled:opacity-50">
+            {busy ? 'Generating…' : 'Generate burst now'}
+          </button>
+        </div>
+      )}
     </Section>
   )
 }
