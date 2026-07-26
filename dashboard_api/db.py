@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class SchemaVersionError(RuntimeError):
@@ -762,7 +762,8 @@ def audit(conn: sqlite3.Connection, actor: str | None, action: str,
 
 
 def record_ioc_import(conn, source: str, method: str, imported: int, duplicates: int,
-                      skipped: int, actor: str, error: str | None = None) -> str:
+                      skipped: int, actor: str, error: str | None = None,
+                      duration_ms: int = 0) -> str:
     """Insert an `ioc_imports` row (caller commits) - the Feeds → Import log.
 
     EVERY path that puts indicators into the store must call this, not just the
@@ -778,10 +779,11 @@ def record_ioc_import(conn, source: str, method: str, imported: int, duplicates:
               "partial" if imported else "failed")
     iid = str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO ioc_imports (id,source,method,imported,duplicates,skipped,status,actor,ts) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ioc_imports (id,source,method,imported,duplicates,skipped,status,actor,ts,"
+        "duration_ms) VALUES (?,?,?,?,?,?,?,?,?,?)",
         (iid, (source or "unknown")[:120], method, imported, duplicates, skipped, status, actor,
-         datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()),
+         datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+         max(0, int(duration_ms))),
     )
     return iid
 
@@ -809,6 +811,10 @@ _MIGRATIONS = [
     # `interval_minutes` is kept in sync for backward compatibility. 0/NULL means
     # "fall back to interval_minutes * 60".
     ("connectors", "interval_seconds", "INTEGER NOT NULL DEFAULT 0"),
+    # How long an import took, so the UI can show real throughput
+    # (indicators/sec) instead of only a count - what an analyst needs to
+    # judge whether a feed is healthy or degrading.
+    ("ioc_imports", "duration_ms", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),

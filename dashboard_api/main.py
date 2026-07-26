@@ -165,11 +165,11 @@ def _engine_loop():
     from dashboard_api.engine import process_tick
     from dashboard_api.config import (ENGINE_TICK_SECONDS, ENGINE_EVENTS_PER_TICK,
                                       SYNTHETIC_ALLOWED)
+    from dashboard_api import leader
     if not SYNTHETIC_ALLOWED:
         logger.info('Live mode: synthetic telemetry generation is disabled - '
-                    'the dashboard shows real connector/log data only.')
-        return
-    from dashboard_api import leader
+                    'real connector/log data only. This loop still runs because it '
+                    'renews the HA leader lease that the connector scheduler needs.')
     time.sleep(5)
     while True:
         try:
@@ -181,8 +181,12 @@ def _engine_loop():
                 continue
             with get_conn() as conn:
                 row = conn.execute("SELECT value FROM settings WHERE key='engine_enabled'").fetchone()
+            # Gate ONLY the synthetic generation. This loop must keep running
+            # regardless: it renews the leader lease, and `_connector_scheduler`
+            # refuses to sync anything while no replica holds it. Returning early
+            # here silently stopped every connector from auto-syncing.
             enabled = (row is None) or (row["value"] != "false")
-            if enabled:
+            if enabled and SYNTHETIC_ALLOWED:
                 s = process_tick(max_events=ENGINE_EVENTS_PER_TICK)
                 logger.info("Engine tick: %d events → %d alerts, %d IOCs, %d dark-web, %d cases",
                             s["events"], s["alerts"], s["iocs"], s["darkWeb"], s["casesEscalated"])

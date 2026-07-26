@@ -430,7 +430,7 @@ export default function ImportIocsPage() {
             <table className="w-full text-xs">
               <thead className="bg-white/3 border-b border-white/8">
                 <tr>
-                  {['Filename', 'Count', 'Date', 'User', 'Status'].map(h => (
+                  {['Source', 'Imported', 'Duration', 'Date', 'User', 'Status'].map(h => (
                     <th key={h} className="text-left px-4 py-2.5 text-[10px] text-ink-500 font-semibold uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -439,12 +439,26 @@ export default function ImportIocsPage() {
               </thead>
               <tbody>
                 {history.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-600">No imports yet - import indicators above to populate this log.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-600">No imports yet - import indicators above to populate this log.</td></tr>
                 )}
                 {history.map((h, i) => (
                   <tr key={h.id} className={cn('border-b border-white/4', i % 2 !== 0 && 'bg-white/1')}>
                     <td className="px-4 py-3 font-mono text-ink-200">{h.source}<span className="ml-2 text-[9px] uppercase text-ink-600">{h.method}</span></td>
-                    <td className="px-4 py-3 font-mono text-violet text-right">{h.imported.toLocaleString()}</td>
+                    <td className="px-4 py-3 font-mono text-violet text-right">
+                      {h.imported.toLocaleString()}
+                      {(h.duplicates > 0 || h.skipped > 0) && (
+                        <span className="block text-[9px] text-ink-600">
+                          {h.duplicates.toLocaleString()} dup · {h.skipped.toLocaleString()} skipped
+                        </span>
+                      )}
+                    </td>
+                    {/* Throughput: what tells an analyst a feed is healthy or degrading. */}
+                    <td className="px-4 py-3 font-mono text-ink-400 text-right whitespace-nowrap">
+                      {h.durationMs ? `${(h.durationMs / 1000).toFixed(1)}s` : '—'}
+                      {h.ratePerSec ? (
+                        <span className="block text-[9px] text-teal">{h.ratePerSec.toLocaleString()}/s</span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 font-mono text-ink-500 whitespace-nowrap">{relDay(h.ts)}</td>
                     <td className="px-4 py-3 text-ink-400">{h.actor ?? '-'}</td>
                     <td className="px-4 py-3">

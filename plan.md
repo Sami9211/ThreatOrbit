@@ -3524,3 +3524,24 @@ _Move completed items here with the date so the roadmap stays honest._
     `test_bulk_osint_is_parallel_and_survives_a_dead_feed`.
   • Verified: **618 backend tests pass, 1 skipped.** Live volume verifies on a
     host with unfiltered DNS - the sandbox proxy blocks these feeds outright.
+
+- **2026-07-26 · REGRESSION I introduced: no connector ever auto-synced.**
+  The operator had to press "Sync now" by hand for anything to import. Cause: the
+  `SYNTHETIC_ALLOWED` change made `_engine_loop` **return early** in live mode -
+  but that loop is also what **acquires/renews the HA leader lease**, and
+  `_connector_scheduler` skips every tick while no replica holds it. Disabling
+  synthetic generation therefore disabled the entire scheduler.
+  • Fixed: the loop always runs and renews the lease; only the `process_tick()`
+    generation call is gated. Fenced by
+    `test_engine_loop_still_renews_leader_lease_when_synthetic_disabled`, which
+    asserts `leader.acquire()` is reached and that no early `return` precedes the
+    loop.
+  • **1-second cadence honoured**: `MIN_INTERVAL_SECONDS` 5→1 and
+    `CONNECTOR_TICK_SECONDS` 5→1, so saving 1s no longer snaps back to 5s.
+    Fenced by `test_connector_cadence_allows_one_second`.
+  • **Import throughput is now recorded and shown** (schema v6): `ioc_imports`
+    gains `duration_ms`, `run_connector` times every sync, `/cti/import-history`
+    returns `durationMs` + derived `ratePerSec`, and the Import history table
+    shows duration, indicators/sec, and the dup/skipped split - the numbers an
+    analyst uses to judge whether a feed is healthy or degrading.
+  • Verified: **620 backend tests pass, 1 skipped**; lint 0 errors, build clean.

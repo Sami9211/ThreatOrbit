@@ -745,3 +745,34 @@ def test_bulk_osint_is_parallel_and_survives_a_dead_feed(monkeypatch):
     # Registered and zero-config for the operator.
     preset = conn_mod.KIND_PRESETS["osint"]
     assert preset["needs_key"] is False and preset["needs_url"] is False
+
+
+def test_engine_loop_still_renews_leader_lease_when_synthetic_disabled():
+    """REGRESSION FENCE. The engine loop doubles as the HA leader-lease renewer,
+    and `_connector_scheduler` refuses to sync anything unless a replica holds
+    that lease. Returning early from the loop when synthetic generation is
+    disabled therefore stopped EVERY connector from auto-syncing - the operator
+    had to press "Sync now" by hand. The loop must keep running and gate only
+    the generation call.
+    """
+    import inspect
+
+    import dashboard_api.main as main_mod
+    src = inspect.getsource(main_mod._engine_loop)
+
+    # The leader lease must still be acquired/renewed on every tick.
+    assert "leader.acquire()" in src
+    # And generation must be gated INSIDE the loop, not by an early return.
+    gate = src.index("SYNTHETIC_ALLOWED")
+    loop = src.index("while True:")
+    early_return = src[:loop].count("\n        return")
+    assert early_return == 0, "engine loop returns before the leader lease is renewed"
+    assert "and SYNTHETIC_ALLOWED" in src, "generation must be gated inside the loop"
+    assert gate < len(src)
+
+
+def test_connector_cadence_allows_one_second():
+    """A 1-second cadence must survive a save. The floor used to be 5s, so setting
+    1s silently snapped back to 5s."""
+    assert conn_mod.MIN_INTERVAL_SECONDS <= 1
+    assert conn_mod.connector_interval_seconds({"interval_seconds": 1}) == 1

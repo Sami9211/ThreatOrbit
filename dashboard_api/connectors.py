@@ -928,6 +928,8 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
         conn.execute("UPDATE connectors SET status='running' WHERE id=?", (cid,))
         conn.commit()
 
+    import time as _time
+    _t0 = _time.perf_counter()
     try:
         indicators = fetch(connector)
         if connector["kind"] == "darkweb-json":
@@ -959,7 +961,8 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             # indicators and the operator would still see an empty import log.
             record_ioc_import(conn, connector["name"], f"connector:{connector['kind']}",
                               result.get("imported", 0), result.get("duplicates", 0),
-                              result.get("skipped", 0), actor)
+                              result.get("skipped", 0), actor,
+                              duration_ms=int((_time.perf_counter() - _t0) * 1000))
             audit(conn, actor, "connector.run", cid,
                   f"kind={connector['kind']} imported={result['imported']}")
             conn.commit()
@@ -975,7 +978,8 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             # A failed sync belongs in the import log too - silence is what made
             # "nothing shows up at imports" impossible to diagnose.
             record_ioc_import(conn, connector["name"], f"connector:{connector['kind']}",
-                              0, 0, 0, actor, error=msg)
+                              0, 0, 0, actor, error=msg,
+                              duration_ms=int((_time.perf_counter() - _t0) * 1000))
             conn.commit()
         return {"error": msg}
 
@@ -1009,7 +1013,7 @@ def seed_builtin_connectors():
 # Floor on how often a connector may poll. Sub-minute cadence is supported, but
 # a hard floor keeps a misconfigured connector from hammering a third-party feed
 # (and getting the deployment rate-limited or banned).
-MIN_INTERVAL_SECONDS = int(os.environ.get("DASHBOARD_MIN_CONNECTOR_SECONDS", "5"))
+MIN_INTERVAL_SECONDS = int(os.environ.get("DASHBOARD_MIN_CONNECTOR_SECONDS", "1"))
 
 # How long a connector may sit at status='running' before the scheduler assumes
 # the run died and retries it. Generous vs the bounded fetch (_TIMEOUT per HTTP

@@ -283,7 +283,7 @@ DATA_MODE = os.environ.get("DASHBOARD_DATA_MODE", "demo").lower()
 # How often the scheduler checks for due connectors. Must be <= the smallest
 # connector interval or a sub-minute cadence can never actually fire; the
 # check is a single indexed query, so a short tick is cheap.
-CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "5"))
+CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "1"))
 
 # Live processing engine (live mode): how often it generates a telemetry batch
 # and how many events per batch. Lower the interval for a more active demo.

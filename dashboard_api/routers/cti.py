@@ -219,9 +219,14 @@ def import_history(limit: int = Query(50, le=200)):
     """Recent IOC imports (manual / MISP / connector) - the Feeds → Import log."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, source, method, imported, duplicates, skipped, status, actor, ts "
-            "FROM ioc_imports ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
-    return rows_to_dicts(rows)
+            "SELECT id, source, method, imported, duplicates, skipped, status, actor, ts, "
+            "duration_ms FROM ioc_imports ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    out = rows_to_dicts(rows)
+    # Throughput per import: analysts judge feed health by rate, not just a count.
+    for r in out:
+        ms = r.get("duration_ms") or 0
+        r["ratePerSec"] = round(r["imported"] / (ms / 1000), 1) if ms and r["imported"] else None
+    return out
 
 
 @router.get("/ioc-types")
