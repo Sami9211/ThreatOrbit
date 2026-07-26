@@ -73,7 +73,7 @@ function SourceRow({ c, canManage, onChanged }: {
         </div>
         <p className="text-[10px] text-ink-600 mt-0.5 truncate">
           {c.kind} · {c.indicatorCount.toLocaleString()} indicators · last import {relTime(c.lastRun)}
-          {c.lastError ? <span className="text-threat"> · {c.lastError.slice(0, 70)}</span> : ''}
+          {c.lastError ? <span className="text-threat" title={c.lastError}> · {c.lastError}</span> : ''}
         </p>
       </div>
       {/* Burst-delay control: each source's own auto-import cadence (minutes) */}
@@ -125,6 +125,22 @@ export default function ImportsPage() {
   }, [load])
 
   const totalIndicators = (connectors ?? []).reduce((n, c) => n + c.indicatorCount, 0)
+  // Import-centric health, all derived from real connector state.
+  const okSources = (connectors ?? []).filter((c) => c.status === 'ok').length
+  const failedSources = (connectors ?? []).filter((c) => c.status === 'error').length
+  const lastImportAt = (connectors ?? [])
+    .map((c) => c.lastRun).filter(Boolean)
+    .sort().slice(-1)[0] ?? null
+  // Soonest upcoming sync across enabled connectors (cadence - elapsed).
+  const nextSyncIn = (() => {
+    const due = (connectors ?? []).filter((c) => c.enabled).map((c) => {
+      const every = c.intervalSeconds || c.intervalMinutes * 60
+      if (!c.lastRun) return 0
+      const elapsed = Math.floor((Date.now() - new Date(c.lastRun).getTime()) / 1000)
+      return Math.max(0, every - elapsed)
+    })
+    return due.length ? Math.min(...due) : null
+  })()
   const q = engine?.queue
 
   return (
@@ -156,10 +172,18 @@ export default function ImportsPage() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Pipeline summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Every tile is about IMPORTS. This page used to show the DETECTION
+              queue depth/lag and the synthetic engine's "burst cadence" - numbers
+              that say nothing about whether intel is arriving, and that read as
+              broken ("Processing queue 0") while imports were working fine. */}
           {[
-            { label: 'Processing queue', value: q ? q.depth.toLocaleString() : '—', sub: q ? `${q.inFlight} in flight` : 'engine idle', icon: Activity, color: 'text-violet' },
-            { label: 'Burst cadence', value: engine ? `${engine.tickSeconds}s` : '—', sub: 'engine tick interval', icon: Gauge, color: 'text-teal' },
-            { label: 'Queue lag', value: q ? `${q.lagSeconds}s` : '—', sub: q?.shedding ? 'shedding load' : 'within budget', icon: Clock, color: q?.shedding ? 'text-threat' : 'text-safe' },
+            { label: 'Sources syncing', value: `${okSources}/${(connectors ?? []).length}`,
+              sub: failedSources ? `${failedSources} failing` : 'all healthy',
+              icon: Activity, color: failedSources ? 'text-threat' : 'text-safe' },
+            { label: 'Last import', value: lastImportAt ? relTime(lastImportAt) : '—',
+              sub: lastImportAt ? 'most recent sync' : 'no sync yet', icon: Clock, color: 'text-violet' },
+            { label: 'Next sync in', value: nextSyncIn !== null ? `${nextSyncIn}s` : '—',
+              sub: 'soonest connector cadence', icon: Gauge, color: 'text-teal' },
             { label: 'Total indicators', value: totalIndicators.toLocaleString(), sub: `${(connectors ?? []).length} sources`, icon: Zap, color: 'text-amber' },
           ].map((k) => (
             <div key={k.label} className="glass border border-white/5 rounded-xl p-3">
@@ -172,16 +196,29 @@ export default function ImportsPage() {
           ))}
         </div>
 
-        {/* Explicit idle state - the queue is genuinely empty (real engine
-            telemetry), not hidden behind a bare "0". No fabricated activity. */}
-        {engine && q && q.depth === 0 && q.inFlight === 0 && (
-          <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-white/8 bg-surface text-xs text-ink-400">
-            <CheckCircle className="w-4 h-4 text-safe shrink-0" />
-            <span>
-              The processing queue is empty — no indicators are being ingested right now.
-              Import activity appears here live as your configured connectors run.
-            </span>
-          </div>
+        {/* Honest import state. This used to report the DETECTION queue being
+            empty, which read as "nothing works" even while connectors were
+            importing normally. Now it reflects what actually happened. */}
+        {connectors && connectors.length > 0 && (
+          failedSources > 0 ? (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-threat/25 bg-threat/10 text-xs text-threat">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                <b>{failedSources} of {connectors.length} sources failed to sync.</b> The reason is
+                shown on each source below. A source that cannot resolve or reach its endpoint is
+                usually blocked by DNS or a firewall on this host — the other sources keep importing.
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-white/8 bg-surface text-xs text-ink-400">
+              <CheckCircle className="w-4 h-4 text-safe shrink-0" />
+              <span>
+                All {connectors.length} sources are syncing.{' '}
+                {totalIndicators.toLocaleString()} indicators imported so far
+                {lastImportAt ? `, most recently ${relTime(lastImportAt)}` : ''}.
+              </span>
+            </div>
+          )
         )}
 
         {/* Import sources */}

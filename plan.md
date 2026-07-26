@@ -3484,3 +3484,19 @@ _Move completed items here with the date so the roadmap stays honest._
   • Fenced by `test_live_mode_refuses_synthetic_generation` (409 + indicator count
     unchanged) and `test_demo_mode_still_allows_synthetic_generation`.
   • Verified: **616 backend tests pass, 1 skipped**; lint 0 errors, build clean.
+
+- **2026-07-26 · Imports page told the truth about the wrong thing.** With real
+  intel flowing (NVD 100, engine 5), the page still read as broken because three
+  of four tiles reported the **detection** pipeline, not imports:
+  "Processing queue 0", "Queue lag", and - after being asked twice to remove
+  synthetic surfaces - **"Burst cadence · engine tick interval"**, a
+  synthetic-engine metric on an imports screen.
+  • Tiles are now import-centric and derived from real connector state:
+    **Sources syncing** (`ok/total`, failures called out), **Last import**,
+    **Next sync in** (soonest cadence), **Total indicators**.
+  • The idle banner reported the empty *detection* queue - reading as "nothing
+    works" while imports succeeded. It now states what actually happened: all
+    sources syncing with counts, or **N of M sources failed** with the reason.
+  • Connector errors are no longer truncated at 70 chars, which was hiding the
+    most useful part - the resolved address in
+    "URL resolves to a private or reserved address (host -> ip)".
