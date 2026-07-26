@@ -3500,3 +3500,27 @@ _Move completed items here with the date so the roadmap stays honest._
   • Connector errors are no longer truncated at 70 chars, which was hiding the
     most useful part - the resolved address in
     "URL resolves to a private or reserved address (host -> ip)".
+
+- **2026-07-26 · Bulk public OSINT: the volume fix (new `osint` connector).**
+  Operator report: the ThreatOrbit engine imported **5 indicators**. The import
+  *engine* was never the constraint - it sustains ~39k indicators/sec at a 1M-row
+  table (`docs/LOAD_LIMITS.md`), far past the 5k/s bar. **Sourcing** was: the
+  bundled `threatorbit` connector only re-serves whatever the companion service
+  holds, which is a handful of records (and nothing at all when that service's
+  own upstreams are blocked).
+  • New `osint` kind, **seeded as the leading built-in**: seven curated keyless
+    public blocklists - abuse.ch **ThreatFox**, **URLhaus** and **Feodo**,
+    **blocklist.de**, **CINS Army**, **Emerging Threats** compromised hosts and
+    **Tor exit nodes** - fetched **in parallel** (`ThreadPoolExecutor`), parsed
+    and normalised into the store. Tens of thousands of real indicators per sync,
+    no API key, no URL, no companion dependency.
+  • **One dead feed cannot zero a sync** - each source is isolated and logged;
+    the rest still import. This is exactly how a single thin upstream produced
+    "5 indicators" before.
+  • Bounded by `DASHBOARD_BULK_MAX_PER_FEED` (50k default) and
+    `DASHBOARD_BULK_WORKERS`, on top of the existing 64 MB body cap.
+  • Fenced by `test_bulk_osint_parsers_handle_real_feed_formats` (real ThreatFox
+    `host:port`, URLhaus CSV and comment-laden IP-list shapes) and
+    `test_bulk_osint_is_parallel_and_survives_a_dead_feed`.
+  • Verified: **618 backend tests pass, 1 skipped.** Live volume verifies on a
+    host with unfiltered DNS - the sandbox proxy blocks these feeds outright.

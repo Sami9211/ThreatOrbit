@@ -21,6 +21,7 @@ tests can drive the parsers without network access.
 import csv as csvmod
 import io
 import json
+import logging
 import os
 import re
 import uuid
@@ -168,6 +169,14 @@ KIND_PRESETS = {
         "needs_url": True,
         "default_url": "",
         "default_interval": 60,
+    },
+    "osint": {
+        "label": "Public OSINT Bulk Feeds (no key)",
+        "description": "Seven curated public blocklists pulled in parallel - ThreatFox, URLhaus, Feodo, blocklist.de, CINS Army, Emerging Threats and Tor exits. Tens of thousands of real indicators per sync. No API key, no URL, no setup.",
+        "needs_key": False,
+        "needs_url": False,
+        "default_url": "",
+        "default_interval": 30,
     },
     "abusech": {
         "label": "abuse.ch Feodo Tracker (no key)",
@@ -769,10 +778,136 @@ def _fetch_abusech(c: dict) -> list[dict]:
     return out
 
 
+
+# ---------------------------------------------------------------------------
+# Bulk public OSINT: the high-volume, keyless intel source.
+#
+# The bundled `threatorbit` connector re-serves whatever the companion threat
+# service happens to hold, which in practice was a handful of indicators. This
+# pulls curated public blocklists DIRECTLY, in parallel, with no API key and no
+# companion dependency - tens of thousands of real indicators per sync, which is
+# what makes the platform comparable to an OpenCTI feed pull. The import engine
+# handles ~39k indicators/sec, so the network fetch is the only real cost.
+#
+# Every feed is free and keyless. A feed that fails (blocked, moved, rate
+# limited) is skipped with a warning - one bad source must never zero out a sync.
+# ---------------------------------------------------------------------------
+
+def _p_iplist(text: str) -> list[tuple[str, str]]:
+    """One indicator per line, `#`/`;` comments ignored. Used by most blocklists."""
+    out = []
+    for line in text.splitlines():
+        v = line.strip()
+        if not v or v[0] in "#;":
+            continue
+        v = v.split()[0].strip()          # some lists append notes after the IP
+        if v:
+            out.append((v, ""))
+        if len(out) >= _BULK_MAX_PER_FEED:
+            break
+    return out
+
+
+def _p_threatfox(text: str) -> list[tuple[str, str]]:
+    """abuse.ch ThreatFox CSV: first_seen,ioc_id,ioc_value,ioc_type,threat_type,..."""
+    out = []
+    for row in csvmod.reader(io.StringIO(text)):
+        if not row or (row[0] or "").lstrip().startswith("#") or len(row) < 5:
+            continue
+        value = (row[2] or "").strip().strip('"')
+        malware = (row[7] or "").strip().strip('"') if len(row) > 7 else ""
+        # ThreatFox encodes host:port for C2 entries - keep the host only.
+        if value.count(":") == 1 and not value.startswith("http"):
+            value = value.split(":")[0]
+        if value:
+            out.append((value, malware))
+        if len(out) >= _BULK_MAX_PER_FEED:
+            break
+    return out
+
+
+def _p_urlhaus(text: str) -> list[tuple[str, str]]:
+    """abuse.ch URLhaus CSV: id,dateadded,url,url_status,last_online,threat,tags,..."""
+    out = []
+    for row in csvmod.reader(io.StringIO(text)):
+        if not row or (row[0] or "").lstrip().startswith("#") or len(row) < 3:
+            continue
+        url = (row[2] or "").strip().strip('"')
+        threat = (row[5] or "").strip().strip('"') if len(row) > 5 else ""
+        if url.startswith("http"):
+            out.append((url, threat))
+        if len(out) >= _BULK_MAX_PER_FEED:
+            break
+    return out
+
+
+_BULK_PARSERS = {"iplist": _p_iplist, "threatfox": _p_threatfox, "urlhaus": _p_urlhaus}
+
+# name, url, parser, forced type (None = auto-detect), confidence, threat_type
+_BULK_FEEDS = [
+    ("abuse.ch ThreatFox", "https://threatfox.abuse.ch/export/csv/recent/",
+     "threatfox", None, 85, "malware-c2"),
+    ("abuse.ch URLhaus", "https://urlhaus.abuse.ch/downloads/csv_recent/",
+     "urlhaus", "url", 85, "malware-distribution"),
+    ("abuse.ch Feodo Tracker", "https://feodotracker.abuse.ch/downloads/ipblocklist.txt",
+     "iplist", "ip", 90, "botnet-c2"),
+    ("blocklist.de", "https://lists.blocklist.de/lists/all.txt",
+     "iplist", "ip", 70, "attack-source"),
+    ("CINS Army", "https://cinsscore.com/list/ci-badguys.txt",
+     "iplist", "ip", 70, "attack-source"),
+    ("Emerging Threats", "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",
+     "iplist", "ip", 75, "compromised-host"),
+    ("Tor exit nodes", "https://check.torproject.org/torbulkexitlist",
+     "iplist", "ip", 40, "anonymiser"),
+]
+
+# Per-feed cap keeps one huge list from dominating a sync (and bounds memory);
+# raise DASHBOARD_BULK_MAX_PER_FEED for a fuller pull.
+_BULK_MAX_PER_FEED = int(os.environ.get("DASHBOARD_BULK_MAX_PER_FEED", "50000"))
+_BULK_WORKERS = int(os.environ.get("DASHBOARD_BULK_WORKERS", "6"))
+
+
+def _fetch_bulk_osint(c: dict) -> list[dict]:
+    """Pull every curated public blocklist in parallel and normalise the lot.
+
+    Parallel because these are network-bound: fetched serially a seven-feed sync
+    would take as long as the slowest chain, while the DB side ingests them at
+    tens of thousands per second."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(feed):
+        name, url, parser, forced, conf, threat = feed
+        try:
+            text = _http_get(url).text
+            pairs = _BULK_PARSERS[parser](text)
+        except Exception as e:                    # one dead feed must not zero the sync
+            logging.warning("bulk OSINT feed %s failed: %s", name, e)
+            return []
+        rows = []
+        for value, note in pairs:
+            t = forced or guess_type(value)
+            if not t or t not in _IOC_TYPES:
+                continue
+            rows.append({
+                "type": t, "value": value,
+                "threat_type": f"{threat}{f' ({note})' if note else ''}",
+                "confidence": conf, "actor": note or "",
+                "source": f"osint:{name}",
+                "tags": ["osint", "public-feed"],
+            })
+        return rows
+
+    out: list[dict] = []
+    with ThreadPoolExecutor(max_workers=_BULK_WORKERS) as pool:
+        for rows in pool.map(one, _BULK_FEEDS):
+            out.extend(rows)
+    return out
+
+
 _FETCHERS = {
     "threatorbit": _fetch_threatorbit, "otx": _fetch_otx, "nvd": _fetch_nvd,
     "json": _fetch_json, "csv": _fetch_csv, "stix": _fetch_stix,
-    "taxii": _fetch_taxii, "abusech": _fetch_abusech, "darkweb-json": _fetch_darkweb_json,
+    "taxii": _fetch_taxii, "abusech": _fetch_abusech, "osint": _fetch_bulk_osint, "darkweb-json": _fetch_darkweb_json,
 }
 
 
@@ -852,6 +987,7 @@ def seed_builtin_connectors():
         # Keyless + high-volume + no companion dependency: this is what makes a
         # fresh install show REAL indicators after one sync, instead of only the
         # simulated engine data.
+        ("Public OSINT Bulk Feeds", "osint", "", 30),
         ("abuse.ch Feodo Tracker", "abusech", ABUSECH_FEODO_URL, 30),
         ("ThreatOrbit OSINT Engine", "threatorbit", THREAT_API_URL, 30),
         ("NVD CVE Feed", "nvd", "https://services.nvd.nist.gov/rest/json/cves/2.0", 720),

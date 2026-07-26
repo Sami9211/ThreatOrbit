@@ -688,3 +688,60 @@ def test_abusech_connector_parses_real_blocklist_shape(monkeypatch):
     assert conn_mod._FETCHERS["abusech"] is conn_mod._fetch_abusech
     preset = conn_mod.KIND_PRESETS["abusech"]
     assert preset["needs_key"] is False and preset["needs_url"] is False
+
+
+def test_bulk_osint_parsers_handle_real_feed_formats():
+    """Parsers for the keyless bulk feeds, against their real on-the-wire shapes."""
+    # blocklist.de / CINS / ET / Tor: plain list with comments and trailing notes
+    ips = conn_mod._p_iplist(
+        "# CINS Army list\n\n1.2.3.4\n5.6.7.8   # noisy scanner\n;comment\n9.9.9.9\n")
+    assert [v for v, _ in ips] == ["1.2.3.4", "5.6.7.8", "9.9.9.9"]
+
+    # ThreatFox CSV: first_seen,ioc_id,ioc_value,ioc_type,threat_type,...,malware
+    tf = conn_mod._p_threatfox(
+        '# comment line\n'
+        '"2026-07-20","123","45.61.2.9:8080","ip:port","botnet_cc","x","y","Emotet"\n'
+        '"2026-07-20","124","bad-c2.example","domain","botnet_cc","x","y","QakBot"\n')
+    assert tf[0][0] == "45.61.2.9" and tf[0][1] == "Emotet"      # host:port -> host
+    assert tf[1][0] == "bad-c2.example"
+
+    # URLhaus CSV: id,dateadded,url,url_status,last_online,threat,...
+    uh = conn_mod._p_urlhaus(
+        '# id,dateadded,url,url_status\n'
+        '"1","2026-07-20","http://evil.test/payload.bin","online","","malware_download"\n'
+        '"2","2026-07-20","not-a-url","online","","x"\n')
+    assert [v for v, _ in uh] == ["http://evil.test/payload.bin"]
+    assert uh[0][1] == "malware_download"
+
+
+def test_bulk_osint_is_parallel_and_survives_a_dead_feed(monkeypatch):
+    """Volume is the point: all feeds are pulled together, and ONE dead feed must
+    never zero out the sync (the old single-source engine produced ~5 indicators
+    precisely because everything hung off one upstream)."""
+    calls = []
+
+    class _R:
+        def __init__(self, t): self.text = t
+
+    def fake_get(url, **kw):
+        calls.append(url)
+        if "cinsscore" in url:
+            raise ValueError("feed unreachable")          # one dead source
+        if "threatfox" in url:
+            return _R('"2026","1","203.0.113.9:443","ip:port","botnet_cc","x","y","Emotet"\n')
+        if "urlhaus" in url:
+            return _R('"1","2026","http://bad.test/x.exe","online","","malware_download"\n')
+        return _R("198.51.100.7\n198.51.100.8\n")          # plain IP lists
+
+    monkeypatch.setattr(conn_mod, "_http_get", fake_get)
+    out = conn_mod._fetch_bulk_osint({})
+
+    assert len(calls) == len(conn_mod._BULK_FEEDS), "every feed must be attempted"
+    values = {o["value"] for o in out}
+    assert "203.0.113.9" in values and "http://bad.test/x.exe" in values
+    assert "198.51.100.7" in values
+    assert out, "a single dead feed must not zero the sync"
+    assert all(o["source"].startswith("osint:") for o in out)
+    # Registered and zero-config for the operator.
+    preset = conn_mod.KIND_PRESETS["osint"]
+    assert preset["needs_key"] is False and preset["needs_url"] is False
