@@ -78,6 +78,7 @@
     "/config/webhooks/{webhook_id}/test",
     "/connectors",
     "/connectors/kinds",
+    "/connectors/works",
     "/connectors/{connector_id}",
     "/connectors/{connector_id}/run",
     "/cti/actors",

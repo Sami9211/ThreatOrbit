@@ -83,6 +83,33 @@ def _secs(body) -> int:
     return max(MIN_INTERVAL_SECONDS, int(raw))
 
 
+@router.get("/works")
+def list_works(limit: int = 20, _: dict = Depends(current_user)):
+    """In-flight and recent import works - the live pipeline view.
+
+    Running works first: an operator's first question during a big sync is "is it
+    moving?", which a completed-only history cannot answer."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM connector_works "
+            "ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, started_at DESC "
+            "LIMIT ?", (max(1, min(limit, 100)),)).fetchall()
+    works = rows_to_dicts(rows)
+    for w in works:
+        exp = w.get("expected") or 0
+        proc = w.get("processed") or 0
+        w["percent"] = round(min(100, proc / exp * 100)) if exp else (100 if w["status"] != "running" else 0)
+        # Live throughput, so a slow feed is visibly slow rather than just "running".
+        try:
+            started = datetime.fromisoformat(w["started_at"])
+            updated = datetime.fromisoformat(w["updated_at"])
+            secs = max(0.001, (updated - started).total_seconds())
+            w["ratePerSec"] = round(proc / secs, 1) if proc else None
+        except (ValueError, TypeError):
+            w["ratePerSec"] = None
+    return works
+
+
 @router.post("", status_code=201)
 def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("connectors.manage"))):
     if body.kind not in KIND_PRESETS:

@@ -1045,3 +1045,71 @@ def test_pulse_without_an_adversary_creates_no_actor():
         assert conn_mod.upsert_actor_from_pulse(c, {"adversary": "   "}) is None
         after = c.execute("SELECT COUNT(*) AS n FROM threat_actors").fetchone()["n"]
     assert before == after
+
+
+def test_import_publishes_live_progress_during_a_sync(monkeypatch):
+    """Progress must be visible WHILE an import runs, not only after it ends.
+
+    An import used to be atomic: the operator saw nothing until it finished, so a
+    large sync in flight was indistinguishable from a hung one. A work row is
+    opened up front and updated after every sub-batch, so counts climb live.
+    """
+    from dashboard_api.db import get_conn as real_get_conn
+
+    # Small sub-batches so a modest fixture produces several progress updates.
+    monkeypatch.setattr(conn_mod, "_IMPORT_BATCH", 10)
+
+    tag = uuid.uuid4().hex[:6]
+    src = f"work-progress-{tag}"
+    inds = [{"type": "ip", "value": f"198.18.{i // 256}.{i % 256}"} for i in range(35)]
+
+    snapshots: list[tuple[int, int]] = []
+    real_update = conn_mod.update_work
+
+    def spy(work_id, **counts):
+        real_update(work_id, **counts)
+        if work_id:
+            with real_get_conn() as c:
+                r = c.execute(
+                    "SELECT processed, imported, status FROM connector_works WHERE id=?",
+                    (work_id,)).fetchone()
+            if r:
+                snapshots.append((r["processed"], r["imported"]))
+                assert r["status"] == "running", "work must still be running mid-import"
+
+    monkeypatch.setattr(conn_mod, "update_work", spy)
+
+    wid = conn_mod.start_work(src, None, len(inds))
+    try:
+        with real_get_conn() as c:
+            row = c.execute("SELECT * FROM connector_works WHERE id=?", (wid,)).fetchone()
+        assert row["status"] == "running" and row["expected"] == 35 and row["processed"] == 0
+
+        res = conn_mod.import_indicators(inds, src, work_id=wid)
+        assert res["imported"] == 35
+
+        # Several intermediate updates, strictly increasing - that is the "live" part.
+        assert len(snapshots) >= 3, f"expected progressive updates, got {snapshots}"
+        assert [p for p, _ in snapshots] == sorted(p for p, _ in snapshots)
+        assert snapshots[-1][0] == 35
+
+        conn_mod.finish_work(wid, "completed", processed=35, imported=res["imported"])
+        with real_get_conn() as c:
+            done = c.execute("SELECT * FROM connector_works WHERE id=?", (wid,)).fetchone()
+        assert done["status"] == "completed" and done["imported"] == 35
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works WHERE id=?", (wid,))
+            c.execute("DELETE FROM iocs WHERE source=?", (src,))
+            c.commit()
+
+
+def test_work_progress_failures_never_break_an_import(monkeypatch):
+    """Progress reporting is telemetry. If it fails, the import must still
+    succeed - observability must never be able to break ingestion."""
+    def boom(*a, **k):
+        raise RuntimeError("works table unavailable")
+
+    monkeypatch.setattr(conn_mod, "get_conn", boom)
+    conn_mod.update_work("some-id", processed=5)      # must not raise
+    conn_mod.finish_work("some-id", "completed")      # must not raise

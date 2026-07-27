@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class SchemaVersionError(RuntimeError):
@@ -440,6 +440,27 @@ CREATE TABLE IF NOT EXISTS ioc_imports (
     actor     TEXT,
     ts        TEXT NOT NULL
 );
+
+-- In-flight import "work" (OpenCTI's model). An import used to be atomic and
+-- invisible: nothing to see until it finished, so a running sync was
+-- indistinguishable from a broken one. A work row is created when a sync starts
+-- and UPDATED as each sub-batch lands, so the UI can show counts climbing live
+-- and an operator can tell "ingesting 40k" from "hung".
+CREATE TABLE IF NOT EXISTS connector_works (
+    id           TEXT PRIMARY KEY,
+    connector_id TEXT,
+    connector    TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'running',  -- running|completed|failed
+    expected     INTEGER NOT NULL DEFAULT 0,       -- indicators fetched, to process
+    processed    INTEGER NOT NULL DEFAULT 0,
+    imported     INTEGER NOT NULL DEFAULT 0,
+    duplicates   INTEGER NOT NULL DEFAULT 0,
+    skipped      INTEGER NOT NULL DEFAULT 0,
+    message      TEXT,
+    started_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_works_status ON connector_works(status, started_at DESC);
 
 -- Analyst-authored CTI intel reports (campaign & report management).
 CREATE TABLE IF NOT EXISTS intel_reports (

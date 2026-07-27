@@ -433,7 +433,65 @@ def upsert_intel_reports(reports: list[dict], source: str) -> dict[str, str]:
     return ids
 
 
-def import_indicators(indicators: list[dict], source: str) -> dict:
+def start_work(connector: str, connector_id: str | None, expected: int) -> str:
+    """Open an in-flight work record for a sync (OpenCTI's "work" concept).
+
+    An import used to be atomic and invisible - the operator saw nothing until it
+    finished, so a 40k-indicator sync in progress looked identical to a broken
+    one. The work row is updated as each sub-batch lands."""
+    wid = str(uuid.uuid4())
+    now = _now()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO connector_works (id,connector_id,connector,status,expected,"
+            "processed,imported,duplicates,skipped,started_at,updated_at) "
+            "VALUES (?,?,?, 'running', ?,0,0,0,0,?,?)",
+            (wid, connector_id, connector[:120], max(0, expected), now, now))
+        conn.commit()
+    return wid
+
+
+def update_work(work_id: str, **counts) -> None:
+    """Advance an in-flight work. Best-effort: progress reporting must never be
+    able to fail an import that is otherwise succeeding."""
+    if not work_id:
+        return
+    fields = [k for k in ("processed", "imported", "duplicates", "skipped") if k in counts]
+    if not fields:
+        return
+    try:
+        with get_conn() as conn:
+            conn.execute(
+                f"UPDATE connector_works SET {','.join(f'{f}=?' for f in fields)}, updated_at=? "
+                "WHERE id=?",
+                (*[int(counts[f]) for f in fields], _now(), work_id))
+            conn.commit()
+    except Exception:
+        logging.debug("work progress update failed", exc_info=True)
+
+
+def finish_work(work_id: str, status: str, message: str | None = None, **counts) -> None:
+    """Close a work as completed/failed. Also best-effort."""
+    if not work_id:
+        return
+    try:
+        with get_conn() as conn:
+            sets = ["status=?", "updated_at=?"]
+            vals: list = [status, _now()]
+            for f in ("processed", "imported", "duplicates", "skipped"):
+                if f in counts:
+                    sets.append(f"{f}=?"); vals.append(int(counts[f]))
+            if message is not None:
+                sets.append("message=?"); vals.append(str(message)[:300])
+            conn.execute(f"UPDATE connector_works SET {','.join(sets)} WHERE id=?",
+                         (*vals, work_id))
+            conn.commit()
+    except Exception:
+        logging.debug("work finalisation failed", exc_info=True)
+
+
+def import_indicators(indicators: list[dict], source: str,
+                      work_id: str | None = None) -> dict:
     """Ingest an arbitrarily large feed in bounded sub-batches.
 
     Thin, scale-safe wrapper over `_import`: it slices the fetched indicators
@@ -445,10 +503,16 @@ def import_indicators(indicators: list[dict], source: str) -> dict:
               "total": len(indicators), "alertsRaised": 0}
     budget = _MAX_INTEL_ALERTS_PER_RUN
     for i in range(0, len(indicators), _IMPORT_BATCH):
-        r = _import(indicators[i:i + _IMPORT_BATCH], source, alert_budget=budget)
+        chunk = indicators[i:i + _IMPORT_BATCH]
+        r = _import(chunk, source, alert_budget=budget)
         for k in ("imported", "duplicates", "skipped", "alertsRaised"):
             totals[k] += r[k]
         budget -= r["alertsRaised"]
+        # Publish progress after every sub-batch so the UI sees counts climb
+        # during a large sync instead of one lump at the end.
+        update_work(work_id, processed=min(i + len(chunk), len(indicators)),
+                    imported=totals["imported"], duplicates=totals["duplicates"],
+                    skipped=totals["skipped"])
     return totals
 
 
@@ -1172,7 +1236,16 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
                     if ext and ext in rid_by_ext:
                         ind["report_id"] = rid_by_ext[ext]
                 fetch.last_reports = None          # don't leak into the next run
-            result = import_indicators(indicators, connector["name"])
+            # Open a work now that we know how much was fetched, so the UI can
+            # show real progress (processed/expected) while this runs.
+            work_id = start_work(connector["name"], cid, len(indicators))
+            try:
+                result = import_indicators(indicators, connector["name"], work_id=work_id)
+                finish_work(work_id, "completed", processed=len(indicators), **{
+                    k: result.get(k, 0) for k in ("imported", "duplicates", "skipped")})
+            except Exception:
+                finish_work(work_id, "failed", "import failed")
+                raise
         with get_conn() as conn:
             if connector["kind"] == "darkweb-json":
                 total_count = conn.execute(
@@ -1214,6 +1287,13 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
         return result
     except Exception as e:  # network/parse/auth failure - record, never crash
         msg = str(e)[:300]
+        # If the failure happened during the fetch there is no work yet; record
+        # one so a failed sync is visible in the pipeline view too.
+        try:
+            if "work_id" not in dir():
+                finish_work(start_work(connector["name"], cid, 0), "failed", msg)
+        except Exception:
+            logging.debug("failed-work record failed", exc_info=True)
         with get_conn() as conn:
             conn.execute("UPDATE connectors SET status='error', last_run=?, last_error=? WHERE id=?",
                          (_now(), msg, cid))
