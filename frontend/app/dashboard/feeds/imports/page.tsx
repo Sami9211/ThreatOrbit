@@ -90,8 +90,13 @@ function SourceRow({ c, canManage, onChanged }: {
         </div>
         <p className="text-[10px] text-ink-600 mt-0.5 truncate">
           {c.kind} · {c.indicatorCount.toLocaleString()} indicators · last import {relTime(c.lastRun)}
-          {c.lastError ? <span className="text-threat" title={c.lastError}> · {c.lastError}</span> : ''}
         </p>
+        {/* Own line, wrapped: the reason sat inside a `truncate` paragraph, so
+            CSS clipped it to one line and the fix was only ever visible as a
+            hover tooltip. */}
+        {c.lastError && (
+          <p className="text-[10px] text-threat mt-1 leading-relaxed break-words">{c.lastError}</p>
+        )}
       </div>
       {/* Each source's own auto-import cadence, in seconds (sub-minute allowed) */}
       <div className="flex items-center gap-1.5 shrink-0">

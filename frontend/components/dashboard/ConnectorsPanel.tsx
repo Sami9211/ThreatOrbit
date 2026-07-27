@@ -268,8 +268,14 @@ export default function ConnectorsPanel() {
                 </div>
                 <p className="text-[10px] text-ink-600 mt-0.5 truncate">
                   {c.kind} · {c.indicatorCount.toLocaleString()} indicators · every {formatEvery(c.intervalSeconds || c.intervalMinutes * 60)} · last {relTime(c.lastRun)}
-                  {c.lastError ? <span className="text-threat"> · {c.lastError.slice(0, 60)}</span> : ''}
                 </p>
+                {/* The failure reason gets its own wrapped line. Truncated to 60
+                    characters on the summary line it lost exactly the part that
+                    says what to do - "...cannot reach X, this is not an API-key
+                    problem" cuts to "...cannot reach X from thi". */}
+                {c.lastError && (
+                  <p className="text-[10px] text-threat mt-1 leading-relaxed break-words">{c.lastError}</p>
+                )}
                 {/* Live progress for a sync in flight, so a long import reads as
                     working rather than as a row that has stopped changing. */}
                 {live && w && (
