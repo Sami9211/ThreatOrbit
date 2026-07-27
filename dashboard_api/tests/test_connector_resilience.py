@@ -11,6 +11,7 @@ dump would OOM the dashboard. `_read_capped` streams and rejects past
 import json
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
@@ -1175,3 +1176,95 @@ def test_work_rate_is_null_rather_than_invented_when_nothing_processed(client, a
         with real_get_conn() as c:
             c.execute("DELETE FROM connector_works WHERE id=?", (wid,))
             c.commit()
+
+def test_due_connectors_sync_on_their_own_without_anyone_pressing_sync(monkeypatch):
+    """AUTOMATIC sync is the whole point of a cadence.
+
+    The reported symptom was "they don't do it automatically, I have to manually
+    click sync" - and nothing covered run_due_connectors actually *running* a due
+    connector, only that it skips ones that are mid-sync. This pins the contract
+    the scheduler tick depends on: elapsed cadence -> the connector runs itself,
+    indicators land, and a work record describes the run.
+    """
+    from datetime import timedelta
+    from dashboard_api.db import get_conn as real_get_conn
+
+    feed = [{"type": "ip", "value": "203.0.113.77"}, {"type": "domain", "value": "auto-sync.test"}]
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", lambda c: feed)
+
+    tag = uuid.uuid4().hex[:8]
+    due_id, early_id = f"due-{tag}", f"early-{tag}"
+    due_name, early_name = f"Due Feed {tag}", f"Early Feed {tag}"
+    now = datetime.now(timezone.utc)
+    # One connector last ran 10s ago on a 2s cadence (due); the other 10s ago on
+    # an hour's cadence (not due). Both are enabled and idle.
+    rows = [(due_id, due_name, 2, (now - timedelta(seconds=10)).isoformat()),
+            (early_id, early_name, 3600, (now - timedelta(seconds=10)).isoformat())]
+    with real_get_conn() as c:
+        for cid, name, secs, last in rows:
+            c.execute(
+                "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+                "field_map,status,builtin,created_at,last_run) "
+                "VALUES (?,?,?,?,1,?,?,'{}','idle',0,?,?)",
+                (cid, name, "json", "https://example.test/feed",
+                 max(1, round(secs / 60)), secs, conn_mod._now(), last))
+        c.commit()
+    try:
+        ran = conn_mod.run_due_connectors()
+        by_name = {r["connector"]: r for r in ran}
+
+        assert due_name in by_name, f"a due connector did not auto-sync: {sorted(by_name)}"
+        assert by_name[due_name].get("imported") == 2, by_name[due_name]
+        assert early_name not in by_name, "a connector synced before its cadence elapsed"
+
+        with real_get_conn() as c:
+            # Indicators really landed, without any manual run.
+            assert c.execute("SELECT COUNT(*) AS n FROM iocs WHERE source=?",
+                             (due_name,)).fetchone()["n"] == 2
+            # last_run advanced, so the next tick won't immediately re-run it.
+            row = c.execute("SELECT status,last_run FROM connectors WHERE id=?",
+                            (due_id,)).fetchone()
+            assert row["status"] == "ok"
+            assert datetime.fromisoformat(row["last_run"]) > now - timedelta(seconds=5)
+            # And the run is described by a work record, not just a status flip.
+            work = c.execute(
+                "SELECT * FROM connector_works WHERE connector_id=? ORDER BY started_at DESC",
+                (due_id,)).fetchone()
+            assert work is not None, "an automatic sync produced no work record"
+            assert work["status"] == "completed" and work["imported"] == 2
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source IN (?,?)", (due_name, early_name))
+            c.execute("DELETE FROM ioc_imports WHERE source IN (?,?)", (due_name, early_name))
+            c.execute("DELETE FROM connector_works WHERE connector_id IN (?,?)", (due_id, early_id))
+            c.execute("DELETE FROM connectors WHERE id IN (?,?)", (due_id, early_id))
+            c.commit()
+
+
+def test_a_one_second_cadence_is_stored_and_honoured(monkeypatch):
+    """"If I set sync time to 1 second and save, it goes back to 5 seconds."
+
+    The floor used to be 5s, so the value an operator saved was not the value the
+    system kept. Whatever is accepted must survive the round trip and be the
+    interval the scheduler actually uses."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    assert conn_mod.MIN_INTERVAL_SECONDS <= 1, "a 1s cadence must be accepted"
+    assert conn_mod.connector_interval_seconds({"interval_seconds": 1}) == 1
+
+    cid = "onesec-" + uuid.uuid4().hex[:8]
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,1,1,'{}','idle',0,?)",
+            (cid, "One Second Feed", "json", "https://example.test/feed", conn_mod._now()))
+        c.commit()
+    try:
+        with real_get_conn() as c:
+            row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+        assert row["interval_seconds"] == 1, "the saved cadence was rewritten"
+        assert conn_mod.connector_interval_seconds(row) == 1
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
