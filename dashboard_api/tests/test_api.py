@@ -4219,3 +4219,46 @@ def test_import_route_batches_writes_not_per_row(client, auth, monkeypatch):
         with real_get_conn() as c:
             c.execute("DELETE FROM iocs WHERE source=?", (src,))
             c.commit()
+
+
+def test_attack_coverage_surfaces_intel_driven_gaps(client, auth):
+    """ATT&CK coverage must answer the question a SOC actually asks.
+
+    Rules+alerts alone only say "what do I detect". Adding the techniques that
+    imported intel attributes to tracked adversaries turns the navigator into gap
+    analysis: "an adversary we track uses T1071 and we have NO rule for it".
+    Before this, imported attribution never reached the navigator at all.
+    """
+    import json as _json
+    import uuid as _uuid
+
+    from dashboard_api.db import get_conn
+
+    actor = "IntelGapActor-" + _uuid.uuid4().hex[:6]
+    technique = "T1560.001"          # deliberately outside the built-in rule set
+    try:
+        with get_conn() as c:
+            c.execute(
+                "INSERT INTO threat_actors (id,name,aliases,type,motivations,active,"
+                "sophistication,threat_level,sectors,ttps,malware,ioc_count,campaign_count) "
+                "VALUES (?,?,'[]','apt','[]',1,4,'high','[]',?,'[]',0,0)",
+                (str(_uuid.uuid4()), actor, _json.dumps([technique])))
+            c.commit()
+
+        cov = client.get("/siem/attack-coverage", headers=auth).json()
+        assert cov["summary"]["intelTechniques"] >= 1
+        assert cov["summary"]["intelGaps"] >= 1, "an uncovered intel technique is a gap"
+
+        found = None
+        for tac in cov["tactics"]:
+            for t in tac["techniques"]:
+                if t["technique"] == technique:
+                    found = t
+        assert found is not None, f"{technique} from intel must appear in the navigator"
+        assert actor in found["intelActors"], "the attributing adversary must be named"
+        assert found["intelGap"] is True, "no rule covers it, so it is a gap"
+        assert found["covered"] is False
+    finally:
+        with get_conn() as c:
+            c.execute("DELETE FROM threat_actors WHERE name=?", (actor,))
+            c.commit()

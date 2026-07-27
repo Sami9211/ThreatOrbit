@@ -1124,12 +1124,33 @@ def attack_coverage():
         alerts = conn.execute(
             "SELECT mitre_tech_id, COUNT(*) AS n FROM alerts WHERE mitre_tech_id IS NOT NULL GROUP BY mitre_tech_id"
         ).fetchall()
+        # Third dimension: techniques our imported THREAT INTEL attributes to
+        # tracked adversaries. Coverage against rules alone answers "what do I
+        # detect"; adding intel answers the question a SOC actually asks - "what
+        # will I face, and do I detect it?" These techniques arrive from pulse
+        # attack_ids via the connector import, so the navigator now learns from
+        # real intel instead of only the built-in rule set.
+        actor_rows = conn.execute(
+            "SELECT name, ttps FROM threat_actors WHERE active=1 AND ttps IS NOT NULL"
+        ).fetchall()
     rule_cov: dict[str, int] = {}
     for r in rules:
         if r["status"] == "enabled":
             rule_cov[r["mitre_tech_id"]] = rule_cov.get(r["mitre_tech_id"], 0) + 1
     alert_cnt = {a["mitre_tech_id"]: a["n"] for a in alerts}
-    techniques = set(TECH_NAME) | set(rule_cov) | set(alert_cnt)
+    # technique -> adversaries known to use it (from imported intel)
+    intel_actors: dict[str, list[str]] = {}
+    for a in actor_rows:
+        try:
+            for t in (_json.loads(a["ttps"]) or []):
+                t = str(t).strip()
+                if t.upper().startswith("T"):
+                    intel_actors.setdefault(t, [])
+                    if a["name"] not in intel_actors[t]:
+                        intel_actors[t].append(a["name"])
+        except (ValueError, TypeError):
+            continue
+    techniques = set(TECH_NAME) | set(rule_cov) | set(alert_cnt) | set(intel_actors)
     by_tactic: dict[str, list] = {}
     for t in sorted(techniques):
         tactic = TACTIC.get(t.split(".")[0]) or TACTIC.get(t) or "Other"
@@ -1137,13 +1158,20 @@ def attack_coverage():
             "technique": t, "name": TECH_NAME.get(t, t),
             "rules": rule_cov.get(t, 0), "alerts": alert_cnt.get(t, 0),
             "covered": rule_cov.get(t, 0) > 0,
+            # Who intel says uses this, and whether we're blind to it.
+            "intelActors": intel_actors.get(t, []),
+            "intelGap": bool(intel_actors.get(t)) and rule_cov.get(t, 0) == 0,
         })
     covered = sum(1 for t in techniques if rule_cov.get(t, 0) > 0)
     return {
         "tactics": [{"tactic": k, "techniques": v} for k, v in by_tactic.items()],
         "summary": {"techniques": len(techniques), "covered": covered,
                     "gaps": len(techniques) - covered,
-                    "coveragePct": round(covered / len(techniques) * 100) if techniques else 0},
+                    "coveragePct": round(covered / len(techniques) * 100) if techniques else 0,
+                    # The actionable number: techniques real intel attributes to
+                    # adversaries that no enabled rule covers.
+                    "intelTechniques": len(intel_actors),
+                    "intelGaps": sum(1 for t in intel_actors if rule_cov.get(t, 0) == 0)},
     }
 
 

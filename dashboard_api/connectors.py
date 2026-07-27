@@ -309,6 +309,64 @@ _EXISTS_CHUNK = 900
 _IMPORT_BATCH = int(os.environ.get("DASHBOARD_IMPORT_BATCH", "10000"))
 
 
+def upsert_actor_from_pulse(conn, pulse: dict) -> str | None:
+    """Populate the threat-actor library from imported intel.
+
+    A pulse names an adversary and lists the malware, ATT&CK techniques and
+    industries seen with it - exactly the fields the actor library already has.
+    Previously that attribution died as a text string on the indicator, so the
+    Actors page and the ATT&CK navigator only ever showed the curated seed data
+    and never learned anything from what was actually imported.
+
+    Merges rather than overwrites: an actor accumulates TTPs/malware/sectors
+    across every pulse that mentions it, and analyst-entered fields are left
+    alone. Returns the actor id, or None when the pulse names no adversary.
+    """
+    name = (pulse.get("adversary") or "").strip()
+    if not name:
+        return None
+    now = _now()
+    row = conn.execute(
+        "SELECT * FROM threat_actors WHERE LOWER(name)=LOWER(?)", (name,)).fetchone()
+
+    def _merge(existing, incoming):
+        """Union, preserving existing order - imports add, never remove."""
+        try:
+            cur = json.loads(existing) if isinstance(existing, str) else (existing or [])
+        except (ValueError, TypeError):
+            cur = []
+        seen = {str(x).lower() for x in cur}
+        for v in incoming or []:
+            if v and str(v).lower() not in seen:
+                cur.append(v)
+                seen.add(str(v).lower())
+        return cur
+
+    ttps = _merge(row["ttps"] if row else "[]", pulse.get("attack_ids"))
+    malware = _merge(row["malware"] if row else "[]", pulse.get("malware_families"))
+    sectors = _merge(row["sectors"] if row else "[]", pulse.get("industries"))
+
+    if row:
+        conn.execute(
+            "UPDATE threat_actors SET ttps=?, malware=?, sectors=?, last_seen=?, "
+            "active=1, recent_activity=? WHERE id=?",
+            (dumps(ttps), dumps(malware), dumps(sectors),
+             pulse.get("modified") or now,
+             f"Seen in intel: {pulse.get('title') or 'pulse'}"[:200], row["id"]))
+        return row["id"]
+
+    aid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO threat_actors (id,name,aliases,type,motivations,active,first_seen,"
+        "last_seen,sophistication,threat_level,sectors,ttps,malware,ioc_count,"
+        "campaign_count,recent_activity) "
+        "VALUES (?,?,'[]','unknown','[]',1,?,?,3,'medium',?,?,?,0,1,?)",
+        (aid, name, pulse.get("created") or now, pulse.get("modified") or now,
+         dumps(sectors), dumps(ttps), dumps(malware),
+         f"Seen in intel: {pulse.get('title') or 'pulse'}"[:200]))
+    return aid
+
+
 def upsert_intel_reports(reports: list[dict], source: str) -> dict[str, str]:
     """Persist pulse-shaped intel as REPORTS and return {external_id: report_id}.
 
@@ -364,6 +422,12 @@ def upsert_intel_reports(reports: list[dict], source: str) -> dict[str, str]:
                     "updated_at,status,body,iocs,created_at,source,external_id) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'published','','[]',?,?,?)",
                     (rid, *fields, r.get("created") or now, source, ext))
+            # Attribution feeds the actor library + ATT&CK coverage, not just a
+            # text field on the report.
+            try:
+                upsert_actor_from_pulse(conn, r)
+            except Exception:
+                logging.exception("actor upsert failed for pulse %s", ext)
             ids[ext] = rid
         conn.commit()
     return ids

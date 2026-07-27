@@ -44,6 +44,9 @@ export default function AttackNavigatorPage() {
     { label: 'Techniques', value: cov?.summary.techniques ?? 0, color: 'text-white' },
     { label: 'Covered', value: cov?.summary.covered ?? 0, color: 'text-safe' },
     { label: 'Coverage gaps', value: cov?.summary.gaps ?? 0, color: 'text-amber' },
+    // The actionable number: techniques real intel attributes to adversaries we
+    // track, that no enabled rule covers. "What will I face and am I blind to it?"
+    { label: 'Intel gaps', value: cov?.summary.intelGaps ?? 0, color: 'text-threat' },
     { label: 'Coverage', value: `${cov?.summary.coveragePct ?? 0}%`, color: 'text-violet' },
   ]
 
@@ -91,6 +94,15 @@ export default function AttackNavigatorPage() {
                       </div>
                       <p className="text-[10px] text-ink-300 leading-tight mt-0.5 truncate">{t.name}</p>
                       <p className="text-[9px] text-ink-600 mt-0.5">{t.rules} rule{t.rules === 1 ? '' : 's'} · {t.alerts} alerts</p>
+                      {/* Intel-driven gap: a tracked adversary uses this and no
+                          enabled rule covers it. This is the cell an analyst
+                          should look at first. */}
+                      {t.intelGap && (
+                        <p className="text-[9px] text-threat mt-0.5 font-semibold truncate"
+                          title={`Used by: ${(t.intelActors ?? []).join(', ')} - no rule covers it`}>
+                          ⚠ intel gap · {(t.intelActors ?? []).length} actor{(t.intelActors ?? []).length === 1 ? '' : 's'}
+                        </p>
+                      )}
                     </button>
                   ))}
                 </div>

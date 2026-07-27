@@ -3617,3 +3617,25 @@ _Move completed items here with the date so the roadmap stays honest._
     omitted `source`/`external_id`, so the upsert key was never stored and every
     re-sync duplicated the report.
   • Verified: **625 backend tests pass, 1 skipped.**
+
+- **2026-07-26 · Imported attribution now feeds the knowledge graph (gap-list #1/#2
+  of the pulse model).** The pulse container landed last commit, but the
+  attribution inside it still went nowhere. Now it does:
+  • **`upsert_actor_from_pulse()`** populates the **threat-actor library** from
+    imported intel - `adversary` → actor, `attack_ids` → `ttps`,
+    `malware_families` → `malware`, `industries` → `sectors`. It **merges**
+    (union) rather than overwrites, because intel arrives in fragments: two
+    pulses about the same adversary accumulate techniques instead of clobbering
+    each other, and analyst-entered fields are untouched. A pulse with **no**
+    adversary creates **no** actor - inventing attribution is worse than none.
+  • **ATT&CK navigator gains the dimension a SOC actually asks for.** Coverage
+    previously only knew rules + alerts ("what do I detect"). It now also reads
+    the techniques imported intel attributes to tracked adversaries, exposing
+    `intelActors`, `intelGap` per technique and `intelTechniques`/`intelGaps` in
+    the summary: *"an adversary we track uses T1071 and no enabled rule covers
+    it"*. Surfaced as an **Intel gaps** tile plus a per-cell ⚠ marker naming the
+    attributing actors.
+  • Fenced by `test_imported_pulse_populates_the_actor_library_and_ttps` (union
+    semantics, no duplicate actor), `test_pulse_without_an_adversary_creates_no_actor`
+    and `test_attack_coverage_surfaces_intel_driven_gaps`.
+  • Verified: **628 backend tests pass, 1 skipped**; lint 0 errors, build clean.

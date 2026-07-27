@@ -8,6 +8,7 @@ schedule. `httpx.get()`/`.post()` read the whole body into memory before
 dump would OOM the dashboard. `_read_capped` streams and rejects past
 `_MAX_FEED_BYTES`; `run_connector` catches the resulting ValueError.
 """
+import json
 import os
 import uuid
 
@@ -986,3 +987,61 @@ def test_otx_pulse_becomes_a_report_with_attribution_and_ttps(monkeypatch):
             c.execute("DELETE FROM iocs WHERE report_id=?", (rid,))
             c.execute("DELETE FROM intel_reports WHERE id=?", (rid,))
             c.commit()
+
+
+def test_imported_pulse_populates_the_actor_library_and_ttps():
+    """Imported attribution must reach the actor library and ATT&CK coverage.
+
+    A pulse names an adversary and the malware/techniques/industries seen with
+    it. That used to die as a text string on the indicator, so the Actors page
+    and the ATT&CK navigator only ever reflected curated seed data and learned
+    nothing from real imports. Multiple pulses about the same actor must ACCUMULATE
+    (union), never overwrite - intel arrives in fragments.
+    """
+    from dashboard_api.db import get_conn as real_get_conn
+
+    actor = "APT-Merge-Test-" + uuid.uuid4().hex[:6]
+    p1 = {"adversary": actor, "title": "campaign one",
+          "attack_ids": ["T1566"], "malware_families": ["PlugX"],
+          "industries": ["Energy"], "created": "2026-07-01T00:00:00",
+          "modified": "2026-07-01T00:00:00"}
+    p2 = {"adversary": actor, "title": "campaign two",
+          "attack_ids": ["T1071", "T1566"],            # one new, one repeat
+          "malware_families": ["ShadowPad"],
+          "industries": ["Finance"], "modified": "2026-07-20T00:00:00"}
+    try:
+        with real_get_conn() as c:
+            aid = conn_mod.upsert_actor_from_pulse(c, p1)
+            c.commit()
+        assert aid
+        with real_get_conn() as c:
+            aid2 = conn_mod.upsert_actor_from_pulse(c, p2)
+            c.commit()
+        assert aid2 == aid, "the same adversary must not create a second actor"
+
+        with real_get_conn() as c:
+            row = c.execute("SELECT * FROM threat_actors WHERE id=?", (aid,)).fetchone()
+        ttps = json.loads(row["ttps"])
+        malware = json.loads(row["malware"])
+        sectors = json.loads(row["sectors"])
+        assert sorted(ttps) == ["T1071", "T1566"], f"TTPs must union, got {ttps}"
+        assert sorted(malware) == ["PlugX", "ShadowPad"]
+        assert sorted(sectors) == ["Energy", "Finance"]
+        assert row["active"] == 1
+        assert "campaign two" in (row["recent_activity"] or "")
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM threat_actors WHERE name=?", (actor,))
+            c.commit()
+
+
+def test_pulse_without_an_adversary_creates_no_actor():
+    """Most bulk feed entries have no attribution. They must not manufacture a
+    nameless actor - fabricating attribution is worse than having none."""
+    from dashboard_api.db import get_conn as real_get_conn
+    with real_get_conn() as c:
+        before = c.execute("SELECT COUNT(*) AS n FROM threat_actors").fetchone()["n"]
+        assert conn_mod.upsert_actor_from_pulse(c, {"title": "no attribution"}) is None
+        assert conn_mod.upsert_actor_from_pulse(c, {"adversary": "   "}) is None
+        after = c.execute("SELECT COUNT(*) AS n FROM threat_actors").fetchone()["n"]
+    assert before == after

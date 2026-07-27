@@ -814,10 +814,19 @@ export const ingestLogs = (lines: string[], format = 'auto', source = 'collector
   api<{ ingested: number; parsed: number; alerts: number; tiMatches: number; source: string }>(
     '/siem/ingest', { method: 'POST', body: JSON.stringify({ lines, format, source }) })
 
-export interface AttackTechnique { technique: string; name: string; rules: number; alerts: number; covered: boolean }
+export interface AttackTechnique {
+  technique: string; name: string; rules: number; alerts: number; covered: boolean
+  /** Adversaries that imported intel says use this technique. */
+  intelActors?: string[]
+  /** Intel attributes it to a tracked adversary, but no enabled rule covers it. */
+  intelGap?: boolean
+}
 export interface AttackCoverage {
   tactics: Array<{ tactic: string; techniques: AttackTechnique[] }>
-  summary: { techniques: number; covered: number; gaps: number; coveragePct: number }
+  summary: {
+    techniques: number; covered: number; gaps: number; coveragePct: number
+    intelTechniques?: number; intelGaps?: number
+  }
 }
 export const fetchAttackCoverage = () => api<AttackCoverage>('/siem/attack-coverage')
 
