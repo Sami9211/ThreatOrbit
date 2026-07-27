@@ -433,6 +433,14 @@ def upsert_intel_reports(reports: list[dict], source: str) -> dict[str, str]:
     return ids
 
 
+def _now_precise() -> str:
+    """Sub-second timestamp, for works only. `_now()` truncates to whole seconds,
+    which is fine for "last run at" but useless for throughput: a 24k-indicator
+    import that lands in 600ms would show start == end and yield a nonsense
+    rate. Works keep microseconds so the reported rate is a measurement."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 def start_work(connector: str, connector_id: str | None, expected: int) -> str:
     """Open an in-flight work record for a sync (OpenCTI's "work" concept).
 
@@ -440,7 +448,7 @@ def start_work(connector: str, connector_id: str | None, expected: int) -> str:
     finished, so a 40k-indicator sync in progress looked identical to a broken
     one. The work row is updated as each sub-batch lands."""
     wid = str(uuid.uuid4())
-    now = _now()
+    now = _now_precise()
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO connector_works (id,connector_id,connector,status,expected,"
@@ -464,7 +472,7 @@ def update_work(work_id: str, **counts) -> None:
             conn.execute(
                 f"UPDATE connector_works SET {','.join(f'{f}=?' for f in fields)}, updated_at=? "
                 "WHERE id=?",
-                (*[int(counts[f]) for f in fields], _now(), work_id))
+                (*[int(counts[f]) for f in fields], _now_precise(), work_id))
             conn.commit()
     except Exception:
         logging.debug("work progress update failed", exc_info=True)
@@ -477,7 +485,7 @@ def finish_work(work_id: str, status: str, message: str | None = None, **counts)
     try:
         with get_conn() as conn:
             sets = ["status=?", "updated_at=?"]
-            vals: list = [status, _now()]
+            vals: list = [status, _now_precise()]
             for f in ("processed", "imported", "duplicates", "skipped"):
                 if f in counts:
                     sets.append(f"{f}=?"); vals.append(int(counts[f]))

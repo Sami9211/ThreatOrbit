@@ -99,14 +99,18 @@ def list_works(limit: int = 20, _: dict = Depends(current_user)):
         exp = w.get("expected") or 0
         proc = w.get("processed") or 0
         w["percent"] = round(min(100, proc / exp * 100)) if exp else (100 if w["status"] != "running" else 0)
-        # Live throughput, so a slow feed is visibly slow rather than just "running".
+        # Live throughput, so a slow feed is visibly slow rather than just
+        # "running". Reported only when it is actually measurable: no processed
+        # indicators, or no elapsed time to divide by, means we have no rate -
+        # and null is honest where an invented number is not.
+        w["ratePerSec"] = None
         try:
-            started = datetime.fromisoformat(w["started_at"])
-            updated = datetime.fromisoformat(w["updated_at"])
-            secs = max(0.001, (updated - started).total_seconds())
-            w["ratePerSec"] = round(proc / secs, 1) if proc else None
+            secs = (datetime.fromisoformat(w["updated_at"])
+                    - datetime.fromisoformat(w["started_at"])).total_seconds()
+            if proc > 0 and secs > 0:
+                w["ratePerSec"] = round(proc / secs, 1)
         except (ValueError, TypeError):
-            w["ratePerSec"] = None
+            pass
     return works
 
 

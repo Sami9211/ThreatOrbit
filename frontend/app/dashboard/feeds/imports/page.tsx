@@ -11,7 +11,8 @@ import { SEVERITY_COLOR as SEV_COLOR } from '@/lib/colors'
 import { usePermissions } from '@/lib/usePermissions'
 import {
   fetchConnectors, runConnector, patchConnector, fetchEngineStatus, fetchJobs, fetchIocs,
-  type Connector, type EngineStatus, type JobEntry, type Ioc,
+  fetchConnectorWorks,
+  type Connector, type EngineStatus, type JobEntry, type Ioc, type ConnectorWork,
 } from '@/lib/api'
 
 function relTime(iso: string | null): string {
@@ -24,11 +25,27 @@ function relTime(iso: string | null): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
 }
 
+/** How long a run took (or has been running). Sub-second matters here: a 24k
+ *  import that lands in 600ms should not round to "0s". */
+function durationOf(from: string, to: string): string {
+  const ms = new Date(to).getTime() - new Date(from).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`
+}
+
 const CONN_STATUS: Record<string, { label: string; cls: string; dot: string }> = {
   ok:      { label: 'Synced',  cls: 'text-safe border-safe/25 bg-safe/10',     dot: 'bg-safe' },
   idle:    { label: 'Idle',    cls: 'text-ink-400 border-white/10 bg-white/5',  dot: 'bg-ink-500' },
   running: { label: 'Importing', cls: 'text-violet border-violet/25 bg-violet/10', dot: 'bg-violet animate-pulse' },
   error:   { label: 'Error',   cls: 'text-threat border-threat/25 bg-threat/10', dot: 'bg-threat' },
+}
+
+const WORK_STATUS: Record<string, { label: string; cls: string; dot: string }> = {
+  running:   { label: 'Importing', cls: 'text-violet border-violet/25 bg-violet/10', dot: 'bg-violet animate-pulse' },
+  completed: { label: 'Done',      cls: 'text-safe border-safe/25 bg-safe/10',       dot: 'bg-safe' },
+  failed:    { label: 'Failed',    cls: 'text-threat border-threat/25 bg-threat/10', dot: 'bg-threat' },
 }
 
 const JOB_STATUS: Record<string, string> = {
@@ -100,6 +117,41 @@ function SourceRow({ c, canManage, onChanged }: {
   )
 }
 
+/* -- One import run, live -------------------------------------------- */
+function WorkRow({ w }: { w: ConnectorWork }) {
+  const st = WORK_STATUS[w.status] ?? WORK_STATUS.completed
+  const running = w.status === 'running'
+  return (
+    <div className="px-3 py-2.5 rounded-xl border border-white/8 bg-surface">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-semibold text-white truncate">{w.connector}</span>
+        <span className={cn('flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border', st.cls)}>
+          <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />{st.label}
+        </span>
+        <span className="ml-auto text-[10px] text-ink-600 tabular-nums shrink-0">
+          {durationOf(w.startedAt, w.updatedAt)}
+          {w.ratePerSec ? <span className="text-teal"> · {w.ratePerSec.toLocaleString()}/s</span> : null}
+          {!running && <> · {relTime(w.startedAt)}</>}
+        </span>
+      </div>
+      {/* The batch size is known before the first insert, so this bar tracks
+          real completion rather than a guess that jumps to 100%. */}
+      <div className="mt-2 h-1.5 rounded-full bg-white/8 overflow-hidden">
+        <div className={cn('h-full rounded-full transition-[width] duration-500',
+          w.status === 'failed' ? 'bg-threat' : running ? 'bg-violet' : 'bg-safe')}
+          style={{ width: `${w.status === 'failed' ? Math.max(2, w.percent) : w.percent}%` }} />
+      </div>
+      <p className="text-[10px] text-ink-600 mt-1.5 tabular-nums">
+        {w.processed.toLocaleString()}{w.expected ? ` / ${w.expected.toLocaleString()}` : ''} processed
+        {w.imported > 0 && <span className="text-safe"> · {w.imported.toLocaleString()} new</span>}
+        {w.duplicates > 0 && <span> · {w.duplicates.toLocaleString()} already known</span>}
+        {w.skipped > 0 && <span className="text-amber"> · {w.skipped.toLocaleString()} unparseable</span>}
+      </p>
+      {w.message && <p className="text-[10px] text-threat mt-1 break-words">{w.message}</p>}
+    </div>
+  )
+}
+
 export default function ImportsPage() {
   const { can } = usePermissions()
   const canManage = can('connectors.manage')
@@ -107,22 +159,28 @@ export default function ImportsPage() {
   const [engine, setEngine] = useState<EngineStatus | null>(null)
   const [jobs, setJobs] = useState<JobEntry[]>([])
   const [recent, setRecent] = useState<Ioc[] | null>(null)
+  const [works, setWorks] = useState<ConnectorWork[] | null>(null)
 
   const load = useCallback(() => {
     fetchConnectors().then(setConnectors).catch(() => setConnectors([]))
     fetchEngineStatus().then(setEngine).catch(() => setEngine(null))
     fetchJobs(15).then(setJobs).catch(() => setJobs([]))
+    fetchConnectorWorks(12).then(setWorks).catch(() => setWorks([]))
     // Most-recently first-seen indicators = what just landed in the store.
     fetchIocs().then((r) =>
       setRecent([...r.items].sort((a, b) => (b.firstSeen ?? '').localeCompare(a.firstSeen ?? '')).slice(0, 25))
     ).catch(() => setRecent([]))
   }, [])
 
+  const importing = (works ?? []).some((w) => w.status === 'running')
   useEffect(() => {
     load()
-    const t = window.setInterval(load, 15000) // live: re-poll every 15s
+    // A live import moves thousands of indicators a second; polling it every 15s
+    // renders as a frozen bar. Tighten the loop only while one is in flight, so
+    // an idle dashboard still costs one request per 15s.
+    const t = window.setInterval(load, importing ? 2000 : 15000)
     return () => window.clearInterval(t)
-  }, [load])
+  }, [load, importing])
 
   const totalIndicators = (connectors ?? []).reduce((n, c) => n + c.indicatorCount, 0)
   // Import-centric health, all derived from real connector state.
@@ -141,7 +199,8 @@ export default function ImportsPage() {
     })
     return due.length ? Math.min(...due) : null
   })()
-  const q = engine?.queue
+  // Most recent finished run, for the "how much, how fast" tile.
+  const lastWork = (works ?? []).find((w) => w.status !== 'running' && w.processed > 0) ?? null
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0A0612]">
@@ -181,7 +240,10 @@ export default function ImportsPage() {
               sub: failedSources ? `${failedSources} failing` : 'all healthy',
               icon: Activity, color: failedSources ? 'text-threat' : 'text-safe' },
             { label: 'Last import', value: lastImportAt ? relTime(lastImportAt) : '—',
-              sub: lastImportAt ? 'most recent sync' : 'no sync yet', icon: Clock, color: 'text-violet' },
+              sub: lastWork
+                ? `${lastWork.processed.toLocaleString()} in ${durationOf(lastWork.startedAt, lastWork.updatedAt)}`
+                : (lastImportAt ? 'most recent sync' : 'no sync yet'),
+              icon: Clock, color: 'text-violet' },
             { label: 'Next sync in', value: nextSyncIn !== null ? `${nextSyncIn}s` : '—',
               sub: 'soonest connector cadence', icon: Gauge, color: 'text-teal' },
             { label: 'Total indicators', value: totalIndicators.toLocaleString(), sub: `${(connectors ?? []).length} sources`, icon: Zap, color: 'text-amber' },
@@ -220,6 +282,29 @@ export default function ImportsPage() {
             </div>
           )
         )}
+
+        {/* Live import pipeline. Each row is one run of one source, updated while
+            it is still going - so a big sync reads as "moving at 4,800/s", not as
+            an empty page that only fills in once it has finished. */}
+        <section>
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-xs text-ink-400 font-semibold uppercase tracking-wider">Import pipeline</h2>
+            {importing && (
+              <span className="flex items-center gap-1 text-[10px] text-violet">
+                <Loader2 className="w-3 h-3 animate-spin" /> live
+              </span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {works === null && <p className="text-xs text-ink-600 py-4 text-center animate-pulse">Loading pipeline…</p>}
+            {works?.length === 0 && (
+              <p className="text-xs text-ink-600 py-4 text-center">
+                No imports yet. Runs appear here the moment a source starts, with live counts and throughput.
+              </p>
+            )}
+            {works?.map((w) => <WorkRow key={w.id} w={w} />)}
+          </div>
+        </section>
 
         {/* Import sources */}
         <section>

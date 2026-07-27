@@ -1754,6 +1754,29 @@ export interface ConnectorRunResult {
 export const runConnector = (id: string) =>
   api<ConnectorRunResult>(`/connectors/${id}/run`, { method: 'POST' })
 
+/** A single import run, updated *while* it is in flight. Lets the UI show a
+ *  sync that is slow but healthy differently from one that is stuck. */
+export interface ConnectorWork {
+  id: string
+  connectorId: string | null
+  connector: string
+  status: 'running' | 'completed' | 'failed'
+  expected: number
+  processed: number
+  imported: number
+  duplicates: number
+  skipped: number
+  message: string | null
+  startedAt: string
+  updatedAt: string
+  /** Server-computed: processed/expected, or 100 once the work is closed. */
+  percent: number
+  /** Server-computed throughput; null before the first indicator is processed. */
+  ratePerSec: number | null
+}
+export const fetchConnectorWorks = (limit = 20) =>
+  api<ConnectorWork[]>(`/connectors/works?limit=${limit}`)
+
 // -- Companion services (Threat API + Log API, proxied server-side) ---
 export interface ServiceState { url: string; available: boolean; health: unknown }
 export interface ServicesStatus { threatApi: ServiceState; logApi: ServiceState; keyConfigured: boolean }

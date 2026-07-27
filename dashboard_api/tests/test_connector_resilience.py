@@ -1113,3 +1113,65 @@ def test_work_progress_failures_never_break_an_import(monkeypatch):
     monkeypatch.setattr(conn_mod, "get_conn", boom)
     conn_mod.update_work("some-id", processed=5)      # must not raise
     conn_mod.finish_work("some-id", "completed")      # must not raise
+
+def test_works_endpoint_puts_running_first_and_reports_measured_rate(client, auth):
+    """The pipeline view answers "is it moving, and how fast?".
+
+    Running works sort ahead of finished ones regardless of start time - during a
+    big sync the in-flight run is the only row an operator cares about, and a
+    plain recency sort buries it under whatever completed most recently."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:6]
+    older = conn_mod.start_work(f"finished-{tag}", None, 100)
+    conn_mod.finish_work(older, "completed", processed=100, imported=90)
+    live = conn_mod.start_work(f"inflight-{tag}", None, 400)
+    conn_mod.update_work(live, processed=100, imported=80)
+
+    try:
+        rows = client.get("/connectors/works?limit=50", headers=auth).json()
+        by_id = {w["id"]: w for w in rows}
+        assert live in by_id and older in by_id
+
+        ids = [w["id"] for w in rows]
+        assert ids.index(live) < ids.index(older), "in-flight work must sort first"
+
+        running = by_id[live]
+        assert running["status"] == "running"
+        assert running["percent"] == 25          # 100 of 400
+        assert running["ratePerSec"] > 0
+
+        # The rate is only a measurement if the timestamps resolve below one
+        # second. Whole-second timestamps collapsed start == update for any
+        # import faster than a second, and the elapsed-time floor then turned
+        # that divide-by-zero into a rate inflated by orders of magnitude.
+        with real_get_conn() as c:
+            r = c.execute("SELECT started_at, updated_at FROM connector_works WHERE id=?",
+                          (live,)).fetchone()
+        assert r["updated_at"] != r["started_at"], "work timestamps must be sub-second"
+
+        # A closed work reads 100% even though `expected` was never revised.
+        assert by_id[older]["percent"] == 100
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works WHERE id IN (?,?)", (older, live))
+            c.commit()
+
+
+def test_work_rate_is_null_rather_than_invented_when_nothing_processed(client, auth):
+    """A work that has not processed anything yet has no throughput. Reporting a
+    number there (by clamping the elapsed time to a floor) would manufacture a
+    measurement out of a division by ~zero."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    wid = conn_mod.start_work(f"idle-{uuid.uuid4().hex[:6]}", None, 500)
+    try:
+        rows = client.get("/connectors/works?limit=50", headers=auth).json()
+        w = next(x for x in rows if x["id"] == wid)
+        assert w["processed"] == 0
+        assert w["ratePerSec"] is None
+        assert w["percent"] == 0
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works WHERE id=?", (wid,))
+            c.commit()
