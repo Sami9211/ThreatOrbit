@@ -1,17 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plug, RefreshCw, Plus, X, Trash2, Play, Pause, CheckCircle,
   AlertTriangle, Loader2, Database, Pencil,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatEvery } from '@/lib/utils'
 import { usePermissions } from '@/lib/usePermissions'
 import {
   fetchConnectors, fetchConnectorKinds, createConnector, patchConnector,
-  deleteConnector, runConnector,
-  type Connector, type ConnectorKind,
+  deleteConnector, runConnector, fetchConnectorWorks,
+  type Connector, type ConnectorKind, type ConnectorWork,
 } from '@/lib/api'
 
 const STATUS_META: Record<string, { label: string; cls: string; dot: string }> = {
@@ -29,13 +29,6 @@ function relTime(iso: string | null): string {
   if (m < 60) return `${m}m ago`
   const h = Math.floor(m / 60)
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
-}
-
-/** Render a cadence in seconds as a compact, human label (45s / 5m / 2h). */
-function fmtEvery(secs: number): string {
-  if (!secs || secs < 60) return `${secs || 0}s`
-  if (secs < 3600) return secs % 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs / 60}m`
-  return secs % 3600 ? `${Math.floor(secs / 3600)}h ${Math.round((secs % 3600) / 60)}m` : `${secs / 3600}h`
 }
 
 /**
@@ -61,13 +54,37 @@ export default function ConnectorsPanel() {
   const canManage = can('connectors.manage')  // false until confirmed (open-closed)
   const adminOnly = 'Requires administrator privileges'
 
-  const load = () => {
-    fetchConnectors().then(setConnectors).catch(() => setUnavailable(true))
-  }
+  const [works, setWorks] = useState<ConnectorWork[]>([])
+
+  const load = useCallback(() => {
+    fetchConnectors()
+      .then((c) => { setConnectors(c); setUnavailable(false) })
+      .catch(() => setUnavailable(true))
+    fetchConnectorWorks(20).then(setWorks).catch(() => {})
+  }, [])
+
+  // Newest work per connector. The endpoint returns running works first, so the
+  // entry we keep is the in-flight run when there is one, else the last finished.
+  const workOf = useMemo(() => {
+    const m = new Map<string, ConnectorWork>()
+    for (const w of works) if (w.connectorId && !m.has(w.connectorId)) m.set(w.connectorId, w)
+    return m
+  }, [works])
+  const importing = works.some((w) => w.status === 'running')
+
   useEffect(() => {
-    load()
     fetchConnectorKinds().then(setKinds).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    load()
+    // Connectors sync on their own cadence. This panel used to load exactly once,
+    // so a background sync never appeared: the rows sat on a stale "Idle - last
+    // never" and automatic syncing looked broken even while it was working. Poll
+    // quickly while an import is in flight, slowly when nothing is happening.
+    const t = window.setInterval(load, importing ? 2000 : 15000)
+    return () => window.clearInterval(t)
+  }, [load, importing])
 
   function flash(text: string) {
     setMsg(text)
@@ -235,7 +252,9 @@ export default function ConnectorsPanel() {
           <p className="text-xs text-ink-600 py-4 text-center">No connectors yet - add one to start ingesting real data.</p>
         )}
         {connectors?.map((c) => {
-          const st = STATUS_META[c.status] ?? STATUS_META.idle
+          const w = workOf.get(c.id)
+          const live = w?.status === 'running'
+          const st = live ? STATUS_META.running : (STATUS_META[c.status] ?? STATUS_META.idle)
           return (
             <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/8 bg-surface">
               <div className="p-2 rounded-lg bg-violet/10 shrink-0"><Database className="w-4 h-4 text-violet" /></div>
@@ -248,9 +267,32 @@ export default function ConnectorsPanel() {
                   </span>
                 </div>
                 <p className="text-[10px] text-ink-600 mt-0.5 truncate">
-                  {c.kind} · {c.indicatorCount.toLocaleString()} indicators · every {fmtEvery(c.intervalSeconds || c.intervalMinutes * 60)} · last {relTime(c.lastRun)}
+                  {c.kind} · {c.indicatorCount.toLocaleString()} indicators · every {formatEvery(c.intervalSeconds || c.intervalMinutes * 60)} · last {relTime(c.lastRun)}
                   {c.lastError ? <span className="text-threat"> · {c.lastError.slice(0, 60)}</span> : ''}
                 </p>
+                {/* Live progress for a sync in flight, so a long import reads as
+                    working rather than as a row that has stopped changing. */}
+                {live && w && (
+                  <div className="mt-1.5">
+                    <div className="h-1 rounded-full bg-white/8 overflow-hidden">
+                      <div className="h-full rounded-full bg-violet transition-[width] duration-500"
+                        style={{ width: `${w.percent}%` }} />
+                    </div>
+                    <p className="text-[10px] text-violet mt-1 tabular-nums">
+                      {w.processed.toLocaleString()}{w.expected ? ` / ${w.expected.toLocaleString()}` : ''} processed
+                      {w.ratePerSec ? ` · ${w.ratePerSec.toLocaleString()}/s` : ''}
+                    </p>
+                  </div>
+                )}
+                {/* What the last completed run actually produced - the panel used
+                    to show only a timestamp, never an amount. */}
+                {!live && w && w.status === 'completed' && (
+                  <p className="text-[10px] text-ink-600 mt-0.5 tabular-nums">
+                    last run: <span className="text-safe">{w.imported.toLocaleString()} new</span>
+                    {w.duplicates > 0 && ` · ${w.duplicates.toLocaleString()} already known`}
+                    {w.ratePerSec ? ` · ${w.ratePerSec.toLocaleString()}/s` : ''}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button

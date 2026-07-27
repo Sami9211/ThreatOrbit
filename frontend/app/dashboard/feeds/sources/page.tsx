@@ -11,7 +11,7 @@ import {
   Radio, Plus, RefreshCw, XCircle, Link2,
   Clock, Tag, Activity, ShieldCheck, Pause, Play,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatEvery } from '@/lib/utils'
 
 type FeedType = 'OSINT' | 'Commercial' | 'Government' | 'Community'
 type FeedFormat = 'STIX 2.1' | 'MISP' | 'CSV' | 'JSON' | 'TAXII' | '-'
@@ -64,7 +64,7 @@ const apiFeedToRow = (f: ApiFeed): FeedSource => ({
   reliability: ((f.reliability?.toUpperCase() as Reliability) || '-'),
   enabled: f.enabled,
   url: f.url ?? '',
-  pullInterval: f.syncInterval ? `${Math.round(f.syncInterval / 60)}m` : '-',
+  pullInterval: formatEvery(f.syncInterval),
   status: f.status ?? 'unknown',
   provider: f.provider ?? f.name,
   description: f.description ?? '',
