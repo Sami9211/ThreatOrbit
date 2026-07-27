@@ -709,9 +709,11 @@ export default function FeedsPage() {
   // Download the live IOC store as CSV; fall back to the visible entries'
   // indicators when the API is unreachable.
   const [exporting, setExporting] = useState(false)
+  const [exportNote, setExportNote] = useState<string | null>(null)
   async function exportIocs() {
     if (exporting) return
     setExporting(true)
+    setExportNote(null)
     const download = (csv: string) => {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
       const url = URL.createObjectURL(blob)
@@ -723,16 +725,37 @@ export default function FeedsPage() {
     }
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     try {
-      const { items } = await fetchIocs({ limit: '1000' })
+      // Page through the store. This used to take a single limit=1000 request
+      // and hand back a file that looked complete: against a 310k-indicator
+      // store the analyst silently got 0.3% of it, with nothing in the CSV or
+      // the UI saying so. Bounded so the browser isn't asked to build a
+      // several-hundred-megabyte string in memory - and when the bound bites,
+      // it says exactly how much was written.
+      const PAGE = 1000
+      const MAX_ROWS = 100_000
+      const first = await fetchIocs({ limit: String(PAGE) })
+      const items = [...first.items]
+      const wanted = Math.min(first.total, MAX_ROWS)
+      while (items.length < wanted) {
+        const { items: page } = await fetchIocs({ limit: String(PAGE), offset: String(items.length) })
+        if (!page.length) break
+        items.push(...page)
+      }
       download([
         'type,value,severity,confidence,threat_type,actor,source,first_seen,last_seen',
         ...items.map((i) => [i.type, i.value, i.severity, i.confidence, i.threatType, i.actor, i.source, i.firstSeen, i.lastSeen].map(esc).join(',')),
       ].join('\n'))
+      setExportNote(items.length < first.total
+        ? `Exported the ${items.length.toLocaleString()} most recent of ${first.total.toLocaleString()} indicators (export is capped).`
+        : `Exported all ${items.length.toLocaleString()} indicators.`)
     } catch {
       const rows = [...confirmed, ...unconfirmed].flatMap((e) =>
         e.iocs.map((v) => [classifyIoc(v) ?? 'unknown', v, e.severity, e.aiConfidence, e.attackType, '', e.feedSources[0] ?? '', '', '']))
       download(['type,value,severity,confidence,threat_type,actor,source,first_seen,last_seen',
         ...rows.map((r) => r.map(esc).join(','))].join('\n'))
+      // Say which file they actually got: this fallback is the indicators
+      // visible on screen, not the store, and the two are very different sizes.
+      setExportNote(`API unreachable — exported the ${rows.length.toLocaleString()} indicators shown on this page, not the full store.`)
     } finally {
       setExporting(false)
     }
@@ -778,6 +801,9 @@ export default function FeedsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {exportNote && (
+            <span className="text-[10px] text-ink-500 max-w-[320px] text-right" role="status">{exportNote}</span>
+          )}
           <button
             onClick={exportIocs}
             disabled={exporting}
