@@ -480,6 +480,12 @@ export default function IocLifecyclePanel() {
                   ['Source', isSimulatedSource(detail.source)
                     ? `${detail.source} — SIMULATED, not real intel`
                     : (detail.source || '-')],
+                  // Provenance an analyst can act on: which campaign reported
+                  // this. Bulk blocklist entries honestly have none - saying so
+                  // is the point, because "no campaign" is real information.
+                  ['Reported in', detail.report?.title
+                    ? `${detail.report.title}${detail.report.tlp ? ` (TLP:${detail.report.tlp})` : ''}`
+                    : 'Bulk feed - no campaign context'],
                   ['First seen', relTime(detail.firstSeen)], ['Last seen', relTime(detail.lastSeen)],
                 ].map(([k, v]) => (
                   <div key={k} className="px-3 py-2 rounded-lg bg-surface-2/40 border border-white/5">

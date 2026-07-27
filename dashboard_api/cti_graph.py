@@ -56,16 +56,48 @@ def _full_graph(conn, *, actor_limit: int, ioc_limit: int) -> tuple[dict, list]:
         for s in _loads(a["sectors"]):
             link(aid, add_node(f"sector:{s}", label=s, group="sector", size=8), "targets")
 
+    # Intel REPORTS (imported pulses) are the campaign context that ties an
+    # indicator to an adversary. Without them the graph could only connect an
+    # indicator whose free-text `actor` string happened to match an actor row -
+    # so indicators from a pulse that names malware but no adversary, or whose
+    # attribution is recorded on the report, were simply invisible here.
+    reports = conn.execute(
+        "SELECT id, title, tlp, actors, malware_families, attack_ids "
+        "FROM intel_reports WHERE external_id IS NOT NULL "
+        "ORDER BY updated_at DESC LIMIT ?", (actor_limit,)).fetchall()
+    report_nodes: dict[str, str] = {}
+    for r in reports:
+        rid = add_node(f"report:{r['id']}", label=(r["title"] or "Intel report")[:60],
+                       group="report", level=r["tlp"], size=10)
+        report_nodes[r["id"]] = rid
+        # A report is attributed to its adversary, and documents malware/TTPs.
+        for name in _loads(r["actors"]):
+            aid = f"actor:{name}"
+            if aid not in nodes:
+                aid = add_node(aid, label=name, group="actor", level="medium", size=14)
+            link(rid, aid, "attributed to")
+        for m in _loads(r["malware_families"]):
+            link(rid, add_node(f"malware:{m}", label=m, group="malware", size=9), "documents")
+        for t in _loads(r["attack_ids"]):
+            link(rid, add_node(f"technique:{t}", label=t, group="technique", size=8), "documents")
+
     iocs = conn.execute(
-        "SELECT value, type, actor, severity FROM iocs WHERE actor != '' "
+        "SELECT value, type, actor, severity, report_id FROM iocs "
+        "WHERE actor != '' OR report_id IS NOT NULL "
         "ORDER BY CASE severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 "
         "WHEN 'medium' THEN 2 ELSE 1 END DESC LIMIT ?", (ioc_limit,)).fetchall()
     for i in iocs:
-        aid = f"actor:{i['actor']}"
+        aid = f"actor:{i['actor']}" if i["actor"] else None
+        rid = report_nodes.get(i["report_id"]) if i["report_id"] else None
+        if not (aid in nodes or rid):
+            continue                      # nothing to attach it to - skip, don't invent
+        iid = add_node(f"ioc:{i['value']}", label=i["value"], group="ioc",
+                       iocType=i["type"], level=i["severity"], size=6)
         if aid in nodes:
-            iid = add_node(f"ioc:{i['value']}", label=i["value"], group="ioc",
-                           iocType=i["type"], level=i["severity"], size=6)
             link(aid, iid, "indicates")
+        if rid:
+            # The pivot an analyst needs: indicator -> which pulse reported it.
+            link(rid, iid, "reported")
     return nodes, links
 
 

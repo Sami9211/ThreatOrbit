@@ -131,6 +131,23 @@ def list_iocs(type: str | None = None, severity: str | None = None,
     for ioc in rows_to_dicts(rows):
         items.append({**ioc, "effectiveConfidence": effective_confidence(
             ioc["confidence"], ioc["last_seen"], ioc["type"])})
+
+    # Attach the campaign context an indicator came from. A bare report_id UUID
+    # tells an analyst nothing; the pulse title/TLP is what makes the difference
+    # between "an IP from a feed" and "infrastructure from campaign X". One
+    # lookup for the whole page rather than a join over every row.
+    rids = {i.get("report_id") for i in items if i.get("report_id")}
+    if rids:
+        ph = ",".join("?" * len(rids))
+        with get_conn() as conn:
+            reps = conn.execute(
+                f"SELECT id, title, tlp, source FROM intel_reports WHERE id IN ({ph})",
+                tuple(rids)).fetchall()
+        by_id = {r["id"]: {"id": r["id"], "title": r["title"], "tlp": r["tlp"],
+                           "source": r["source"]} for r in reps}
+        for i in items:
+            if i.get("report_id") in by_id:
+                i["report"] = by_id[i["report_id"]]
     return {"total": total, "items": items}
 
 

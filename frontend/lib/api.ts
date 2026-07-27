@@ -363,6 +363,10 @@ export interface Ioc {
   status: 'active' | 'expired' | 'known-good'
   sightings: number
   effectiveConfidence: number
+  /** The intel report/pulse this indicator came from, when it has one.
+   *  Bulk blocklist entries legitimately have none. */
+  report?: { id: string; title: string; tlp: string; source: string | null }
+  reportId?: string | null
 }
 
 export interface IocLifecycle {

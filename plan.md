@@ -3639,3 +3639,26 @@ _Move completed items here with the date so the roadmap stays honest._
     semantics, no duplicate actor), `test_pulse_without_an_adversary_creates_no_actor`
     and `test_attack_coverage_surfaces_intel_driven_gaps`.
   • Verified: **628 backend tests pass, 1 skipped**; lint 0 errors, build clean.
+
+- **2026-07-26 · Relationship graph + honest provenance (pulse model, cont.).**
+  • **Intel reports are now graph nodes.** `cti_graph` previously joined an
+    indicator to an actor only when the indicator's free-text `actor` column
+    happened to match an actor row - so anything whose attribution lived on the
+    pulse was invisible. Reports now appear as nodes with edges
+    `report → actor (attributed to)`, `report → malware/technique (documents)`
+    and `report → indicator (reported)`, giving the pivot an analyst actually
+    performs: **value → which campaign → who is behind it → what they use.**
+    Indicators are included when they have *either* an actor or a report, and
+    are skipped when they have neither rather than being attached to something
+    invented.
+  • **Campaign context on the indicator itself.** `GET /cti/iocs` attaches the
+    originating pulse (`title`, `tlp`, `source`) via one lookup per page rather
+    than a per-row join, and the IOC detail shows **"Reported in"** - the pulse
+    title with its TLP, or an explicit *"Bulk feed - no campaign context"*.
+    That asymmetry is deliberate and honest: OTX pulses carry a campaign,
+    blocklist entries genuinely do not, and saying so is real information rather
+    than a gap to paper over.
+  • Fenced by `test_cti_graph_pivots_indicator_to_pulse_to_actor`, which asserts
+    an indicator with **no** actor string still reaches its adversary through the
+    report, and that the documents/attributed-to edges exist.
+  • Verified: **629 backend tests pass, 1 skipped**; lint 0 errors, build clean.

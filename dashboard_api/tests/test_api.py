@@ -4262,3 +4262,53 @@ def test_attack_coverage_surfaces_intel_driven_gaps(client, auth):
         with get_conn() as c:
             c.execute("DELETE FROM threat_actors WHERE name=?", (actor,))
             c.commit()
+
+
+def test_cti_graph_pivots_indicator_to_pulse_to_actor(client, auth):
+    """The pivot an analyst actually performs: value -> which campaign reported
+    it -> who is behind it -> what malware/techniques they use.
+
+    Before intel reports were nodes, an indicator could only join the graph if
+    its free-text `actor` column happened to match an actor row, so anything
+    whose attribution lived on the pulse was invisible.
+    """
+    import json as _json
+    import uuid as _uuid
+
+    from dashboard_api.db import get_conn
+
+    tag = _uuid.uuid4().hex[:6]
+    actor, rid, value = f"GraphActor-{tag}", str(_uuid.uuid4()), f"203.0.113.{tag[:2]}.test"
+    try:
+        with get_conn() as c:
+            c.execute(
+                "INSERT INTO intel_reports (id,title,tlp,status,summary,actors,iocs,tags,"
+                "author,created_at,updated_at,source,external_id,malware_families,attack_ids) "
+                "VALUES (?,?,'green','published','',?,'[]','[]','t',?,?,'otx',?,?,?)",
+                (rid, f"Campaign {tag}", _json.dumps([actor]), "2026-07-01", "2026-07-01",
+                 f"pulse-{tag}", _json.dumps(["PlugX"]), _json.dumps(["T1566"])))
+            # An indicator with NO actor string - only a report link.
+            c.execute(
+                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,"
+                "actor,first_seen,last_seen,tags,report_id) "
+                "VALUES (?,'domain',?,'c2',80,'high','otx','', ?,?,'[]',?)",
+                (str(_uuid.uuid4()), value, "2026-07-01", "2026-07-01", rid))
+            c.commit()
+
+        g = client.get("/cti/graph?limit=500", headers=auth).json()
+        ids = {n["id"] for n in g["nodes"]}
+        assert f"report:{rid}" in ids, "the pulse must be a node"
+        assert f"ioc:{value}" in ids, "an indicator with only a report link must appear"
+        assert f"actor:{actor}" in ids
+
+        edges = {(l["source"], l["target"], l["kind"]) for l in g["links"]}
+        assert (f"report:{rid}", f"ioc:{value}", "reported") in edges
+        assert (f"report:{rid}", f"actor:{actor}", "attributed to") in edges
+        assert (f"report:{rid}", "malware:PlugX", "documents") in edges
+        assert (f"report:{rid}", "technique:T1566", "documents") in edges
+    finally:
+        with get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE report_id=?", (rid,))
+            c.execute("DELETE FROM intel_reports WHERE id=?", (rid,))
+            c.execute("DELETE FROM threat_actors WHERE name=?", (actor,))
+            c.commit()
