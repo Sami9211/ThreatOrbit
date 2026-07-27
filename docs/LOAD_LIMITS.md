@@ -112,21 +112,21 @@ bounded sub-batches. Same host as above (4 vCPU · SQLite WAL):
 
 | Stage | Indicators | Seconds | Indicators/sec |
 |---|---:|---:|---:|
-| ioc import (all new, empty table) | 50,000 | 1.27 | **~39,000** |
+| ioc import (all new, empty table) | 50,000 | 1.40 | **~36,000** |
 
 Held under a growing table (loading 50k-at-a-time to 1,000,000 rows, every
 indicator normalised + dedup-checked + inserted):
 
 | IOC table size | Indicators/sec (all-new) | Indicators/sec (all-duplicate) |
 |---|---:|---:|
-| ~50k rows   | ~39,000 | — |
-| ~500k rows  | ~30,000 | — |
-| ~1,000,000 rows | ~23,000 | ~86,000 |
+| ~50k rows   | ~37,000 | ~124,000 |
+| ~500k rows  | ~21,000 | ~115,000 |
+| ~1,000,000 rows | ~17,000 | ~118,000 |
 
 **What this means:**
 
 1. **The engine already clears the OpenCTI/OTX reference band (1k–10k/s) by
-   2–23×, on plain SQLite, with every indicator filtered** — and stays above it
+   2–36×, on plain SQLite, with every indicator filtered** — and stays above it
    even at a million-row store (degradation is gentle B-tree index maintenance,
    not a cliff). This is the payoff of the batch redesign: the previous per-row
    `SELECT`+`INSERT` loop was O(N) database round trips (hundreds of
@@ -134,6 +134,19 @@ indicator normalised + dedup-checked + inserted):
    required to hit the target** — measured, not assumed. The Postgres backend
    remains an opt-in (`DASHBOARD_DB_BACKEND=postgres`) for deployments that need
    concurrent writers, not for single-node import speed.
+
+   These write numbers are ~30% below an earlier revision at scale (~23,000/s at
+   a million rows). That is a deliberate trade, not a regression to chase: the
+   CTI list had no index matching its browse order, so **reading** a large store
+   rebuilt a temp B-tree over every row on each page — ~1.6s per page at 310k
+   indicators, getting worse with every sync. Indexing that order costs write
+   throughput and buys ~40× on the read path (~33ms at the far end of 310k
+   rows). Only the default order is indexed, for the same reason: covering the
+   other sort options as well halved import throughput again, to ~10,000/s at a
+   million rows, for orderings nothing currently requests.
+
+   Re-syncs — the common case, since a feed is mostly the same indicators it
+   served last time — are unaffected at ~118,000/s.
 
 2. **Bounded memory + lock hold at any feed size.** `import_indicators` slices a
    pull into `DASHBOARD_IMPORT_BATCH` (default 10,000) sub-batches, so a

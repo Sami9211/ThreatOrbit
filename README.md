@@ -41,16 +41,24 @@ An ambitious, security-aware platform - **not a production-audited product.** Th
 honest framing (the strong parts stand on their own without inflating the rest):
 
 * **Single-node by default.** WAL-mode SQLite with an opt-in, staged Postgres
-  backend. Measured ~10k EPS ingest / ~7k EPS detection, and ~23-39k
-  indicators/sec feed import (filtered + deduped, even at a 1M-row store), on
-  4 vCPU ([`docs/LOAD_LIMITS.md`](docs/LOAD_LIMITS.md)); for higher sustained
-  load, move to Postgres / externalise the event store.
+  backend. Measured ~10k EPS ingest / ~7k EPS detection, and ~36k indicators/sec
+  feed import (filtered + deduped; ~17k/s once the store holds a million rows)
+  on 4 vCPU ([`docs/LOAD_LIMITS.md`](docs/LOAD_LIMITS.md)); for higher sustained
+  load, move to Postgres / externalise the event store. A full sync of the
+  bundled OSINT catalogue is ~315k indicators in about 13 seconds end to end,
+  and the CTI list stays interactive at that size (~14 ms first page, ~33 ms at
+  the far end of 310k rows).
 * **The ML layer is unsupervised outlier _ranking_ for triage**, not trained
   ground-truth detection - it surfaces the most unusual sources (corroborated by
   a concrete signal), it doesn't assert "this is an attack".
-* **OSINT is OTX + abuse.ch + a pluggable RSS layer.** The "dark-web" and
-  "social" feeds are RSS slots that are **empty by default** until you add
-  sources - extensible ingestion, not live dark-web/social collection.
+* **OSINT is a curated public-feed catalogue**, plus OTX/NVD/TAXII connectors
+  and a pluggable RSS layer. The bundled catalogue is ~16 keyless blocklists
+  (abuse.ch, blocklist.de, CINS, Emerging Threats, Tor, Phishing.Database,
+  Maltrail, Blocklist Project, FireHOL and others) covering domains, URLs and
+  IPs. It is aggregation of public sources - good, real, attributable coverage,
+  but not proprietary or first-party collection. The "dark-web" and "social"
+  feeds are RSS slots that are **empty by default** until you add sources -
+  extensible ingestion, not live dark-web/social collection.
 * **Enterprise features (SSO/SCIM/SAML, billing, multi-tenancy)** are implemented
   and tested but **exploratory / not independently security-audited** - no SOC 2
   or third-party pentest yet ([`docs/COMPLIANCE.md`](docs/COMPLIANCE.md),
@@ -288,9 +296,7 @@ IPs **with no API key**.
 ### The live processing engine (`dashboard_api/engine.py`)
 
 The Threat API above is the *external* intelligence engine. The dashboard also
-has its own **live processing engine** that makes every operational section
-flow with data **without any external connector or internet**. In live mode it
-runs on a background tick and is a real pipeline, stage by stage:
+has its own **live processing engine** - a real pipeline, stage by stage:
 
 ```
   environment telemetry        ← continuous, freshly generated each tick
@@ -319,10 +325,18 @@ matches all write into these same stores. The **only** seeded/generated input is
 *environment telemetry* - the raw auth/network/endpoint event stream a SIEM
 normally receives from your own infrastructure. That stream genuinely requires a
 deployment with log forwarding configured (see
-[§4a](#4a-real-data-vs-demo-mode) and the [FAQ](#faq)); until then the engine
-generates a representative stream so the detection/correlation/response pipeline
-has something real to act on. You can pause it, or click **Generate burst now**,
-from **Config → General → Live Processing Engine**.
+[§4a](#4a-real-data-vs-demo-mode) and the [FAQ](#faq)).
+
+**That generated stream is a demo facility, and live mode refuses it outright.**
+Under `DASHBOARD_DATA_MODE=live` (what `linux-start.sh` and the Docker
+production compose file use) telemetry generation is not merely paused - the
+generator itself declines to run, the API answers the burst endpoint with a
+409, and the UI hides the synthetic controls entirely. A live deployment shows
+an empty SIEM until real logs arrive, which is the correct state, and its
+indicators come only from connectors. In demo mode the same engine runs on a
+background tick, everything it writes is tagged `engine:*`, and the UI labels
+it **Simulated**; you can pause it or click **Generate burst now** from
+**Config → General → Live Processing Engine**.
 
 ### Each section's workflow - distinct by design
 

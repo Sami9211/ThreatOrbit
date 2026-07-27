@@ -1433,17 +1433,17 @@ def test_ioc_browse_order_is_index_driven_not_a_full_sort():
         pytest.skip("EXPLAIN QUERY PLAN is SQLite-specific")
     from dashboard_api.db import get_conn as real_get_conn
 
-    orders = ["last_seen DESC, id DESC", "first_seen DESC, id DESC",
-              "confidence DESC, id DESC"]
+    # Only the DEFAULT browse order is indexed - see the schema comment. The
+    # other sorts are unindexed on purpose, because each extra index halved bulk
+    # import throughput at a million rows.
     with real_get_conn() as c:
-        for order in orders:
-            plan = " ".join(
-                str(r[-1]) for r in
-                c.execute(f"EXPLAIN QUERY PLAN SELECT * FROM iocs "
-                          f"ORDER BY {order} LIMIT 100 OFFSET 500").fetchall())
-            assert "TEMP B-TREE" not in plan.upper(), (
-                f"ORDER BY {order} falls back to a full sort: {plan}")
-            assert "INDEX" in plan.upper(), f"ORDER BY {order} is unindexed: {plan}"
+        plan = " ".join(
+            str(r[-1]) for r in
+            c.execute("EXPLAIN QUERY PLAN SELECT * FROM iocs "
+                      "ORDER BY last_seen DESC, id DESC LIMIT 100 OFFSET 500").fetchall())
+        assert "TEMP B-TREE" not in plan.upper(), (
+            f"the default browse order falls back to a full sort: {plan}")
+        assert "INDEX" in plan.upper(), f"the default browse order is unindexed: {plan}"
 
         # The list's total for the severity+confidence filter must be answerable
         # from an index alone; without the composite it fetched every matching

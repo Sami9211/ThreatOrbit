@@ -751,18 +751,22 @@ CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(username);
 CREATE INDEX IF NOT EXISTS idx_iocs_value ON iocs(value);
 CREATE INDEX IF NOT EXISTS idx_iocs_status ON iocs(status);
 CREATE INDEX IF NOT EXISTS idx_iocs_actor ON iocs(actor);
--- Browse-order indexes. The CTI list pages with ORDER BY <sort>, id; without a
+-- Browse order. The CTI list pages with ORDER BY last_seen, id; without a
 -- matching index every request built a temp B-tree over the WHOLE table, so
--- paging a 310k-indicator store cost ~1.6s per page and got worse as feeds grew.
--- Indexed, the same query is served by an index walk (~20ms at the far end).
--- The id tie-breaker is part of the key so the index satisfies the full order.
+-- paging a 310k-indicator store cost ~1.6s per page and got worse with every
+-- sync. Indexed, the same query is an index walk (~30ms at the far end). The id
+-- tie-breaker is part of the key so the index satisfies the full order.
+--
+-- Only the default order is indexed, deliberately. The API also offers
+-- sort=first_seen/confidence/severity, but nothing requests them and each extra
+-- index is paid for on every insert: covering all of them halved bulk import
+-- throughput at a million rows (18k -> 10k indicators/sec). Those sorts fall
+-- back to a sort, which is fine for the filtered result sets they are used with.
 CREATE INDEX IF NOT EXISTS idx_iocs_last_seen ON iocs(last_seen DESC, id DESC);
-CREATE INDEX IF NOT EXISTS idx_iocs_first_seen ON iocs(first_seen DESC, id DESC);
-CREATE INDEX IF NOT EXISTS idx_iocs_confidence ON iocs(confidence DESC, id DESC);
--- Covering index for the list's total. Given only the sort indexes above, the
--- planner served `WHERE severity=? AND confidence>=?` from the confidence index
--- and then fetched a quarter-million rows just to test severity (365ms for a
--- COUNT). With both columns in one index the count is answered from the index
+-- Covering index for the list's total. Given only the ordering index, the
+-- planner answered `WHERE severity=? AND confidence>=?` from a non-covering
+-- index and fetched a quarter-million rows purely to re-check severity (365ms
+-- for one COUNT). With both columns in one index it is answered from the index
 -- alone (~10ms).
 CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
 CREATE INDEX IF NOT EXISTS idx_pbruns_alert ON playbook_runs(alert_id);
