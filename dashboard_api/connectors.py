@@ -309,6 +309,66 @@ _EXISTS_CHUNK = 900
 _IMPORT_BATCH = int(os.environ.get("DASHBOARD_IMPORT_BATCH", "10000"))
 
 
+def upsert_intel_reports(reports: list[dict], source: str) -> dict[str, str]:
+    """Persist pulse-shaped intel as REPORTS and return {external_id: report_id}.
+
+    This is the AlienVault/OpenCTI model: a pulse is a report carrying the
+    attribution (adversary, malware families), the TTPs (MITRE ATT&CK ids), the
+    targeting (industries, countries) and the source reporting (references).
+    Without this the platform stored a bare value and a feed name, and an analyst
+    had no way to ask what campaign an indicator belonged to.
+
+    Upserted on (source, external_id) so a re-synced pulse updates in place
+    instead of duplicating - pulses are revised upstream all the time.
+    """
+    if not reports:
+        return {}
+    now = _now()
+    ids: dict[str, str] = {}
+    with get_conn() as conn:
+        for r in reports:
+            ext = (r.get("external_id") or "").strip()
+            if not ext:
+                continue
+            row = conn.execute(
+                "SELECT id FROM intel_reports WHERE source=? AND external_id=?",
+                (source, ext)).fetchone()
+            fields = (
+                r.get("title") or "Untitled pulse",
+                (r.get("tlp") or "white").lower(),
+                r.get("summary") or "",
+                dumps([a for a in [r.get("adversary")] if a]),
+                dumps(list(r.get("tags") or [])),
+                r.get("author") or "",
+                dumps(list(r.get("references") or [])),
+                dumps(list(r.get("attack_ids") or [])),
+                dumps(list(r.get("malware_families") or [])),
+                dumps(list(r.get("targeted_countries") or [])),
+                dumps(list(r.get("industries") or [])),
+                now,
+            )
+            if row:
+                rid = row["id"]
+                conn.execute(
+                    "UPDATE intel_reports SET title=?, tlp=?, summary=?, actors=?, tags=?, "
+                    "author=?, source_refs=?, attack_ids=?, malware_families=?, "
+                    "targeted_countries=?, industries=?, updated_at=? WHERE id=?",
+                    (*fields, rid))
+            else:
+                rid = str(uuid.uuid4())
+                conn.execute(
+                    # source + external_id are the upsert key: without them a
+                    # re-synced pulse would insert a duplicate every cycle.
+                    "INSERT INTO intel_reports (id,title,tlp,summary,actors,tags,author,"
+                    "source_refs,attack_ids,malware_families,targeted_countries,industries,"
+                    "updated_at,status,body,iocs,created_at,source,external_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'published','','[]',?,?,?)",
+                    (rid, *fields, r.get("created") or now, source, ext))
+            ids[ext] = rid
+        conn.commit()
+    return ids
+
+
 def import_indicators(indicators: list[dict], source: str) -> dict:
     """Ingest an arbitrarily large feed in bounded sub-batches.
 
@@ -377,7 +437,9 @@ def _import(indicators: list[dict], source: str,
                     ind.get("threat_type") or "malicious-activity", conf, severity,
                     ind.get("source") or source, ind.get("actor") or "",
                     ind.get("first_seen") or now, ind.get("last_seen") or now,
-                    dumps(list(ind.get("tags") or []))),
+                    dumps(list(ind.get("tags") or [])),
+                    # Provenance: the pulse/report this indicator belongs to.
+                    ind.get("report_id")),
         })
 
     if not candidates:
@@ -404,7 +466,7 @@ def _import(indicators: list[dict], source: str,
         if new:
             conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,report_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 [c["row"] for c in new],
             )
             imported = len(new)
@@ -519,6 +581,7 @@ def _fetch_otx(c: dict) -> list[dict]:
     base = (c.get("url") or "https://otx.alienvault.com").rstrip("/")
     headers = {"X-OTX-API-KEY": c["api_key"]}
     out: list[dict] = []
+    reports: list[dict] = []
     # Page through the subscribed pulses (page increments against the fixed base -
     # not by following the API-supplied `next` URL, which would widen the SSRF
     # surface) until OTX signals no further page, the page cap, or the indicator
@@ -534,7 +597,37 @@ def _fetch_otx(c: dict) -> list[dict]:
             if not isinstance(pulse, dict):
                 continue
             name = pulse.get("name", "OTX pulse")
-            tags = list(pulse.get("tags") or [])[:5]
+            tags = list(pulse.get("tags") or [])[:8]
+            adversary = (pulse.get("adversary") or "").strip()
+            malware = [m for m in (pulse.get("malware_families") or []) if m]
+            # OTX returns attack_ids either as bare strings or as objects.
+            attack_ids = []
+            for a in (pulse.get("attack_ids") or []):
+                aid = a.get("id") if isinstance(a, dict) else a
+                if aid:
+                    attack_ids.append(str(aid))
+            refs = [r for r in (pulse.get("references") or []) if r]
+
+            # A pulse is a REPORT, not a bag of values. Emit it so the import
+            # can persist the attribution/TTPs and hang the indicators off it -
+            # this is the difference between "an IP from a feed" and intel an
+            # analyst can act on.
+            report = {
+                "external_id": pulse.get("id") or "",
+                "title": name,
+                "summary": (pulse.get("description") or "")[:4000],
+                "tlp": (pulse.get("TLP") or pulse.get("tlp") or "white").lower(),
+                "author": (pulse.get("author_name") or pulse.get("author", {}).get("username")
+                           if isinstance(pulse.get("author"), dict) else pulse.get("author_name")) or "",
+                "created": pulse.get("created"), "modified": pulse.get("modified"),
+                "tags": tags, "references": refs, "attack_ids": attack_ids,
+                "malware_families": malware, "adversary": adversary,
+                "targeted_countries": [c for c in (pulse.get("targeted_countries") or []) if c],
+                "industries": [i for i in (pulse.get("industries") or []) if i],
+                "source": "alienvault-otx",
+            }
+            reports.append(report)
+
             for ind in pulse.get("indicators", []):
                 if not isinstance(ind, dict):
                     continue
@@ -543,15 +636,22 @@ def _fetch_otx(c: dict) -> list[dict]:
                     continue
                 out.append({
                     "type": t, "value": ind.get("indicator"),
-                    "threat_type": name, "confidence": 70, "source": "alienvault-otx",
-                    "actor": (pulse.get("adversary") or ""), "tags": tags,
+                    # Threat type now carries real meaning, not just the pulse title.
+                    "threat_type": (malware[0] if malware else name),
+                    "confidence": 70, "source": "alienvault-otx",
+                    "actor": adversary, "tags": tags,
+                    "report_external_id": report["external_id"],
+                    "first_seen": ind.get("created") or pulse.get("created"),
                 })
                 if len(out) >= _OTX_MAX_INDICATORS:
+                    _fetch_otx.last_reports = reports
                     return out
         # Stop when the API reports no further page (guards against a server that
         # keeps returning the same page and would otherwise loop to the cap).
         if not (isinstance(data, dict) and data.get("next")):
             break
+    # Hand the pulse context to the import layer alongside the indicators.
+    _fetch_otx.last_reports = reports
     return out
 
 
@@ -997,6 +1097,17 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             from dashboard_api.darkweb_logic import import_findings
             result = import_findings(indicators, connector["name"])
         else:
+            # Pulse-shaped sources (OTX) hand back report context alongside the
+            # indicators. Persist the reports first so every indicator can carry
+            # its report_id - attribution and TTPs travel WITH the value.
+            pulses = getattr(fetch, "last_reports", None)
+            if pulses:
+                rid_by_ext = upsert_intel_reports(pulses, connector["kind"])
+                for ind in indicators:
+                    ext = ind.get("report_external_id")
+                    if ext and ext in rid_by_ext:
+                        ind["report_id"] = rid_by_ext[ext]
+                fetch.last_reports = None          # don't leak into the next run
             result = import_indicators(indicators, connector["name"])
         with get_conn() as conn:
             if connector["kind"] == "darkweb-json":

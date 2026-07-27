@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class SchemaVersionError(RuntimeError):
@@ -38,6 +38,7 @@ class SchemaVersionError(RuntimeError):
 
 # Columns that store JSON-encoded text and should be decoded on read.
 JSON_COLUMNS = {
+    "source_refs", "attack_ids", "malware_families", "targeted_countries", "industries",
     "tags", "open_ports", "cves", "steps", "actions", "aliases", "motivations",
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
@@ -819,6 +820,22 @@ _MIGRATIONS = [
     # validators per feed URL so a re-sync can ask "changed since last time?"
     # instead of re-downloading and re-parsing an identical list every cycle.
     ("connectors", "state", "TEXT NOT NULL DEFAULT '{}'"),
+    # Pulse-shaped intel import (the AlienVault OTX / OpenCTI model). An
+    # indicator is not a free-floating value: it belongs to a REPORT that carries
+    # the attribution and TTPs. Imports populate intel_reports and link each
+    # indicator back to it, so an analyst can answer "what campaign is this part
+    # of, who is behind it, which ATT&CK techniques, and where is the source
+    # reporting" instead of seeing a bare IP with a feed name.
+    ("intel_reports", "source", "TEXT"),              # otx | osint | misp | manual
+    ("intel_reports", "external_id", "TEXT"),         # upstream pulse id (upsert key)
+    # `references` is a reserved word in SQL - use an unambiguous name so no
+    # statement needs quoting on either backend.
+    ("intel_reports", "source_refs", "TEXT NOT NULL DEFAULT '[]'"),
+    ("intel_reports", "attack_ids", "TEXT NOT NULL DEFAULT '[]'"),
+    ("intel_reports", "malware_families", "TEXT NOT NULL DEFAULT '[]'"),
+    ("intel_reports", "targeted_countries", "TEXT NOT NULL DEFAULT '[]'"),
+    ("intel_reports", "industries", "TEXT NOT NULL DEFAULT '[]'"),
+    ("iocs", "report_id", "TEXT"),                    # the pulse/report it came from
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),

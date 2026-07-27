@@ -902,3 +902,87 @@ def test_retired_connector_kinds_still_run_but_are_hidden():
     assert "abusech" not in conn_mod.KIND_PRESETS
     assert "osint" in conn_mod._FETCHERS and "abusech" in conn_mod._FETCHERS
     assert "threatorbit" in conn_mod.KIND_PRESETS
+
+
+def test_otx_pulse_becomes_a_report_with_attribution_and_ttps(monkeypatch):
+    """The AlienVault model: a pulse is a REPORT, and indicators belong to it.
+
+    OTX is not "some public source" - its unit of intelligence carries the
+    adversary, malware families, MITRE ATT&CK techniques, targeting and the
+    source reporting. Importing only the bare values (what this platform used to
+    do) throws away everything that makes the intel actionable: an analyst could
+    not ask what campaign an IP belonged to, who is behind it, or where the
+    reporting came from.
+    """
+    pulse = {
+        "id": "pulse-abc123",
+        "name": "APT-X spearphishing infrastructure",
+        "description": "Infrastructure used in a 2026 campaign.",
+        "TLP": "green",
+        "author_name": "researcher1",
+        "created": "2026-07-01T10:00:00",
+        "modified": "2026-07-20T10:00:00",
+        "adversary": "APT-X",
+        "malware_families": ["PlugX", "ShadowPad"],
+        "attack_ids": [{"id": "T1566"}, "T1071"],       # OTX mixes both shapes
+        "references": ["https://vendor.example/report-apt-x"],
+        "targeted_countries": ["Germany"],
+        "industries": ["Energy"],
+        "tags": ["apt", "spearphishing"],
+        "indicators": [
+            {"type": "IPv4", "indicator": "203.0.113.44", "created": "2026-07-01T10:00:00"},
+            {"type": "domain", "indicator": "apt-x-c2.example"},
+        ],
+    }
+
+    class _R:
+        def json(self): return {"results": [pulse], "next": None}
+
+    monkeypatch.setattr(conn_mod, "_http_get", lambda url, **kw: _R())
+    indicators = conn_mod._fetch_otx({"api_key": "k"})
+
+    # The pulse context is emitted, not discarded.
+    reports = conn_mod._fetch_otx.last_reports
+    assert len(reports) == 1
+    r = reports[0]
+    assert r["external_id"] == "pulse-abc123" and r["tlp"] == "green"
+    assert r["adversary"] == "APT-X"
+    assert r["malware_families"] == ["PlugX", "ShadowPad"]
+    assert sorted(r["attack_ids"]) == ["T1071", "T1566"]      # both shapes normalised
+    assert r["references"] == ["https://vendor.example/report-apt-x"]
+    assert r["targeted_countries"] == ["Germany"] and r["industries"] == ["Energy"]
+
+    # Indicators carry attribution and point back at their pulse.
+    assert {i["value"] for i in indicators} == {"203.0.113.44", "apt-x-c2.example"}
+    assert all(i["actor"] == "APT-X" for i in indicators)
+    assert all(i["report_external_id"] == "pulse-abc123" for i in indicators)
+
+    # And the report actually persists, with the indicators linked to it.
+    from dashboard_api.db import get_conn as real_get_conn
+    ids = conn_mod.upsert_intel_reports(reports, "otx")
+    rid = ids["pulse-abc123"]
+    try:
+        for i in indicators:
+            i["report_id"] = rid
+        res = conn_mod.import_indicators(indicators, "otx-test")
+        assert res["imported"] == 2, res
+        with real_get_conn() as c:
+            row = c.execute("SELECT * FROM intel_reports WHERE id=?", (rid,)).fetchone()
+            assert row["tlp"] == "green" and "APT-X" in row["actors"]
+            assert "T1566" in row["attack_ids"] and "PlugX" in row["malware_families"]
+            assert "vendor.example" in row["source_refs"]
+            linked = c.execute("SELECT COUNT(*) AS n FROM iocs WHERE report_id=?", (rid,)).fetchone()["n"]
+            assert linked == 2, "indicators must be linked back to their pulse"
+
+        # Re-syncing the same pulse UPDATES it (pulses are revised upstream).
+        reports[0]["title"] = "APT-X spearphishing infrastructure (rev 2)"
+        again = conn_mod.upsert_intel_reports(reports, "otx")
+        assert again["pulse-abc123"] == rid, "a revised pulse must not duplicate"
+        with real_get_conn() as c:
+            assert "rev 2" in c.execute(
+                "SELECT title FROM intel_reports WHERE id=?", (rid,)).fetchone()["title"]
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE report_id=?", (rid,))
+            c.execute("DELETE FROM intel_reports WHERE id=?", (rid,))
+            c.commit()

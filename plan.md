@@ -3588,3 +3588,32 @@ _Move completed items here with the date so the roadmap stays honest._
     companion DOWN; adds companion data when UP) and
     `test_retired_connector_kinds_still_run_but_are_hidden`.
   • Verified: **624 backend tests pass, 1 skipped.**
+
+- **2026-07-26 · Pulse-shaped intel: adopt the AlienVault/OpenCTI data model.**
+  Studied how OTX actually works before writing code (OTX DirectConnect + the
+  OpenCTI `external-import/alienvault` connector). The finding that mattered:
+  **OTX is context-first, not indicator-first.** Its unit is a **Pulse** - a
+  report carrying `adversary`, `malware_families`, `attack_ids` (MITRE),
+  `references`, `TLP`, `industries`, `targeted_countries`, with indicators
+  *belonging to it*. OpenCTI maps that to Report / Intrusion Set / Malware /
+  Attack Pattern / Sector / Location plus relationships.
+  ThreatOrbit was importing **orphaned values**: `intel_reports` existed but no
+  import ever wrote to it, and `iocs` had no link to any report. So an analyst
+  saw "an IP from a feed" and could not ask what campaign it belonged to, who is
+  behind it, which techniques it maps to, or where the reporting came from.
+  • **Schema v8:** `intel_reports` gains `source`, `external_id`, `source_refs`,
+    `attack_ids`, `malware_families`, `targeted_countries`, `industries`;
+    `iocs` gains `report_id`. (`references` is a SQL reserved word - the column
+    is `source_refs` so no statement needs quoting on either backend.)
+  • **`_fetch_otx` now emits the full pulse**, normalising `attack_ids` whether
+    OTX returns bare strings or objects, and tagging each indicator with its
+    `report_external_id` + adversary.
+  • **`upsert_intel_reports()`** persists pulses, **upserted on
+    (source, external_id)** so a revised pulse updates in place instead of
+    duplicating each sync; `run_connector` maps indicators onto the resulting
+    `report_id` before import.
+  • Fenced by `test_otx_pulse_becomes_a_report_with_attribution_and_ttps`, which
+    asserts the whole chain end to end - and **caught a real bug**: the INSERT
+    omitted `source`/`external_id`, so the upsert key was never stored and every
+    re-sync duplicated the report.
+  • Verified: **625 backend tests pass, 1 skipped.**
