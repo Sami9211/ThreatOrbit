@@ -51,12 +51,15 @@ class _CappedResponse:
     """A minimal response wrapper exposing the `.json()` / `.text` the fetchers
     use, over a body already read under the size cap."""
 
-    def __init__(self, content: bytes, not_modified: bool = False, headers: dict | None = None):
+    def __init__(self, content: bytes, not_modified: bool = False, headers: dict | None = None,
+                 truncated: bool = False):
         self._content = content
         # True when the server answered 304 to our If-None-Match/If-Modified-Since:
         # the feed is byte-identical to the last sync, so there is nothing to parse.
         self.not_modified = not_modified
         self.headers = headers or {}
+        # True when we deliberately stopped reading early (see `truncate_at`).
+        self.truncated = truncated
 
     @property
     def text(self) -> str:
@@ -66,9 +69,19 @@ class _CappedResponse:
         return json.loads(self._content)
 
 
-def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
+def _read_capped(method: str, url: str, *, truncate_at: int | None = None,
+                 **kwargs) -> _CappedResponse:
     """Fetch with a streamed, size-bounded body read, re-validating the SSRF
     guard on every redirect hop.
+
+    `truncate_at` opts into stopping early and keeping what arrived, instead of
+    refusing the response. Curated bulk blocklists are the case for it: some run
+    to tens of megabytes while we only ever keep the first
+    `DASHBOARD_BULK_MAX_PER_FEED` entries, so downloading the remainder buys
+    nothing and a hard cap would reject the whole feed over bytes we intended to
+    discard. It is opt-in precisely because it must NOT apply to operator-supplied
+    feeds, where silently importing a prefix of a malformed multi-GB response is
+    worse than failing loudly.
 
     `httpx.stream(..., follow_redirects=True)` used to chase a `Location`
     header entirely inside httpx, with zero visibility to our SSRF guard: a
@@ -106,14 +119,24 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
             r.raise_for_status()                    # status is known before the body
             chunks: list[bytes] = []
             total = 0
+            truncated = False
             for chunk in r.iter_bytes():
                 total += len(chunk)
+                if truncate_at is not None and total >= truncate_at:
+                    chunks.append(chunk)
+                    truncated = True
+                    break                           # stop the transfer; we have enough
                 if total > _MAX_FEED_BYTES:
                     raise ValueError(
                         f"feed response exceeds {_MAX_FEED_BYTES} bytes - refusing to buffer")
                 chunks.append(chunk)
+            body = b"".join(chunks)
+            if truncated:
+                # The cut lands mid-line. Drop the trailing fragment rather than
+                # importing half an indicator as if it were a whole one.
+                body = body[:body.rfind(b"\n") + 1] if b"\n" in body else b""
             return _CappedResponse(
-                b"".join(chunks),
+                body, truncated=truncated,
                 headers={k.lower(): v for k, v in r.headers.items()
                          if k.lower() in ("etag", "last-modified")})
     raise ValueError(f"too many redirects (> {_MAX_REDIRECTS})")
@@ -245,7 +268,8 @@ def validate_feed_url(url: str) -> None:
     validate_external_url(url, allow_private=True if _is_companion(url) else None)
 
 
-def _http_get(url: str, headers: dict | None = None, params: dict | None = None):
+def _http_get(url: str, headers: dict | None = None, params: dict | None = None,
+              truncate_at: int | None = None):
     # Re-validate at SEND time (not just when the connector was registered) so a
     # name can't rebind to an internal IP between configuration and fetch.
     # Redirects stay enabled here: feed URLs legitimately redirect (http→https,
@@ -255,7 +279,8 @@ def _http_get(url: str, headers: dict | None = None, params: dict | None = None)
     # Streamed, size-capped read: a hostile/buggy feed can't OOM us with a
     # multi-GB body (the `limit` params we send are advisory, ignored by a
     # hostile server), and `run_connector` records the ValueError as last_error.
-    return _read_capped("GET", url, headers=headers or {}, params=params or {})
+    return _read_capped("GET", url, headers=headers or {}, params=params or {},
+                        truncate_at=truncate_at)
 
 
 def _http_post(url: str, headers: dict | None = None, json_body: dict | None = None):
@@ -1098,7 +1123,47 @@ def _p_urlhaus(text: str) -> list[tuple[str, str]]:
     return out
 
 
-_BULK_PARSERS = {"iplist": _p_iplist, "threatfox": _p_threatfox, "urlhaus": _p_urlhaus}
+def _p_hosts(text: str) -> list[tuple[str, str]]:
+    """Hosts-file format: `0.0.0.0 evil.example`. The sinkhole address in column
+    one is not the indicator - the domain in column two is. Parsing these with
+    the plain list parser would have imported 400k copies of `0.0.0.0`."""
+    out = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s[0] in "#;":
+            continue
+        parts = s.split()
+        if len(parts) < 2:
+            continue
+        host = parts[1].strip().rstrip(".")
+        # Every hosts file starts with real loopback entries; they are not IOCs.
+        if not host or host in ("localhost", "localhost.localdomain", "broadcasthost",
+                                "local", "ip6-localhost", "ip6-loopback"):
+            continue
+        out.append((host, ""))
+        if len(out) >= _BULK_MAX_PER_FEED:
+            break
+    return out
+
+
+def _p_netset(text: str) -> list[tuple[str, str]]:
+    """FireHOL-style netsets: single addresses mixed with CIDR ranges. Only the
+    single addresses are kept - the IOC store matches exact values, so importing
+    `1.2.3.0/24` as a literal string would never match anything and would report
+    a coverage this platform does not actually have."""
+    out = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s[0] in "#;" or "/" in s:
+            continue
+        out.append((s.split()[0], ""))
+        if len(out) >= _BULK_MAX_PER_FEED:
+            break
+    return out
+
+
+_BULK_PARSERS = {"iplist": _p_iplist, "threatfox": _p_threatfox, "urlhaus": _p_urlhaus,
+                 "hosts": _p_hosts, "netset": _p_netset}
 
 # name, url, parser, forced type (None = auto-detect), confidence, threat_type
 _BULK_FEEDS = [
@@ -1116,20 +1181,65 @@ _BULK_FEEDS = [
      "iplist", "ip", 75, "compromised-host"),
     ("Tor exit nodes", "https://check.torproject.org/torbulkexitlist",
      "iplist", "ip", 40, "anonymiser"),
+    # -- Domain / URL / phishing coverage ------------------------------------
+    # The list above is almost entirely IPs, which left the CTI store unable to
+    # answer the question an L1 analyst asks most often: "is this domain or link
+    # in a proxy log known-bad?". These add that side, and are the bulk of the
+    # volume - the previous catalogue topped out around 24k indicators a sync.
+    ("Phishing.Database (active domains)",
+     "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt",
+     "iplist", None, 80, "phishing"),
+    ("Phishing.Database (active links)",
+     "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-links-ACTIVE.txt",
+     "iplist", "url", 80, "phishing"),
+    ("Maltrail malware domains",
+     "https://raw.githubusercontent.com/stamparm/aux/master/maltrail-malware-domains.txt",
+     "iplist", None, 75, "malware-distribution"),
+    ("Blocklist Project (ransomware)",
+     "https://raw.githubusercontent.com/blocklistproject/Lists/master/ransomware.txt",
+     "hosts", None, 80, "ransomware"),
+    ("Blocklist Project (phishing)",
+     "https://raw.githubusercontent.com/blocklistproject/Lists/master/phishing.txt",
+     "hosts", None, 70, "phishing"),
+    ("Blocklist Project (scam)",
+     "https://raw.githubusercontent.com/blocklistproject/Lists/master/scam.txt",
+     "hosts", None, 60, "scam"),
+    ("Marcoux malicious IPs",
+     "https://raw.githubusercontent.com/romainmarcoux/malicious-ip/main/full-40k.txt",
+     "iplist", "ip", 70, "attack-source"),
+    ("Marcoux malicious domains",
+     "https://raw.githubusercontent.com/romainmarcoux/malicious-domains/main/full-domains-aa.txt",
+     "iplist", None, 65, "malware-distribution"),
+    ("FireHOL level2",
+     "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level2.netset",
+     "netset", "ip", 70, "attack-source"),
 ]
+# Deliberately NOT included: the undifferentiated multi-million-entry hosts
+# aggregations (e.g. Blocklist Project's `malware`/`abuse` lists). They exceed
+# the per-feed cap several times over, so we would import whatever happens to
+# sort first alphabetically - a biased sample rather than a representative one -
+# and their contents are broad enough that the extra rows would mostly add noise
+# to analyst lookups. Volume is only worth having when it is volume of signal.
 
 # Per-feed cap keeps one huge list from dominating a sync (and bounds memory);
 # raise DASHBOARD_BULK_MAX_PER_FEED for a fuller pull.
 _BULK_MAX_PER_FEED = int(os.environ.get("DASHBOARD_BULK_MAX_PER_FEED", "50000"))
-_BULK_WORKERS = int(os.environ.get("DASHBOARD_BULK_WORKERS", "6"))
+_BULK_WORKERS = int(os.environ.get("DASHBOARD_BULK_WORKERS", "8"))
+# Stop downloading a curated blocklist once we have comfortably more bytes than
+# the per-feed entry cap can use. Several of these feeds run to tens of MB while
+# we keep only the first _BULK_MAX_PER_FEED entries, so reading the rest costs
+# bandwidth and time for rows that are discarded on arrival. ~120 bytes/entry is
+# a generous allowance for the widest of these formats (a full phishing URL).
+_BULK_FEED_MAX_BYTES = int(os.environ.get(
+    "DASHBOARD_BULK_FEED_MAX_BYTES", str(max(4 * 1024 * 1024, _BULK_MAX_PER_FEED * 120))))
 
 
 def _fetch_bulk_osint(c: dict) -> list[dict]:
     """Pull every curated public blocklist in parallel and normalise the lot.
 
-    Parallel because these are network-bound: fetched serially a seven-feed sync
-    would take as long as the slowest chain, while the DB side ingests them at
-    tens of thousands per second."""
+    Parallel because these are network-bound: fetched serially the sync would
+    take as long as the sum of every chain, while the DB side ingests the lot at
+    tens of thousands per second. The network is the only real cost here."""
     from concurrent.futures import ThreadPoolExecutor
 
     # OpenCTI keeps a per-connector "state" so a re-run doesn't re-ingest what it
@@ -1156,7 +1266,7 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
         if prev.get("last_modified"):
             cond["If-Modified-Since"] = prev["last_modified"]
         try:
-            resp = _http_get(url, headers=cond or None)
+            resp = _http_get(url, headers=cond or None, truncate_at=_BULK_FEED_MAX_BYTES)
             if getattr(resp, "not_modified", False):
                 new_state[url] = prev            # keep the validator; feed unchanged
                 unchanged.append(name)

@@ -1268,3 +1268,81 @@ def test_a_one_second_cadence_is_stored_and_honoured(monkeypatch):
     finally:
         with real_get_conn() as c:
             c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
+
+# -- Bulk feed parsers: format mistakes here silently poison the IOC store ------
+
+def test_hosts_parser_takes_the_domain_not_the_sinkhole_address():
+    """Hosts-file feeds are `0.0.0.0 evil.example`. Reading column one (as the
+    plain-list parser does) would import tens of thousands of identical
+    `0.0.0.0` rows and none of the domains that are the actual indicators."""
+    text = ("# comment\n"
+            "0.0.0.0 localhost\n"
+            "0.0.0.0 evil.example\n"
+            "127.0.0.1 phish.test\n"
+            "0.0.0.0 trailing-dot.example.\n"
+            "\n"
+            "malformed-single-column\n")
+    values = [v for v, _ in conn_mod._p_hosts(text)]
+    assert values == ["evil.example", "phish.test", "trailing-dot.example"]
+    assert "0.0.0.0" not in values and "localhost" not in values
+
+
+def test_netset_parser_drops_cidr_ranges_it_cannot_match_on():
+    """The IOC store matches exact values, so a CIDR string would never match a
+    real observation. Importing it anyway would inflate the indicator count with
+    rows that claim coverage the platform does not have."""
+    pairs = conn_mod._p_netset("# hdr\n1.2.3.0/24\n8.8.8.8\n10.0.0.0/8\n9.9.9.9 note\n")
+    assert [v for v, _ in pairs] == ["8.8.8.8", "9.9.9.9"]
+
+
+def test_bulk_read_truncates_on_a_line_boundary_and_never_splits_a_value(monkeypatch):
+    """Curated blocklists run to tens of MB while we keep only the first N
+    entries, so the read stops early. Cutting mid-line would import half an
+    indicator as though it were whole - the tail fragment must be dropped."""
+    body = b"".join(b"evil%d.example\n" % i for i in range(4000))   # ~60 KB
+    monkeypatch.setattr(conn_mod.httpx, "stream",
+                        lambda *a, **k: _FakeStream([body[i:i + 1024]
+                                                     for i in range(0, len(body), 1024)]))
+    resp = conn_mod._read_capped("GET", "https://feed.invalid/big", truncate_at=8192)
+    assert resp.truncated is True
+    assert resp.text.endswith("\n"), "truncated body must end on a line boundary"
+    lines = resp.text.splitlines()
+    assert 0 < len(lines) < 4000, "expected an early stop, not the whole feed"
+    # Every retained line is a complete, parseable value.
+    assert all(le.startswith("evil") and le.endswith(".example") for le in lines)
+
+
+def test_truncation_is_opt_in_so_operator_feeds_still_fail_loudly(monkeypatch):
+    """The size cap is a DoS guard for operator-supplied feeds. Silently
+    importing a prefix of a hostile multi-GB response would defeat it, so a read
+    without an explicit truncate_at must still refuse."""
+    monkeypatch.setattr(conn_mod, "_MAX_FEED_BYTES", 2048)
+    monkeypatch.setattr(conn_mod.httpx, "stream",
+                        lambda *a, **k: _FakeStream([b"y" * 4096]))
+    with pytest.raises(ValueError, match="exceeds"):
+        conn_mod._read_capped("GET", "https://feed.invalid/flood")
+
+
+def test_bulk_catalogue_is_well_formed_and_covers_more_than_ip_addresses():
+    """A malformed tuple here fails at fetch time, on a background thread, for
+    one feed only - the kind of breakage that shows up as a quietly smaller
+    sync. Also pins the type coverage: an IP-only catalogue cannot answer "is
+    this domain in my proxy log known-bad?", which is the L1 question."""
+    seen_urls = set()
+    for entry in conn_mod._BULK_FEEDS:
+        assert len(entry) == 6, f"malformed feed entry: {entry}"
+        name, url, parser, forced, conf, threat = entry
+        assert name and threat, entry
+        assert url.startswith("https://"), f"{name} must be fetched over TLS"
+        assert url not in seen_urls, f"{name} duplicates an existing feed URL"
+        seen_urls.add(url)
+        assert parser in conn_mod._BULK_PARSERS, f"{name} uses unknown parser {parser!r}"
+        assert forced is None or forced in conn_mod._IOC_TYPES, f"{name}: bad type {forced!r}"
+        assert 0 < conf <= 100, f"{name}: confidence {conf} out of range"
+
+    # Forced-type feeds plus auto-detecting ones must between them cover more
+    # than addresses; the catalogue was once entirely IP blocklists.
+    forced_types = {e[3] for e in conn_mod._BULK_FEEDS if e[3]}
+    assert {"url"} <= forced_types
+    assert any(e[3] is None for e in conn_mod._BULK_FEEDS), "no domain-bearing feeds"
+    assert len(conn_mod._BULK_FEEDS) >= 12
