@@ -1346,3 +1346,76 @@ def test_bulk_catalogue_is_well_formed_and_covers_more_than_ip_addresses():
     assert {"url"} <= forced_types
     assert any(e[3] is None for e in conn_mod._BULK_FEEDS), "no domain-bearing feeds"
     assert len(conn_mod._BULK_FEEDS) >= 12
+
+def test_aggregating_connector_reports_a_real_running_total(monkeypatch):
+    """An aggregating connector records each indicator under its ORIGINATING
+    feed, so the connector's own name appears in no source string. Counting by
+    `source LIKE '%name%'` therefore reported 0 for the bundled engine no matter
+    how much it imported."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:8]
+    feed = [{"type": "ip", "value": "203.0.113.90", "source": f"osint:Some Feed {tag}"},
+            {"type": "domain", "value": f"agg-{tag}.test", "source": f"osint:Other Feed {tag}"}]
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", lambda c: list(feed))
+
+    cid = f"agg-{tag}"
+    name = f"Aggregating Engine {tag}"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','idle',0,?)",
+            (cid, name, "json", "https://example.test/feed", conn_mod._now()))
+        c.commit()
+        row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+    try:
+        res = conn_mod.run_connector(row, actor="tester")
+        assert res["imported"] == 2, res
+        assert res["connectorTotal"] == 2, (
+            f"aggregating connector reported a total of {res['connectorTotal']}")
+
+        # A second run adds nothing new, and the running total stays truthful.
+        with real_get_conn() as c:
+            row2 = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+        res2 = conn_mod.run_connector(row2, actor="tester")
+        assert res2["imported"] == 0 and res2["duplicates"] == 2
+        assert res2["connectorTotal"] == 2
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source LIKE ?", (f"%{tag}%",))
+            c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
+            c.execute("DELETE FROM connector_works WHERE connector_id=?", (cid,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_connector_name_with_sql_wildcards_does_not_skew_its_total(monkeypatch):
+    """`%` and `_` are LIKE wildcards. A connector named "%" matched every
+    source in the store and reported the entire IOC table as its own total."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:8]
+    monkeypatch.setitem(conn_mod._FETCHERS, "json",
+                        lambda c: [{"type": "ip", "value": "203.0.113.91"}])
+    cid, name = f"wild-{tag}", f"%_{tag}"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','idle',0,?)",
+            (cid, name, "json", "https://example.test/feed", conn_mod._now()))
+        c.commit()
+        row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+        everything = c.execute("SELECT COUNT(*) AS n FROM iocs").fetchone()["n"]
+    try:
+        res = conn_mod.run_connector(row, actor="tester")
+        assert res["connectorTotal"] <= 1, "a wildcard name claimed other sources' indicators"
+        assert res["connectorTotal"] != everything or everything <= 1
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source=?", (name,))
+            c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
+            c.execute("DELETE FROM connector_works WHERE connector_id=?", (cid,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()

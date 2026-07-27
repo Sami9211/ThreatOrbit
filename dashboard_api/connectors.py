@@ -1365,15 +1365,6 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
                 finish_work(work_id, "failed", "import failed")
                 raise
         with get_conn() as conn:
-            if connector["kind"] == "darkweb-json":
-                total_count = conn.execute(
-                    "SELECT COUNT(*) AS n FROM dark_web_findings WHERE source=?",
-                    (connector["name"],)).fetchone()["n"]
-            else:
-                total_count = conn.execute(
-                    "SELECT COUNT(*) AS n FROM iocs WHERE source LIKE ?",
-                    (f"%{connector['name']}%",),
-                ).fetchone()["n"]
             # Persist the connector's state (HTTP validators) so the NEXT run can
             # ask "changed?" instead of re-downloading everything.
             new_state = getattr(fetch, "last_state", None)
@@ -1401,6 +1392,24 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
             audit(conn, actor, "connector.run", cid,
                   f"kind={connector['kind']} imported={result['imported']}")
             conn.commit()
+            # Running total for this connector, read back after the update.
+            #
+            # This used to count `iocs WHERE source LIKE '%<connector name>%'`,
+            # which reported 0 for every aggregating connector: the bundled
+            # engine records each indicator under its originating feed
+            # (`osint:Maltrail malware domains`), so the connector's own name
+            # appears in no source string - a sync of 310,788 indicators
+            # reported a total of zero. The pattern was also unsafe as a
+            # match: `%` and `_` in a connector name are LIKE wildcards, and a
+            # short name matched any source that merely contained it.
+            if connector["kind"] == "darkweb-json":
+                total_count = conn.execute(
+                    "SELECT COUNT(*) AS n FROM dark_web_findings WHERE source=?",
+                    (connector["name"],)).fetchone()["n"]
+            else:
+                row = conn.execute("SELECT indicator_count FROM connectors WHERE id=?",
+                                   (cid,)).fetchone()
+                total_count = (row["indicator_count"] if row else 0) or 0
         result["connectorTotal"] = total_count
         return result
     except Exception as e:  # network/parse/auth failure - record, never crash

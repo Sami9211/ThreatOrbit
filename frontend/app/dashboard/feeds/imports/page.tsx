@@ -93,7 +93,7 @@ function SourceRow({ c, canManage, onChanged }: {
           {c.lastError ? <span className="text-threat" title={c.lastError}> · {c.lastError}</span> : ''}
         </p>
       </div>
-      {/* Burst-delay control: each source's own auto-import cadence (minutes) */}
+      {/* Each source's own auto-import cadence, in seconds (sub-minute allowed) */}
       <div className="flex items-center gap-1.5 shrink-0">
         <label className="text-[10px] text-ink-500">every</label>
         <input type="number" min={1} value={interval} disabled={!canManage}
