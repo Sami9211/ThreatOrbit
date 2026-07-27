@@ -1659,3 +1659,30 @@ def test_schema_verification_passes_on_a_real_initialised_database():
     from dashboard_api.db import get_conn as real_get_conn
     with real_get_conn() as c:
         db_mod._verify_schema(c)              # raises if any declared table is absent
+
+def test_proxy_refusal_is_not_reported_as_a_credential_problem():
+    """A proxy refusing the tunnel raises ProxyError with NO .response, so it
+    reached the operator as the bare string "403 Forbidden" - which reads exactly
+    like a rejected API key and is the one thing it cannot be. Found by running a
+    real boot against a network that blocks the feed, not by reading the code."""
+    msg = conn_mod.describe_fetch_error(
+        conn_mod.httpx.ProxyError("403 Forbidden"),
+        {"kind": "nvd", "name": "NVD CVE Feed",
+         "url": "https://services.nvd.nist.gov/rest/json/cves/2.0"})
+    assert "not an API-key problem" in msg
+    assert "proxy" in msg.lower()
+    assert "services.nvd.nist.gov" in msg
+    assert not msg.startswith("403")
+
+
+@pytest.mark.parametrize("exc", [
+    conn_mod.httpx.ReadError("connection reset"),
+    conn_mod.httpx.RemoteProtocolError("server disconnected"),
+    conn_mod.httpx.ConnectError("[Errno -2] Name or service not known"),
+])
+def test_every_transport_failure_reads_as_a_reachability_problem(exc):
+    """The whole RequestError family means "the request never completed", which
+    is never a credential problem regardless of which subclass it is."""
+    msg = conn_mod.describe_fetch_error(exc, {"kind": "otx", "name": "OTX",
+                                              "url": "https://otx.alienvault.com"})
+    assert "not an API-key problem" in msg

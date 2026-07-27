@@ -1367,19 +1367,28 @@ def describe_fetch_error(exc: Exception, connector: dict) -> str:
         return f"{label} returned HTTP 404 - the feed URL looks wrong or the feed has moved."
     if status and status >= 500:
         return f"{label} is having server trouble (HTTP {status}). This is on their side; it will retry."
-    if isinstance(exc, httpx.ConnectTimeout | httpx.ReadTimeout | httpx.PoolTimeout):
+    if isinstance(exc, httpx.TimeoutException):
         return (f"Timed out talking to {label}. The host is reachable but slow or "
                 f"partially blocked - check any proxy or firewall on this machine.")
-    if isinstance(exc, httpx.ConnectError):
-        # The single most common report, and never a key problem.
+    if isinstance(exc, httpx.RequestError):
+        # Every transport failure, not just ConnectError: a proxy refusing the
+        # tunnel raises ProxyError with no `.response` at all, and reached this
+        # function as the bare string "403 Forbidden" - which reads exactly like
+        # a rejected credential and is the one thing it cannot be. ReadError and
+        # RemoteProtocolError are the same class of problem. None are key issues.
         host = ""
         try:
             host = httpx.URL(connector.get("url") or "").host or ""
         except (ValueError, TypeError):
             pass
         where = f" ({host})" if host else ""
-        return (f"Could not reach {label}{where} from this machine. DNS or the network is "
-                f"blocking it - this is not an API-key problem. Other connectors are unaffected.")
+        detail = str(exc).strip()
+        via = " A proxy on this machine refused the connection." if isinstance(
+            exc, httpx.ProxyError) else ""
+        return (f"Could not reach {label}{where} from this machine.{via} DNS, a proxy or a "
+                f"firewall is blocking it - this is not an API-key problem. Other connectors "
+                f"are unaffected."
+                + (f" [{detail[:80]}]" if detail else ""))
     return str(exc)[:300]
 
 
