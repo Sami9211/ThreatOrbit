@@ -504,7 +504,9 @@ def update_work(work_id: str, **counts) -> None:
 
 
 def finish_work(work_id: str, status: str, message: str | None = None, **counts) -> None:
-    """Close a work as completed/failed. Also best-effort."""
+    """Close a work as completed/failed, then trim the rolling history.
+
+    Also best-effort: bookkeeping must never fail an import that succeeded."""
     if not work_id:
         return
     try:
@@ -518,6 +520,13 @@ def finish_work(work_id: str, status: str, message: str | None = None, **counts)
                 sets.append("message=?"); vals.append(str(message)[:300])
             conn.execute(f"UPDATE connector_works SET {','.join(sets)} WHERE id=?",
                          (*vals, work_id))
+            # Rolling window, trimmed as runs close. A 1-second cadence writes a
+            # work row every second per connector; unbounded, this table would
+            # outgrow the indicators it describes. Running rows are exempt so a
+            # long import can never have the row it is still writing to deleted.
+            from dashboard_api.db import HISTORY_KEEP_WORKS, trim_history
+            trim_history(conn, "connector_works", HISTORY_KEEP_WORKS, "started_at",
+                         protect="status='running'")
             conn.commit()
     except Exception:
         logging.debug("work finalisation failed", exc_info=True)

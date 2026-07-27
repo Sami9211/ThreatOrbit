@@ -763,6 +763,16 @@ CREATE INDEX IF NOT EXISTS idx_iocs_actor ON iocs(actor);
 -- throughput at a million rows (18k -> 10k indicators/sec). Those sorts fall
 -- back to a sort, which is fine for the filtered result sets they are used with.
 CREATE INDEX IF NOT EXISTS idx_iocs_last_seen ON iocs(last_seen DESC, id DESC);
+-- Recency order for the rolling-history tables. Read by the jobs / import-history
+-- views, and by the trim that keeps them bounded - without these the trim sorts
+-- the whole table on every insert, and an insert happens on every sync. These
+-- live down here with the other indexes because every table they name must
+-- already exist: declared beside connector_works they referenced `jobs` and
+-- `ioc_imports` before those tables were created, which aborted the rest of the
+-- schema and left the database without an `events` table at all.
+CREATE INDEX IF NOT EXISTS idx_works_started ON connector_works(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ioc_imports_ts ON ioc_imports(ts DESC);
 -- Covering index for the list's total. Given only the ordering index, the
 -- planner answered `WHERE severity=? AND confidence>=?` from a non-covering
 -- index and fetched a quarter-million rows purely to re-check severity (365ms
@@ -801,6 +811,34 @@ def audit(conn: sqlite3.Connection, actor: str | None, action: str,
         pass
 
 
+# Operational history is a rolling window, not an archive. One row lands per
+# connector sync in each of jobs / ioc_imports / connector_works, and connector
+# cadences are settable down to one second - so three sources on a 1s cadence
+# write ~260k rows a day between them, forever. These tables answer "what
+# happened recently"; the UI reads at most a couple of hundred rows from any of
+# them. Caps are generous enough to cover a long look-back and env-tunable.
+HISTORY_KEEP_JOBS = int(os.environ.get("DASHBOARD_KEEP_JOBS", "2000"))
+HISTORY_KEEP_IMPORTS = int(os.environ.get("DASHBOARD_KEEP_IMPORTS", "2000"))
+HISTORY_KEEP_WORKS = int(os.environ.get("DASHBOARD_KEEP_WORKS", "500"))
+
+
+def trim_history(conn, table: str, keep: int, order_col: str, protect: str | None = None) -> int:
+    """Keep only the newest `keep` rows of a rolling-history table.
+
+    `protect` is an SQL condition for rows that must survive regardless of age -
+    an in-flight work record must never be deleted out from under the import
+    that is still writing progress to it.
+
+    Table/column names here are module constants, never user input."""
+    if keep <= 0:
+        return 0
+    guard = f" AND NOT ({protect})" if protect else ""
+    return conn.execute(
+        f"DELETE FROM {table} WHERE id NOT IN "
+        f"(SELECT id FROM {table} ORDER BY {order_col} DESC LIMIT ?){guard}",
+        (keep,)).rowcount
+
+
 def record_ioc_import(conn, source: str, method: str, imported: int, duplicates: int,
                       skipped: int, actor: str, error: str | None = None,
                       duration_ms: int = 0) -> str:
@@ -825,6 +863,7 @@ def record_ioc_import(conn, source: str, method: str, imported: int, duplicates:
          datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
          max(0, int(duration_ms))),
     )
+    trim_history(conn, "ioc_imports", HISTORY_KEEP_IMPORTS, "ts")
     return iid
 
 
@@ -840,6 +879,7 @@ def record_job(conn: sqlite3.Connection, kind: str, status: str, meta: dict | No
         "VALUES (?,?,?,?,?,?,?)",
         (jid, kind, status, progress, ts, ts, dumps(meta or {})),
     )
+    trim_history(conn, "jobs", HISTORY_KEEP_JOBS, "created_at")
     return jid
 
 
@@ -1016,6 +1056,33 @@ def _safe_schema(conn: sqlite3.Connection):
                 _rollback()
 
 
+def _verify_schema(conn):
+    """Fail loudly if applying the schema did not produce every table it declares.
+
+    `_safe_schema` deliberately swallows per-statement failures so one index on a
+    not-yet-migrated column cannot stop a deployment booting. The cost is that a
+    genuinely broken statement is silent too: an index placed above the table it
+    references aborted the script, the fallback did not recover, and the first
+    symptom was `no such table: events` from a migration much later - pointing at
+    a table that had nothing to do with the mistake.
+
+    The expected set is parsed out of SCHEMA itself, so it cannot drift from it."""
+    import re
+    expected = set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", SCHEMA))
+    from dashboard_api.db_backend import is_postgres
+    if is_postgres():  # pragma: no cover - opt-in backend
+        rows = conn.execute("SELECT tablename AS name FROM pg_tables "
+                            "WHERE schemaname='public'").fetchall()
+    else:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    missing = sorted(expected - {r["name"] for r in rows})
+    if missing:
+        raise RuntimeError(
+            f"Database schema is incomplete - these declared tables were not created: "
+            f"{', '.join(missing)}. This usually means a schema statement failed; a "
+            f"CREATE INDEX must appear after the table it references.")
+
+
 def _schema_version_gate(conn):
     """Migration-gating on upgrade. Compares the DB's recorded schema version to
     SCHEMA_VERSION and either adopts (fresh/unversioned DB), bumps (normal
@@ -1056,6 +1123,7 @@ def init_db():
         _apply_migrations(conn)
         # second pass: indexes that needed migrated columns now succeed
         _safe_schema(conn)
+        _verify_schema(conn)
         # Migration-gating: refuse to run against a DB newer than this code
         # (rollback safety) before we touch any data.
         _schema_version_gate(conn)

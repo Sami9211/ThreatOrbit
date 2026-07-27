@@ -1567,3 +1567,95 @@ def test_otx_still_imports_normally_when_the_account_has_pulses(monkeypatch):
     assert [i["value"] for i in out] == ["203.0.113.55", "otx-live.test"]
     assert all(i["actor"] == "APT-Test" for i in out)
     assert conn_mod._fetch_otx.last_reports[0]["title"] == "Campaign X"
+
+# -- Rolling history must stay bounded ------------------------------------------
+
+def test_work_history_is_bounded_and_never_deletes_a_running_import(monkeypatch):
+    """One work row lands per sync, and cadences go down to one second - three
+    connectors at 1s write ~260k history rows a day between the three tables.
+    Unbounded, the record of the imports outgrows the indicators themselves.
+
+    The exemption matters as much as the cap: deleting the row a long import is
+    still publishing progress to would make it vanish from the pipeline view
+    mid-flight."""
+    import dashboard_api.db as db_mod
+    from dashboard_api.db import get_conn as real_get_conn
+
+    monkeypatch.setattr(db_mod, "HISTORY_KEEP_WORKS", 5)
+    tag = uuid.uuid4().hex[:8]
+
+    with real_get_conn() as c:      # isolate the count from other tests' rows
+        c.execute("DELETE FROM connector_works"); c.commit()
+
+    inflight = conn_mod.start_work(f"long-import-{tag}", None, 1_000_000)
+    try:
+        for i in range(12):
+            wid = conn_mod.start_work(f"quick-{tag}-{i}", None, 10)
+            conn_mod.finish_work(wid, "completed", processed=10, imported=10)
+
+        with real_get_conn() as c:
+            rows = c.execute("SELECT id, status FROM connector_works").fetchall()
+        ids = {r["id"] for r in rows}
+
+        assert inflight in ids, "an in-flight work was trimmed away mid-import"
+        finished = [r for r in rows if r["status"] != "running"]
+        assert len(finished) <= 5, f"history grew past the cap: {len(finished)} rows"
+
+        # And the survivor set is the NEWEST runs, not an arbitrary five.
+        with real_get_conn() as c:
+            kept = [r["connector"] for r in c.execute(
+                "SELECT connector FROM connector_works WHERE status!='running' "
+                "ORDER BY started_at DESC").fetchall()]
+        assert kept[0] == f"quick-{tag}-11", f"newest run was trimmed: {kept}"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works"); c.commit()
+
+
+def test_job_and_import_history_are_bounded_too(monkeypatch):
+    """Same rolling-window rule for the other two per-sync tables."""
+    import dashboard_api.db as db_mod
+    from dashboard_api.db import get_conn as real_get_conn, record_ioc_import, record_job
+
+    monkeypatch.setattr(db_mod, "HISTORY_KEEP_JOBS", 4)
+    monkeypatch.setattr(db_mod, "HISTORY_KEEP_IMPORTS", 4)
+    with real_get_conn() as c:
+        c.execute("DELETE FROM jobs"); c.execute("DELETE FROM ioc_imports"); c.commit()
+    try:
+        with real_get_conn() as c:
+            for i in range(10):
+                record_job(c, "connector.json", "completed", {"n": i})
+                record_ioc_import(c, f"src-{i}", "connector:json", 1, 0, 0, "tester")
+            c.commit()
+            jobs = c.execute("SELECT COUNT(*) AS n FROM jobs").fetchone()["n"]
+            imps = c.execute("SELECT COUNT(*) AS n FROM ioc_imports").fetchone()["n"]
+        assert jobs <= 4, f"jobs grew past the cap: {jobs}"
+        assert imps <= 4, f"import history grew past the cap: {imps}"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM jobs"); c.execute("DELETE FROM ioc_imports"); c.commit()
+
+def test_incomplete_schema_is_reported_against_the_table_that_is_missing():
+    """`_safe_schema` swallows per-statement failures on purpose, so a broken
+    statement leaves tables missing silently. The first symptom of an index
+    declared above its table was `no such table: events` from an unrelated
+    migration. The check names what is actually missing."""
+    import dashboard_api.db as db_mod
+
+    class _FakeConn:
+        def execute(self, sql, *a):
+            assert "sqlite_master" in sql
+            return self
+        def fetchall(self):
+            return [{"name": "users"}]        # everything else "missing"
+
+    with pytest.raises(RuntimeError, match="schema is incomplete"):
+        db_mod._verify_schema(_FakeConn())
+
+
+def test_schema_verification_passes_on_a_real_initialised_database():
+    """And it must not cry wolf against the database the suite is running on."""
+    import dashboard_api.db as db_mod
+    from dashboard_api.db import get_conn as real_get_conn
+    with real_get_conn() as c:
+        db_mod._verify_schema(c)              # raises if any declared table is absent
