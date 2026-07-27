@@ -753,6 +753,18 @@ def _fetch_otx(c: dict) -> list[dict]:
                          params={"limit": _OTX_PAGE_LIMIT, "page": page}).json()
         results = data.get("results", []) if isinstance(data, dict) else []
         if not results:
+            # An empty FIRST page means the key authenticated (OTX would have
+            # answered 401/403 otherwise) but the account follows nobody, so the
+            # subscribed feed is genuinely empty and will stay empty on every
+            # future sync. Reporting "0 imported, no error" would leave the
+            # operator with a connector that looks healthy and never delivers -
+            # this is a configuration problem on the OTX side, and it needs to
+            # say so.
+            if page == 1:
+                raise ValueError(
+                    "OTX accepted the API key but your account is subscribed to no pulses, "
+                    "so there is nothing to import. Subscribe to pulses or users at "
+                    "otx.alienvault.com (Browse → Pulses → Subscribe) and sync again.")
             break
         for pulse in results:
             if not isinstance(pulse, dict):
@@ -1318,6 +1330,50 @@ _FETCHERS = {
 
 # -- Orchestration ---------------------------------------------------------------
 
+def describe_fetch_error(exc: Exception, connector: dict) -> str:
+    """Turn a transport exception into something an operator can act on.
+
+    The raw text was httpx's own: "Client error '403 Forbidden' for url
+    'https://otx.alienvault.com/api/v1/pulses/subscribed?limit=50&page=1'" plus a
+    link to MDN. That does not distinguish the two failures operators actually
+    hit - a key the provider rejected, and a provider this host cannot reach at
+    all - and those have completely different fixes. Guessing wrong sends people
+    hunting a bad key when their network is blocking the domain, or the reverse.
+    """
+    kind = connector.get("kind", "")
+    label = KIND_PRESETS.get(kind, {}).get("label", kind or "This source")
+    needs_key = KIND_PRESETS.get(kind, {}).get("needs_key", False)
+
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status in (401, 403):
+        if needs_key:
+            return (f"{label} rejected the API key (HTTP {status}). Check the key is correct "
+                    f"and pasted in full, and that it is still active with the provider.")
+        return (f"{label} refused the request (HTTP {status}). The endpoint may require "
+                f"authentication, or this host may be blocked by the provider.")
+    if status == 429:
+        return (f"{label} is rate-limiting this key (HTTP 429). The next scheduled sync "
+                f"will retry; lengthening the interval will stop it recurring.")
+    if status == 404:
+        return f"{label} returned HTTP 404 - the feed URL looks wrong or the feed has moved."
+    if status and status >= 500:
+        return f"{label} is having server trouble (HTTP {status}). This is on their side; it will retry."
+    if isinstance(exc, httpx.ConnectTimeout | httpx.ReadTimeout | httpx.PoolTimeout):
+        return (f"Timed out talking to {label}. The host is reachable but slow or "
+                f"partially blocked - check any proxy or firewall on this machine.")
+    if isinstance(exc, httpx.ConnectError):
+        # The single most common report, and never a key problem.
+        host = ""
+        try:
+            host = httpx.URL(connector.get("url") or "").host or ""
+        except (ValueError, TypeError):
+            pass
+        where = f" ({host})" if host else ""
+        return (f"Could not reach {label}{where} from this machine. DNS or the network is "
+                f"blocking it - this is not an API-key problem. Other connectors are unaffected.")
+    return str(exc)[:300]
+
+
 def run_connector(connector: dict, actor: str = "scheduler") -> dict:
     """Fetch + normalise + import one connector. Updates its status and records
     a job. Returns the import tally (or an {error} dict on failure)."""
@@ -1413,7 +1469,7 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
         result["connectorTotal"] = total_count
         return result
     except Exception as e:  # network/parse/auth failure - record, never crash
-        msg = str(e)[:300]
+        msg = describe_fetch_error(e, connector)[:300]
         # If the failure happened during the fetch there is no work yet; record
         # one so a failed sync is visible in the pipeline view too.
         try:

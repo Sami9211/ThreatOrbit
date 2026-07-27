@@ -40,7 +40,14 @@ class _FakeStream:
 
     def raise_for_status(self):
         if not self._ok:
-            raise conn_mod.httpx.HTTPError("bad status")
+            # Real httpx raises HTTPStatusError carrying the response, and the
+            # error-description layer reads .response.status_code off it to tell
+            # a rejected key from an unreachable host. A bare HTTPError here
+            # would let that layer pass a test it could not pass in production.
+            raise conn_mod.httpx.HTTPStatusError(
+                f"Client error '{self.status_code}' for url 'https://feed.invalid/x'",
+                request=conn_mod.httpx.Request("GET", "https://feed.invalid/x"),
+                response=conn_mod.httpx.Response(self.status_code))
 
     def iter_bytes(self):
         yield from self._chunks
@@ -1452,3 +1459,111 @@ def test_ioc_browse_order_is_index_driven_not_a_full_sort():
             "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM iocs "
             "WHERE severity=? AND confidence>=?", ("high", 70)).fetchall())
         assert "COVERING INDEX" in plan.upper(), f"count is not covered: {plan}"
+
+# -- Failure messages: the two failures operators actually hit look identical ---
+
+def test_rejected_key_and_unreachable_host_do_not_look_the_same(monkeypatch):
+    """A rejected API key and a host this machine cannot reach have completely
+    different fixes, and httpx's own message distinguishes neither - it reports
+    a URL and links to MDN. Days were lost to exactly this ambiguity: a network
+    blocking the feed domain read as an API-key problem."""
+    otx = {"kind": "otx", "name": "OTX", "url": "https://otx.alienvault.com"}
+
+    rejected = conn_mod.describe_fetch_error(
+        conn_mod.httpx.HTTPStatusError(
+            "Client error '403 Forbidden' for url 'https://otx.alienvault.com/api/v1/x'",
+            request=conn_mod.httpx.Request("GET", "https://otx.alienvault.com/api/v1/x"),
+            response=conn_mod.httpx.Response(403)), otx)
+    assert "key" in rejected.lower() and "403" in rejected
+
+    unreachable = conn_mod.describe_fetch_error(
+        conn_mod.httpx.ConnectError("[Errno -2] Name or service not known"), otx)
+    assert "not an API-key problem" in unreachable
+    assert "otx.alienvault.com" in unreachable
+    assert "403" not in unreachable
+    assert rejected != unreachable
+
+    # Rate limiting is neither of the above and must not read as a broken key.
+    limited = conn_mod.describe_fetch_error(
+        conn_mod.httpx.HTTPStatusError(
+            "429", request=conn_mod.httpx.Request("GET", "https://otx.alienvault.com/x"),
+            response=conn_mod.httpx.Response(429)), otx)
+    assert "rate-limit" in limited.lower() and "key" not in limited.lower().split("this key")[0]
+
+
+def test_keyless_feed_403_is_not_reported_as_an_api_key_problem():
+    """A keyless blocklist cannot have a bad key. Telling the operator to check
+    one sends them looking for a setting that does not exist."""
+    msg = conn_mod.describe_fetch_error(
+        conn_mod.httpx.HTTPStatusError(
+            "403", request=conn_mod.httpx.Request("GET", "https://feed.test/x"),
+            response=conn_mod.httpx.Response(403)),
+        {"kind": "threatorbit", "name": "Engine", "url": "https://feed.test"})
+    assert "API key" not in msg
+    assert "403" in msg
+
+
+def test_connector_run_records_the_actionable_message_not_the_raw_httpx_text(monkeypatch):
+    """End-to-end: what lands in last_error is what the operator reads."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    def boom(*a, **k):
+        raise conn_mod.httpx.ConnectError("[Errno -2] Name or service not known")
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", boom)
+
+    cid = "unreach-" + uuid.uuid4().hex[:8]
+    name = f"Unreachable {cid}"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,interval_seconds,"
+            "field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','idle',0,?)",
+            (cid, name, "json", "https://blocked.example/feed", conn_mod._now()))
+        c.commit()
+        row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+    try:
+        res = conn_mod.run_connector(row, actor="tester")
+        assert "not an API-key problem" in res["error"]
+        assert "blocked.example" in res["error"]
+        with real_get_conn() as c:
+            stored = c.execute("SELECT status,last_error FROM connectors WHERE id=?",
+                               (cid,)).fetchone()
+        assert stored["status"] == "error"
+        assert "not an API-key problem" in stored["last_error"]
+        assert "MDN" not in stored["last_error"] and "developer.mozilla" not in stored["last_error"]
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
+            c.execute("DELETE FROM connector_works WHERE connector_id=?", (cid,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_otx_with_no_subscriptions_says_so_instead_of_importing_nothing_quietly(monkeypatch):
+    """A key that authenticates against an account following nobody returns an
+    empty feed forever. Reported as "0 imported, no error" the connector looks
+    healthy and never delivers - the operator has no way to know the fix is on
+    the OTX side."""
+    class _Resp:
+        def json(self): return {"results": [], "next": None}
+    monkeypatch.setattr(conn_mod, "_http_get", lambda *a, **k: _Resp())
+
+    with pytest.raises(ValueError, match="subscribed to no pulses"):
+        conn_mod._fetch_otx({"api_key": "valid-key", "url": None, "kind": "otx"})
+
+
+def test_otx_still_imports_normally_when_the_account_has_pulses(monkeypatch):
+    """The empty-feed guard must not fire on a working account."""
+    pulse = {"id": "p1", "name": "Campaign X", "adversary": "APT-Test",
+             "malware_families": ["TestLoader"], "tags": ["test"],
+             "indicators": [{"type": "IPv4", "indicator": "203.0.113.55"},
+                            {"type": "domain", "indicator": "otx-live.test"}]}
+
+    class _Resp:
+        def json(self): return {"results": [pulse], "next": None}
+    monkeypatch.setattr(conn_mod, "_http_get", lambda *a, **k: _Resp())
+
+    out = conn_mod._fetch_otx({"api_key": "valid-key", "url": None, "kind": "otx"})
+    assert [i["value"] for i in out] == ["203.0.113.55", "otx-live.test"]
+    assert all(i["actor"] == "APT-Test" for i in out)
+    assert conn_mod._fetch_otx.last_reports[0]["title"] == "Campaign X"
