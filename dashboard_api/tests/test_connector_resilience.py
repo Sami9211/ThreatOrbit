@@ -1419,3 +1419,36 @@ def test_connector_name_with_sql_wildcards_does_not_skew_its_total(monkeypatch):
             c.execute("DELETE FROM connector_works WHERE connector_id=?", (cid,))
             c.execute("DELETE FROM connectors WHERE id=?", (cid,))
             c.commit()
+
+def test_ioc_browse_order_is_index_driven_not_a_full_sort():
+    """Paging the CTI list must not re-sort the whole table per request.
+
+    With no index matching `ORDER BY <sort>, id`, SQLite built a temp B-tree over
+    every row on every page load: at 310k indicators that cost ~1.6s per page and
+    grew with each sync, so the store got slower to read the better the feeds got.
+    Asserted on the query PLAN rather than a wall-clock threshold, which is the
+    property that actually holds regardless of machine speed."""
+    from dashboard_api.db_backend import is_postgres
+    if is_postgres():                       # pragma: no cover - planner text differs
+        pytest.skip("EXPLAIN QUERY PLAN is SQLite-specific")
+    from dashboard_api.db import get_conn as real_get_conn
+
+    orders = ["last_seen DESC, id DESC", "first_seen DESC, id DESC",
+              "confidence DESC, id DESC"]
+    with real_get_conn() as c:
+        for order in orders:
+            plan = " ".join(
+                str(r[-1]) for r in
+                c.execute(f"EXPLAIN QUERY PLAN SELECT * FROM iocs "
+                          f"ORDER BY {order} LIMIT 100 OFFSET 500").fetchall())
+            assert "TEMP B-TREE" not in plan.upper(), (
+                f"ORDER BY {order} falls back to a full sort: {plan}")
+            assert "INDEX" in plan.upper(), f"ORDER BY {order} is unindexed: {plan}"
+
+        # The list's total for the severity+confidence filter must be answerable
+        # from an index alone; without the composite it fetched every matching
+        # row off disk purely to re-check severity.
+        plan = " ".join(str(r[-1]) for r in c.execute(
+            "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM iocs "
+            "WHERE severity=? AND confidence>=?", ("high", 70)).fetchall())
+        assert "COVERING INDEX" in plan.upper(), f"count is not covered: {plan}"

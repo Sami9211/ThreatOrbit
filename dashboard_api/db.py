@@ -751,6 +751,20 @@ CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(username);
 CREATE INDEX IF NOT EXISTS idx_iocs_value ON iocs(value);
 CREATE INDEX IF NOT EXISTS idx_iocs_status ON iocs(status);
 CREATE INDEX IF NOT EXISTS idx_iocs_actor ON iocs(actor);
+-- Browse-order indexes. The CTI list pages with ORDER BY <sort>, id; without a
+-- matching index every request built a temp B-tree over the WHOLE table, so
+-- paging a 310k-indicator store cost ~1.6s per page and got worse as feeds grew.
+-- Indexed, the same query is served by an index walk (~20ms at the far end).
+-- The id tie-breaker is part of the key so the index satisfies the full order.
+CREATE INDEX IF NOT EXISTS idx_iocs_last_seen ON iocs(last_seen DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_iocs_first_seen ON iocs(first_seen DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_iocs_confidence ON iocs(confidence DESC, id DESC);
+-- Covering index for the list's total. Given only the sort indexes above, the
+-- planner served `WHERE severity=? AND confidence>=?` from the confidence index
+-- and then fetched a quarter-million rows just to test severity (365ms for a
+-- COUNT). With both columns in one index the count is answered from the index
+-- alone (~10ms).
+CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
 CREATE INDEX IF NOT EXISTS idx_pbruns_alert ON playbook_runs(alert_id);
 CREATE INDEX IF NOT EXISTS idx_pbruns_pb ON playbook_runs(playbook_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vulns_asset ON vuln_findings(asset_id);
