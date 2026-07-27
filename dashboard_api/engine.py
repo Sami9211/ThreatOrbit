@@ -631,7 +631,19 @@ def _maybe_escalate_case(conn, actor_email="engine") -> int:
 # -- Tick -------------------------------------------------------------------------
 def process_tick(max_events: int = 6) -> dict:
     """One pass of the live engine: generate telemetry → run detection rules →
-    alerts, extract IOCs, monitor dark web, correlate/escalate."""
+    alerts, extract IOCs, monitor dark web, correlate/escalate.
+
+    The telemetry this generates is SYNTHETIC. In live mode the platform must
+    show only real, externally sourced data, so the refusal lives here rather
+    than only at the call sites: the startup prime bypassed the caller-side
+    check and seeded fabricated indicators into a live deployment on first boot.
+    A generator that cannot be invoked by accident is the only kind that keeps
+    that guarantee."""
+    from dashboard_api.config import SYNTHETIC_ALLOWED
+    if not SYNTHETIC_ALLOWED:
+        logger.debug("Engine tick refused: synthetic telemetry disabled in live mode")
+        return {"events": 0, "alerts": 0, "iocs": 0, "darkWeb": 0,
+                "casesEscalated": 0, "playbookRuns": 0, "refused": "synthetic-disabled"}
     import uuid as _uuid
     seed_builtin_rules()  # idempotent - guarantees detection rules exist
     rng = _rng()

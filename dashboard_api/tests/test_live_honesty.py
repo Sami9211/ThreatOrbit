@@ -111,3 +111,73 @@ def test_demo_mode_still_allows_synthetic_generation(client, auth, monkeypatch):
     monkeypatch.setattr(cfg, "SYNTHETIC_ALLOWED", True)
     r = client.post("/config/engine", json={"generate": 1}, headers=auth)
     assert r.status_code == 200, r.text
+
+
+def test_process_tick_itself_refuses_to_fabricate_in_live_mode(monkeypatch):
+    """The refusal must live in the GENERATOR, not only at its call sites.
+
+    The first-boot prime called process_tick() directly and so bypassed the
+    caller-side SYNTHETIC_ALLOWED check, seeding 25 ticks of fabricated
+    telemetry into a live deployment before anyone had logged in. Guarding the
+    generator makes that class of bypass impossible for any future caller too.
+    """
+    import dashboard_api.config as cfg
+    from dashboard_api.engine import process_tick
+    from dashboard_api.db import get_conn
+
+    monkeypatch.setattr(cfg, "SYNTHETIC_ALLOWED", False)
+    tables = ("events", "alerts", "iocs", "dark_web_findings")
+    with get_conn() as c:
+        before = {t: c.execute(f"SELECT COUNT(*) AS n FROM {t}").fetchone()["n"] for t in tables}
+
+    summary = process_tick(max_events=10)
+    assert summary["events"] == 0 and summary["iocs"] == 0
+    assert summary.get("refused") == "synthetic-disabled"
+
+    with get_conn() as c:
+        after = {t: c.execute(f"SELECT COUNT(*) AS n FROM {t}").fetchone()["n"] for t in tables}
+    assert after == before, f"process_tick fabricated rows in live mode: {before} -> {after}"
+
+
+def test_full_live_startup_primes_nothing_fabricated():
+    """End-to-end fence on the real startup path.
+
+    The other boot tests call bootstrap_live() directly, which is why the prime
+    block's missing guard went unnoticed: the code that fabricated the data was
+    never exercised. This runs the actual _startup() a deployment runs, with the
+    engine ON, and requires every observation store to still be empty.
+
+    Built-in detection rules and playbooks are deliberately NOT in scope here:
+    _startup seeds them and should, they are shipped content (logic an analyst
+    edits), not claims about what was observed on this network."""
+    observed = ["alerts", "cases", "assets", "integrations", "iocs",
+                "feeds", "saved_hunts", "dark_web_findings", "events"]
+    db = Path(tempfile.mkdtemp()) / "startup.db"
+    script = f"""
+import os, json
+os.environ["DASHBOARD_DB_PATH"] = {str(db)!r}
+os.environ["DASHBOARD_JWT_SECRET"] = "test-secret-live-startup"
+os.environ["DASHBOARD_DATA_MODE"] = "live"
+os.environ["DASHBOARD_ENGINE"] = "on"
+os.environ.pop("DASHBOARD_ALLOW_SYNTHETIC", None)
+import dashboard_api.main as m
+m._startup()
+from dashboard_api.db import get_conn
+tables = {observed!r}
+with get_conn() as conn:
+    counts = {{t: conn.execute(f"SELECT COUNT(*) FROM {{t}}").fetchone()[0] for t in tables}}
+print(json.dumps(counts))
+"""
+    env = {**dict(__import__("os").environ)}
+    env["DASHBOARD_DB_BACKEND"] = "sqlite"
+    env.pop("DATABASE_URL", None)
+    env.pop("DASHBOARD_ALLOW_SYNTHETIC", None)
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True,
+                         text=True, env=env, cwd=str(Path(__file__).resolve().parents[2]),
+                         timeout=180)
+    assert out.returncode == 0, f"startup failed:\n{out.stderr}"
+    counts = json.loads(out.stdout.strip().splitlines()[-1])
+    for table in observed:
+        assert counts[table] == 0, (
+            f"{table} has {counts[table]} fabricated rows after a live startup - "
+            "live mode must never prime the stores with simulated telemetry")

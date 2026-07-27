@@ -269,6 +269,7 @@ def _startup():
     except Exception:
         logger.exception("Secret encryption migration failed")
     if DATA_MODE == "live":
+        from dashboard_api.config import SYNTHETIC_ALLOWED
         from dashboard_api.seed import bootstrap_live
         from dashboard_api.connectors import seed_builtin_connectors
         first_boot = bootstrap_live()
@@ -282,9 +283,13 @@ def _startup():
         engine_off = _apply_engine_mode()
         if first_boot:
             logger.info("Live mode: bootstrapped admin + settings (no demo data)")
-        if first_boot and not engine_off:
-            # Prime the stores so the first login isn't an empty screen - these
-            # are live engine ticks (real pipeline), not static seed data.
+        if first_boot and not engine_off and SYNTHETIC_ALLOWED:
+            # Prime the stores so the first login isn't an empty screen. What the
+            # engine generates is SIMULATED telemetry, so this only runs where
+            # simulation is permitted - priming a live deployment with fabricated
+            # indicators is exactly the thing live mode exists to prevent. An
+            # empty first screen is the correct state when there is no real data
+            # yet; connectors fill it as they sync.
             try:
                 from dashboard_api.engine import process_tick
                 from dashboard_api.scoring import recompute_asset_risk
@@ -293,7 +298,8 @@ def _startup():
                 with get_conn() as conn:
                     recompute_asset_risk(conn)
                     conn.commit()
-                logger.info("Live mode: primed initial telemetry via the engine")
+                logger.info("Primed initial SIMULATED telemetry via the engine "
+                            "(synthetic generation is explicitly enabled)")
             except Exception:
                 logger.exception("Initial engine prime failed")
         threading.Thread(target=_connector_scheduler, daemon=True).start()
