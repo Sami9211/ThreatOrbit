@@ -689,10 +689,10 @@ def test_abusech_connector_parses_real_blocklist_shape(monkeypatch):
     assert "Emotet" in out[0]["threat_type"] and out[0]["actor"] == "Emotet"
     assert out[0]["confidence"] == 90
 
-    # Registered as a kind, and keyless/URL-less so the UI asks for nothing.
+    # Still runnable for connectors created before the engine absorbed these
+    # feeds, but no longer offered as a separate kind in the UI.
     assert conn_mod._FETCHERS["abusech"] is conn_mod._fetch_abusech
-    preset = conn_mod.KIND_PRESETS["abusech"]
-    assert preset["needs_key"] is False and preset["needs_url"] is False
+    assert "abusech" not in conn_mod.KIND_PRESETS
 
 
 def test_bulk_osint_parsers_handle_real_feed_formats():
@@ -747,9 +747,12 @@ def test_bulk_osint_is_parallel_and_survives_a_dead_feed(monkeypatch):
     assert "198.51.100.7" in values
     assert out, "a single dead feed must not zero the sync"
     assert all(o["source"].startswith("osint:") for o in out)
-    # Registered and zero-config for the operator.
-    preset = conn_mod.KIND_PRESETS["osint"]
-    assert preset["needs_key"] is False and preset["needs_url"] is False
+    # The aggregator is what the bundled engine runs; it is no longer a separate
+    # UI kind, but the fetcher stays available for pre-existing connectors.
+    assert conn_mod._FETCHERS["osint"] is conn_mod._fetch_bulk_osint
+    assert "osint" not in conn_mod.KIND_PRESETS
+    engine = conn_mod.KIND_PRESETS["threatorbit"]
+    assert engine["needs_key"] is False and engine["needs_url"] is False
 
 
 def test_engine_loop_still_renews_leader_lease_when_synthetic_disabled():
@@ -843,3 +846,59 @@ def test_bulk_osint_keeps_state_when_a_feed_errors(monkeypatch):
     monkeypatch.setattr(conn_mod, "_http_get", flaky)
     conn_mod._fetch_bulk_osint({"state": good})
     assert conn_mod._fetch_bulk_osint.last_state == good, "validators lost on a transient error"
+
+
+def test_threatorbit_engine_aggregates_feeds_itself(monkeypatch):
+    """The bundled engine must BE the OSINT source, not a proxy to one.
+
+    It previously only re-served whatever the companion threat service held - a
+    second-hand path to a near-empty store, which is why the "engine" imported ~5
+    indicators (or none) while presenting itself as the platform's own source.
+    It now aggregates the public feeds directly, and the companion is an optional
+    extra that cannot zero the sync when it is down.
+    """
+    class _R:
+        def __init__(self, text="", js=None):
+            self.text = text
+            self.not_modified = False
+            self.headers = {}
+            self._js = js
+
+        def json(self):
+            if self._js is None:
+                raise ValueError("companion unavailable")
+            return self._js
+
+    def only_public_feeds(url, headers=None, **kw):
+        if "/iocs" in url:                       # the companion service is DOWN
+            raise ValueError("connection refused")
+        return _R("198.51.100.10\n198.51.100.11\n")
+
+    monkeypatch.setattr(conn_mod, "_http_get", only_public_feeds)
+    out = conn_mod._fetch_threatorbit({})
+    assert len(out) > 0, "engine must import from public feeds with no companion"
+    assert all(o["source"].startswith("osint:") for o in out)
+    # Incremental state is carried through the engine, not lost.
+    assert isinstance(getattr(conn_mod._fetch_threatorbit, "last_state", None), dict)
+
+    # With the companion UP, its indicators are ADDED on top of the public feeds.
+    def both(url, headers=None, **kw):
+        if "/iocs" in url:
+            return _R(js=[{"ioc_type": "ip", "value": "203.0.113.77",
+                           "confidence": 80, "source": "abuse.ch"}])
+        return _R("198.51.100.10\n")
+
+    monkeypatch.setattr(conn_mod, "_http_get", both)
+    out2 = conn_mod._fetch_threatorbit({})
+    values = {o["value"] for o in out2}
+    assert "198.51.100.10" in values and "203.0.113.77" in values
+
+
+def test_retired_connector_kinds_still_run_but_are_hidden():
+    """Folding the bulk feeds into the engine must not break connectors an
+    operator already created: the kinds keep working, they are just no longer
+    offered in the Add-connector catalogue."""
+    assert "osint" not in conn_mod.KIND_PRESETS
+    assert "abusech" not in conn_mod.KIND_PRESETS
+    assert "osint" in conn_mod._FETCHERS and "abusech" in conn_mod._FETCHERS
+    assert "threatorbit" in conn_mod.KIND_PRESETS

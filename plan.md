@@ -3567,3 +3567,24 @@ _Move completed items here with the date so the roadmap stays honest._
   • Test double `_FakeStream` now models `status_code` (real httpx responses
     always carry one) - it lacked it, which is what the new 304 check exposed.
   • Verified: **622 backend tests pass, 1 skipped.**
+
+- **2026-07-26 · The ThreatOrbit engine now IS the OSINT source (#3 of the gap list).**
+  The bundled `threatorbit` connector only ever re-served whatever the companion
+  threat service happened to hold - a second-hand path to a near-empty store.
+  That is why "the engine" imported ~5 indicators, or none: it had no sources of
+  its own, and the companion is a single point of failure.
+  • `_fetch_threatorbit` now **aggregates the seven curated public blocklists
+    directly** (the parallel, conditional-fetch path), and *then* adds the
+    companion service's indicators **if it is reachable**. A dead companion is
+    logged and ignored - it can no longer zero a sync that already collected tens
+    of thousands of indicators. Incremental state is carried through the engine.
+  • **Retired the duplicate kinds.** `osint` and `abusech` are gone from
+    `KIND_PRESETS` (nothing new can be created) but remain in `_FETCHERS`, so
+    connectors an operator already created keep running. Seeding now creates
+    **one** engine connector instead of three that imported the same indicators
+    under different names - answering the fair criticism that a separate "bulk
+    public OSINT feeds" connector was a workaround, not a fix.
+  • Fenced by `test_threatorbit_engine_aggregates_feeds_itself` (imports with the
+    companion DOWN; adds companion data when UP) and
+    `test_retired_connector_kinds_still_run_but_are_hidden`.
+  • Verified: **624 backend tests pass, 1 skipped.**

@@ -122,7 +122,7 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
 KIND_PRESETS = {
     "threatorbit": {
         "label": "ThreatOrbit OSINT Engine",
-        "description": "Our own engine: abuse.ch, RSS, dark-web & social OSINT, plus OTX if a key is set. Free, no key needed.",
+        "description": "The bundled engine. Aggregates seven curated public blocklists in parallel - abuse.ch ThreatFox/URLhaus/Feodo, blocklist.de, CINS Army, Emerging Threats and Tor exits - tens of thousands of real indicators per sync. Free, no API key, no setup. Re-syncs are incremental (unchanged feeds are skipped).",
         "needs_key": False,
         # `needs_url` = the operator must supply the endpoint. Managed providers
         # (fixed, known endpoints) set False so the UI never asks for a URL - it
@@ -178,22 +178,6 @@ KIND_PRESETS = {
         "needs_url": True,
         "default_url": "",
         "default_interval": 60,
-    },
-    "osint": {
-        "label": "Public OSINT Bulk Feeds (no key)",
-        "description": "Seven curated public blocklists pulled in parallel - ThreatFox, URLhaus, Feodo, blocklist.de, CINS Army, Emerging Threats and Tor exits. Tens of thousands of real indicators per sync. No API key, no URL, no setup.",
-        "needs_key": False,
-        "needs_url": False,
-        "default_url": "",
-        "default_interval": 30,
-    },
-    "abusech": {
-        "label": "abuse.ch Feodo Tracker (no key)",
-        "description": "Live botnet C2 IP blocklist from abuse.ch - thousands of real, current malicious IPs. Completely free, NO API key and no URL to configure. The fastest way to get genuine threat intel flowing.",
-        "needs_key": False,
-        "needs_url": False,
-        "default_url": ABUSECH_FEODO_URL,
-        "default_interval": 30,
     },
     "taxii": {
         "label": "TAXII 2.1 collection",
@@ -455,6 +439,34 @@ _THREATORBIT_MAX_PAGES = int(os.environ.get("DASHBOARD_THREATORBIT_MAX_PAGES", "
 
 
 def _fetch_threatorbit(c: dict) -> list[dict]:
+    """The ThreatOrbit OSINT engine: aggregate real intel from public sources.
+
+    This used to ONLY re-serve whatever the companion threat service happened to
+    hold - a second-hand path to a store that is usually near-empty, which is why
+    the "engine" imported a handful of indicators (or none) while claiming to be
+    the platform's own OSINT source.
+
+    It now does the aggregation itself: it pulls the curated public blocklists
+    directly (the same parallel, conditional-fetch path the bulk connector uses)
+    and then *adds* anything the companion service holds, if it is reachable.
+    The companion is now an optional bonus, not a single point of failure.
+    """
+    out: list[dict] = _fetch_bulk_osint(c)
+    # Carry the bulk feeds' HTTP validators so incremental sync still applies.
+    _fetch_threatorbit.last_state = getattr(_fetch_bulk_osint, "last_state", {}) or {}
+
+    try:
+        out.extend(_fetch_threat_api(c))
+    except Exception as e:
+        # The companion is optional. A failure here must never zero a sync that
+        # already collected tens of thousands of indicators from public feeds.
+        logging.info("ThreatOrbit engine: companion threat service unavailable (%s) - "
+                     "public OSINT feeds still imported", e)
+    return out
+
+
+def _fetch_threat_api(c: dict) -> list[dict]:
+    """Read indicators from the companion threat service (optional extra source)."""
     base = (c.get("url") or THREAT_API_URL).rstrip("/")
     headers = {"X-API-Key": SERVICES_API_KEY} if SERVICES_API_KEY else {}
     rows: list = []
@@ -951,7 +963,10 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
 _FETCHERS = {
     "threatorbit": _fetch_threatorbit, "otx": _fetch_otx, "nvd": _fetch_nvd,
     "json": _fetch_json, "csv": _fetch_csv, "stix": _fetch_stix,
-    "taxii": _fetch_taxii, "abusech": _fetch_abusech, "osint": _fetch_bulk_osint, "darkweb-json": _fetch_darkweb_json,
+    "taxii": _fetch_taxii,
+    # Retired kinds: the engine now aggregates these feeds itself, so they are
+    # no longer offered in the UI - but existing connectors must keep working.
+    "abusech": _fetch_abusech, "osint": _fetch_bulk_osint, "darkweb-json": _fetch_darkweb_json,
 }
 
 
@@ -1045,8 +1060,9 @@ def seed_builtin_connectors():
         # Keyless + high-volume + no companion dependency: this is what makes a
         # fresh install show REAL indicators after one sync, instead of only the
         # simulated engine data.
-        ("Public OSINT Bulk Feeds", "osint", "", 30),
-        ("abuse.ch Feodo Tracker", "abusech", ABUSECH_FEODO_URL, 30),
+        # One engine. It aggregates the public feeds itself; seeding separate
+        # "bulk"/"abuse.ch" connectors alongside it just imported the same
+        # indicators twice under different names.
         ("ThreatOrbit OSINT Engine", "threatorbit", THREAT_API_URL, 30),
         ("NVD CVE Feed", "nvd", "https://services.nvd.nist.gov/rest/json/cves/2.0", 720),
     ]
