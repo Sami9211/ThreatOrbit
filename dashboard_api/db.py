@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 class SchemaVersionError(RuntimeError):
@@ -815,6 +815,10 @@ _MIGRATIONS = [
     # (indicators/sec) instead of only a count - what an analyst needs to
     # judge whether a feed is healthy or degrading.
     ("ioc_imports", "duration_ms", "INTEGER NOT NULL DEFAULT 0"),
+    # Per-connector state (OpenCTI calls this the connector "state"): HTTP
+    # validators per feed URL so a re-sync can ask "changed since last time?"
+    # instead of re-downloading and re-parsing an identical list every cycle.
+    ("connectors", "state", "TEXT NOT NULL DEFAULT '{}'"),
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),

@@ -19,11 +19,16 @@ import dashboard_api.connectors as conn_mod
 class _FakeStream:
     """Stand-in for the context manager `httpx.stream(...)` returns."""
 
-    def __init__(self, chunks: list[bytes], ok: bool = True, redirect_to: str | None = None):
+    def __init__(self, chunks: list[bytes], ok: bool = True, redirect_to: str | None = None,
+                 status_code: int | None = None):
         self._chunks = chunks
         self._ok = ok
         self.is_redirect = redirect_to is not None
         self.headers = {"location": redirect_to} if redirect_to else {}
+        # Real httpx responses always carry a status code; _read_capped reads it
+        # to detect a 304 (conditional GET). Model it so the double stays honest.
+        self.status_code = status_code if status_code is not None else (
+            302 if redirect_to else (200 if ok else 500))
 
     def __enter__(self):
         return self
@@ -776,3 +781,65 @@ def test_connector_cadence_allows_one_second():
     1s silently snapped back to 5s."""
     assert conn_mod.MIN_INTERVAL_SECONDS <= 1
     assert conn_mod.connector_interval_seconds({"interval_seconds": 1}) == 1
+
+
+def test_bulk_osint_uses_conditional_fetch_and_skips_unchanged_feeds(monkeypatch):
+    """Incremental sync, OpenCTI's "connector state" idea applied to blocklists.
+
+    These feeds have no cursor, but they serve HTTP validators. Storing
+    ETag/Last-Modified per feed lets a re-sync send a conditional request: an
+    unchanged feed answers 304 with no body, so there is nothing to download,
+    parse or dedup. Without this, a 1-second cadence re-pulls tens of thousands
+    of identical rows every tick.
+    """
+    seen_headers = {}
+
+    class _R:
+        def __init__(self, text="", not_modified=False, headers=None):
+            self.text = text
+            self.not_modified = not_modified
+            self.headers = headers or {}
+
+    # --- first sync: no state, everything is fetched and returns validators ---
+    def fresh(url, headers=None, **kw):
+        seen_headers[url] = headers
+        return _R("198.51.100.1\n198.51.100.2\n", headers={"etag": f'W/"{url[-8:]}"'})
+
+    monkeypatch.setattr(conn_mod, "_http_get", fresh)
+    first = conn_mod._fetch_bulk_osint({})
+    assert first, "first sync must import"
+    assert all(h in (None, {}) for h in seen_headers.values()), "no validators on a cold sync"
+    state = conn_mod._fetch_bulk_osint.last_state
+    assert len(state) == len(conn_mod._BULK_FEEDS), "every feed must record its validator"
+
+    # --- second sync: state present -> conditional request -> 304 -> no work ---
+    conditional = {}
+
+    def not_modified(url, headers=None, **kw):
+        conditional[url] = headers
+        return _R(not_modified=True)
+
+    monkeypatch.setattr(conn_mod, "_http_get", not_modified)
+    second = conn_mod._fetch_bulk_osint({"state": state})
+    assert second == [], "an unchanged feed must produce no indicators to re-ingest"
+    assert conditional, "second sync must issue requests"
+    for url, hdrs in conditional.items():
+        assert hdrs and "If-None-Match" in hdrs, f"no conditional header sent for {url}"
+    # The validators survive so the NEXT sync is conditional too.
+    assert conn_mod._fetch_bulk_osint.last_state == state
+
+
+def test_bulk_osint_keeps_state_when_a_feed_errors(monkeypatch):
+    """A transient failure must not discard a good validator - otherwise the next
+    sync silently falls back to a full re-download."""
+    class _R:
+        def __init__(self): self.text = "203.0.113.5\n"; self.not_modified = False; self.headers = {}
+
+    good = {u: {"etag": '"keep-me"'} for (_n, u, *_r) in conn_mod._BULK_FEEDS}
+
+    def flaky(url, headers=None, **kw):
+        raise ValueError("temporary upstream failure")
+
+    monkeypatch.setattr(conn_mod, "_http_get", flaky)
+    conn_mod._fetch_bulk_osint({"state": good})
+    assert conn_mod._fetch_bulk_osint.last_state == good, "validators lost on a transient error"

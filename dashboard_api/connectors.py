@@ -51,8 +51,12 @@ class _CappedResponse:
     """A minimal response wrapper exposing the `.json()` / `.text` the fetchers
     use, over a body already read under the size cap."""
 
-    def __init__(self, content: bytes):
+    def __init__(self, content: bytes, not_modified: bool = False, headers: dict | None = None):
         self._content = content
+        # True when the server answered 304 to our If-None-Match/If-Modified-Since:
+        # the feed is byte-identical to the last sync, so there is nothing to parse.
+        self.not_modified = not_modified
+        self.headers = headers or {}
 
     @property
     def text(self) -> str:
@@ -97,6 +101,8 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
                 # apply to every hop.
                 hop_kwargs = {k: v for k, v in kwargs.items() if k == "headers"}
                 continue
+            if r.status_code == 304:                # conditional GET: nothing new
+                return _CappedResponse(b"", not_modified=True)
             r.raise_for_status()                    # status is known before the body
             chunks: list[bytes] = []
             total = 0
@@ -106,7 +112,10 @@ def _read_capped(method: str, url: str, **kwargs) -> _CappedResponse:
                     raise ValueError(
                         f"feed response exceeds {_MAX_FEED_BYTES} bytes - refusing to buffer")
                 chunks.append(chunk)
-            return _CappedResponse(b"".join(chunks))
+            return _CappedResponse(
+                b"".join(chunks),
+                headers={k.lower(): v for k, v in r.headers.items()
+                         if k.lower() in ("etag", "last-modified")})
     raise ValueError(f"too many redirects (> {_MAX_REDIRECTS})")
 
 # Connector presets surfaced to the UI's "Add connector" form.
@@ -875,13 +884,43 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
     tens of thousands per second."""
     from concurrent.futures import ThreadPoolExecutor
 
+    # OpenCTI keeps a per-connector "state" so a re-run doesn't re-ingest what it
+    # already has. These blocklists have no cursor, but they DO serve HTTP
+    # validators - so we store ETag/Last-Modified per feed and send a conditional
+    # request. An unchanged feed answers 304 with no body: nothing to download,
+    # nothing to parse, nothing to dedup. That is what makes a short cadence
+    # sensible instead of re-pulling tens of thousands of identical rows.
+    state = c.get("state") or {}
+    if isinstance(state, str):
+        try:
+            state = json.loads(state)
+        except (ValueError, TypeError):
+            state = {}
+    new_state: dict = {}
+    unchanged: list[str] = []
+
     def one(feed):
         name, url, parser, forced, conf, threat = feed
+        prev = state.get(url) or {}
+        cond = {}
+        if prev.get("etag"):
+            cond["If-None-Match"] = prev["etag"]
+        if prev.get("last_modified"):
+            cond["If-Modified-Since"] = prev["last_modified"]
         try:
-            text = _http_get(url).text
-            pairs = _BULK_PARSERS[parser](text)
+            resp = _http_get(url, headers=cond or None)
+            if getattr(resp, "not_modified", False):
+                new_state[url] = prev            # keep the validator; feed unchanged
+                unchanged.append(name)
+                return []
+            h = getattr(resp, "headers", {}) or {}
+            if h.get("etag") or h.get("last-modified"):
+                new_state[url] = {"etag": h.get("etag"),
+                                  "last_modified": h.get("last-modified")}
+            pairs = _BULK_PARSERS[parser](resp.text)
         except Exception as e:                    # one dead feed must not zero the sync
             logging.warning("bulk OSINT feed %s failed: %s", name, e)
+            new_state[url] = prev                 # don't lose a good validator on a blip
             return []
         rows = []
         for value, note in pairs:
@@ -901,6 +940,11 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
     with ThreadPoolExecutor(max_workers=_BULK_WORKERS) as pool:
         for rows in pool.map(one, _BULK_FEEDS):
             out.extend(rows)
+    if unchanged:
+        logging.info("bulk OSINT: %d/%d feeds unchanged since last sync (%s)",
+                     len(unchanged), len(_BULK_FEEDS), ", ".join(unchanged))
+    # Hand the refreshed validators back so run_connector can persist them.
+    _fetch_bulk_osint.last_state = new_state
     return out
 
 
@@ -949,11 +993,21 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
                     "SELECT COUNT(*) AS n FROM iocs WHERE source LIKE ?",
                     (f"%{connector['name']}%",),
                 ).fetchone()["n"]
-            conn.execute(
-                "UPDATE connectors SET status='ok', last_run=?, last_error=NULL, "
-                "indicator_count=indicator_count+? WHERE id=?",
-                (_now(), result["imported"], cid),
-            )
+            # Persist the connector's state (HTTP validators) so the NEXT run can
+            # ask "changed?" instead of re-downloading everything.
+            new_state = getattr(fetch, "last_state", None)
+            if new_state:
+                conn.execute(
+                    "UPDATE connectors SET status='ok', last_run=?, last_error=NULL, "
+                    "indicator_count=indicator_count+?, state=? WHERE id=?",
+                    (_now(), result["imported"], dumps(new_state), cid),
+                )
+            else:
+                conn.execute(
+                    "UPDATE connectors SET status='ok', last_run=?, last_error=NULL, "
+                    "indicator_count=indicator_count+? WHERE id=?",
+                    (_now(), result["imported"], cid),
+                )
             record_job(conn, f"connector.{connector['kind']}", "completed",
                        {"connector": connector["name"], **result, "actor": actor})
             # Also log it as an IMPORT. The Feeds → Import history reads
@@ -1061,11 +1115,12 @@ def run_due_connectors() -> list[dict]:
         rows = conn.execute("SELECT * FROM connectors WHERE enabled=1").fetchall()
     for r in rows:
         c = dict(r)
-        if c.get("field_map") and isinstance(c["field_map"], str):
-            try:
-                c["field_map"] = json.loads(c["field_map"])
-            except (ValueError, TypeError):
-                c["field_map"] = {}
+        for jcol, default in (("field_map", {}), ("state", {})):
+            if isinstance(c.get(jcol), str):
+                try:
+                    c[jcol] = json.loads(c[jcol])
+                except (ValueError, TypeError):
+                    c[jcol] = default
         due = True
         if c.get("last_run"):
             try:

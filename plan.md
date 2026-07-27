@@ -3545,3 +3545,25 @@ _Move completed items here with the date so the roadmap stays honest._
     shows duration, indicators/sec, and the dup/skipped split - the numbers an
     analyst uses to judge whether a feed is healthy or degrading.
   • Verified: **620 backend tests pass, 1 skipped**; lint 0 errors, build clean.
+
+- **2026-07-26 · Incremental sync via connector state (OpenCTI's model, applied).**
+  Researched how OpenCTI actually ingests (docs + worker architecture): connectors
+  push STIX bundles onto RabbitMQ, workers consume continuously, a **"work"**
+  tracks each import's progress, and a per-connector **state** (cursor/last-run)
+  is what stops a re-run re-fetching data it already has. ThreatOrbit had none of
+  the last part - every tick re-downloaded and re-parsed the same tens of
+  thousands of rows, which is why a short cadence was pointless.
+  • New `connectors.state` column (schema v7) - the direct analogue of OpenCTI's
+    connector state. Public blocklists have no cursor, but they serve HTTP
+    validators, so we store **ETag/Last-Modified per feed URL** and send a
+    conditional request. An unchanged feed answers **304 with no body**: nothing
+    downloaded, parsed, deduped or written.
+  • `_read_capped` now surfaces 304 (`not_modified`) and captures validators;
+    `run_connector` persists the refreshed state after each run; a transient feed
+    error **keeps** the previous validator rather than forcing a full re-download.
+  • Fenced by three tests: cold sync sends no validators and records one per feed;
+    the second sync sends `If-None-Match`, gets 304 and imports nothing; and a
+    failing feed does not lose its stored validator.
+  • Test double `_FakeStream` now models `status_code` (real httpx responses
+    always carry one) - it lacked it, which is what the new 304 check exposed.
+  • Verified: **622 backend tests pass, 1 skipped.**
