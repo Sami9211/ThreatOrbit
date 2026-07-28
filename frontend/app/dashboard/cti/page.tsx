@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain, Globe, Hash, Target, ChevronRight, ExternalLink,
@@ -577,8 +578,38 @@ function NormalCTI() {
       {/* Threat Brief Cards (derived from live tracked actors) */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-white">Active Threats Affecting Your Sector</h2>
+        {/* An empty brief beside a six-figure indicator count reads as a broken
+            module. It is not: blocklists publish values without saying who is
+            behind them, so attribution simply is not in that data. Naming the
+            cause and the fix beats a bare "nothing here". */}
         {briefs.length === 0 && (
-          <p className="text-xs text-ink-500">No active threat actors are being tracked yet.</p>
+          (sum?.totalIocs ?? 0) > 0 ? (
+            <div className="text-xs text-ink-500 space-y-1.5 max-w-2xl">
+              <p>
+                No actor activity to brief on, though{' '}
+                <b className="text-ink-300">{(sum?.totalIocs ?? 0).toLocaleString()}</b> indicators
+                have been imported.
+              </p>
+              <p className="text-ink-600 leading-relaxed">
+                That is expected from blocklist sources: they publish indicator values without
+                attributing them, so no actor or campaign context comes with them. Attribution
+                arrives with report-shaped feeds — connect AlienVault OTX or a TAXII collection
+                under{' '}
+                <Link href="/dashboard/feeds/sources" className="text-magenta hover:underline">
+                  Feeds → Sources
+                </Link>{' '}
+                and pulses will populate this brief.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-ink-500">
+              No indicators imported yet — sync a connector under{' '}
+              <Link href="/dashboard/feeds/sources" className="text-magenta hover:underline">
+                Feeds → Sources
+              </Link>{' '}
+              to populate the brief.
+            </p>
+          )
         )}
         {briefs.map((b, i) => {
           const sev = sevFor(b.sophistication)
