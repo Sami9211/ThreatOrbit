@@ -39,6 +39,11 @@ type ThreatEntry = {
   attackType: string
   source: string
   sourceCountry: string
+  /** Attributed actor, when the source provides one. Kept SEPARATE from
+   *  sourceCountry: an actor name was previously stuffed into that field, and
+   *  escalating the entry then wrote "APT29" into the SIEM alert's src_country,
+   *  which the overview's country rollup groups by. */
+  actor?: string
   severity: Severity
   sectors: string[]
   summary: string
@@ -320,7 +325,10 @@ function ThreatCard({
       severity: entry.severity,
       description: entry.summary,
       srcIp: classifyIoc(entry.source) === 'ip' ? entry.source : undefined,
-      srcCountry: entry.sourceCountry,
+      // Only a real country goes in the country field; '-' means we do not know
+      // one, and the actor belongs nowhere near it.
+      srcCountry: entry.sourceCountry && entry.sourceCountry !== '-'
+        ? entry.sourceCountry : undefined,
       mitreTechId: entry.mitre[0],
       ruleName: 'Threat Intel Escalation',
       tiHits: entry.feedSources.length,
@@ -417,7 +425,7 @@ function ThreatCard({
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className="text-[10px] text-ink-500">{entry.attackType}</span>
             <span className="text-ink-700 text-[10px]">·</span>
-            <span className="text-[10px] text-ink-600">{entry.sourceCountry}</span>
+            <span className="text-[10px] text-ink-600">{entry.actor || entry.sourceCountry}</span>
             <span className="text-ink-700 text-[10px]">·</span>
             <span suppressHydrationWarning className="text-[10px] text-ink-600">{timeAgo(entry.ts)}</span>
           </div>
@@ -609,7 +617,8 @@ export default function FeedsPage() {
     title: `${i.threatType || 'Indicator'} - ${i.value}`,
     attackType: i.threatType || i.type.toUpperCase(),
     source: i.value,
-    sourceCountry: i.actor || '-',
+    sourceCountry: '-',          // a blocklist indicator carries no geography
+    actor: i.actor || '',
     severity: (['critical', 'high', 'medium', 'low', 'info'].includes(i.severity) ? i.severity : 'medium') as Severity,
     sectors: [],
     summary: `${i.type.toUpperCase()} indicator ingested from ${i.source}. Confidence ${i.confidence}%.${i.actor ? ` Attributed to ${i.actor}.` : ''}`,
@@ -773,7 +782,7 @@ export default function FeedsPage() {
     if (sourceFilter !== 'all' && !(e.feedSources ?? []).includes(sourceFilter)) return false
     if (search) {
       const q = search.toLowerCase()
-      const hay = [e.title, e.attackType, e.sourceCountry, ...(e.iocs ?? []),
+      const hay = [e.title, e.attackType, e.sourceCountry, e.actor ?? '', ...(e.iocs ?? []),
         ...(e.feedSources ?? []), ...(e.mitre ?? [])].join(' ').toLowerCase()
       if (!hay.includes(q)) return false
     }
