@@ -9,19 +9,22 @@ direction.
 """
 import uuid
 
-from dashboard_api.db import get_conn
+from dashboard_api.db import get_conn, host_of
 from dashboard_api.tenancy import DEFAULT_ORG_ID
 
 
 def _put_ioc(value, ioc_type="url", severity="critical", confidence=95):
+    # Sets `host` exactly as every production insert path does. A helper that
+    # skipped it would make the domain-lookup tests pass against rows that could
+    # not exist in a real store, hiding the very breakage they exist to catch.
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-            "first_seen,last_seen,tags,org_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "first_seen,last_seen,tags,org_id,host) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), ioc_type, value, "Phishing", confidence, severity,
              "pytest-feed", "", "2026-01-01T00:00:00", "2026-07-01T00:00:00", "[]",
-             DEFAULT_ORG_ID),
+             DEFAULT_ORG_ID, host_of(value, ioc_type)),
         )
         conn.commit()
 
@@ -224,3 +227,107 @@ def test_rdap_private_ip_needs_no_registry(monkeypatch):
     res = enrichment._enrich_rdap(None, "192.168.1.10", "ip")
     assert res["available"] is True and called == []
     assert "non-routable" in res["summary"]
+
+
+# -- Bulk lookup: the L1 triage action, and it must agree with the single one ---
+
+def test_bulk_lookup_returns_every_submitted_value_in_order(client, auth):
+    """An analyst pasting a firewall extract needs to see which lines were clean,
+    not only the hits - a response containing just the matches makes it
+    impossible to tell "checked and clean" from "not checked"."""
+    bad, unknown = "bulk-evil.example", "bulk-never-seen.example"
+    _put_ioc(bad, ioc_type="domain")
+    try:
+        r = client.post("/cti/lookup/bulk",
+                        json={"values": [unknown, bad, "  ", unknown]}, headers=auth)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # Blank dropped, duplicate collapsed, submission order preserved.
+        assert [x["value"] for x in body["results"]] == [unknown, bad]
+        assert body["total"] == 2 and body["found"] == 1
+        assert body["results"][0]["found"] is False
+        assert body["results"][0]["verdict"] == "unverified"
+        assert body["results"][1]["found"] is True
+        assert body["results"][1]["verdict"] == "malicious"
+    finally:
+        _cleanup(bad)
+
+
+def test_bulk_and_single_lookup_never_disagree(client, auth):
+    """Two triage paths that reached different verdicts on the same value would
+    be worse than having only one, so they share a matcher. This pins that: the
+    delimiter-bounded fallbacks and the LinkedIn regression must behave
+    identically through both endpoints."""
+    hosted = "https://evil.example/agree-check/login"
+    domain = "agree-evil.example"
+    _put_ioc(hosted)
+    _put_ioc(domain, ioc_type="domain", severity="medium", confidence=60)
+    probes = [domain, "evil.example", hosted, "agree-check", "agree-never-seen.example"]
+    try:
+        bulk = {r["value"]: r for r in client.post(
+            "/cti/lookup/bulk", json={"values": probes}, headers=auth).json()["results"]}
+        for v in probes:
+            single = client.get(f"/cti/lookup?value={v}", headers=auth).json()
+            b = bulk[v]
+            assert b["found"] == single["found"], f"{v}: found differs"
+            assert b["verdict"] == single["verdict"], f"{v}: verdict differs"
+            assert b["severity"] == single["severity"], f"{v}: severity differs"
+            if single["found"]:
+                # Single keys `value` to the matched indicator; bulk keeps the
+                # query in `value` and reports the match in `matched`.
+                assert b["matched"] == single["value"], f"{v}: matched indicator differs"
+    finally:
+        _cleanup(hosted, domain)
+
+
+def test_bulk_lookup_refuses_an_unbounded_paste(client, auth):
+    """A whole log pasted in must be refused with a clear limit, not turned into
+    an unbounded scan of the store."""
+    r = client.post("/cti/lookup/bulk",
+                    json={"values": [f"v{i}.example" for i in range(1500)]}, headers=auth)
+    assert r.status_code == 413
+    # The app wraps HTTPException.detail as {"error": ...} - assert the contract
+    # the browser actually receives, not the one FastAPI would emit by default.
+    assert "1000" in r.json()["error"]
+
+
+def test_bulk_lookup_handles_an_empty_submission(client, auth):
+    r = client.post("/cti/lookup/bulk", json={"values": ["", "   "]}, headers=auth)
+    assert r.status_code == 200
+    assert r.json() == {"total": 0, "found": 0, "results": []}
+
+
+def test_bulk_lookup_requires_authentication(client):
+    r = client.post("/cti/lookup/bulk", json={"values": ["x.example"]})
+    assert r.status_code in (401, 403), "the IOC store must not be readable anonymously"
+
+
+def test_every_ioc_insert_path_populates_host():
+    """`iocs.host` powers "is this domain known-bad?" as an indexed lookup. A row
+    written without it is invisible to that question - silently, with no error
+    and no failing request, just a quietly less accurate answer.
+
+    There are eight insert paths across the app. This is a static fence rather
+    than a behavioural one because the failure is a NEGATIVE: a ninth insert
+    added later would break domain lookups for whatever it writes, and no
+    existing test would notice."""
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    offenders = []
+    for path in root.rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        text = path.read_text()
+        for m in re.finditer(r'"INSERT INTO iocs \(([^"]*)"(?:\s*"([^"]*)")*', text):
+            # Column list can be split across adjacent string literals; join the
+            # statement's leading run of literals before checking.
+            tail = text[m.start():m.start() + 400]
+            cols = " ".join(re.findall(r'"([^"]*)"', tail)[:4])
+            if "host" not in cols:
+                line = text[:m.start()].count("\n") + 1
+                offenders.append(f"{path.relative_to(root)}:{line}")
+    assert not offenders, (
+        "these INSERT INTO iocs statements do not set `host`, so indicators they "
+        f"write will not be found by domain lookups: {offenders}")

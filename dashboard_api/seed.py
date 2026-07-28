@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from dashboard_api.auth import hash_password
 from dashboard_api.config import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_RANDOM
-from dashboard_api.db import dumps, get_conn
+from dashboard_api.db import dumps, get_conn, host_of
 from dashboard_api.scoring import asset_risk, recompute_asset_risk, risk_band
 
 UTC = timezone.utc
@@ -402,11 +402,12 @@ def _seed_iocs(conn, rng, actors):
             value = f"{rng.choice(['hr','it','ceo','billing'])}@{rng.choice(['acme-corp','mail-secure'])}.com"
         conn.execute(
             "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-            "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "first_seen,last_seen,tags,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()), t, value, rng.choice(["C2", "Phishing", "Malware", "Scanning", "Exfil"]),
              rng.randint(40, 99), rng.choice(SEVERITIES), rng.choice(["OTX", "abuse.ch", "MISP", "Internal", "VirusTotal"]),
              rng.choice(actors) if rng.random() > 0.4 else "", _ago(rng, 720), _ago(rng, 72),
-             dumps(rng.sample(["malicious", "active", "confirmed", "high-conf"], rng.randint(1, 2)))),
+             dumps(rng.sample(["malicious", "active", "confirmed", "high-conf"], rng.randint(1, 2))),
+             host_of(value, t)),
         )
 
 

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
-from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn, host_of, row_to_dict, rows_to_dicts
 from dashboard_api.webhooks import dispatch
 from dashboard_api.ioc_lifecycle import (
     decay_iocs, effective_confidence, lifecycle_of, record_sighting, set_known_good)
@@ -202,9 +202,10 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
         if new:
             conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,org_id,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 [(str(uuid.uuid4()), t, v, body.threat_type, conf, body.severity,
-                  body.source, body.actor, now, now, tags_json, org) for v, t in new],
+                  body.source, body.actor, now, now, tags_json, org, host_of(v, t))
+                 for v, t in new],
             )
             imported = len(new)
         _record_import(conn, body.source or "manual import", "manual", imported, duplicates,
@@ -287,9 +288,8 @@ def cti_summary(user: dict = Depends(current_user)):
     }
 
 
-@router.get("/lookup")
-def ioc_lookup(value: str):
-    """Look an indicator up against the IOC store and return a verdict + enrichment.
+def _match_indicator(conn, v: str):
+    """Find the store row for a queried value, or None.
 
     Matching is exact-first, then *delimiter-bounded*: a URL query also tries
     its hostname, and a bare-domain query matches URL indicators hosted ON that
@@ -298,23 +298,35 @@ def ioc_lookup(value: str):
     matched phishing URLs hosted elsewhere that embed the string, branding the
     legitimate domain malicious. False negatives beat fabricated positives.
     """
-    v = value.strip()
-    with get_conn() as conn:
-        row = conn.execute("SELECT * FROM iocs WHERE value=?", (v,)).fetchone()
-        if row is None and "://" in v:
-            # URL query → is its host itself a known indicator?
-            from urllib.parse import urlparse
-            host = (urlparse(v).hostname or "").strip(".")
-            if host:
-                row = conn.execute("SELECT * FROM iocs WHERE value=?", (host,)).fetchone()
-        elif row is None and v and "/" not in v and "." in v:
-            # Bare domain/IP query → URL indicators hosted ON it (host position
-            # only, so `evil.com/linkedin.com/x` can never match linkedin.com).
-            row = conn.execute(
-                "SELECT * FROM iocs WHERE value LIKE ? OR value LIKE ? OR value LIKE ? "
-                "ORDER BY confidence DESC LIMIT 1",
-                (f"%://{v}/%", f"%://{v}", f"%://{v}?%"),
-            ).fetchone()
+    row = conn.execute("SELECT * FROM iocs WHERE value=?", (v,)).fetchone()
+    if row is not None:
+        return row
+    if "://" in v:
+        # URL query → is its host itself a known indicator?
+        from urllib.parse import urlparse
+        host = (urlparse(v).hostname or "").strip(".")
+        if host:
+            return conn.execute("SELECT * FROM iocs WHERE value=?", (host,)).fetchone()
+        return None
+    if v and "/" not in v and "." in v:
+        # Bare domain/IP query → URL indicators hosted ON it (host position
+        # only, so `evil.com/linkedin.com/x` can never match linkedin.com).
+        #
+        # Matched against the indexed `host` column rather than three
+        # leading-wildcard LIKEs. The LIKE form could not use any index, so every
+        # MISS scanned the whole table: checking 1,000 lines against a
+        # 310k-indicator store took 32 seconds, which is not a triage tool.
+        return conn.execute(
+            "SELECT * FROM iocs WHERE host=? ORDER BY confidence DESC LIMIT 1",
+            (v.lower(),),
+        ).fetchone()
+    return None
+
+
+def _lookup_payload(v: str, row) -> dict:
+    """The verdict for one queried value. Shared by the single and bulk lookups:
+    two triage paths that disagreed about whether a value is malicious would be
+    worse than not having the second one."""
     if row is None:
         return {"value": v, "found": False, "verdict": "unverified", "confidence": 0,
                 "severity": None, "threatType": None, "actor": None, "source": None,
@@ -329,13 +341,84 @@ def ioc_lookup(value: str):
         verdict = "malicious" if ioc["severity"] in ("critical", "high") else (
             "suspicious" if ioc["severity"] == "medium" else "clean")
     return {
-        "value": ioc["value"], "found": True, "verdict": verdict,
+        "value": v, "matched": ioc["value"], "found": True, "verdict": verdict,
         "confidence": ioc["confidence"], "severity": ioc["severity"],
         "threatType": ioc["threat_type"], "actor": ioc["actor"], "source": ioc["source"],
         "firstSeen": ioc["first_seen"], "lastSeen": ioc["last_seen"], "tags": ioc["tags"],
         "status": life["status"], "effectiveConfidence": life["effectiveConfidence"],
         "sightings": life["sightings"], "knownGood": ioc.get("status") == "known-good",
     }
+
+
+@router.get("/lookup")
+def ioc_lookup(value: str):
+    """Look an indicator up against the IOC store and return a verdict + enrichment."""
+    v = value.strip()
+    with get_conn() as conn:
+        row = _match_indicator(conn, v)
+    out = _lookup_payload(v, row)
+    # The single-value response has always keyed `value` to the MATCHED
+    # indicator, not the query; keep that shape for existing callers.
+    if out["found"]:
+        out["value"] = out.pop("matched")
+    else:
+        out.pop("matched", None)
+    return out
+
+
+# An L1 pasting a firewall/proxy extract is the most common triage action there
+# is, and one-at-a-time it is one HTTP round trip per line. Capped so a paste of
+# a whole log cannot turn into an unbounded scan.
+_BULK_LOOKUP_MAX = 1000
+
+
+class BulkLookup(BaseModel):
+    values: list[str]
+
+
+@router.post("/lookup/bulk")
+def ioc_lookup_bulk(body: BulkLookup):
+    """Check many indicators against the store in one request.
+
+    Exact matches - the overwhelming majority - are answered with chunked
+    `value IN (...)` probes rather than a query per value, so checking 1,000
+    lines costs a handful of queries. Only the values that miss fall through to
+    the delimiter-bounded fallbacks, one query each.
+
+    Results come back in the order submitted, including the misses: an analyst
+    pasting 40 lines needs to see which 37 were clean, not just the 3 hits.
+    """
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for raw in body.values:
+        v = (raw or "").strip()
+        if v and v not in seen:
+            seen.add(v)
+            ordered.append(v)
+    if len(ordered) > _BULK_LOOKUP_MAX:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many values: {len(ordered)} (max {_BULK_LOOKUP_MAX} per request)")
+    if not ordered:
+        return {"total": 0, "found": 0, "results": []}
+
+    rows: dict[str, object] = {}
+    with get_conn() as conn:
+        for i in range(0, len(ordered), _IMPORT_PROBE_CHUNK):
+            chunk = ordered[i:i + _IMPORT_PROBE_CHUNK]
+            ph = ",".join("?" * len(chunk))
+            for r in conn.execute(f"SELECT * FROM iocs WHERE value IN ({ph})", chunk):
+                rows[r["value"]] = r
+        for v in ordered:
+            if v not in rows:
+                hit = _match_indicator(conn, v)
+                if hit is not None:
+                    rows[v] = hit
+
+    results = [_lookup_payload(v, rows.get(v)) for v in ordered]
+    return {"total": len(results),
+            "found": sum(1 for r in results if r["found"]),
+            "results": results}
 
 
 class SightingBody(BaseModel):
@@ -563,10 +646,10 @@ def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write")
             sev = "high" if a.get("to_ids") else "medium"
             conn.execute(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,org_id,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (str(uuid.uuid4()), a["type"], val, a.get("comment") or "misp-import",
                  70 if a.get("to_ids") else 50, sev, "MISP import", "", now, now,
-                 dumps([f"tlp:{tlp}", "misp"]), tenancy.org_of(user)))
+                 dumps([f"tlp:{tlp}", "misp"]), tenancy.org_of(user), host_of(val, a["type"])))
             imported += 1
         _record_import(conn, f"MISP event ({body.event.get('Event', {}).get('info', 'import')})"[:100],
                        "misp", imported, duplicates, skipped, user["email"])

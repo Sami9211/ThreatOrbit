@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from dashboard_api.auth import decode_token
-from dashboard_api.db import get_conn, rows_to_dicts
+from dashboard_api.db import get_conn, host_of, rows_to_dicts
 from dashboard_api import stix
 
 TAXII_MEDIA = "application/taxii+json;version=2.1"
@@ -188,10 +188,12 @@ def add_objects(collection_id: str, principal: dict = Depends(taxii_principal),
             else:
                 conn.execute(
                     "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                    "first_seen,last_seen,tags,status,sightings) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'active',1)",
+                    "first_seen,last_seen,tags,host,status,sightings) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'active',1)",
                     (str(uuid.uuid4()), ioc["type"], ioc["value"], ioc["threat_type"],
                      ioc["confidence"], ioc["severity"], "TAXII push", "", now, now,
-                     dumps(ioc.get("tags", []) + ["taxii"])))
+                     dumps(ioc.get("tags", []) + ["taxii"]),
+                     host_of(ioc["value"], ioc["type"])))
             statuses.append({"id": obj.get("id", "?"), "status": "complete"})
             success += 1
         audit(conn, actor, "taxii.push", collection_id, f"success={success} failure={failure}")

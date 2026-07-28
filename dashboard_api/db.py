@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 class SchemaVersionError(RuntimeError):
@@ -417,7 +417,11 @@ CREATE TABLE IF NOT EXISTS iocs (
     last_seen   TEXT,
     tags        TEXT NOT NULL DEFAULT '[]',
     status      TEXT NOT NULL DEFAULT 'active',   -- active|expired|known-good
-    sightings   INTEGER NOT NULL DEFAULT 1
+    sightings   INTEGER NOT NULL DEFAULT 1,
+    -- Hostname of a `url` indicator, extracted at insert. Lets "is this domain
+    -- known-bad?" find URLs hosted on it with an indexed equality match instead
+    -- of three leading-wildcard LIKEs over the whole table.
+    host        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ioc_sightings (
@@ -779,6 +783,7 @@ CREATE INDEX IF NOT EXISTS idx_ioc_imports_ts ON ioc_imports(ts DESC);
 -- for one COUNT). With both columns in one index it is answered from the index
 -- alone (~10ms).
 CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
+CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
 CREATE INDEX IF NOT EXISTS idx_pbruns_alert ON playbook_runs(alert_id);
 CREATE INDEX IF NOT EXISTS idx_pbruns_pb ON playbook_runs(playbook_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vulns_asset ON vuln_findings(asset_id);
@@ -915,6 +920,7 @@ _MIGRATIONS = [
     ("intel_reports", "targeted_countries", "TEXT NOT NULL DEFAULT '[]'"),
     ("intel_reports", "industries", "TEXT NOT NULL DEFAULT '[]'"),
     ("iocs", "report_id", "TEXT"),                    # the pulse/report it came from
+    ("iocs", "host", "TEXT"),                         # host of a url indicator (see _backfill_ioc_hosts)
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),
@@ -1056,6 +1062,41 @@ def _safe_schema(conn: sqlite3.Connection):
                 _rollback()
 
 
+def host_of(value: str, ioc_type: str = "") -> str | None:
+    """Hostname of a URL indicator, for the indexed `iocs.host` column.
+
+    Only URLs get one: for ip/domain rows the value IS the host, and storing it
+    twice would just double the index for no lookup we make."""
+    v = (value or "").strip()
+    if "://" not in v:
+        return None
+    if ioc_type and ioc_type != "url":
+        return None
+    from urllib.parse import urlparse
+    try:
+        return (urlparse(v).hostname or "").strip(".").lower() or None
+    except (ValueError, TypeError):
+        return None
+
+
+def _backfill_ioc_hosts(conn) -> int:
+    """Populate `iocs.host` for URL rows imported before the column existed.
+
+    Runs once per database: after this, every URL row either has a host or has
+    been examined and genuinely has none, so the WHERE clause matches nothing on
+    subsequent boots. Without the backfill, "is this domain known-bad?" would
+    silently stop finding URLs hosted on it for everything already imported -
+    a lookup that quietly gets less accurate after an upgrade is worse than one
+    that is slow."""
+    rows = conn.execute(
+        "SELECT id, value, type FROM iocs WHERE host IS NULL AND value LIKE '%://%'"
+    ).fetchall()
+    updates = [(h, r["id"]) for r in rows if (h := host_of(r["value"], r["type"]))]
+    if updates:
+        conn.executemany("UPDATE iocs SET host=? WHERE id=?", updates)
+    return len(updates)
+
+
 def _verify_schema(conn):
     """Fail loudly if applying the schema did not produce every table it declares.
 
@@ -1124,6 +1165,15 @@ def init_db():
         # second pass: indexes that needed migrated columns now succeed
         _safe_schema(conn)
         _verify_schema(conn)
+        try:
+            filled = _backfill_ioc_hosts(conn)
+            if filled:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Backfilled host for %d URL indicators", filled)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("host backfill failed")
         # Migration-gating: refuse to run against a DB newer than this code
         # (rollback safety) before we touch any data.
         _schema_version_gate(conn)

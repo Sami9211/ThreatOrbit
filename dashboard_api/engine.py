@@ -29,7 +29,7 @@ import random
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from dashboard_api.db import audit, dumps, get_conn
+from dashboard_api.db import audit, dumps, get_conn, host_of
 from dashboard_api.detections import _insert_alert, _TACTIC  # reuse the alert writer
 
 logger = logging.getLogger("dashboard_api.engine")
@@ -546,10 +546,11 @@ def _write_ioc(conn, ioc: dict, source: str):
     conf = int(ioc.get("confidence", 50))
     conn.execute(
         "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-        "first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "first_seen,last_seen,tags,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (str(uuid.uuid4()), ioc["type"], value, ioc.get("threat_type", "malicious-activity"),
          conf, ioc.get("severity") or _SEV_FROM_CONF(conf), source, ioc.get("actor", ""),
-         _now(), _now(), dumps(ioc.get("tags", ["engine-detected"]))),
+         _now(), _now(), dumps(ioc.get("tags", ["engine-detected"])),
+         host_of(value, ioc["type"])),
     )
     return True
 

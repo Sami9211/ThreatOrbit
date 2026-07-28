@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 import httpx
 
 from dashboard_api.config import THREAT_API_URL, SERVICES_API_KEY
-from dashboard_api.db import audit, dumps, get_conn, record_ioc_import, record_job
+from dashboard_api.db import audit, dumps, get_conn, host_of, record_ioc_import, record_job
 
 _TIMEOUT = 20.0
 # Cap the response body a feed may return (DoS guard). httpx reads the whole
@@ -609,7 +609,10 @@ def _import(indicators: list[dict], source: str,
                     ind.get("first_seen") or now, ind.get("last_seen") or now,
                     dumps(list(ind.get("tags") or [])),
                     # Provenance: the pulse/report this indicator belongs to.
-                    ind.get("report_id")),
+                    ind.get("report_id"),
+                    # Indexed host, so "is this domain known-bad?" is a lookup
+                    # rather than a wildcard scan of every URL in the store.
+                    host_of(value, itype)),
         })
 
     if not candidates:
@@ -636,7 +639,7 @@ def _import(indicators: list[dict], source: str,
         if new:
             conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,report_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,report_id,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 [c["row"] for c in new],
             )
             imported = len(new)
