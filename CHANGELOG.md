@@ -9,6 +9,104 @@ roadmap in [`plan.md`](plan.md) (completed roadmap items land here).
 
 ## [Unreleased]
 
+### 2026-07-28 - Ingestion at volume: live import progress, a wider OSINT catalogue, and lists that stop under-reporting
+
+**Imports are visible while they happen.** An import used to be atomic — nothing
+changed on screen until it finished, so a large sync in flight was
+indistinguishable from a hung one. A `connector_works` record (schema v9) is now
+opened before the first insert and updated after every 10k sub-batch;
+`GET /connectors/works` exposes percent and throughput, and the Imports page
+shows a live pipeline. Progress publishing is best-effort — a bookkeeping
+failure can never fail the import it describes.
+
+- Work timestamps keep microseconds. At whole-second resolution any import
+  faster than a second had `started_at == updated_at`, and the elapsed-time
+  floor turned that divide-by-zero into a rate inflated by orders of magnitude.
+  The endpoint returns `null` where there is nothing measurable to divide.
+- The connectors panel polls (2s while importing, 15s idle). It loaded exactly
+  once on mount, so background syncs never appeared and automatic syncing looked
+  broken while it was working.
+
+**The no-synthetic-data guarantee moved into the generator.** The first-boot
+prime called `process_tick()` directly, bypassing the caller-side
+`SYNTHETIC_ALLOWED` check that gates the engine loop: a live boot with the
+engine on seeded itself with **103 fabricated alerts** plus events and
+indicators before anyone had logged in. `process_tick()` now refuses outright,
+so no present or future call site can reintroduce the bypass. Deployments
+started by `linux-start.sh` run with the engine off and were not affected.
+
+**OSINT catalogue widened from 7 feeds to 16.** Measured end to end against the
+live sources: **315,385 indicators fetched and parsed in 2.7s, imported at
+~26,000/sec** (204k domains, 60k IPs, 50k URLs) — against roughly 24k before,
+almost all of them IP addresses. Two new parsers (hosts-file and netset), and
+reads for these feeds stop early on a line boundary so a 66 MB feed is not
+rejected over bytes that were going to be discarded. Truncation is opt-in;
+operator-supplied feeds still fail loudly rather than importing a prefix of a
+hostile response. The multi-million-entry undifferentiated hosts aggregations
+are deliberately excluded — past the per-feed cap they contribute whatever sorts
+first alphabetically, which is a biased sample rather than a bigger one.
+
+**Bulk indicator lookup**, and the indexed `iocs.host` column that makes it
+viable. Against a 310,649-indicator store:
+
+| | before | after |
+|---|---:|---:|
+| 40 lines (typical paste) | 1428 ms | 8 ms |
+| 1000 lines (max) | 32358 ms | 61 ms |
+| 40 lines one-at-a-time | 1823 ms | 255 ms |
+
+The cause was the bare-domain fallback matching URL indicators with three
+leading-wildcard `LIKE`s, which no index can serve, so every miss scanned the
+whole table. All eight IOC insert paths populate `host`, existing rows are
+backfilled once at boot (50,000 in 940 ms, idempotent thereafter), and a static
+fence checks every `INSERT INTO iocs` includes it — the failure mode is a silent
+negative, where a new insert path writes indicators that domain lookups quietly
+stop finding. A new **Bulk check** screen under IntelScope exposes it.
+
+**Browsing a large store is interactive again.** The CTI list orders by
+`last_seen, id` and no index matched, so every page load built a temp B-tree
+over the whole table: 85 ms → 14 ms first page, **1293 ms → 33 ms at the far end
+of 310k rows**. Only the default order is indexed; covering the other sort
+options as well halved import throughput at a million rows for orderings nothing
+requests. Bulk import measures ~36k/sec on an empty table and ~17k/sec at a
+million rows, with re-syncs — the common case — unaffected at ~118k/sec.
+
+**Lists stopped presenting a capped page as the whole set.**
+
+- The IOC library fetched 60 rows, discarded the API's `total`, and had no
+  offset, search or type filter: 99.98% of a 310k store was unreachable. It now
+  pages over the server-side total, with debounced value search.
+- The assets page tile labelled "Total Assets" counted the rows returned by a
+  request capped at 200 — a deployment with 640 assets read "200" on its own
+  inventory screen. That is a wrong number, not a truncated list.
+- The SIEM triage funnel's first stage had the same bug, but every later stage
+  counts the same loaded page and the bars are drawn against stage one, so
+  substituting a true total there alone would have understated every stage after
+  it. The stage is renamed and the sample named instead.
+- Dark-web findings and the IOC CSV export say what they actually contain; the
+  export pages the store rather than silently returning its first 1,000 rows.
+
+**Connector failures say which failure it was.** A rejected key and an
+unreachable host both recorded httpx's own text, which distinguishes neither and
+which is why a network blocking a feed read as an OTX key problem. Errors now
+map to actionable messages — rejected key (only where a key exists), rate
+limited, moved, provider-side, timeout, and unreachable, which names the host
+and states plainly that it is not an API-key problem. Found by running a real
+boot: a proxy refusing the tunnel raises `ProxyError` with no response attached
+and had been surfacing as the bare string "403 Forbidden". OTX with a valid key
+on an account subscribed to nothing now says so instead of reporting a healthy
+connector that imports nothing forever.
+
+**Operational history is bounded.** `jobs`, `ioc_imports` and `connector_works`
+each gain a row per sync and none were trimmed — survivable at hourly cadences,
+not at the one-second cadences now supported (~260k rows/day across the three).
+Each is a rolling window; in-flight works are exempt so a long import cannot
+have its progress row deleted underneath it.
+
+**Upgrade path verified against a populated database** (99,979 indicators,
+50,000 URLs, schema v9): migrate and backfill in 940 ms, no indicators lost,
+domain lookup of a pre-upgrade URL's host works, second boot 13 ms.
+
 ### 2026-07-18 - SIEM Rules Engine: opening a rule no longer crashes; edit/test/related all work (Audit-3 item 17)
 - **The real "clicking rules errors" bug found and fixed.** The rules page
   cast the `/siem/rules` response straight onto the seed display type
