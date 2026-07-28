@@ -94,6 +94,8 @@ const STATUS_STYLE: Record<string, { color: string; label: string }> = {
   'known-good': { color: tk('violet'), label: 'Known-good' },
 }
 const FILTERS = ['all', 'active', 'expired', 'known-good']
+const TYPES = ['all', 'ip', 'domain', 'url', 'hash', 'email', 'cve']
+const PAGE = 60
 
 function relTime(iso: string | null): string {
   if (!iso) return '-'
@@ -111,6 +113,10 @@ function relTime(iso: string | null): string {
  */
 export default function IocLifecyclePanel() {
   const [items, setItems] = useState<Ioc[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [query, setQuery] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<IocDetail | null>(null)
@@ -123,11 +129,37 @@ export default function IocLifecyclePanel() {
   const [actionMsg, setActionMsg] = useState<{ text: string; href: string; label: string } | null>(null)
 
   const load = useCallback(() => {
-    const params: Record<string, string> = { limit: '60', sort: 'last_seen', order: 'desc' }
+    setLoading(true)
+    const params: Record<string, string> = {
+      limit: String(PAGE), offset: String(page * PAGE), sort: 'last_seen', order: 'desc',
+    }
     if (filter !== 'all') params.status = filter
-    fetchIocs(params).then(({ items }) => setItems(items)).catch(() => {}).finally(() => setLoading(false))
-  }, [filter])
-  useEffect(() => { load() }, [load])
+    if (typeFilter !== 'all') params.type = typeFilter
+    if (query.trim()) params.q = query.trim()
+    // `total` was thrown away and there was no offset: the panel showed the 60
+    // most recent indicators and nothing else, so a store holding 310k was
+    // 99.98% unreachable from the UI.
+    fetchIocs(params)
+      .then(({ items, total }) => { setItems(items); setTotal(total) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [filter, typeFilter, query, page])
+
+  useEffect(() => {
+    // Debounced: at this table size every keystroke would otherwise run a
+    // substring scan over the whole store.
+    const t = window.setTimeout(load, query ? 300 : 0)
+    return () => window.clearTimeout(t)
+  }, [load, query])
+
+  // Any change to what is being asked for restarts at the first page - staying
+  // on page 40 of a filter that now has three results shows an empty list. Done
+  // in the handlers rather than an effect so it batches into a single render:
+  // resetting after the fact fetched once at the stale offset and again at zero,
+  // flashing the wrong rows in between.
+  const applyFilter = (f: string) => { setFilter(f); setPage(0) }
+  const applyType = (t: string) => { setTypeFilter(t); setPage(0) }
+  const applyQuery = (q: string) => { setQuery(q); setPage(0) }
 
   function open(id: string) {
     setEnrichment(null)
@@ -217,11 +249,15 @@ export default function IocLifecyclePanel() {
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-white">IOC database &amp; lifecycle</h3>
-          <p className="text-[10px] text-ink-500">Confidence decay · sightings · expiry · known-good handling</p>
+          <p className="text-[10px] text-ink-500">
+            {total.toLocaleString()} indicator{total === 1 ? '' : 's'}
+            {query || filter !== 'all' || typeFilter !== 'all' ? ' matching' : ''} · confidence decay ·
+            sightings · expiry
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
           {FILTERS.map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
+            <button key={f} onClick={() => applyFilter(f)}
               className={cn('px-2.5 py-1 rounded-lg text-[11px] font-medium capitalize transition-colors',
                 filter === f ? 'bg-violet/15 text-violet border border-violet/30' : 'text-ink-500 hover:text-ink-200 border border-white/8')}>
               {f}
@@ -238,10 +274,30 @@ export default function IocLifecyclePanel() {
         </div>
       </div>
 
+      {/* Search + type narrowing. With hundreds of thousands of indicators,
+          scrolling is not a way to find one. */}
+      <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/5 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="w-3.5 h-3.5 text-ink-600 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            value={query} onChange={(e) => applyQuery(e.target.value)}
+            placeholder="Search indicator value…"
+            className="w-full pl-8 pr-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-100 font-mono focus:outline-hidden focus:border-violet/40 placeholder-ink-700" />
+        </div>
+        <select value={typeFilter} onChange={(e) => applyType(e.target.value)}
+          className="px-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-violet/40">
+          {TYPES.map((t) => <option key={t} value={t}>{t === 'all' ? 'All types' : t}</option>)}
+        </select>
+      </div>
+
       <div className="divide-y divide-white/4 max-h-96 overflow-y-auto">
         {loading && <p className="text-[11px] text-ink-600 py-8 text-center animate-pulse">Loading indicators…</p>}
         {!loading && items.length === 0 && (
-          <p className="text-[11px] text-ink-600 py-8 text-center">No indicators{filter !== 'all' ? ` (${filter})` : ''} yet.</p>
+          <p className="text-[11px] text-ink-600 py-8 text-center">
+            {query.trim()
+              ? <>No indicator matches <span className="font-mono text-ink-400">{query.trim()}</span>. Absence from this store is not proof the value is safe.</>
+              : <>No indicators{filter !== 'all' ? ` (${filter})` : ''} yet.</>}
+          </p>
         )}
         {items.map((i) => {
           const st = STATUS_STYLE[i.status] ?? STATUS_STYLE.active
@@ -275,6 +331,28 @@ export default function IocLifecyclePanel() {
           )
         })}
       </div>
+
+      {/* Pager. Offset paging over a server-side total, so the whole store is
+          reachable rather than only its most recent page. */}
+      {total > PAGE && (
+        <div className="flex items-center justify-between gap-3 px-5 py-2.5 border-t border-white/5">
+          <span className="text-[10px] text-ink-600 tabular-nums">
+            {(page * PAGE + 1).toLocaleString()}–{Math.min((page + 1) * PAGE, total).toLocaleString()}
+            {' of '}{total.toLocaleString()}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}
+              className="px-2.5 py-1 rounded-lg border border-white/10 text-[11px] text-ink-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+              Previous
+            </button>
+            <button onClick={() => setPage((p) => p + 1)}
+              disabled={(page + 1) * PAGE >= total || loading}
+              className="px-2.5 py-1 rounded-lg border border-white/10 text-[11px] text-ink-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Detail drawer */}
       <AnimatePresence>

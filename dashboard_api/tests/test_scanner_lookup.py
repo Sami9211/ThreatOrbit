@@ -331,3 +331,50 @@ def test_every_ioc_insert_path_populates_host():
     assert not offenders, (
         "these INSERT INTO iocs statements do not set `host`, so indicators they "
         f"write will not be found by domain lookups: {offenders}")
+
+
+# -- Offset paging: the IOC library pages through the whole store ----------------
+
+def test_paging_covers_every_row_exactly_once(client, auth):
+    """The library pager walks the store with limit/offset. If the sort order is
+    not total, tied keys come back in backend-dependent order and paging silently
+    repeats some rows while skipping others - the analyst sees a list that looks
+    complete and is not. Bulk feeds import thousands of rows sharing one
+    last_seen second, so ties are the normal case here, not an edge case."""
+    tag = uuid.uuid4().hex[:8]
+    values = [f"page-{tag}-{i:03d}.example" for i in range(25)]
+    for v in values:
+        _put_ioc(v, ioc_type="domain")     # identical first_seen/last_seen: all tied
+    try:
+        seen, page, guard = [], 0, 0
+        while guard < 20:
+            guard += 1
+            r = client.get(f"/cti/iocs?q=page-{tag}-&limit=10&offset={page * 10}",
+                           headers=auth).json()
+            assert r["total"] == 25, f"filtered total wrong: {r['total']}"
+            if not r["items"]:
+                break
+            seen.extend(i["value"] for i in r["items"])
+            page += 1
+        assert len(seen) == 25, f"paging returned {len(seen)} rows for 25"
+        assert len(set(seen)) == 25, "paging repeated rows across pages"
+        assert set(seen) == set(values), "paging skipped rows"
+    finally:
+        _cleanup(*values)
+
+
+def test_search_and_type_filters_narrow_the_total_together(client, auth):
+    """The library sends q + type + status together; `total` must describe the
+    filtered set, or the pager reports pages that do not exist."""
+    tag = uuid.uuid4().hex[:8]
+    dom, ip = f"combo-{tag}.example", f"198.51.100.{uuid.uuid4().int % 200 + 10}"
+    _put_ioc(dom, ioc_type="domain")
+    _put_ioc(ip, ioc_type="ip")
+    try:
+        both = client.get(f"/cti/iocs?q=combo-{tag}", headers=auth).json()
+        assert both["total"] == 1 and both["items"][0]["value"] == dom
+
+        typed = client.get(f"/cti/iocs?q=combo-{tag}&type=ip", headers=auth).json()
+        assert typed["total"] == 0 and typed["items"] == []
+    finally:
+        _cleanup(dom, ip)
