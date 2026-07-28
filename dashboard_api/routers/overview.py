@@ -42,8 +42,14 @@ def kpis(user: dict = Depends(current_user)):
         ).fetchone()[0]
         assets = conn.execute(f"SELECT risk_score, criticality FROM assets WHERE 1=1 {sc}", sp).fetchall()
     # Criticality-weighted org risk - crown jewels move the needle more than endpoints.
+    # `score` is a criticality-weighted mean over assets, so with no assets it is
+    # 0 - which is indistinguishable from "assessed, and found to be at no risk".
+    # The dashboard inverts it into a Prevention pillar, so an empty inventory
+    # rendered as 100% prevention: a perfect posture asserted from no data at
+    # all. Report how many assets the score is actually based on and let the UI
+    # say "not assessed" rather than invent a pass.
     return {"threats": threats, "iocs": iocs, "sources": feeds + connectors,
-            "score": org_risk(assets)}
+            "score": org_risk(assets), "assetsAssessed": len(assets)}
 
 
 @router.get("/threat-vectors")

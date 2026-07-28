@@ -130,8 +130,12 @@ export interface User {
 export interface OverviewKpis {
   threats: number
   iocs: number
+  /** Active feeds + enabled connectors. */
   sources: number
+  /** Criticality-weighted mean asset risk. Meaningless when assetsAssessed is
+   *  0 - the mean of nothing is 0, which is NOT "no risk found". */
   score: number
+  assetsAssessed: number
 }
 
 export interface ThreatVector {

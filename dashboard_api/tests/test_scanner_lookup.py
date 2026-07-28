@@ -412,3 +412,23 @@ def test_sources_online_counts_connectors_not_only_the_feeds_table(client, auth)
     finally:
         with real_get_conn() as c:
             c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
+
+
+def test_kpis_report_how_many_assets_the_risk_score_covers(client, auth):
+    """`score` is a criticality-weighted MEAN over assets, and the mean of an
+    empty inventory is 0 - indistinguishable from "assessed, no risk found". The
+    dashboard inverts it into a Prevention pillar, so nothing assessed rendered
+    as 100% prevention: a perfect security posture asserted from no data. The
+    count lets the UI say "not assessed" instead of inventing a pass."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    body = client.get("/overview/kpis", headers=auth).json()
+    assert "assetsAssessed" in body, "the UI cannot tell an empty inventory from a clean one"
+
+    with real_get_conn() as c:
+        actual = c.execute("SELECT COUNT(*) AS n FROM assets").fetchone()["n"]
+    assert body["assetsAssessed"] == actual
+    # And the invariant that matters: a score of 0 with nothing assessed must be
+    # reported as covering nothing, never as a measured result.
+    if actual == 0:
+        assert body["score"] == 0 and body["assetsAssessed"] == 0

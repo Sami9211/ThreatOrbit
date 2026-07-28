@@ -746,7 +746,7 @@ function computePosture(
 
 /* -- Normal Mode Dashboard ----------------------------------------- */
 function NormalDashboard({ count, alerts, incidents, siem, soar }: {
-  count: { threats: number; iocs: number; sources: number; score: number }
+  count: { threats: number; iocs: number; sources: number; score: number; assetsAssessed?: number }
   alerts: OverviewAlert[]; incidents: Incident[]
   siem: SiemKpis | null; soar: SoarMetrics | null
 }) {
@@ -761,15 +761,24 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
   const { score, band, color: bandColor } = computePosture(count, siem, soar, incidents)
   // Prevention pillar stays the pure asset-risk (patch/hardening) posture, so
   // the three pillars decompose the overall score honestly.
-  const preventionScore = clampPct(100 - Number(count.score ?? 0))
+  // Prevention is the INVERSE of mean asset risk, and the mean of an empty
+  // inventory is 0 - so with nothing assessed this pillar read 100%, asserting
+  // a perfect posture from no data. null means "not assessed" and renders as
+  // such; absence of findings is not a finding of absence.
+  const assetsAssessed = Number(count.assetsAssessed ?? 0)
+  const preventionScore = assetsAssessed > 0 ? clampPct(100 - Number(count.score ?? 0)) : null
   // Posture pillars from REAL telemetry (not fixed demo numbers): Detection =
   // inverse of the live false-positive rate; Response = live SLA compliance;
   // Prevention = asset-risk posture. Each falls back to the prevention score.
   const pillars = [
     { label: 'Detection',  score: siem ? clampPct(100 - siem.fpRate) : preventionScore },
     { label: 'Response',   score: soar && soar.openCases > 0 ? clampPct((1 - (soar.slaBreached ?? 0) / soar.openCases) * 100) : (soar ? 100 : preventionScore) },
-    { label: 'Prevention', score: preventionScore },
-  ].map((p) => ({ ...p, color: p.score >= 60 ? 'text-safe' : p.score >= 40 ? 'text-amber' : 'text-threat' }))
+    { label: 'Prevention', score: preventionScore, hint: assetsAssessed === 0 ? 'no assets assessed' : undefined },
+  ].map((p) => ({
+    ...p,
+    color: p.score === null ? 'text-ink-500'
+      : p.score >= 60 ? 'text-safe' : p.score >= 40 ? 'text-amber' : 'text-threat',
+  }))
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -826,9 +835,11 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
         </div>
         <div className="flex justify-center gap-3 mt-6 relative">
           {pillars.map((m) => (
-            <div key={m.label} className="px-4 py-2.5 rounded-xl bg-white/4 border border-white/6 text-center min-w-[72px]">
-              <p className={cn('text-base font-bold', m.color)}>{m.score}</p>
+            <div key={m.label} className="px-4 py-2.5 rounded-xl bg-white/4 border border-white/6 text-center min-w-[72px]"
+              title={m.hint}>
+              <p className={cn('text-base font-bold', m.color)}>{m.score === null ? '—' : m.score}</p>
               <p className="text-[10px] text-ink-500 mt-0.5">{m.label}</p>
+              {m.hint && <p className="text-[9px] text-ink-600 mt-0.5">{m.hint}</p>}
             </div>
           ))}
         </div>
@@ -950,7 +961,7 @@ function NormalDashboard({ count, alerts, incidents, siem, soar }: {
 
 /* -- Page ---------------------------------------------------------- */
 export default function DashboardOverview() {
-  const [kpis, setKpis]           = useState<OverviewKpis>({ threats: 0, iocs: 0, sources: 0, score: 0 })
+  const [kpis, setKpis]           = useState<OverviewKpis>({ threats: 0, iocs: 0, sources: 0, score: 0, assetsAssessed: 0 })
   const [recentAlerts, setRecentAlerts]     = useState<OverviewAlert[]>([])
   const [incidents, setIncidents]           = useState<Incident[]>([])
   const [topActors, setTopActors]           = useState<TopActor[]>([])
