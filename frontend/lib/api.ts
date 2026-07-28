@@ -1228,6 +1228,17 @@ export const fetchStixBundle = (type?: string) =>
 export const lookupIoc = (value: string) =>
   api<IocLookup>(`/cti/lookup?value=${encodeURIComponent(value)}`)
 
+/** One row of a bulk check. `value` is what was submitted; `matched` is the
+ *  indicator it hit (they differ when a domain query matches a URL hosted on
+ *  it), and is absent on a miss. */
+export interface BulkLookupRow extends IocLookup {
+  matched?: string
+}
+export const BULK_LOOKUP_MAX = 1000
+export const lookupIocsBulk = (values: string[]) =>
+  api<{ total: number; found: number; results: BulkLookupRow[] }>(
+    '/cti/lookup/bulk', { method: 'POST', body: JSON.stringify({ values }) })
+
 /** IntelScope provider panel: the real enrichment pipeline run over an
  * arbitrary value. Every row carries an honest `available` flag - external
  * providers without API keys report unavailable, never invented verdicts. */

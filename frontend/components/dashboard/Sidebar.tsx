@@ -55,7 +55,16 @@ const NAV: NavGroup[] = [
           { href: '/dashboard/feeds/import',   label: 'Import IOCs', feature: 'feeds' },
         ],
       },
-      { href: '/dashboard/scanner', label: 'IntelScope', icon: Search, feature: 'scanner' },
+      {
+        href: '/dashboard/scanner',
+        label: 'IntelScope',
+        icon: Search,
+        feature: 'scanner',
+        sub: [
+          { href: '/dashboard/scanner',      label: 'Single value', feature: 'scanner' },
+          { href: '/dashboard/scanner/bulk', label: 'Bulk check',   feature: 'scanner' },
+        ],
+      },
       {
         href: '/dashboard/cti',
         label: 'CTI Intelligence',
