@@ -1278,6 +1278,9 @@ export default function SIEMPage() {
   // queue on a real deployment is honest ("nothing detected yet"), not a cue to
   // show demo alerts. ALERTS is a first-load-offline fallback only (see loadSiem).
   const [alerts, setAlerts] = useState<SiemAlert[]>([])
+  // Server-side queue size. The list is a capped page; several summaries used to
+  // present its length as the total.
+  const [alertTotal, setAlertTotal] = useState(0)
   const loadedRef = useRef(false)
   // Separate render state for "first answer pending": the queue shows
   // skeleton rows instead of flashing "No alerts match" while loading.
@@ -1342,7 +1345,9 @@ export default function SIEMPage() {
   const loadSiem = useCallback(() => {
     fetchSiemAlerts({ limit: '140', sort: 'ts', order: 'desc' })
       // The API answered → show its queue, even empty. Real deployment: honest.
-      .then(({ items }) => { setAlerts(items as unknown as SiemAlert[]); loadedRef.current = true })
+      .then(({ items, total }) => {
+        setAlerts(items as unknown as SiemAlert[]); setAlertTotal(total); loadedRef.current = true
+      })
       // Only a FIRST-load failure (genuinely offline) falls back to the demo
       // set; a transient poll failure after a good load must not fabricate.
       .catch(() => { if (!loadedRef.current) setAlerts(ALERTS) })
@@ -1706,7 +1711,12 @@ export default function SIEMPage() {
                 <MiniFilter label="Tactic" value={filterTactic}
                   options={['All', ...Array.from(new Set(ALERTS.map((a) => a.mitreTactic)))]}
                   onChange={setFilterTactic} />
-                <span className="text-[10px] text-ink-600 ml-auto">{filteredAlerts.length} alerts</span>
+                <span className="text-[10px] text-ink-600 ml-auto">
+                  {filteredAlerts.length} alerts
+                  {alertTotal > alerts.length && (
+                    <span className="text-amber"> · newest {alerts.length.toLocaleString()} of {alertTotal.toLocaleString()}</span>
+                  )}
+                </span>
               </div>
 
               {/* Table header */}
@@ -1930,9 +1940,19 @@ export default function SIEMPage() {
               {/* Alert funnel + severity breakdown */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bg-surface-2/40 rounded-xl p-4 border border-white/5">
-                  <p className="text-xs font-semibold text-white mb-4">Alert Triage Funnel</p>
+                  <p className="text-xs font-semibold text-white mb-1">Alert Triage Funnel</p>
+                  {/* Every stage counts the SAME loaded page, so the proportions
+                      are sound but the base is a sample, not the queue. Mixing a
+                      server-side total into stage one would leave the later bars
+                      measured against a denominator they were never counted
+                      from. Naming the sample is the honest fix. */}
+                  <p className="text-[10px] text-ink-600 mb-3">
+                    {alertTotal > alerts.length
+                      ? `Most recent ${alerts.length.toLocaleString()} of ${alertTotal.toLocaleString()} alerts`
+                      : `All ${alerts.length.toLocaleString()} alerts`}
+                  </p>
                   {[
-                    { stage: 'Total Alerts',    count: alerts.length, color: tk('violet') },
+                    { stage: 'Alerts in view',  count: alerts.length, color: tk('violet') },
                     { stage: 'Acknowledged',    count: alerts.filter(a => a.status !== 'new').length, color: tk('amber') },
                     { stage: 'Investigated',    count: alerts.filter(a => ['in-progress','resolved','closed'].includes(a.status)).length, color: tk('teal') },
                     { stage: 'Escalated',       count: alerts.filter(a => ['resolved','closed'].includes(a.status)).length, color: tk('threat') },
