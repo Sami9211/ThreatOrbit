@@ -25,20 +25,72 @@ SERVICES=(dashboard threat log frontend)
 say()  { printf '%s\n' "$*"; }
 fail() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
+# Kill a process AND everything it spawned. The recorded pid is not always the
+# process holding the port: the website is launched through `npx`, which runs
+# `next start` as a child, so signalling only the recorded pid left the server
+# listening on :3000 after `stop` reported success.
+kill_tree() {
+    local pid=$1 sig=${2:-TERM} kid
+    for kid in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$kid" "$sig"
+    done
+    kill -"$sig" "$pid" 2>/dev/null
+}
+
+# Anything still listening on our ports, as "pid command" lines.
+port_holders() {
+    local port=$1
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null
+    elif command -v fuser >/dev/null 2>&1; then
+        fuser "$port"/tcp 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$'
+    fi
+}
+
 stop_all() {
-    local stopped=0
+    local stopped=0 pid pidfile svc
     for svc in "${SERVICES[@]}"; do
-        local pidfile="$RUN_DIR/$svc.pid"
-        if [ -f "$pidfile" ]; then
-            local pid; pid=$(cat "$pidfile")
+        pidfile="$RUN_DIR/$svc.pid"
+        [ -f "$pidfile" ] || continue
+        pid=$(cat "$pidfile")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill_tree "$pid" TERM
+            # Give it a moment to shut down cleanly, then insist.
+            for _ in $(seq 1 10); do
+                kill -0 "$pid" 2>/dev/null || break
+                sleep 0.5
+            done
             if kill -0 "$pid" 2>/dev/null; then
-                kill "$pid" 2>/dev/null && stopped=$((stopped+1))
-                say "stopped $svc (pid $pid)"
+                say "$svc did not exit on request - forcing"
+                kill_tree "$pid" KILL
             fi
-            rm -f "$pidfile"
+            stopped=$((stopped+1))
+            say "stopped $svc (pid $pid)"
         fi
+        rm -f "$pidfile"
     done
     [ "$stopped" -eq 0 ] && say "nothing was running (no live pids in $RUN_DIR/)"
+
+    # Verify rather than assume. A leftover listener is exactly the state that
+    # makes the next start fail with "port already in use", and deleting the
+    # project directory removes the pid files without stopping anything - so
+    # `stop` can have nothing to go on while the services are still up.
+    local port leftovers=0 holders
+    for port in 8000 8001 8002 3000; do
+        holders=$(port_holders "$port")
+        if [ -n "$holders" ]; then
+            leftovers=1
+            say "port $port is STILL in use by pid(s): $(echo "$holders" | tr '\n' ' ')"
+            for pid in $holders; do
+                say "    $(ps -o pid=,args= -p "$pid" 2>/dev/null | cut -c1-100)"
+            done
+        fi
+    done
+    if [ "$leftovers" = 1 ]; then
+        say ""
+        say "These were not started by this script run (no matching pid file), so it"
+        say "will not kill them blind. To stop them:  kill <pid>   (then -9 if needed)"
+    fi
     exit 0
 }
 
@@ -109,8 +161,21 @@ say "[4/6] Building the website for fast loading (about a minute)..."
 # ---- start the services -------------------------------------------------
 mkdir -p "$RUN_DIR"
 for port in 8000 8001 8002 3000; do
-    if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$port "; then
-        fail "port $port is already in use - run './linux-start.sh stop' first, or free the port."
+    holders=$(port_holders "$port")
+    if [ -z "$holders" ] && command -v ss >/dev/null 2>&1 \
+       && ss -ltn 2>/dev/null | grep -q ":$port "; then
+        holders="(unknown pid)"
+    fi
+    if [ -n "$holders" ]; then
+        # Name the process. "port already in use" alone sends people hunting,
+        # and the usual cause is a previous run whose pid files were removed
+        # with the project directory - so `stop` had nothing left to act on.
+        say "port $port is held by:"
+        for p in $holders; do
+            say "    $(ps -o pid=,args= -p "$p" 2>/dev/null | cut -c1-100)"
+        done
+        fail "port $port is already in use - run './linux-start.sh stop' first,
+  or stop the process listed above (kill <pid>)."
     fi
 done
 
