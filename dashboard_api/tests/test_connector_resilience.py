@@ -1686,3 +1686,29 @@ def test_every_transport_failure_reads_as_a_reachability_problem(exc):
     msg = conn_mod.describe_fetch_error(exc, {"kind": "otx", "name": "OTX",
                                               "url": "https://otx.alienvault.com"})
     assert "not an API-key problem" in msg
+
+def test_a_failed_sync_is_not_reported_as_100_percent(client, auth):
+    """100% has to mean "got through all of it".
+
+    A fetch that failed before it knew how much there was recorded expected=0,
+    and percent fell through to "not running, therefore 100" - which the
+    pipeline view drew as a FULL bar. A dead feed rendered as a finished one,
+    in red. Seen in a browser against the real stack, not in a unit test."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:6]
+    dead = conn_mod.start_work(f"dead-feed-{tag}", None, 0)
+    conn_mod.finish_work(dead, "failed", "could not reach the feed")
+    done = conn_mod.start_work(f"good-feed-{tag}", None, 0)
+    conn_mod.finish_work(done, "completed", processed=5, imported=5)
+    try:
+        rows = {w["id"]: w for w in client.get("/connectors/works?limit=50",
+                                               headers=auth).json()}
+        assert rows[dead]["percent"] == 0, (
+            f"a failed sync that processed nothing reported {rows[dead]['percent']}%")
+        # A completed run with no expected count is still genuinely finished.
+        assert rows[done]["percent"] == 100
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works WHERE id IN (?,?)", (dead, done))
+            c.commit()

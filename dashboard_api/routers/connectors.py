@@ -98,7 +98,14 @@ def list_works(limit: int = 20, _: dict = Depends(current_user)):
     for w in works:
         exp = w.get("expected") or 0
         proc = w.get("processed") or 0
-        w["percent"] = round(min(100, proc / exp * 100)) if exp else (100 if w["status"] != "running" else 0)
+        # 100% must mean "got through all of it". A failed sync that never
+        # fetched anything was reported as 100 (there was nothing expected, and
+        # it was not running), which the pipeline view drew as a FULL bar in red
+        # - reading as "finished" for a run that did nothing at all.
+        if exp:
+            w["percent"] = round(min(100, proc / exp * 100))
+        else:
+            w["percent"] = 100 if w["status"] == "completed" else 0
         # Live throughput, so a slow feed is visibly slow rather than just
         # "running". Reported only when it is actually measurable: no processed
         # indicators, or no elapsed time to divide by, means we have no rate -

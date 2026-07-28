@@ -142,9 +142,12 @@ function WorkRow({ w }: { w: ConnectorWork }) {
       {/* The batch size is known before the first insert, so this bar tracks
           real completion rather than a guess that jumps to 100%. */}
       <div className="mt-2 h-1.5 rounded-full bg-white/8 overflow-hidden">
+        {/* A failed run keeps the fraction it actually reached, floored only so
+            the red is visible at all. Filling the bar for a failure that
+            processed nothing made a dead feed look like a finished one. */}
         <div className={cn('h-full rounded-full transition-[width] duration-500',
           w.status === 'failed' ? 'bg-threat' : running ? 'bg-violet' : 'bg-safe')}
-          style={{ width: `${w.status === 'failed' ? Math.max(2, w.percent) : w.percent}%` }} />
+          style={{ width: `${w.status === 'failed' ? Math.max(3, w.percent) : w.percent}%` }} />
       </div>
       <p className="text-[10px] text-ink-600 mt-1.5 tabular-nums">
         {w.processed.toLocaleString()}{w.expected ? ` / ${w.expected.toLocaleString()}` : ''} processed

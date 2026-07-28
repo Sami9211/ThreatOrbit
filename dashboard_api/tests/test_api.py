@@ -694,7 +694,18 @@ def test_create_asset(client, auth):
 
 
 def test_services_bridge_degrades_gracefully(client, auth, monkeypatch):
-    """With no companion services running, reads degrade and actions 503."""
+    """With no companion services running, reads degrade and actions 503.
+
+    The URLs are pointed at a port nothing can be listening on rather than left
+    at their defaults. Relying on the real companions being down made this fail
+    for anyone who happened to have the stack running locally - the assertion
+    became "is port 8000 free on this machine?", which is not what it is testing.
+    """
+    import dashboard_api.routers.services as svc
+    dead = "http://127.0.0.1:9"          # discard port: refuses every connection
+    monkeypatch.setattr(svc, "THREAT_API_URL", dead)
+    monkeypatch.setattr(svc, "LOG_API_URL", dead)
+
     status = client.get("/services/status", headers=auth).json()
     assert status["threatApi"]["available"] is False
     assert status["logApi"]["available"] is False
