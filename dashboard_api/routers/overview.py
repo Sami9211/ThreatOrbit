@@ -27,14 +27,23 @@ def kpis(user: dict = Depends(current_user)):
     sc, sp = _scope(user)
     with get_conn() as conn:
         iocs = conn.execute(f"SELECT COUNT(*) FROM iocs WHERE 1=1 {sc}", sp).fetchone()[0]
+        # "Sources online" means every live intel source, which is connectors as
+        # well as feeds - the tile has always said "feeds & connectors active".
+        # Counting only the `feeds` table made it structurally zero in live mode,
+        # which deliberately seeds no feed rows: a deployment pulling 310k
+        # indicators through two working connectors reported "0 Sources Online"
+        # on its front page.
         feeds = conn.execute(f"SELECT COUNT(*) FROM feeds WHERE status='active' {sc}", sp).fetchone()[0]
+        connectors = conn.execute(
+            f"SELECT COUNT(*) FROM connectors WHERE enabled=1 {sc}", sp).fetchone()[0]
         threats = conn.execute(
             "SELECT COUNT(*) FROM alerts WHERE severity IN ('critical','high') "
             f"AND status NOT IN ('resolved','closed') {sc}", sp
         ).fetchone()[0]
         assets = conn.execute(f"SELECT risk_score, criticality FROM assets WHERE 1=1 {sc}", sp).fetchall()
     # Criticality-weighted org risk - crown jewels move the needle more than endpoints.
-    return {"threats": threats, "iocs": iocs, "sources": feeds, "score": org_risk(assets)}
+    return {"threats": threats, "iocs": iocs, "sources": feeds + connectors,
+            "score": org_risk(assets)}
 
 
 @router.get("/threat-vectors")

@@ -378,3 +378,37 @@ def test_search_and_type_filters_narrow_the_total_together(client, auth):
         assert typed["total"] == 0 and typed["items"] == []
     finally:
         _cleanup(dom, ip)
+
+
+def test_sources_online_counts_connectors_not_only_the_feeds_table(client, auth):
+    """"Sources Online" on the front page is labelled "feeds & connectors
+    active" but counted only the `feeds` table. Live mode deliberately seeds no
+    feed rows, so the tile was structurally zero: a deployment pulling hundreds
+    of thousands of indicators through working connectors reported 0 sources on
+    the first screen an operator sees - which reads as "nothing is connected"."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    before = client.get("/overview/kpis", headers=auth).json()["sources"]
+    cid = "srccount-" + uuid.uuid4().hex[:8]
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,60,60,'{}','ok',0,?)",
+            (cid, f"Counted {cid}", "json", "https://example.test/feed",
+             "2026-01-01T00:00:00"))
+        c.commit()
+    try:
+        after = client.get("/overview/kpis", headers=auth).json()["sources"]
+        assert after == before + 1, (
+            f"an enabled connector did not count as a source ({before} -> {after})")
+
+        # A disabled connector is not an online source.
+        with real_get_conn() as c:
+            c.execute("UPDATE connectors SET enabled=0 WHERE id=?", (cid,))
+            c.commit()
+        disabled = client.get("/overview/kpis", headers=auth).json()["sources"]
+        assert disabled == before, f"a disabled connector still counted ({disabled})"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
