@@ -1,7 +1,28 @@
 // Live-mode dashboard crawl: visit every route, collect runtime problems.
 import { chromium } from 'playwright'
 
-const exe = process.env.PW_EXECUTABLE_PATH || '/opt/pw-browsers/chromium'
+// Resolve the browser rather than assuming a fixed path: Playwright installs
+// into a VERSIONED directory (chromium-1194/...), so the bare
+// /opt/pw-browsers/chromium only exists on some images and this script failed
+// to launch at all on the others.
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+function findChromium() {
+  if (process.env.PW_EXECUTABLE_PATH) return process.env.PW_EXECUTABLE_PATH
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers'
+  const candidates = ['chromium', ...(existsSync(root) ? readdirSync(root) : [])
+    .filter((d) => d.startsWith('chromium-'))
+    .sort().reverse()]
+  for (const dir of candidates) {
+    for (const rel of ['chrome-linux/chrome', '']) {
+      const p = rel ? join(root, dir, rel) : join(root, dir)
+      if (existsSync(p)) return p
+    }
+  }
+  return undefined                       // let Playwright use its own default
+}
+const exe = findChromium()
 const BASE = 'http://localhost:3000'
 const API = 'http://localhost:8002'
 
@@ -14,7 +35,8 @@ const ROUTES = [
   '/dashboard/cti', '/dashboard/cti/actors', '/dashboard/cti/hunt',
   '/dashboard/assets', '/dashboard/assets/network', '/dashboard/assets/vulns',
   '/dashboard/darkweb', '/dashboard/feeds', '/dashboard/feeds/sources',
-  '/dashboard/feeds/import', '/dashboard/scanner',
+  '/dashboard/feeds/import', '/dashboard/feeds/imports',
+  '/dashboard/scanner', '/dashboard/scanner/bulk',
   '/dashboard/config', '/dashboard/config/api', '/dashboard/config/users',
   '/dashboard/config/sources',
 ]
