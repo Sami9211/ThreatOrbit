@@ -37,14 +37,45 @@ kill_tree() {
     kill -"$sig" "$pid" 2>/dev/null
 }
 
-# Anything still listening on our ports, as "pid command" lines.
+# Is anything listening on this port? Read straight from the kernel rather than
+# through ss/lsof/fuser, none of which is guaranteed present (a minimal Fedora
+# install has none of them) and any of which can come up empty while the port is
+# genuinely taken - observed with `next start`, whose listener shows in
+# /proc/net/tcp but which `lsof -i` did not report at all. A check that fails
+# open is worse than no check: it passes, and the service then cannot bind.
+# Returns 0 in use, 1 free, 2 undetermined.
+port_in_use() {
+    local port=$1 hex f files=""
+    hex=$(printf ':%04X' "$port")
+    # tcp6 is absent on IPv6-less hosts; passing a missing file makes awk abort
+    # before END, which silently reported every port as free.
+    for f in /proc/net/tcp /proc/net/tcp6; do [ -r "$f" ] && files="$files $f"; done
+    [ -n "$files" ] || return 2
+    # shellcheck disable=SC2086
+    awk -v suf="$hex" '$4=="0A" && substr($2, length($2)-length(suf)+1) == suf { f=1 }
+                       END { exit(f?0:1) }' $files
+}
+
+# Best-effort pid attribution for a port. May legitimately come back empty even
+# when the port IS in use - occupancy is decided by port_in_use, never by this.
 port_holders() {
     local port=$1
-    if command -v lsof >/dev/null 2>&1; then
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltnp 2>/dev/null | awk -v p=":$port\$" '$4 ~ p' \
+            | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
+    elif command -v lsof >/dev/null 2>&1; then
         lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null
     elif command -v fuser >/dev/null 2>&1; then
         fuser "$port"/tcp 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$'
     fi
+}
+
+# Print "<pid> <command>" for each holder we could identify, indented.
+describe_holders() {
+    local pid
+    for pid in $(port_holders "$1"); do
+        say "    $(ps -o pid=,args= -p "$pid" 2>/dev/null | cut -c1-100)"
+    done
 }
 
 stop_all() {
@@ -75,15 +106,12 @@ stop_all() {
     # makes the next start fail with "port already in use", and deleting the
     # project directory removes the pid files without stopping anything - so
     # `stop` can have nothing to go on while the services are still up.
-    local port leftovers=0 holders
+    local port leftovers=0
     for port in 8000 8001 8002 3000; do
-        holders=$(port_holders "$port")
-        if [ -n "$holders" ]; then
+        if port_in_use "$port"; then
             leftovers=1
-            say "port $port is STILL in use by pid(s): $(echo "$holders" | tr '\n' ' ')"
-            for pid in $holders; do
-                say "    $(ps -o pid=,args= -p "$pid" 2>/dev/null | cut -c1-100)"
-            done
+            say "port $port is STILL in use:"
+            describe_holders "$port"
         fi
     done
     if [ "$leftovers" = 1 ]; then
@@ -161,19 +189,12 @@ say "[4/6] Building the website for fast loading (about a minute)..."
 # ---- start the services -------------------------------------------------
 mkdir -p "$RUN_DIR"
 for port in 8000 8001 8002 3000; do
-    holders=$(port_holders "$port")
-    if [ -z "$holders" ] && command -v ss >/dev/null 2>&1 \
-       && ss -ltn 2>/dev/null | grep -q ":$port "; then
-        holders="(unknown pid)"
-    fi
-    if [ -n "$holders" ]; then
-        # Name the process. "port already in use" alone sends people hunting,
-        # and the usual cause is a previous run whose pid files were removed
-        # with the project directory - so `stop` had nothing left to act on.
+    if port_in_use "$port"; then
+        # Name the process where we can. "port already in use" alone sends
+        # people hunting, and the usual cause is a previous run whose pid files
+        # went with a deleted project directory, leaving `stop` nothing to act on.
         say "port $port is held by:"
-        for p in $holders; do
-            say "    $(ps -o pid=,args= -p "$p" 2>/dev/null | cut -c1-100)"
-        done
+        describe_holders "$port"
         fail "port $port is already in use - run './linux-start.sh stop' first,
   or stop the process listed above (kill <pid>)."
     fi
