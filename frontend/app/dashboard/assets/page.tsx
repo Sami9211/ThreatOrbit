@@ -122,6 +122,10 @@ let nextId = 200
    too - otherwise the empty tracks keep consuming width and squash the remaining
    columns (making the risk rings overlap badges on mobile). Track count always
    matches the number of *visible* cells at each breakpoint. */
+// Inventory page size. The API caps `limit` at 500; 200 keeps the initial
+// render light, and the count below the table says when there is more.
+const ASSET_PAGE = 200
+
 const ROW_GRID =
   'grid gap-2 md:gap-3 items-center ' +
   'grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] ' +          // mobile: Asset Risk Alerts Status Actions
@@ -176,6 +180,9 @@ export default function AssetsPage() {
   // empty inventory is honest ("no assets yet"), never a cue to show demo hosts.
   // SEED is used only if the API is unreachable (offline/marketing preview).
   const [assets, setAssets] = useState<Asset[]>([])
+  // Server-side total. The list is capped at ASSET_PAGE; without this the page
+  // showed the first 200 of an arbitrarily large inventory and said nothing.
+  const [assetTotal, setAssetTotal] = useState(0)
   // First answer pending → skeleton rows, not "No assets match your filters"
   const [assetsPending, setAssetsPending] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -188,9 +195,9 @@ export default function AssetsPage() {
 
   // Load from API
   const loadAssets = () => {
-    fetchAssets({ limit: '200' })
+    fetchAssets({ limit: String(ASSET_PAGE) })
       // The API answered → show its inventory, even when empty (real deployment).
-      .then(({ items }) => setAssets(items as unknown as Asset[]))
+      .then(({ items, total }) => { setAssets(items as unknown as Asset[]); setAssetTotal(total) })
       // Unreachable → offline preview with the demo inventory.
       .catch(() => setAssets(SEED))
       .finally(() => setAssetsPending(false))
@@ -209,8 +216,8 @@ export default function AssetsPage() {
     setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'scanning' } : a)))
     scanAssetVulns(id)
       .then(async () => {
-        const { items } = await fetchAssets({ limit: '200' })
-        setAssets(items as unknown as Asset[])
+        const { items, total } = await fetchAssets({ limit: String(ASSET_PAGE) })
+        setAssets(items as unknown as Asset[]); setAssetTotal(total)
       })
       .catch(() => {
         // API unreachable - restore status rather than fabricate results.
@@ -255,8 +262,8 @@ export default function AssetsPage() {
     setRecomputing(true)
     try {
       await recomputeAssetRisk()
-      const { items } = await fetchAssets({ limit: '200' })
-      setAssets(items as unknown as Asset[])
+      const { items, total } = await fetchAssets({ limit: String(ASSET_PAGE) })
+      setAssets(items as unknown as Asset[]); setAssetTotal(total)
     } catch { /* leave current data in place */ }
     finally { setRecomputing(false) }
   }
@@ -358,7 +365,10 @@ export default function AssetsPage() {
         {/* KPI strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 border-b border-white/5 shrink-0">
           {[
-            { label: 'Total Assets',   value: assets.length,                   color: 'text-white',   sub: `${assets.filter(a => a.criticality === 'critical').length} critical infra` },
+            // The server-side total, not the number of rows fetched: labelled
+            // "Total Assets" while counting a capped page, this under-reported
+            // the inventory of any deployment with more than ASSET_PAGE assets.
+            { label: 'Total Assets',   value: assetTotal || assets.length,     color: 'text-white',   sub: `${assets.filter(a => a.criticality === 'critical').length} critical infra` },
             { label: 'At Risk',        value: atRisk,                          color: 'text-magenta', sub: `${assets.filter(a => a.status === 'critical').length} critical status` },
             { label: 'Open Alerts',    value: assets.reduce((s,a)=>s+a.alerts,0), color: 'text-threat',  sub: 'across all assets' },
             { label: 'Total CVEs',     value: totalCves,                       color: 'text-amber',   sub: `${criticalCves} critical severity` },
@@ -411,7 +421,13 @@ export default function AssetsPage() {
             <option value="name">Sort: Name</option>
           </select>
 
-          <span className="text-[10px] text-ink-600">{filtered.length} assets</span>
+          <span className="text-[10px] text-ink-600">
+            {filtered.length} assets
+            {/* Say when the table is a page rather than the whole inventory. */}
+            {assetTotal > assets.length && (
+              <span className="text-amber"> · showing first {assets.length.toLocaleString()} of {assetTotal.toLocaleString()}</span>
+            )}
+          </span>
 
           {/* View toggle */}
           <div className="ml-auto flex items-center gap-1 bg-surface-2 border border-white/8 rounded-lg p-0.5">

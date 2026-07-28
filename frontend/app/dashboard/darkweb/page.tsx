@@ -43,8 +43,13 @@ function relTime(iso: string): string {
   const h = Math.floor(m / 60); return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
 }
 
+// Findings page size. The list below is the most recent page, not the archive;
+// the footer says so when there is more behind it.
+const DW_PAGE = 200
+
 export default function DarkWebPage() {
   const [findings, setFindings] = useState<DarkWebFinding[]>([])
+  const [total, setTotal] = useState(0)
   const [summary, setSummary] = useState<DarkWebSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [catFilter, setCatFilter] = useState<string>('all')
@@ -54,8 +59,8 @@ export default function DarkWebPage() {
   useEffect(() => { setCopiedUrl(false) }, [selected?.id])
 
   const load = useCallback(() => {
-    fetchDarkWebFindings({ limit: '200' })
-      .then((d) => setFindings(d.items))
+    fetchDarkWebFindings({ limit: String(DW_PAGE) })
+      .then((d) => { setFindings(d.items); setTotal(d.total) })
       .catch(() => {})
       .finally(() => setLoading(false))
     fetchDarkWebSummary().then(setSummary).catch(() => {})
@@ -142,6 +147,13 @@ export default function DarkWebPage() {
         {loading && <SkeletonRows rows={8} className="px-0" />}
         {!loading && filtered.length === 0 && (
           <p className="text-xs text-ink-600 py-8 text-center">No findings yet - the engine surfaces these as it monitors. Check back shortly.</p>
+        )}
+        {/* Honest about being a page: the list is capped, and silently showing
+            the newest 200 of a larger archive reads as "this is everything". */}
+        {!loading && total > findings.length && (
+          <p className="text-[10px] text-amber text-center pb-1">
+            Showing the {findings.length.toLocaleString()} most recent of {total.toLocaleString()} findings.
+          </p>
         )}
         {filtered.map((f) => {
           const cat = CATEGORY_META[f.category] ?? CATEGORY_META['brand-mention']
