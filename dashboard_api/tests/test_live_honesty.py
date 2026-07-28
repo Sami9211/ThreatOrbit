@@ -181,3 +181,64 @@ print(json.dumps(counts))
         assert counts[table] == 0, (
             f"{table} has {counts[table]} fabricated rows after a live startup - "
             "live mode must never prime the stores with simulated telemetry")
+
+
+def test_upgrading_an_existing_database_backfills_url_hosts():
+    """An operator upgrading a running deployment already has indicators in the
+    store, imported before `iocs.host` existed. Without a backfill those rows
+    keep working for exact lookups but silently stop being found by domain
+    queries - the store gets quietly less accurate after an upgrade, which is
+    worse than a slow lookup because nothing reports it.
+
+    Runs in a subprocess against a throwaway DB, reconstructing the pre-upgrade
+    shape (no host column, schema_version 9) and then booting the current code
+    against it - the same path a restart after `git pull` takes."""
+    db = Path(tempfile.mkdtemp()) / "upgrade.db"
+    script = f"""
+import json, os, sqlite3, uuid
+os.environ["DASHBOARD_DB_PATH"] = {str(db)!r}
+os.environ["DASHBOARD_JWT_SECRET"] = "test-secret-upgrade"
+os.environ["DASHBOARD_DATA_MODE"] = "live"
+from dashboard_api.db import init_db, get_conn
+init_db()
+
+# Rewind to the pre-upgrade shape: drop the column and the version marker, then
+# write rows the way the older build did.
+with get_conn() as c:
+    c.execute("DROP INDEX IF EXISTS idx_iocs_host")
+    c.execute("ALTER TABLE iocs DROP COLUMN host")
+    c.execute("DELETE FROM iocs")
+    for i in range(50):
+        c.execute(
+            "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,"
+            "actor,first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,'[]')",
+            (str(uuid.uuid4()), "url", f"https://legacy-{{i}}.example/path?a=1",
+             "phishing", 80, "high", "pre-upgrade-feed", "",
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+    c.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('schema_version','9')")
+    c.commit()
+
+init_db()                      # the upgrade: migration + backfill
+
+with get_conn() as c:
+    ver = c.execute("SELECT value FROM settings WHERE key='schema_version'").fetchone()["value"]
+    total = c.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
+    filled = c.execute("SELECT COUNT(*) FROM iocs WHERE host IS NOT NULL").fetchone()[0]
+    one = c.execute("SELECT host FROM iocs WHERE value LIKE '%legacy-7.example%'").fetchone()
+print(json.dumps({{"version": ver, "total": total, "filled": filled,
+                   "host": one["host"] if one else None}}))
+"""
+    env = {**dict(__import__("os").environ)}
+    env["DASHBOARD_DB_BACKEND"] = "sqlite"
+    env.pop("DATABASE_URL", None)
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                         env=env, cwd=str(Path(__file__).resolve().parents[2]), timeout=180)
+    assert out.returncode == 0, f"upgrade boot failed:\n{out.stderr}"
+    res = json.loads(out.stdout.strip().splitlines()[-1])
+
+    assert res["total"] == 50, f"the upgrade lost indicators: {res['total']} of 50 remain"
+    assert res["filled"] == 50, (
+        f"only {res['filled']} of 50 pre-upgrade URLs got a host - the rest became "
+        "invisible to domain lookups")
+    assert res["host"] == "legacy-7.example", f"host parsed wrong: {res['host']!r}"
+    assert res["version"] == "10", f"schema version not bumped: {res['version']}"
