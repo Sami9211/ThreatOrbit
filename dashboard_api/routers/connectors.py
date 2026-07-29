@@ -134,7 +134,39 @@ def list_works(limit: int = 20, _: dict = Depends(current_user)):
                 w["ratePerSec"] = round(proc / secs, 1)
         except (ValueError, TypeError):
             pass
-    return works
+        # A completed run that brought in nothing new is a poll, not an event.
+        w["noop"] = bool(w["status"] == "completed" and not (w.get("imported") or 0))
+    return _collapse_noops(works)
+
+
+def _collapse_noops(works: list[dict]) -> list[dict]:
+    """Fold consecutive no-change polls of the SAME connector into one row.
+
+    A short cadence against feeds that publish every few minutes means most syncs
+    import nothing, and every one of them was its own entry: the reported
+    pipeline was a wall of `5 / 5 processed · 5 already known` repeating every
+    few seconds, which buries the runs that actually did something. OpenCTI does
+    not list every poll either - a connector shows its current work and its
+    counters.
+
+    Only CONSECUTIVE runs fold, so a real import always breaks the run and stays
+    visible. Nothing is deleted - connector_works keeps every row for the audit
+    trail; this is a presentation decision, made where the presentation is.
+    """
+    out: list[dict] = []
+    for w in works:
+        prev = out[-1] if out else None
+        if (prev is not None and prev.get("noop") and w.get("noop")
+                and prev.get("connector") == w.get("connector")):
+            prev["collapsed"] = prev.get("collapsed", 1) + 1
+            # The window spans from the OLDEST folded run to the newest, so the
+            # row can honestly say "checked N times since HH:MM".
+            prev["collapsedSince"] = w["started_at"]
+            prev["processed"] = (prev.get("processed") or 0) + (w.get("processed") or 0)
+            prev["duplicates"] = (prev.get("duplicates") or 0) + (w.get("duplicates") or 0)
+            continue
+        out.append(w)
+    return out
 
 
 @router.post("", status_code=201)

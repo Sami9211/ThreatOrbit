@@ -126,6 +126,27 @@ function SourceRow({ c, canManage, onChanged }: {
 function WorkRow({ w }: { w: ConnectorWork }) {
   const st = WORK_STATUS[w.status] ?? WORK_STATUS.completed
   const running = w.status === 'running'
+
+  // A run of polls that changed nothing is one quiet line, not N loud ones.
+  // Feeds publish every few minutes; at a short cadence most syncs import
+  // nothing, and listing each one buries the syncs that actually did something.
+  if (w.noop) {
+    const n = w.collapsed ?? 1
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/5 bg-surface/50 text-[10px] text-ink-600">
+        <span className="w-1.5 h-1.5 rounded-full bg-ink-600 shrink-0" />
+        <span className="text-ink-500 font-medium truncate">{w.connector}</span>
+        <span>
+          checked {n > 1 ? `${n} times` : ''} · no new indicators
+          {w.duplicates > 0 && ` (${w.duplicates.toLocaleString()} already known)`}
+        </span>
+        <span className="ml-auto tabular-nums shrink-0">
+          {n > 1 && w.collapsedSince ? `since ${relTime(w.collapsedSince)}` : relTime(w.startedAt)}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className="px-3 py-2.5 rounded-xl border border-white/8 bg-surface">
       <div className="flex items-center gap-2 flex-wrap">
@@ -209,6 +230,14 @@ export default function ImportsPage() {
   })()
   // Most recent finished run, for the "how much, how fast" tile.
   const lastWork = (works ?? []).find((w) => w.status !== 'running' && w.processed > 0) ?? null
+  // Live throughput across everything currently importing - the number OpenCTI
+  // puts front and centre on its ingestion screen, and the one this page was
+  // missing entirely: it listed past syncs and never said how fast anything was
+  // moving right now.
+  const liveRate = (works ?? [])
+    .filter((w) => w.status === 'running')
+    .reduce((n, w) => n + (w.ratePerSec ?? 0), 0)
+  const importedToday = (works ?? []).reduce((n, w) => n + (w.imported ?? 0), 0)
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0A0612]">
@@ -252,9 +281,19 @@ export default function ImportsPage() {
                 ? `${lastWork.processed.toLocaleString()} in ${durationOf(lastWork.startedAt, lastWork.updatedAt)}`
                 : (lastImportAt ? 'most recent sync' : 'no sync yet'),
               icon: Clock, color: 'text-violet' },
-            { label: 'Next sync in', value: nextSyncIn !== null ? `${nextSyncIn}s` : '—',
-              sub: 'soonest connector cadence', icon: Gauge, color: 'text-teal' },
-            { label: 'Total indicators', value: totalIndicators.toLocaleString(), sub: `${(connectors ?? []).length} sources`, icon: Zap, color: 'text-amber' },
+            // While anything is importing this becomes a live rate; otherwise it
+            // answers the idle question ("when next?"). One tile, whichever is
+            // the useful fact at that moment.
+            importing
+              ? { label: 'Import rate', value: `${Math.round(liveRate).toLocaleString()}/s`,
+                  sub: 'across running syncs', icon: Gauge, color: 'text-violet' }
+              : { label: 'Next sync in', value: nextSyncIn !== null ? `${nextSyncIn}s` : '—',
+                  sub: 'soonest connector cadence', icon: Gauge, color: 'text-teal' },
+            { label: 'Total indicators', value: totalIndicators.toLocaleString(),
+              sub: importedToday > 0
+                ? `${importedToday.toLocaleString()} new in recent syncs`
+                : `${(connectors ?? []).length} sources`,
+              icon: Zap, color: 'text-amber' },
           ].map((k) => (
             <div key={k.label} className="glass border border-white/5 rounded-xl p-3">
               <div className="flex items-center gap-1.5 text-[10px] text-ink-500 uppercase tracking-wide">

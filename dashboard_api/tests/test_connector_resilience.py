@@ -1851,3 +1851,88 @@ def test_a_429_backs_off_and_the_scheduler_waits(monkeypatch):
             c.execute("DELETE FROM connector_works WHERE connector_id=?", (cid,))
             c.execute("DELETE FROM connectors WHERE id=?", (cid,))
             c.commit()
+
+def test_repeated_no_change_polls_collapse_into_one_row(client, auth):
+    """A short cadence against feeds that publish every few minutes means most
+    syncs import nothing. Each was its own pipeline entry, so the reported view
+    was a wall of `5 / 5 processed · 5 already known` repeating every few
+    seconds, burying the runs that actually did something."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:6]
+    name = f"Polling Feed {tag}"
+    ids = []
+    with real_get_conn() as c:
+        c.execute("DELETE FROM connector_works")     # isolate the ordering
+        c.commit()
+    try:
+        # Six polls that found nothing, then one that actually imported.
+        for _ in range(6):
+            wid = conn_mod.start_work(name, None, 5)
+            conn_mod.finish_work(wid, "completed", processed=5, imported=0, duplicates=5)
+            ids.append(wid)
+        real = conn_mod.start_work(name, None, 40)
+        conn_mod.finish_work(real, "completed", processed=40, imported=40)
+
+        rows = client.get("/connectors/works?limit=50", headers=auth).json()
+        assert len(rows) == 2, f"expected the polls folded into one row, got {len(rows)}"
+
+        newest, folded = rows[0], rows[1]
+        # The run that imported something is never folded away.
+        assert newest["imported"] == 40 and newest["noop"] is False
+        assert "collapsed" not in newest
+
+        assert folded["noop"] is True
+        assert folded["collapsed"] == 6, f"folded {folded.get('collapsed')} of 6 polls"
+        assert folded["processed"] == 30, "folded row should total the polls it stands for"
+        assert folded["collapsedSince"], "a folded row must say how far back it reaches"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works")
+            c.commit()
+
+
+def test_only_consecutive_polls_from_the_same_connector_fold(client, auth):
+    """Folding across connectors would hide one source's silence behind
+    another's, and folding across a real import would hide the import."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:6]
+    with real_get_conn() as c:
+        c.execute("DELETE FROM connector_works"); c.commit()
+    try:
+        for nm in (f"A-{tag}", f"B-{tag}", f"A-{tag}"):     # interleaved sources
+            wid = conn_mod.start_work(nm, None, 5)
+            conn_mod.finish_work(wid, "completed", processed=5, imported=0, duplicates=5)
+
+        rows = client.get("/connectors/works?limit=50", headers=auth).json()
+        assert len(rows) == 3, "interleaved connectors must not fold together"
+        assert all("collapsed" not in r for r in rows)
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works"); c.commit()
+
+
+def test_a_failed_poll_is_never_folded_away(client, auth):
+    """Failures are the thing an operator most needs to see. A failed run is not
+    a no-op even though it imported nothing."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:6]
+    name = f"Flaky {tag}"
+    with real_get_conn() as c:
+        c.execute("DELETE FROM connector_works"); c.commit()
+    try:
+        for _ in range(3):
+            wid = conn_mod.start_work(name, None, 5)
+            conn_mod.finish_work(wid, "completed", processed=5, imported=0, duplicates=5)
+        bad = conn_mod.start_work(name, None, 0)
+        conn_mod.finish_work(bad, "failed", "could not reach the feed")
+
+        rows = client.get("/connectors/works?limit=50", headers=auth).json()
+        assert rows[0]["status"] == "failed", "the failure must stay at the top"
+        assert rows[0]["noop"] is False
+        assert len(rows) == 2 and rows[1]["collapsed"] == 3
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connector_works"); c.commit()

@@ -1796,6 +1796,12 @@ export interface ConnectorWork {
   percent: number
   /** Server-computed throughput; null before the first indicator is processed. */
   ratePerSec: number | null
+  /** A completed run that brought in nothing new - a poll, not an event. */
+  noop?: boolean
+  /** How many consecutive no-change polls this row stands for (absent = 1). */
+  collapsed?: number
+  /** Start of the oldest poll folded into this row. */
+  collapsedSince?: string
 }
 export const fetchConnectorWorks = (limit = 20) =>
   api<ConnectorWork[]>(`/connectors/works?limit=${limit}`)
