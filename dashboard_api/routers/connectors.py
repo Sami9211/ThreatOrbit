@@ -16,7 +16,8 @@ router = APIRouter(prefix="/connectors", tags=["connectors"], dependencies=[Depe
 
 # api_key is never returned to the browser; we expose only whether one is set.
 _PUBLIC = ("id, name, kind, url, auth_header, enabled, interval_minutes, interval_seconds, field_map, "
-           "status, last_run, last_error, indicator_count, builtin, created_at, created_by")
+           "status, last_run, last_error, indicator_count, builtin, created_at, created_by, "
+           "next_allowed_at")
 
 
 class ConnectorCreate(BaseModel):
@@ -73,14 +74,29 @@ def list_connectors(user: dict = Depends(current_user)):
     return rows_to_dicts(rows)
 
 
-def _secs(body) -> int:
+def _secs(body, kind: str) -> int:
     """Cadence in seconds. Explicit `interval_seconds` wins; otherwise derive it
-    from `interval_minutes`. Floored by MIN_INTERVAL_SECONDS so a misconfigured
-    connector can't hammer a third-party feed into rate-limiting us."""
-    from dashboard_api.connectors import MIN_INTERVAL_SECONDS
+    from `interval_minutes`.
+
+    A cadence below the provider's floor is REFUSED, not silently clamped.
+    Clamping is how "I set 1 second and it went back to 5" happened: the value
+    the operator saved was not the value the system kept, and nothing said so.
+    Telling them the number is impossible - and which provider says so - is the
+    honest behaviour."""
+    from dashboard_api.connectors import interval_floor_reason, min_interval_for
     raw = body.interval_seconds if body.interval_seconds is not None else \
         (body.interval_minutes or 60) * 60
-    return max(MIN_INTERVAL_SECONDS, int(raw))
+    secs = int(raw)
+    floor = min_interval_for(kind)
+    if secs < floor:
+        why = interval_floor_reason(kind)
+        label = KIND_PRESETS.get(kind, {}).get("label", kind)
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} cannot sync faster than every {floor}s"
+                   + (f" - {why}." if why else ".")
+                   + f" You asked for {secs}s.")
+    return secs
 
 
 @router.get("/works")
@@ -150,7 +166,8 @@ def create_connector(body: ConnectorCreate, user: dict = Depends(require_perm("c
             "VALUES (?,?,?,?,?,?,?,?,?,?, 'idle',0,?,?,?)",
             (cid, name, body.kind, (body.url or KIND_PRESETS[body.kind]["default_url"]) or None,
              encrypt(body.api_key or None), body.auth_header or None, 1 if body.enabled else 0,
-             max(1, round(_secs(body) / 60)), _secs(body), dumps(body.field_map or {}), _now(), user["email"],
+             max(1, round(_secs(body, body.kind) / 60)), _secs(body, body.kind),
+             dumps(body.field_map or {}), _now(), user["email"],
              tenancy.org_of(user)),
         )
         audit(conn, user["email"], "connector.create", cid, f"kind={body.kind} name={name}")
@@ -172,9 +189,25 @@ def update_connector(connector_id: str, body: ConnectorUpdate,
     fields, values = [], []
     if body.interval_seconds is not None:
         # Seconds is the source of truth; keep interval_minutes in step so older
-        # readers (and the legacy fallback) stay consistent.
-        from dashboard_api.connectors import MIN_INTERVAL_SECONDS
-        secs = max(MIN_INTERVAL_SECONDS, int(body.interval_seconds))
+        # readers (and the legacy fallback) stay consistent. Refused rather than
+        # clamped, for the reason in _secs().
+        from dashboard_api.connectors import interval_floor_reason, min_interval_for
+        with get_conn() as conn:
+            existing = conn.execute("SELECT kind FROM connectors WHERE id=?",
+                                    (connector_id,)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Connector not found")
+        kind = existing["kind"]
+        secs = int(body.interval_seconds)
+        floor = min_interval_for(kind)
+        if secs < floor:
+            why = interval_floor_reason(kind)
+            label = KIND_PRESETS.get(kind, {}).get("label", kind)
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label} cannot sync faster than every {floor}s"
+                       + (f" - {why}." if why else ".")
+                       + f" You asked for {secs}s.")
         fields.append("interval_seconds=?"); values.append(secs)
         fields.append("interval_minutes=?"); values.append(max(1, round(secs / 60)))
     for col in ("name", "url", "auth_header", "interval_minutes"):

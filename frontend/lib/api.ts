@@ -1730,6 +1730,8 @@ export interface Connector {
   hasKey?: number
   createdAt: string
   createdBy: string | null
+  /** Set when a provider returned 429: the earliest it will accept us again. */
+  nextAllowedAt?: string | null
 }
 /** NOTE: these fields are camelCase because every response goes through
  *  `toCamel` (the backend sends needs_key / needs_url / default_url /
@@ -1748,6 +1750,12 @@ export interface ConnectorKind {
   needsUrl: boolean
   defaultUrl: string
   defaultInterval: number
+  /** Shortest cadence the PROVIDER tolerates, in seconds. Absent means the
+   *  platform floor applies (a source the operator runs themselves). */
+  minInterval?: number
+  /** Why that floor exists, e.g. "NVD allows 5 requests per 30s without an API
+   *  key". A bare minimum reads as an arbitrary platform restriction. */
+  rateNote?: string
 }
 export const fetchConnectors = () => api<Connector[]>('/connectors')
 export const fetchConnectorKinds = () => api<ConnectorKind[]>('/connectors/kinds')

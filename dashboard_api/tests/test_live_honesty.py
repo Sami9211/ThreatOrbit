@@ -241,7 +241,11 @@ print(json.dumps({{"version": ver, "total": total, "filled": filled,
         f"only {res['filled']} of 50 pre-upgrade URLs got a host - the rest became "
         "invisible to domain lookups")
     assert res["host"] == "legacy-7.example", f"host parsed wrong: {res['host']!r}"
-    assert res["version"] == "10", f"schema version not bumped: {res['version']}"
+    # Compare against the code's current version rather than a literal: pinning
+    # "10" meant every later migration broke this test for the wrong reason.
+    from dashboard_api.db import SCHEMA_VERSION
+    assert int(res["version"]) == SCHEMA_VERSION, (
+        f"schema version not bumped to {SCHEMA_VERSION}: {res['version']}")
 
 
 def test_url_host_backfill_runs_on_the_configured_backend():

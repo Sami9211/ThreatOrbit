@@ -1758,3 +1758,96 @@ def test_schema_splitter_handles_strings_and_comments(sql, expect):
     """Semicolons inside string literals and comments are data, not separators."""
     from dashboard_api.db import split_statements
     assert [s.strip() for s in split_statements(sql)] == expect
+
+# -- Provider rate limits: the floor belongs to the provider --------------------
+
+def test_a_managed_provider_refuses_a_cadence_it_cannot_serve(client, auth):
+    """NVD allows 5 requests per rolling 30s without a key. A 1s cadence earns a
+    steady stream of 429s and imports nothing - which is exactly what the field
+    report showed. The create path REFUSES rather than silently clamping, and
+    names the provider and the reason: "minimum 30s" with no explanation reads
+    as an arbitrary platform restriction rather than NVD's rule."""
+    r = client.post("/connectors", json={
+        "name": f"NVD too fast {uuid.uuid4().hex[:6]}", "kind": "nvd",
+        "interval_seconds": 1}, headers=auth)
+    assert r.status_code == 400, r.text
+    detail = r.json()["error"]
+    assert "30s" in detail and "5 requests per 30s" in detail
+    assert "You asked for 1s" in detail
+
+
+def test_an_operator_owned_source_may_still_sync_every_second(client, auth):
+    """The floor is the PROVIDER's, not the platform's. A custom JSON endpoint is
+    the operator's own server - their call, and the sub-second cadence work
+    exists precisely so they can."""
+    r = client.post("/connectors", json={
+        "name": f"My feed {uuid.uuid4().hex[:6]}", "kind": "json",
+        "url": "https://example.test/feed", "interval_seconds": 1}, headers=auth)
+    assert r.status_code == 201, r.text
+    assert r.json()["interval_seconds"] == 1
+    client.delete(f"/connectors/{r.json()['id']}", headers=auth)
+
+
+def test_editing_a_connector_is_held_to_the_same_floor(client, auth):
+    """The PATCH path clamped where create refused. Two different answers to the
+    same question is how "I set 1 second and it went back to 5" happened."""
+    from dashboard_api.db import get_conn as real_get_conn
+    cid = "floor-" + uuid.uuid4().hex[:8]
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,NULL,1,720,43200,'{}','idle',0,?)",
+            (cid, f"NVD edit {cid}", "nvd", conn_mod._now()))
+        c.commit()
+    try:
+        bad = client.patch(f"/connectors/{cid}", json={"interval_seconds": 2}, headers=auth)
+        assert bad.status_code == 400 and "30s" in bad.json()["error"]
+        ok = client.patch(f"/connectors/{cid}", json={"interval_seconds": 60}, headers=auth)
+        assert ok.status_code == 200 and ok.json()["interval_seconds"] == 60
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,)); c.commit()
+
+
+def test_a_429_backs_off_and_the_scheduler_waits(monkeypatch):
+    """A 429 is the provider saying when to return. Retrying on the next tick is
+    how a connector spends its life rate-limited and imports nothing."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    def rate_limited(*a, **k):
+        raise conn_mod.httpx.HTTPStatusError(
+            "429", request=conn_mod.httpx.Request("GET", "https://feed.test/x"),
+            response=conn_mod.httpx.Response(429, headers={"Retry-After": "120"}))
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", rate_limited)
+
+    cid = "backoff-" + uuid.uuid4().hex[:8]
+    name = f"Limited {cid}"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,1,1,'{}','idle',0,?)",
+            (cid, name, "json", "https://feed.test/x", conn_mod._now()))
+        c.commit()
+        row = dict(c.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone())
+    try:
+        res = conn_mod.run_connector(row, actor="tester")
+        assert "rate-limit" in res["error"].lower()
+
+        with real_get_conn() as c:
+            nxt = c.execute("SELECT next_allowed_at FROM connectors WHERE id=?",
+                            (cid,)).fetchone()["next_allowed_at"]
+        assert nxt, "a 429 recorded no backoff - the next tick would retry straight into it"
+        wait = (datetime.fromisoformat(nxt) - datetime.now(timezone.utc)).total_seconds()
+        assert 100 < wait <= 130, f"Retry-After: 120 not honoured (waiting {wait:.0f}s)"
+
+        # And the scheduler actually skips it, despite a 1s cadence.
+        ran = [r["connector"] for r in conn_mod.run_due_connectors()]
+        assert name not in ran, "scheduler ran a connector inside its backoff window"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM ioc_imports WHERE source=?", (name,))
+            c.execute("DELETE FROM connector_works WHERE connector_id=?", (cid,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()

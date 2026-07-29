@@ -342,7 +342,7 @@ export default function ConnectorsPanel() {
 
       <AnimatePresence>
         {showAdd && <AddConnectorModal kinds={kinds} initialKind={presetKind} onClose={() => setShowAdd(false)} onAdd={add} />}
-        {editing && <EditConnectorModal connector={editing} onClose={() => setEditing(null)} onSave={update} />}
+        {editing && <EditConnectorModal connector={editing} kinds={kinds} onClose={() => setEditing(null)} onSave={update} />}
       </AnimatePresence>
     </motion.div>
   )
@@ -463,7 +463,18 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
 
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (seconds)</label>
-            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} placeholder={String((preset?.defaultInterval ?? 60) * 60)} className={input} />
+            <input type="number" min={preset?.minInterval ?? 1} value={values.interval_minutes}
+              onChange={(e) => set('interval_minutes')(e.target.value)}
+              placeholder={String((preset?.defaultInterval ?? 60) * 60)} className={input} />
+            {/* The floor is the provider's, so say whose and why. The server
+                refuses a shorter cadence outright rather than silently clamping
+                it - showing it here just avoids a pointless round trip. */}
+            {preset?.minInterval && preset.minInterval > 1 && (
+              <p className="text-[10px] text-ink-600 mt-1">
+                Minimum {preset.minInterval}s
+                {preset.rateNote ? ` — ${preset.rateNote}` : ''}
+              </p>
+            )}
           </div>
 
           {error && <p className="flex items-center gap-2 px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}</p>}
@@ -480,12 +491,15 @@ function AddConnectorModal({ kinds, onClose, onAdd, initialKind }: {
 }
 
 /* -- Edit-connector modal ------------------------------------------ */
-function EditConnectorModal({ connector, onClose, onSave }: {
+function EditConnectorModal({ connector, kinds, onClose, onSave }: {
   connector: Connector
+  kinds: ConnectorKind[]
   onClose: () => void
   onSave: (c: Connector, values: Record<string, string>) => Promise<void>
 }) {
   const c = connector
+  // The provider's cadence floor lives on the kind preset, not the connector.
+  const kindPreset = kinds.find((k) => k.kind === c.kind)
   const isCustom = c.kind === 'json' || c.kind === 'csv' || c.kind === 'stix'
   const [values, setValues] = useState<Record<string, string>>(() => ({
     name: c.name,
@@ -571,7 +585,14 @@ function EditConnectorModal({ connector, onClose, onSave }: {
 
           <div>
             <label className="block text-xs font-medium text-ink-300 mb-1.5">Auto-sync every (seconds)</label>
-            <input type="number" value={values.interval_minutes} onChange={(e) => set('interval_minutes')(e.target.value)} className={input} />
+            <input type="number" min={kindPreset?.minInterval ?? 1} value={values.interval_minutes}
+              onChange={(e) => set('interval_minutes')(e.target.value)} className={input} />
+            {kindPreset?.minInterval && kindPreset.minInterval > 1 && (
+              <p className="text-[10px] text-ink-600 mt-1">
+                Minimum {kindPreset.minInterval}s
+                {kindPreset.rateNote ? ` — ${kindPreset.rateNote}` : ''}
+              </p>
+            )}
           </div>
 
           {error && <p className="flex items-center gap-2 px-3 py-2 rounded-lg bg-threat/10 border border-threat/25 text-[11px] text-threat" role="alert"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}</p>}

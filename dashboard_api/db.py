@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 class SchemaVersionError(RuntimeError):
@@ -921,6 +921,10 @@ _MIGRATIONS = [
     ("intel_reports", "industries", "TEXT NOT NULL DEFAULT '[]'"),
     ("iocs", "report_id", "TEXT"),                    # the pulse/report it came from
     ("iocs", "host", "TEXT"),                         # host of a url indicator (see _backfill_ioc_hosts)
+    # Earliest time a rate-limited provider will accept us again. Set from a 429
+    # (Retry-After); the scheduler skips the connector until it passes, so we
+    # stop retrying into a limit we have already been told about.
+    ("connectors", "next_allowed_at", "TEXT"),
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),

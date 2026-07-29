@@ -25,7 +25,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -153,6 +153,11 @@ KIND_PRESETS = {
         "needs_url": False,
         "default_url": THREAT_API_URL,
         "default_interval": 30,
+        # One sync fans out to 16 third-party hosts. A 1s cadence would be 16
+        # requests/second at public infrastructure that costs us nothing and
+        # asks nothing in return; the feeds themselves refresh in minutes.
+        "min_interval": 30,
+        "rate_note": "aggregates 16 public feeds - they refresh in minutes, not seconds",
     },
     "nvd": {
         "label": "NVD CVE Feed",
@@ -161,6 +166,10 @@ KIND_PRESETS = {
         "needs_url": False,
         "default_url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
         "default_interval": 720,
+        # NVD allows 5 requests per rolling 30s without a key (50 with one).
+        # A sync is several paged requests, so anything under ~30s earns a 429.
+        "min_interval": 30,
+        "rate_note": "NVD allows 5 requests per 30s without an API key",
     },
     "otx": {
         "label": "AlienVault OTX",
@@ -169,6 +178,8 @@ KIND_PRESETS = {
         "needs_url": False,   # endpoint is fixed (otx.alienvault.com) - ask only for the key
         "default_url": "https://otx.alienvault.com",
         "default_interval": 120,
+        "min_interval": 60,
+        "rate_note": "OTX pulses update on the order of minutes",
     },
     "json": {
         "label": "Custom JSON source",
@@ -1395,6 +1406,34 @@ def describe_fetch_error(exc: Exception, connector: dict) -> str:
     return str(exc)[:300]
 
 
+def _retry_after_from(exc: Exception, connector: dict) -> str | None:
+    """When a 429 says we may try again, as an ISO timestamp - else None.
+
+    Prefers the provider's own `Retry-After` (seconds, or an HTTP date). Falls
+    back to twice the connector's cadence, capped, so a provider that rate-limits
+    without saying for how long still gets breathing room."""
+    resp = getattr(exc, "response", None)
+    if getattr(resp, "status_code", None) != 429:
+        return None
+    wait = None
+    raw = (getattr(resp, "headers", {}) or {}).get("retry-after")
+    if raw:
+        try:
+            wait = int(float(str(raw).strip()))
+        except (TypeError, ValueError):
+            try:
+                from email.utils import parsedate_to_datetime
+                when = parsedate_to_datetime(str(raw))
+                wait = int((when - datetime.now(timezone.utc)).total_seconds())
+            except Exception:
+                wait = None
+    if wait is None:
+        wait = min(3600, max(60, connector_interval_seconds(connector) * 2))
+    wait = max(1, min(wait, 86400))
+    return (datetime.now(timezone.utc).replace(microsecond=0)
+            + timedelta(seconds=wait)).isoformat()
+
+
 def run_connector(connector: dict, actor: str = "scheduler") -> dict:
     """Fetch + normalise + import one connector. Updates its status and records
     a job. Returns the import tally (or an {error} dict on failure)."""
@@ -1491,6 +1530,19 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
         return result
     except Exception as e:  # network/parse/auth failure - record, never crash
         msg = describe_fetch_error(e, connector)[:300]
+        # A 429 is the provider telling us when to come back. Retrying into it on
+        # the next tick is how a connector spends its life rate-limited and
+        # imports nothing; honour Retry-After (or back off a sensible default)
+        # and let the scheduler skip until then.
+        retry_at = _retry_after_from(e, connector)
+        if retry_at:
+            try:
+                with get_conn() as conn:
+                    conn.execute("UPDATE connectors SET next_allowed_at=? WHERE id=?",
+                                 (retry_at, cid))
+                    conn.commit()
+            except Exception:
+                logging.debug("recording rate-limit backoff failed", exc_info=True)
         # If the failure happened during the fetch there is no work yet; record
         # one so a failed sync is visible in the pipeline view too.
         try:
@@ -1551,16 +1603,33 @@ MIN_INTERVAL_SECONDS = int(os.environ.get("DASHBOARD_MIN_CONNECTOR_SECONDS", "1"
 STUCK_RUNNING_AFTER = int(os.environ.get("DASHBOARD_CONNECTOR_STUCK_SECONDS", "900"))
 
 
+def min_interval_for(kind: str) -> int:
+    """The shortest cadence a provider tolerates.
+
+    The global floor is 1s, which is right for a source the operator runs
+    themselves - it is their server. It is wrong for a managed third party: NVD
+    permits 5 requests per rolling 30s without a key, so a 1s cadence earns a
+    steady stream of HTTP 429 and imports nothing. The floor belongs to the
+    provider, not to the platform."""
+    return int(KIND_PRESETS.get(kind, {}).get("min_interval", MIN_INTERVAL_SECONDS))
+
+
+def interval_floor_reason(kind: str) -> str | None:
+    """Why a provider imposes its floor, for the message shown to the operator.
+    'Minimum 30s' with no reason reads as an arbitrary restriction."""
+    return KIND_PRESETS.get(kind, {}).get("rate_note")
+
+
 def connector_interval_seconds(c: dict) -> int:
     """A connector's sync cadence in seconds.
 
     `interval_seconds` is the source of truth; rows predating it (or set to 0)
-    fall back to the legacy `interval_minutes`. Never returns less than
-    MIN_INTERVAL_SECONDS."""
+    fall back to the legacy `interval_minutes`. Never returns less than the
+    provider's own floor."""
     secs = int(c.get("interval_seconds") or 0)
     if secs <= 0:
         secs = int(c.get("interval_minutes") or 60) * 60
-    return max(MIN_INTERVAL_SECONDS, secs)
+    return max(min_interval_for(c.get("kind", "")), secs)
 
 
 def reset_stuck_connectors() -> int:
@@ -1596,6 +1665,14 @@ def run_due_connectors() -> list[dict]:
                     c[jcol] = json.loads(c[jcol])
                 except (ValueError, TypeError):
                     c[jcol] = default
+        # A provider that returned 429 told us when to come back; until then this
+        # connector is not due no matter what its cadence says.
+        if c.get("next_allowed_at"):
+            try:
+                if now < datetime.fromisoformat(c["next_allowed_at"]):
+                    continue
+            except (ValueError, TypeError):
+                pass
         due = True
         if c.get("last_run"):
             try:
