@@ -955,6 +955,319 @@ volume without B1/B2 makes the product *worse* - a larger undifferentiated list.
 
 ---
 
+## Build plan (2026-07-28) - from indicator list to intelligence platform
+
+The execution plan for Audit 6. Ordered by dependency, not by appeal. Each phase
+states **what changes, what is added, what is removed**, and what "done" means.
+
+**The one-sentence diagnosis this plan is built on:** we store 311k *observables*
+and call them *indicators*. In the CTI model those are different things - an
+observable is a raw fact (this IP exists in a blocklist), an indicator is a
+detection object with a defensible reason to act
+([Filigran on the distinction](https://filigran.io/blog/observables-indicators-and-infrastructure-in-cti/),
+[OpenCTI data model](https://docs.opencti.io/latest/usage/data-model/)). Everything
+that makes our output feel undifferentiated follows from collapsing the two: with
+no promotion step there is nowhere for context, corroboration or scoring to live,
+so every value is equally weighted and equally meaningless.
+
+---
+
+### Phase 0 · Unblock the engine (days)
+
+Nothing below can be evaluated while these are live. All are Audit 6 §A.
+
+**Change**
+- `net_guard`: decode NAT64 (`64:ff9b::/96` + configured prefixes, RFC 6052/7050)
+  to the embedded IPv4 and validate that. Currently blocks every connector on an
+  IPv6-only host. Add a regression test with a literal NAT64 address.
+- `KIND_PRESETS`: add `min_interval_seconds` per kind. `threatorbit` 30s (its
+  feeds are conditional-GET and cheap), `nvd` 30min keyless / 6s keyed, `otx`
+  5min, `taxii` 5min. Scheduler enforces it; the connector form refuses a shorter
+  cadence **and says which provider imposes it**.
+- 429 handling: honour `Retry-After`, persist `next_allowed_at` on the connector,
+  and show it in the UI ("rate limited, next attempt 14:32"). Never silently retry
+  into a limit.
+- `cti.py:410`: `.fetchall()` instead of iterating the cursor - bulk lookup is
+  broken on Postgres today.
+- `db.py::_safe_schema`: strip `--` comments before splitting on `;`, or keep
+  SCHEMA as a list of statements. Semicolons inside comments currently shred
+  whole `CREATE TABLE`s on Postgres.
+- `_verify_schema`: fail the boot on Postgres too (it currently only proves the
+  SQLite path).
+
+**Add**
+- `make test-pg` (or a documented compose one-liner) so the Postgres suite is
+  runnable locally. **CI has been red for 3 commits because a green SQLite run
+  was treated as evidence.**
+
+**Done when:** Postgres CI is green, a connector on an IPv6-only host imports,
+and no connector can be configured into a provider's rate limit.
+
+---
+
+### Phase 1 · Split observable from indicator (the architectural change)
+
+This is the load-bearing phase. Everything in Phases 2-7 depends on it.
+
+**Add** (schema v11, additive; `iocs` stays as a view/compat shim for one release)
+
+```
+observables        id, type, value UNIQUE, host, first_seen, last_seen,
+                   times_seen, org_id
+                   -- the raw fact. Immutable. One row per value, ever.
+
+observable_sources observable_id, source_id, first_seen, last_seen,
+                   raw_label, raw_confidence
+                   -- WHICH feeds asserted it. Enables corroboration; today this
+                   -- is flattened into a single `source` string and the other
+                   -- 15 sources' opinions are thrown away.
+
+indicators         id, observable_id, pattern, pattern_type, score,
+                   base_score, decay_rule_id, valid_from, valid_until,
+                   revoked, promoted_by, promoted_reason, kill_chain_phase
+                   -- a detection object. Created only when there is a REASON.
+
+sources            id, name, kind, reliability (A-F), url, first_seen,
+                   indicator_count, notes
+                   -- feeds as first-class records with an Admiralty
+                   -- reliability grade, not free-text strings on every row.
+
+enrichments        id, observable_id, provider, kind, data (JSON),
+                   collected_at, expires_at
+                   -- typed, provenanced, expiring. Never flattened into columns.
+
+relationships      id, source_ref, source_type, target_ref, target_type,
+                   relationship_type, confidence, first_seen, last_seen
+                   -- indicator->malware, ->actor, ->campaign, observable->
+                   -- indicator (based-on). The thing that makes pivoting possible.
+
+sightings          (exists) - wire it to the engine and to log ingest.
+```
+
+**Change**
+- Import writes **observables + observable_sources**, never indicators. A
+  blocklist entry is an observation that a feed listed a value; it is not yet a
+  detection object.
+- **Promotion rules** decide what becomes an indicator: corroboration ≥ N
+  sources, OR attributed by a pulse/report, OR sighted in this deployment's own
+  telemetry, OR promoted manually by an analyst (with a recorded reason). This is
+  where "311k values" becomes "the 4,000 worth acting on".
+- All eight IOC insert paths funnel through one `ingest_observable()`. Today the
+  same INSERT is spelled out eight times, which is how the `host` column nearly
+  shipped half-populated.
+
+**Remove**
+- The `source` free-text column as the source of truth (kept denormalised for
+  display only).
+- The `feeds` table. It duplicates `connectors`, is empty in live mode by
+  design, and directly caused the "0 Sources Online" bug. Migrate any rows into
+  `sources` and delete it.
+
+**Done when:** a value listed by 9 feeds shows all 9, the store reports
+observables and indicators separately, and promotion is explainable per indicator.
+
+---
+
+### Phase 2 · Enrichment (the biggest single value gain)
+
+OTX's value is that every indicator expands: `general`, `reputation`, `geo`,
+`malware`, `url_list`, `passive_dns`, `http_scans`
+([DirectConnect API](https://otx.alienvault.com/assets/static/external_api.html)).
+We offer none of that on our own data.
+
+**Add** - an `Enricher` interface (`applies_to(type) -> bool`,
+`enrich(observable) -> Enrichment`), a background queue, and an on-demand path
+from the UI. Keyless enrichers first, because they must work on every install:
+
+1. **Cross-source corroboration** - how many independent sources list this value,
+   which, when, and with what labels. Pure SQL over `observable_sources`. Zero
+   dependencies, and it is the single most useful signal we can produce. **We
+   already hold 16 sources and have never compared them.**
+2. **ASN + network owner + country** - offline, from
+   [iptoasn.com](https://iptoasn.com/): hourly TSV, IPv4+IPv6, **PDDL public
+   domain, no key, no per-lookup call**. Ship a refresh job; fall back to
+   DB-IP Lite. Answers "is this one bulletproof host or 40 unrelated networks?"
+3. **First-party passive DNS** - record every resolution we perform, over time.
+   A public library structurally cannot have this for the customer's own
+   environment.
+4. **Reverse DNS / PTR + TLS certificate observation** for hosts and URLs.
+5. **Sighting count** from this deployment's logs (Phase 1 `sightings`).
+6. **Keyed enrichers as an upgrade, never the baseline**: VirusTotal (exists),
+   OTX per-indicator sections, Shodan. Must degrade honestly when absent - the
+   existing "not configured" pattern is correct and should be reused.
+
+**Change**
+- The indicator drawer becomes an **entity page** (Phase 5) whose Enrichment tab
+  renders whatever enrichers have produced, with collection time and provider.
+- Enrichment runs on promotion, on demand, and on a schedule for indicators above
+  a score threshold - not for all 311k observables.
+
+**Done when:** clicking any indicator answers "why should I care, who else says
+so, where does it live, and have we seen it here?"
+
+---
+
+### Phase 3 · Scoring that means something
+
+**Change** - replace `confidence` (copied from the feed) with a computed score:
+
+```
+base = admiralty(source.reliability, raw_confidence)     # A1..F6 -> 0..100
+score = base
+      + corroboration_bonus(distinct_sources)            # log-scaled, capped
+      + sighting_bonus(local_sightings)                  # our telemetry outranks
+      + attribution_bonus(has_report/actor)              # pulse-backed context
+      - decay(age, decay_rule)                           # per OpenCTI
+```
+
+**Add** - decay rules as records, per
+[OpenCTI's model](https://docs.opencti.io/latest/usage/indicators-lifecycle/):
+initial score, curve, **reaction points**, and a **revoke score** at which the
+indicator is retired, with `valid_until` computed as the time the curve reaches
+it. Per-type curves - a phishing URL dies in days, a ransomware C2 domain does
+not, a Tor exit node is a standing fact rather than a finding. Our current
+lifecycle decays a number with no rule model, no revoke, no per-type curve.
+
+**Change** - severity stops being a confidence band. A Tor exit node at 90%
+confidence is not "critical"; it is a high-confidence *low-severity* fact.
+Severity = f(threat class, corroboration, local sighting).
+
+**Remove** - `_severity_from_confidence()`. It is the reason a 40-source
+consensus and a single stale blocklist hit look identical.
+
+**Done when:** the default IOC list, sorted by score, puts genuinely actionable
+things on page one - and each score is explainable in the UI.
+
+---
+
+### Phase 4 · Ingestion screen as a live system
+
+OpenCTI's Data → Ingestion shows **messages/sec, queue depth, in-flight work with
+progress, connector state, last error**, refreshing continuously, with controls to
+reset state or purge the queue
+([connectors](https://docs.opencti.io/latest/development/connectors/)).
+
+**Change**
+- Collapse consecutive no-op syncs into one "last checked HH:MM:SS · no change"
+  line per connector. The owner's log is a wall of `5 / 5 processed · 5 already
+  known` - the conditional-GET path already knows nothing changed
+  (`unchanged` in `_fetch_bulk_osint`); the UI just ignores it.
+- Header metrics become **rates**: indicators/sec now, queue depth, observables
+  vs promoted indicators today - not a list of past syncs.
+- Push updates over the existing SSE stream instead of 2s polling.
+
+**Add** - per-connector operator controls: **reset state** (forget ETags, force a
+full re-fetch), **pause**, **run now**, and a visible `next_allowed_at` when rate
+limited.
+
+**Done when:** an idle system is visibly idle, a syncing system shows a live rate,
+and an operator can force a full re-fetch without touching the database.
+
+---
+
+### Phase 5 · Entity depth and navigation
+
+**Add** - real entity pages, per OpenCTI's tab model
+([entities](https://docs.opencti.io/latest/usage/exploring-entities/)):
+**Overview** (properties + recent activity), **Knowledge** (relationships, ATT&CK
+timeline, related indicators/actors/malware), **Enrichment** (Phase 2),
+**Sightings** (where we saw it), **Analyses** (reports containing it), **History**
+(every change, who and when). Applies to indicators, actors, malware, campaigns
+and reports alike.
+
+**Change** - navigation from a product-feature list (SIEM / SOAR / CTI / Feeds) to
+OpenCTI's **hot knowledge** (Cases, Events, Observations, Analyses) vs **cold
+knowledge** (Threats, Arsenal, Techniques, Entities) split. Operational data on
+one side, the encyclopedia that explains it on the other, with every entity
+reachable from every mention of it.
+
+**Add** - hover affordances the owner asked for, and which are genuinely useful
+rather than decorative: hovering an indicator anywhere shows score, corroborating
+source count, first/last seen and local sighting count without navigating away.
+One shared `<EntityHoverCard>` so it behaves identically everywhere.
+
+**Add** - investigation graph: pivot from any node, expand neighbours, save the
+investigation, attach it to a case. We render a static graph today.
+
+**Done when:** an analyst can start at an alert and reach the actor without typing
+a search.
+
+---
+
+### Phase 6 · SOC workflow (what a team, not a user, needs)
+
+**Add**
+- **Tiered queues and escalation.** L1 triage queue → escalate to L2 with notes →
+  L3 / threat research for attribution. Assignment, hand-off, per-tier SLA. We
+  have RBAC capabilities and no workflow on top of them.
+- **Investigation as an artefact**: timeline of analyst actions, pivots taken,
+  indicators cleared vs confirmed, evidence, and a conclusion.
+- **Verdict feedback loop** - an analyst's "this was a false positive here"
+  writes back to the indicator, scoped to the tenant. Today nothing an analyst
+  concludes ever reaches the intel store, so the platform never learns.
+- **Scheduled hunts** - saved hunts that re-run and alert on new matches.
+- **Narrative reporting** - what changed, what was seen, what was actioned.
+
+**Done when:** two analysts can work the same queue without stepping on each
+other, and a conclusion reached on Tuesday affects Wednesday's scoring.
+
+---
+
+### Phase 7 · Dashboards
+
+**Add** - a widget engine over the Phase 1 model: number, list, distribution,
+timeline, donut, radar, map, tree map, with entity / relationship / audit
+perspectives ([OpenCTI dashboards](https://docs.opencti.io/latest/usage/dashboards/)).
+User-composed, saveable, shareable.
+
+Deliberately last: widgets need something to aggregate over, and today that would
+be one undifferentiated table.
+
+---
+
+### Cross-cutting: what to REMOVE
+
+Removal is half the work and usually skipped. Each of these actively costs us:
+
+- [ ] **The `feeds` table** - duplicates `connectors`, empty by design in live
+      mode, caused the "0 Sources Online" front-page bug. (Phase 1)
+- [ ] **`_severity_from_confidence`** - conflates two unrelated axes. (Phase 3)
+- [ ] **Eight hand-written `INSERT INTO iocs`** - one ingest function. (Phase 1)
+- [ ] **Frontend seed/demo arrays** (`CONFIRMED_SEED`, `ALERTS`, `SEED` assets…)
+      shipped inside live page components. They exist for an offline preview and
+      are one bad conditional away from rendering fabricated data in a live
+      deployment. Move to a demo-only module that live builds cannot import.
+- [ ] **The synthetic engine's reach.** It is correctly refused in live mode now,
+      but it still owns the name "engine" in the UI and docs while the *real*
+      engine (connectors + import) is presented as plumbing. Rename: the OSINT
+      pipeline is the engine; the generator is "demo telemetry".
+- [ ] **Normal/Power mode duality** - two information architectures maintained in
+      parallel, and the reason the SIEM funnel fix was invisible until I found
+      the right tab. Pick one IA with progressive disclosure.
+- [ ] **`plan.md` itself** - 3,900 lines with completed items inline. Split into
+      `plan.md` (open) and `CHANGELOG.md` (done) properly.
+
+---
+
+### What this is NOT
+
+- **Not more feeds.** The engine imports 311k in ~14s and the network is the
+  bottleneck. More volume without Phases 1-3 makes the product measurably worse.
+- **Not more throughput.** ~36k/s import and ~118k/s dedup already exceed the
+  stated 5k/s target by 7-23×.
+- **Not a rewrite.** Every phase is additive against the existing schema, with
+  compat shims for one release.
+
+### Honest sequencing note
+
+Phases 1-3 are where this product stops being a blocklist aggregator; they are
+also the only phases that require touching the data model, so they must come
+first or be redone later. Phase 0 is days. Phase 1 is the risky one - it changes
+what a row *means* - and should ship behind a compat view with the old `iocs`
+surface intact until the UI has moved.
+
+---
+
 ## Open roadmap (remaining work only - finished items live in the CHANGELOG)
 
 **Shipped & complete** (full detail in the CHANGELOG below): Phase 0
