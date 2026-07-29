@@ -569,6 +569,38 @@ def import_indicators(indicators: list[dict], source: str,
     return totals
 
 
+def record_source_assertions(conn, candidates: list[dict], now: str) -> None:
+    """Upsert one (value, source) row per candidate, and keep intel_sources fresh.
+
+    Best-effort: corroboration is a derived signal, and losing it must never fail
+    an import that is otherwise storing indicators correctly."""
+    if not candidates:
+        return
+    try:
+        rows, sources = [], {}
+        for c in candidates:
+            src = (c.get("source") or "")[:200]
+            if not src:
+                continue
+            rows.append((c["value"], src, now, now,
+                         (c.get("threat_type") or "")[:120], c.get("conf"), now))
+            sources[src] = now
+        if not rows:
+            return
+        # ON CONFLICT works on both backends; a repeat sighting from the same
+        # source moves last_seen forward instead of duplicating the row.
+        conn.executemany(
+            "INSERT INTO observable_sources (value,source_id,first_seen,last_seen,"
+            "raw_label,confidence) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(value,source_id) DO UPDATE SET last_seen=?", rows)
+        conn.executemany(
+            "INSERT INTO intel_sources (id,name,first_seen,last_seen) "
+            "VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=?",
+            [(sid, sid, ts, ts, ts) for sid, ts in sources.items()])
+    except Exception:
+        logging.debug("recording source assertions failed", exc_info=True)
+
+
 def _import(indicators: list[dict], source: str,
             *, alert_budget: int = _MAX_INTEL_ALERTS_PER_RUN) -> dict:
     """Batch dedup-by-value insert of normalised indicators into the IOC store.
@@ -644,7 +676,14 @@ def _import(indicators: list[dict], source: str,
             ).fetchall()
             existing.update(r["value"] for r in rows)
 
-        # 3. Everything not already present is new - bulk INSERT it in one call.
+        # 3. Record WHICH source asserted each value - for every candidate, not
+        #    just the new ones. A value already in the store because feed A
+        #    listed it is exactly the case that matters: feed B listing it too is
+        #    corroboration, and dropping it as "a duplicate" is how 16 feeds
+        #    produced one opinion. This is the only place that fact exists.
+        record_source_assertions(conn, candidates, now)
+
+        # 4. Everything not already present is new - bulk INSERT it in one call.
         new = [c for c in candidates if c["value"] not in existing]
         duplicates += len(candidates) - len(new)
         if new:

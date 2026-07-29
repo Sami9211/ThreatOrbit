@@ -353,6 +353,8 @@ export interface Actor {
 }
 
 export interface Ioc {
+  /** Independent sources asserting this value (see IocLookup.sourceCount). */
+  sourceCount?: number
   id: string
   type: string
   value: string
@@ -404,6 +406,11 @@ export interface CtiSummary {
 export interface IocLookup {
   value: string
   found: boolean
+  /** How many independent sources assert this value. 1 is a single feed's word;
+   *  4 is four feeds agreeing, which is a different claim entirely. */
+  sourceCount?: number
+  /** Which sources, oldest assertion first. */
+  sources?: string[]
   verdict: 'malicious' | 'suspicious' | 'clean' | 'benign' | 'expired' | 'unverified'
   confidence: number
   severity: string | null

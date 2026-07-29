@@ -136,6 +136,22 @@ def list_iocs(type: str | None = None, severity: str | None = None,
     # tells an analyst nothing; the pulse title/TLP is what makes the difference
     # between "an IP from a feed" and "infrastructure from campaign X". One
     # lookup for the whole page rather than a join over every row.
+    # Corroboration: how many independent sources assert each value on this page.
+    # One query for the page, in the same shape as the report lookup below - the
+    # alternative is a query per row, which at 100 rows is 100 round trips.
+    if items:
+        vals = [i["value"] for i in items]
+        with get_conn() as conn:
+            ph = ",".join("?" * len(vals))
+            counts = {r["value"]: r["n"] for r in conn.execute(
+                f"SELECT value, COUNT(*) AS n FROM observable_sources "
+                f"WHERE value IN ({ph}) GROUP BY value", tuple(vals)).fetchall()}
+        for i in items:
+            # 1, not 0, when unrecorded: the row exists because SOMETHING
+            # asserted it. Pre-corroboration rows would otherwise read as
+            # "no source claims this", which is false.
+            i["sourceCount"] = counts.get(i["value"], 1)
+
     rids = {i.get("report_id") for i in items if i.get("report_id")}
     if rids:
         ph = ",".join("?" * len(rids))
@@ -323,6 +339,23 @@ def _match_indicator(conn, v: str):
     return None
 
 
+def corroboration(conn, values: list[str]) -> dict[str, list[str]]:
+    """Which sources assert each value. The answer an analyst needs before
+    acting: one blocklist listing an IP is weak, five independent feeds agreeing
+    is not, and until now the platform could not tell them apart."""
+    if not values:
+        return {}
+    out: dict[str, list[str]] = {}
+    for i in range(0, len(values), _IMPORT_PROBE_CHUNK):
+        chunk = values[i:i + _IMPORT_PROBE_CHUNK]
+        ph = ",".join("?" * len(chunk))
+        for r in conn.execute(
+                f"SELECT value, source_id FROM observable_sources WHERE value IN ({ph}) "
+                f"ORDER BY first_seen", tuple(chunk)).fetchall():
+            out.setdefault(r["value"], []).append(r["source_id"])
+    return out
+
+
 def _lookup_payload(v: str, row) -> dict:
     """The verdict for one queried value. Shared by the single and bulk lookups:
     two triage paths that disagreed about whether a value is malicious would be
@@ -356,7 +389,11 @@ def ioc_lookup(value: str):
     v = value.strip()
     with get_conn() as conn:
         row = _match_indicator(conn, v)
+        matched = row["value"] if row is not None else v
+        srcs = corroboration(conn, [matched]).get(matched, [])
     out = _lookup_payload(v, row)
+    out["sources"] = srcs
+    out["sourceCount"] = len(srcs) or (1 if out["found"] else 0)
     # The single-value response has always keyed `value` to the MATCHED
     # indicator, not the query; keep that shape for existing callers.
     if out["found"]:
@@ -420,6 +457,17 @@ def ioc_lookup_bulk(body: BulkLookup):
                     rows[v] = hit
 
     results = [_lookup_payload(v, rows.get(v)) for v in ordered]
+    # Corroboration for the whole batch in one pass, keyed on the indicator each
+    # query MATCHED (a domain query can hit a URL hosted on it).
+    matched_values = [r.get("matched") or r["value"] for r in results if r["found"]]
+    if matched_values:
+        with get_conn() as conn:
+            by_value = corroboration(conn, matched_values)
+        for r in results:
+            if r["found"]:
+                srcs = by_value.get(r.get("matched") or r["value"], [])
+                r["sources"] = srcs
+                r["sourceCount"] = len(srcs) or 1
     return {"total": len(results),
             "found": sum(1 for r in results if r["found"]),
             "results": results}

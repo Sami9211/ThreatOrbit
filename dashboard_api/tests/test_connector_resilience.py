@@ -1222,7 +1222,15 @@ def test_due_connectors_sync_on_their_own_without_anyone_pressing_sync(monkeypat
 
         assert due_name in by_name, f"a due connector did not auto-sync: {sorted(by_name)}"
         assert by_name[due_name].get("imported") == 2, by_name[due_name]
-        assert early_name not in by_name, "a connector synced before its cadence elapsed"
+        # The not-due connector must be absent from THIS pass. Asserted against
+        # its stored last_run rather than the return list: run_due_connectors is
+        # global, so a concurrently-running test's own call can consume a due
+        # connector and make the aggregate list an unreliable witness.
+        with real_get_conn() as c:
+            early_row = c.execute("SELECT last_run FROM connectors WHERE id=?",
+                                  (early_id,)).fetchone()
+        assert early_row["last_run"] == rows[1][3], (
+            "a connector synced before its cadence elapsed")
 
         with real_get_conn() as c:
             # Indicators really landed, without any manual run.

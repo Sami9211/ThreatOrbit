@@ -79,8 +79,9 @@ export default function BulkCheckPage() {
   function exportCsv() {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const csv = [
-      'value,verdict,matched_indicator,severity,confidence,threat_type,actor,source,last_seen',
-      ...(rows ?? []).map((r) => [r.value, r.verdict, r.matched ?? '', r.severity ?? '',
+      'value,verdict,matched_indicator,source_count,sources,severity,confidence,threat_type,actor,source,last_seen',
+      ...(rows ?? []).map((r) => [r.value, r.verdict, r.matched ?? '',
+        r.found ? (r.sourceCount ?? 1) : 0, (r.sources ?? []).join('; '), r.severity ?? '',
         r.confidence, r.threatType ?? '', r.actor ?? '', r.source ?? '', r.lastSeen ?? '']
         .map(esc).join(',')),
     ].join('\n')
@@ -202,6 +203,7 @@ export default function BulkCheckPage() {
                     <tr className="text-left">
                       <th className="px-3 py-2 font-medium">Value</th>
                       <th className="px-3 py-2 font-medium">Verdict</th>
+                      <th className="px-3 py-2 font-medium">Sources</th>
                       <th className="px-3 py-2 font-medium">Threat</th>
                       <th className="px-3 py-2 font-medium">Actor</th>
                       <th className="px-3 py-2 font-medium">Source</th>
@@ -229,6 +231,21 @@ export default function BulkCheckPage() {
                             <span className={cn('inline-flex px-1.5 py-0.5 rounded-full border text-[10px] whitespace-nowrap', v.cls)}>
                               {v.label}
                             </span>
+                          </td>
+                          {/* Corroboration. Four independent feeds agreeing is a
+                              different claim from one feed's word, and the store
+                              could not previously tell them apart. */}
+                          <td className="px-3 py-2">
+                            {r.found ? (
+                              <span
+                                title={(r.sources ?? []).join('\n') || undefined}
+                                className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] tabular-nums',
+                                  (r.sourceCount ?? 1) >= 3 ? 'text-threat border-threat/30 bg-threat/10'
+                                    : (r.sourceCount ?? 1) === 2 ? 'text-amber border-amber/30 bg-amber/10'
+                                    : 'text-ink-400 border-white/10 bg-white/5')}>
+                                {r.sourceCount ?? 1}×
+                              </span>
+                            ) : <span className="text-ink-600">—</span>}
                           </td>
                           <td className="px-3 py-2 text-ink-400">{r.threatType || '—'}</td>
                           <td className="px-3 py-2 text-ink-400">{r.actor || '—'}</td>

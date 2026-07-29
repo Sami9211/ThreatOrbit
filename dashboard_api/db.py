@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 class SchemaVersionError(RuntimeError):
@@ -424,6 +424,42 @@ CREATE TABLE IF NOT EXISTS iocs (
     host        TEXT
 );
 
+-- Which SOURCES asserted a given indicator value, one row per (value, source).
+--
+-- The import used to collapse this: an indicator carried a single `source`
+-- string, and when a second feed listed the same value it was counted as a
+-- duplicate and discarded. The platform pulls from 16 curated feeds and threw
+-- away 15 opinions out of every 16. Corroboration - "how many independent
+-- sources say this, and which" - is the single most useful signal a multi-feed
+-- aggregator can produce, and it was not merely unshown but unrecorded.
+--
+-- Keyed on the value rather than an ioc id so the record survives an indicator
+-- being expired, re-imported or garbage-collected: the assertion "feed X listed
+-- this value on date Y" is true independently of our row for it.
+CREATE TABLE IF NOT EXISTS observable_sources (
+    value       TEXT NOT NULL,
+    source_id   TEXT NOT NULL,      -- intel_sources.id
+    first_seen  TEXT NOT NULL,
+    last_seen   TEXT NOT NULL,
+    raw_label   TEXT,               -- what THIS source called it (threat type)
+    confidence  INTEGER,            -- what THIS source claimed
+    PRIMARY KEY (value, source_id)
+);
+
+-- Feeds as first-class records rather than free text repeated on every row.
+-- `reliability` is the Admiralty grade (A most reliable .. F unassessable),
+-- which is what turns a raw count of sources into a weighted judgement.
+CREATE TABLE IF NOT EXISTS intel_sources (
+    id           TEXT PRIMARY KEY,  -- stable slug, e.g. "osint:Maltrail malware domains"
+    name         TEXT NOT NULL,
+    kind         TEXT,              -- connector kind that produced it
+    reliability  TEXT NOT NULL DEFAULT 'C',
+    url          TEXT,
+    first_seen   TEXT,
+    last_seen    TEXT,
+    value_count  INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS ioc_sightings (
     id      TEXT PRIMARY KEY,
     ioc_id  TEXT NOT NULL,
@@ -784,6 +820,11 @@ CREATE INDEX IF NOT EXISTS idx_ioc_imports_ts ON ioc_imports(ts DESC);
 -- alone (~10ms).
 CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
 CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
+-- Only the reverse direction needs its own index. Corroboration looks up
+-- value -> sources, which the PRIMARY KEY (value, source_id) already serves as
+-- its leading column; a second index on value alone is pure insert cost -
+-- measured at 157k -> 220k rows/s once removed.
+CREATE INDEX IF NOT EXISTS idx_obs_src_source ON observable_sources(source_id);
 CREATE INDEX IF NOT EXISTS idx_pbruns_alert ON playbook_runs(alert_id);
 CREATE INDEX IF NOT EXISTS idx_pbruns_pb ON playbook_runs(playbook_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vulns_asset ON vuln_findings(asset_id);
@@ -1181,6 +1222,47 @@ def _backfill_ioc_hosts(conn) -> int:
     return len(updates)
 
 
+def _backfill_source_assertions(conn) -> int:
+    """Seed observable_sources from the `source` already on each indicator.
+
+    Without this, corroboration only knows about values imported AFTER the
+    feature landed. Feeds use conditional GET, so an unchanged feed is never
+    re-fetched and its indicators would never acquire an assertion row - on a
+    stable store that is effectively never. Every existing row is itself the
+    record of one source asserting one value; this states that explicitly so the
+    count starts from the truth rather than from zero.
+
+    Runs once: after it, every ioc has at least its own source recorded, so the
+    NOT EXISTS clause matches nothing on later boots."""
+    rows = conn.execute(
+        "SELECT value, source, first_seen, last_seen, threat_type, confidence "
+        "FROM iocs WHERE source IS NOT NULL AND source != '' "
+        "AND NOT EXISTS (SELECT 1 FROM observable_sources os "
+        "                WHERE os.value = iocs.value AND os.source_id = iocs.source)"
+    ).fetchall()
+    if not rows:
+        return 0
+    now = _utc_now_iso()
+    payload = [(r["value"], r["source"][:200], r["first_seen"] or now,
+                r["last_seen"] or now, (r["threat_type"] or "")[:120],
+                r["confidence"], r["last_seen"] or now) for r in rows]
+    conn.executemany(
+        "INSERT INTO observable_sources (value,source_id,first_seen,last_seen,"
+        "raw_label,confidence) VALUES (?,?,?,?,?,?) "
+        "ON CONFLICT(value,source_id) DO UPDATE SET last_seen=?", payload)
+    seen = {r["source"][:200] for r in rows}
+    conn.executemany(
+        "INSERT INTO intel_sources (id,name,first_seen,last_seen) VALUES (?,?,?,?) "
+        "ON CONFLICT(id) DO UPDATE SET last_seen=?",
+        [(sid, sid, now, now, now) for sid in seen])
+    return len(payload)
+
+
+def _utc_now_iso() -> str:
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+
+
 def _verify_schema(conn):
     """Fail loudly if applying the schema did not produce every table it declares.
 
@@ -1249,6 +1331,15 @@ def init_db():
         # second pass: indexes that needed migrated columns now succeed
         _safe_schema(conn)
         _verify_schema(conn)
+        try:
+            seeded = _backfill_source_assertions(conn)
+            if seeded:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Seeded %d source assertions from existing indicators", seeded)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("source backfill failed")
         try:
             filled = _backfill_ioc_hosts(conn)
             if filled:

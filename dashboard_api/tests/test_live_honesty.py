@@ -281,3 +281,55 @@ def test_url_host_backfill_runs_on_the_configured_backend():
         with get_conn() as c:
             c.execute("DELETE FROM iocs WHERE value=?", (value,))
             c.commit()
+
+
+def test_existing_indicators_get_their_own_source_recorded():
+    """Corroboration must not start blind on an existing store.
+
+    Feeds use conditional GET, so an unchanged feed is never re-fetched and its
+    indicators would never acquire an assertion row - on a stable store, that is
+    effectively never. Every existing indicator IS the record of one source
+    asserting one value; the backfill states that explicitly so the count starts
+    from the truth instead of from zero.
+
+    What it cannot do is recover corroboration that was already discarded: the
+    old import kept one row per value with one `source`, so a second feed's
+    agreement was dropped at write time and is simply gone. Only imports after
+    the change carry the full picture."""
+    import uuid
+
+    from dashboard_api.db import _backfill_source_assertions, get_conn, host_of
+
+    val = f"seeded-{uuid.uuid4().hex[:8]}.example"
+    src = f"osint:Backfill Feed {uuid.uuid4().hex[:4]}"
+    with get_conn() as c:
+        c.execute(
+            "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,"
+            "actor,first_seen,last_seen,tags,host) VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?)",
+            (str(uuid.uuid4()), "domain", val, "phishing", 70, "high", src, "",
+             "2026-01-01T00:00:00", "2026-01-02T00:00:00", host_of(val, "domain")))
+        c.execute("DELETE FROM observable_sources WHERE value=?", (val,))
+        c.commit()
+    try:
+        with get_conn() as c:
+            assert _backfill_source_assertions(c) >= 1
+            c.commit()
+            rows = c.execute(
+                "SELECT source_id, raw_label FROM observable_sources WHERE value=?",
+                (val,)).fetchall()
+        assert [r["source_id"] for r in rows] == [src]
+        assert rows[0]["raw_label"] == "phishing", "the source's own label is kept"
+
+        # Idempotent: a second boot must not duplicate or re-do the work.
+        with get_conn() as c:
+            again = _backfill_source_assertions(c)
+            c.commit()
+            n = c.execute("SELECT COUNT(*) AS n FROM observable_sources WHERE value=?",
+                          (val,)).fetchone()["n"]
+        assert n == 1, f"backfill duplicated assertions ({n} rows)"
+        assert again == 0, "backfill re-processed rows it had already seeded"
+    finally:
+        with get_conn() as c:
+            c.execute("DELETE FROM observable_sources WHERE value=?", (val,))
+            c.execute("DELETE FROM iocs WHERE value=?", (val,))
+            c.commit()

@@ -432,3 +432,78 @@ def test_kpis_report_how_many_assets_the_risk_score_covers(client, auth):
     # reported as covering nothing, never as a measured result.
     if actual == 0:
         assert body["score"] == 0 and body["assetsAssessed"] == 0
+
+
+# -- Corroboration: 16 feeds used to produce one opinion ------------------------
+
+def _assert_source(value, source_id, ts="2026-01-01T00:00:00"):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO observable_sources (value,source_id,first_seen,last_seen,"
+            "raw_label,confidence) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(value,source_id) DO UPDATE SET last_seen=?",
+            (value, source_id, ts, ts, "phishing", 70, ts))
+        conn.commit()
+
+
+def test_lookup_reports_every_source_that_asserts_a_value(client, auth):
+    """One blocklist listing an IP is weak evidence; five independent feeds
+    agreeing is not. The store held 16 feeds and could not tell those apart,
+    because a second feed listing a known value was counted as a duplicate and
+    discarded - the corroborating fact was never recorded at all."""
+    val = f"corrob-{uuid.uuid4().hex[:8]}.example"
+    _put_ioc(val, ioc_type="domain")
+    for src in ("osint:Feed A", "osint:Feed B", "osint:Feed C"):
+        _assert_source(val, src)
+    try:
+        r = client.get(f"/cti/lookup?value={val}", headers=auth).json()
+        assert r["found"] is True
+        assert r["sourceCount"] == 3, f"expected 3 corroborating sources, got {r['sourceCount']}"
+        assert set(r["sources"]) == {"osint:Feed A", "osint:Feed B", "osint:Feed C"}
+    finally:
+        _cleanup(val)
+        with get_conn() as c:
+            c.execute("DELETE FROM observable_sources WHERE value=?", (val,)); c.commit()
+
+
+def test_bulk_check_carries_corroboration_for_every_hit(client, auth):
+    """The triage screen is where this matters most: which of these 40 lines is
+    backed by more than one source."""
+    weak = f"weak-{uuid.uuid4().hex[:8]}.example"
+    strong = f"strong-{uuid.uuid4().hex[:8]}.example"
+    _put_ioc(weak, ioc_type="domain")
+    _put_ioc(strong, ioc_type="domain")
+    _assert_source(weak, "osint:Only Feed")
+    for src in ("osint:Feed A", "osint:Feed B", "osint:Feed C", "osint:Feed D"):
+        _assert_source(strong, src)
+    try:
+        res = client.post("/cti/lookup/bulk", json={"values": [weak, strong]},
+                          headers=auth).json()
+        by_val = {r["value"]: r for r in res["results"]}
+        assert by_val[weak]["sourceCount"] == 1
+        assert by_val[strong]["sourceCount"] == 4
+    finally:
+        _cleanup(weak, strong)
+        with get_conn() as c:
+            c.execute("DELETE FROM observable_sources WHERE value IN (?,?)", (weak, strong))
+            c.commit()
+
+
+def test_an_indicator_with_no_recorded_assertions_reports_one_not_zero(client, auth):
+    """Rows imported before corroboration existed have no assertion rows. They
+    are not "claimed by nobody" - something put them in the store - and showing
+    0 would read as a value with no backing at all."""
+    val = f"legacy-{uuid.uuid4().hex[:8]}.example"
+    _put_ioc(val, ioc_type="domain")
+    try:
+        r = client.get(f"/cti/lookup?value={val}", headers=auth).json()
+        assert r["found"] is True and r["sourceCount"] == 1
+        listed = client.get(f"/cti/iocs?q={val}", headers=auth).json()
+        assert listed["items"][0]["sourceCount"] == 1
+    finally:
+        _cleanup(val)
+
+
+def test_an_unknown_value_claims_no_sources(client, auth):
+    r = client.get("/cti/lookup?value=never-seen-anywhere.example", headers=auth).json()
+    assert r["found"] is False and r["sourceCount"] == 0
