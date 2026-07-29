@@ -1200,8 +1200,18 @@ def test_due_connectors_sync_on_their_own_without_anyone_pressing_sync(monkeypat
     from datetime import timedelta
     from dashboard_api.db import get_conn as real_get_conn
 
-    feed = [{"type": "ip", "value": "203.0.113.77"}, {"type": "domain", "value": "auto-sync.test"}]
-    monkeypatch.setitem(conn_mod._FETCHERS, "json", lambda c: feed)
+    # Indicators unique PER CONNECTOR, not per test. run_due_connectors runs
+    # every enabled connector in the database, and this monkeypatch replaces the
+    # json fetcher globally - so with one shared feed, a leftover json connector
+    # from an earlier test would import these two values first and ours would
+    # report `imported: 0, duplicates: 2`. That is exactly how this test failed
+    # on Postgres, where `SELECT * FROM connectors` returns heap order and the
+    # leftover happened to come first.
+    def feed_for(c):
+        return [{"type": "domain", "value": f"a.{c['id']}.auto-sync.test"},
+                {"type": "domain", "value": f"b.{c['id']}.auto-sync.test"}]
+
+    monkeypatch.setitem(conn_mod._FETCHERS, "json", feed_for)
 
     tag = uuid.uuid4().hex[:8]
     due_id, early_id = f"due-{tag}", f"early-{tag}"
@@ -1254,6 +1264,11 @@ def test_due_connectors_sync_on_their_own_without_anyone_pressing_sync(monkeypat
     finally:
         with real_get_conn() as c:
             c.execute("DELETE FROM iocs WHERE source IN (?,?)", (due_name, early_name))
+            # Any OTHER connector this global tick happened to run also imported
+            # auto-sync.test domains through the patched fetcher; clean those too
+            # rather than leaking them into every later test's counts.
+            c.execute("DELETE FROM iocs WHERE value LIKE ?", ("%.auto-sync.test",))
+            c.execute("DELETE FROM observable_sources WHERE value LIKE ?", ("%.auto-sync.test",))
             c.execute("DELETE FROM ioc_imports WHERE source IN (?,?)", (due_name, early_name))
             c.execute("DELETE FROM connector_works WHERE connector_id IN (?,?)", (due_id, early_id))
             c.execute("DELETE FROM connectors WHERE id IN (?,?)", (due_id, early_id))

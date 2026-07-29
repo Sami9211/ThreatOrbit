@@ -83,6 +83,8 @@
     "/connectors/{connector_id}/run",
     "/cti/actors",
     "/cti/actors/{actor_id}",
+    "/cti/asn/status",
+    "/cti/asn/sync",
     "/cti/attribution",
     "/cti/attribution/case/{case_id}",
     "/cti/enrichers",

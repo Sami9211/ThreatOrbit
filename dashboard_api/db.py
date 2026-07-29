@@ -460,6 +460,22 @@ CREATE TABLE IF NOT EXISTS intel_sources (
     value_count  INTEGER NOT NULL DEFAULT 0
 );
 
+-- Network ownership (which AS announces an address, and from where), loaded
+-- from iptoasn.com's hourly BGP-derived table. See dashboard_api/asn.py.
+--
+-- Addresses are zero-padded hex, NOT integers: 8 chars for IPv4, 32 for IPv6.
+-- That makes lexicographic comparison identical to numeric comparison on both
+-- backends, where an integer column would have worked for IPv4 and silently
+-- overflowed for IPv6.
+CREATE TABLE IF NOT EXISTS asn_ranges (
+    family      INTEGER NOT NULL,     -- 4 or 6
+    start_hex   TEXT NOT NULL,
+    end_hex     TEXT NOT NULL,
+    asn         INTEGER NOT NULL,
+    country     TEXT,
+    description TEXT
+);
+
 CREATE TABLE IF NOT EXISTS ioc_sightings (
     id      TEXT PRIMARY KEY,
     ioc_id  TEXT NOT NULL,
@@ -828,6 +844,11 @@ CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
 -- its leading column; a second index on value alone is pure insert cost -
 -- measured at 157k -> 220k rows/s once removed.
 CREATE INDEX IF NOT EXISTS idx_obs_src_source ON observable_sources(source_id);
+-- Range lookup: "last range starting at or before this address". Without it,
+-- every enrichment of an IP scans ~700k rows.
+CREATE INDEX IF NOT EXISTS idx_asn_start ON asn_ranges(family, start_hex);
+-- Pivot the other way: every indicator this deployment holds in one AS.
+CREATE INDEX IF NOT EXISTS idx_asn_asn ON asn_ranges(asn);
 CREATE INDEX IF NOT EXISTS idx_pbruns_alert ON playbook_runs(alert_id);
 CREATE INDEX IF NOT EXISTS idx_pbruns_pb ON playbook_runs(playbook_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vulns_asset ON vuln_findings(asset_id);

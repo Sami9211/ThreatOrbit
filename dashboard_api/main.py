@@ -174,6 +174,13 @@ def _connector_scheduler():
                                 res.get("rescored", 0))
             except Exception:
                 logger.exception("IOC lifecycle tick failed")
+        # Network-ownership table (iptoasn). Enforces its own 24h cadence, so
+        # calling it every tick costs one settings read until it is actually due.
+        try:
+            from dashboard_api.asn import sync_if_due as sync_asn
+            sync_asn()
+        except Exception:
+            logger.exception("ASN table tick failed")
         try:  # agentless S3 log pull (no-op unless configured; honours its own interval)
             from dashboard_api.s3_pull import poll_if_configured
             poll_if_configured()

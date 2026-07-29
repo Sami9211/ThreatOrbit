@@ -568,6 +568,38 @@ function DetailsTab({ result }: { result: ScanResult }) {
         )}
       </Card>
 
+      {/* Network ownership. An IP on its own is barely intelligence; "announced
+          by AS14061 DigitalOcean, US" says the infrastructure is cheap and
+          rented. Answered from a local BGP table, so it is instant, works
+          offline, and tells no third party what we looked up. */}
+      {(() => {
+        const a = providerOf(result, 'asn')
+        if (!a) return null
+        const d = (a.data ?? {}) as Record<string, unknown>
+        return (
+          <Card title="Network ownership (BGP)"
+            right={a.available && d.asn
+              ? <span className="text-[9px] text-ink-600">local table</span> : undefined}>
+            {a.available && d.asn ? (
+              <div>
+                <KV k="Autonomous system" v={`AS${d.asn}`} />
+                <KV k="Operator" v={(d.org as string) || null} mono={false} />
+                <KV k="Registered country" v={(d.country as string) || null} />
+                <KV k="Table synced" v={(d.synced as string) || null} />
+                <p className="text-[11px] text-ink-500 mt-2 leading-relaxed">
+                  Ownership is context, not a verdict - plenty of legitimate
+                  services run on the same networks attackers rent.
+                </p>
+              </div>
+            ) : (
+              <EmptyNote text={a.available
+                ? (a.summary || 'This address is not announced in public BGP.')
+                : `Not available: ${a.reason || 'unknown'}.`} />
+            )}
+          </Card>
+        )
+      })()}
+
       <Card title="Registry (RDAP)"
         right={rdap?.cached ? <span className="text-[9px] text-ink-600">cached</span> : undefined}>
         {rdFound ? (

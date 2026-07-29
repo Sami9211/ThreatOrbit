@@ -818,6 +818,42 @@ def list_enrichers():
     return provider_status()
 
 
+@router.get("/asn/status")
+def asn_status():
+    """State of the local BGP ownership table: how many ranges and how fresh.
+
+    Reported honestly - an unsynced deployment sees zero ranges and no
+    timestamp, not an empty-looking success."""
+    from dashboard_api import asn as asn_mod
+    with get_conn() as conn:
+        return asn_mod.status(conn)
+
+
+@router.post("/asn/sync")
+def asn_sync(force: bool = True, user: dict = Depends(require_perm("cti.write"))):
+    """Refresh the network-ownership table from iptoasn.com now.
+
+    `force` by default: an operator pressing this has decided the table should
+    be refreshed, and answering "not due yet" to an explicit request is the
+    behaviour that makes people stop trusting a button.
+    """
+    from dashboard_api import asn as asn_mod
+    with get_conn() as conn:
+        try:
+            res = asn_mod.sync(conn, force=force)
+            conn.commit()
+        except Exception as e:                     # noqa: BLE001
+            # The reason, not a generic failure: "which upstream, and what went
+            # wrong" is what an operator needs to fix it.
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not refresh from {asn_mod.DATASET_URL}: "
+                       f"{e.__class__.__name__}: {e}"[:300])
+        audit(conn, user["email"], "asn.sync", "asn_ranges", f"ranges={res.get('ranges')}")
+        conn.commit()
+    return res
+
+
 @router.post("/iocs/{ioc_id}/enrich")
 def enrich_ioc(ioc_id: str, refresh: bool = False, user: dict = Depends(require_perm("cti.write"))):
     """Run the enrichment pipeline over an indicator (cached, with history)."""

@@ -461,7 +461,56 @@ def _enrich_external(provider: str, value: str, ioc_type: str) -> dict:
     return out
 
 
-BUILTIN = {"internal": _enrich_internal, "indicator": _enrich_indicator}
+def _enrich_asn(conn, value: str, ioc_type: str) -> dict:
+    """Network ownership for an IP, from the LOCAL BGP table (see asn.py).
+
+    Keyless, offline, and instant, because the whole iptoasn table lives in this
+    database rather than behind a per-query API. That also means we never tell a
+    third party which indicators this deployment is investigating.
+
+    Context, never a verdict. Hosting on a cheap VPS network is not evidence of
+    anything - plenty of legitimate services live there - so this returns
+    "unknown" and lets the analyst read the ownership.
+    """
+    from urllib.parse import urlparse
+    from dashboard_api import asn as asn_mod
+
+    base = {"provider": "asn", "verdict": "unknown", "summary": "", "data": {}}
+    target = value
+    if (ioc_type or "").lower() == "url":
+        target = (urlparse(value).hostname or "").strip(".")
+    try:
+        ipaddress.ip_address(target.strip())
+    except ValueError:
+        return {**base, "available": False, "reason": "not an IP address",
+                "summary": "not an IP address"}
+
+    st = asn_mod.status(conn)
+    if not st["available"]:
+        # Honest unavailability. An unsynced table must read as "we have not
+        # loaded this yet", never as "this IP belongs to nobody".
+        return {**base, "available": False,
+                "reason": "the local BGP table has not been synced yet",
+                "summary": "BGP table not synced"}
+    hit = asn_mod.lookup(conn, target)
+    if hit is None:
+        return {**base, "available": True, "summary": "not announced in public BGP",
+                "data": {"synced": st["synced"]}}
+    if hit["asn"] is None:                       # private/reserved space
+        return {**base, "available": True, "summary": hit["note"],
+                "data": {"private": True, "synced": st["synced"]}}
+    org = hit["description"] or f"AS{hit['asn']}"
+    where = f", {hit['country']}" if hit["country"] else ""
+    return {**base, "available": True,
+            "summary": f"AS{hit['asn']} {org}{where}",
+            "data": {"asn": hit["asn"], "org": hit["description"],
+                     "country": hit["country"], "synced": st["synced"]}}
+
+
+BUILTIN = {"internal": _enrich_internal, "indicator": _enrich_indicator,
+           # Local dataset, so it belongs with the builtins rather than the
+           # network-dependent providers: once synced it answers air-gapped.
+           "asn": _enrich_asn}
 # Public registries: keyless like the builtins, but they DO make a network call,
 # so availability is only known at query time (air-gapped deployments get an
 # honest available:false per lookup, not a fabricated record).
@@ -471,6 +520,21 @@ ALL_PROVIDERS = list(BUILTIN) + list(PUBLIC) + list(EXTERNAL_PROVIDERS)
 
 def provider_status() -> list[dict]:
     out = [{"provider": p, "kind": "builtin", "available": True} for p in BUILTIN]
+    # `asn` is a builtin but is only usable once the BGP table has been loaded,
+    # so report what is actually true rather than a blanket yes.
+    for row in out:
+        if row["provider"] == "asn":
+            try:
+                from dashboard_api import asn as asn_mod
+                from dashboard_api.db import get_conn
+                with get_conn() as conn:
+                    st = asn_mod.status(conn)
+                row["available"] = st["available"]
+                row["detail"] = (f"{st['ranges']:,} ranges, synced {st['synced']}"
+                                 if st["available"] else "not synced yet")
+            except Exception:                    # noqa: BLE001
+                row["available"] = False
+                row["detail"] = "unavailable"
     for p in PUBLIC:
         out.append({"provider": p, "kind": "public",
                     "available": os.environ.get("DASHBOARD_DISABLE_RDAP", "").lower() != "true"})

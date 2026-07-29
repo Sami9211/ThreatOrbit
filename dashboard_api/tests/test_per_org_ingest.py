@@ -50,7 +50,14 @@ def test_ingested_events_and_ti_alert_land_in_ingesting_org(client, monkeypatch)
     monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
     org_b = _org("Ingest Co")
     tag = uuid.uuid4().hex[:8]
-    bad_ip = f"203.0.113.{(uuid.uuid4().int % 250) + 1}"
+    # A genuinely unique address. This used to draw from 203.0.113.0/24, which
+    # is 250 possibilities shared with every other test in the suite - and the
+    # alert query below is not scoped to this test, so one collision made it
+    # read ANOTHER test's alert and fail on its org. Caught in CI, which runs
+    # tests in random order; a fixed order had been hiding it.
+    # 198.18.0.0/15 (RFC 2544) gives ~131k addresses instead.
+    n = uuid.uuid4().int
+    bad_ip = f"198.{18 + (n >> 16) % 2}.{(n >> 8) % 256}.{n % 256}"
     with get_conn() as conn:
         email = _email(); _mkuser(conn, email, "analyst", org_b)
         # a malicious IOC so the ingested event raises a deterministic TI-match alert

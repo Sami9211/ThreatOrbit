@@ -1105,6 +1105,26 @@ from the UI. Keyless enrichers first, because they must work on every install:
 **Done when:** clicking any indicator answers "why should I care, who else says
 so, where does it live, and have we seen it here?"
 
+**Status (2026-07-29): (1) corroboration and (2) ASN/network owner are DONE.**
+Corroboration shipped with `observable_sources` and now drives the intel score.
+ASN shipped as `dashboard_api/asn.py` + the `asn_ranges` table: the whole
+iptoasn table is loaded LOCALLY (hourly upstream, PDDL, keyless) rather than
+proxied per query, so lookups are instant, work air-gapped once synced, and
+never tell a third party which indicators this deployment is investigating.
+Wired in as an enrichment provider and surfaced as a "Network ownership (BGP)"
+card in IntelScope, with `GET /cti/asn/status` and `POST /cti/asn/sync` for
+operators and a 24h refresh on the live scheduler.
+
+**Caveat, stated plainly:** the live download could not be exercised from the
+development sandbox - its egress policy allows GitHub only, so `iptoasn.com`
+returns 403 there. Parsing, range lookup, replacement semantics, freshness and
+failure backoff are all covered by tests against a verbatim-format fixture; the
+one step not yet exercised end-to-end is the HTTP fetch itself, which will run
+the first time this is started on a host with ordinary internet access.
+
+Still open in this phase: (3) first-party passive DNS, (4) reverse DNS/PTR and
+TLS observation, (5) sighting counts from local telemetry, (6) keyed enrichers.
+
 ---
 
 ### Phase 3 · Scoring that means something
@@ -1691,6 +1711,66 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-29 · Phase 2: an IP stops being just an IP - network ownership from a
+  LOCAL BGP table.** "203.0.113.7" tells an analyst nothing. "announced by
+  AS14061 DigitalOcean, US" tells them it is cheap rented infrastructure, and it
+  makes every other indicator this deployment holds in the same AS reachable
+  from that one. iptoasn.com publishes the whole BGP-derived table as one hourly
+  file (PDDL public domain, keyless), so `dashboard_api/asn.py` loads it into
+  `asn_ranges` rather than proxying a lookup service per indicator - which would
+  be slower, would leak which indicators we are investigating to a third party,
+  and would stop working the moment the network did.
+
+  Addresses are stored as zero-padded hex (8 chars v4, 32 v6) so lexicographic
+  order equals numeric order on both backends; an integer column would have
+  worked for IPv4 and silently overflowed for IPv6. Loads replace rather than
+  merge, because the upstream file is a complete snapshot and merging would
+  leave withdrawn allocations behind forever. AS0 rows - iptoasn's marker for
+  allocated-but-unannounced space - are dropped, so "we know nothing about this
+  IP" cannot turn into a confident record owned by "Not routed". Failed
+  refreshes back off for 15 minutes: the freshness check alone only paces the
+  success path, so with no table at all every scheduler tick would have
+  re-attempted a ~90 MB download for as long as the network stayed down.
+
+  Two test-design mistakes caught and fixed while writing it: the first fixture
+  used the RFC 5737 documentation blocks, which Python classes as reserved - so
+  every lookup short-circuited on the private-address branch and the range query
+  was never actually exercised; and the failure test left the table fresh, so
+  `sync()` skipped and the failure path it claimed to cover never ran.
+
+  **Not verified end-to-end:** the development sandbox's egress policy allows
+  GitHub only, so `iptoasn.com` returns 403 there and the live download could
+  not be exercised. Parsing, range lookup, boundaries, IPv4/IPv6 separation,
+  replacement, freshness and backoff are covered against a verbatim-format
+  fixture; the HTTP fetch itself will run the first time this starts on a host
+  with ordinary internet access.
+
+  Also: SIEM alerts on import now require critical impact **and** confidence
+  >= 85, not severity alone. That gate did not need to exist while severity was
+  derived from confidence (critical already implied >= 85); now that severity
+  means only what the activity would do, a junk feed asserting "c2" at 20%
+  confidence would otherwise have paged someone.
+
+  The long-standing "flaky" `test_due_connectors_sync_on_their_own` was finally
+  diagnosed rather than re-run until green. It monkeypatched the json fetcher
+  **globally** with ONE shared feed, but `run_due_connectors` runs every enabled
+  connector in the database - so a leftover connector from an earlier test
+  imported those two values first and the connector under test reported
+  `imported: 0, duplicates: 2`. It surfaced on Postgres because
+  `SELECT * FROM connectors` returns heap order there while SQLite returns
+  insertion order. Reproduced deterministically on SQLite (leftover inserted
+  first → `Due Feed imported=0 duplicates=2`, exactly the CI failure) before
+  changing anything; the feed is now keyed to the connector being fetched, which
+  makes the same setup report `imported=2`. Nothing was wrong with the product
+  here - the test was.
+
+  And a real test-isolation defect found by CI: `test_per_org_ingest` drew its
+  address from 203.0.113.0/24 - 250 possibilities shared with the whole suite -
+  while querying alerts unscoped. The SIEM's TI-match path dedups by `src_ip`,
+  so on a collision the test's own alert was never created and it asserted
+  against an older one belonging to a different tenant. Now uses 198.18.0.0/15
+  (~131k addresses).
 
 - **2026-07-29 · Phase 3: a score that means something, and a severity that is
   not the same number twice.** The store held 315,185 indicators ranked by

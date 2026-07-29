@@ -399,6 +399,12 @@ def _to_confidence(raw, default: int = 50) -> int:
 # indicators, so a large feed can't flood the alert queue.
 _MAX_INTEL_ALERTS_PER_RUN = 10
 
+# How sure a feed has to be before a critical-impact indicator raises a SIEM
+# alert on import. 85 is the threshold severity USED to imply back when it was
+# derived from confidence, so this keeps alert volume where it was while letting
+# severity mean what it says.
+ALERT_MIN_CONFIDENCE = int(os.environ.get("DASHBOARD_ALERT_MIN_CONFIDENCE", "85"))
+
 
 # Chunk size for the `value IN (...)` existence probe. SQLite caps a statement
 # at 999 bound variables; Postgres allows far more, so 900 is safe for both and
@@ -782,7 +788,13 @@ def _import(indicators: list[dict], source: str,
             for c in new:
                 if alerts >= alert_budget:
                     break
-                if c["severity"] == "critical":
+                # Critical impact AND a claim worth believing. Severity is now
+                # purely about what the activity WOULD do, so on its own it no
+                # longer says anything about how sure we are - and a junk feed
+                # asserting "c2" at 20% confidence must not page anybody. This
+                # gate did not exist before because severity was derived from
+                # confidence, so "critical" already implied conf >= 85.
+                if c["severity"] == "critical" and c["conf"] >= ALERT_MIN_CONFIDENCE:
                     alert_from_intel(conn, value=c["value"], ioc_type=c["itype"],
                                      severity=c["severity"], confidence=c["conf"],
                                      threat_type=c["threat_type"], actor_name=c["actor"],
