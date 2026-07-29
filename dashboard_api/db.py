@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 class SchemaVersionError(RuntimeError):
@@ -819,6 +819,9 @@ CREATE INDEX IF NOT EXISTS idx_ioc_imports_ts ON ioc_imports(ts DESC);
 -- for one COUNT). With both columns in one index it is answered from the index
 -- alone (~10ms).
 CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
+-- Relevance order. Same rationale as the browse-order index: without it, sorting
+-- 315k rows by score rebuilds a temp B-tree on every page.
+CREATE INDEX IF NOT EXISTS idx_iocs_score ON iocs(intel_score DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
 -- Only the reverse direction needs its own index. Corroboration looks up
 -- value -> sources, which the PRIMARY KEY (value, source_id) already serves as
@@ -966,6 +969,10 @@ _MIGRATIONS = [
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.
     ("connectors", "next_allowed_at", "TEXT"),
+    # Composite intel score, persisted so the store can be SORTED by it. Ranking
+    # 315k indicators by relevance is the whole point; computing the score per
+    # page would only re-order the page, leaving page one whatever arrived last.
+    ("iocs", "intel_score", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "status", "TEXT NOT NULL DEFAULT 'idle'"),
     ("saved_hunts", "progress", "INTEGER NOT NULL DEFAULT 0"),
     ("saved_hunts", "created", "TEXT"),
@@ -1258,6 +1265,48 @@ def _backfill_source_assertions(conn) -> int:
     return len(payload)
 
 
+def _reclassify_severities(conn) -> int:
+    """One-time: rebuild `iocs.severity` from the activity each feed named.
+
+    Severity used to be a monotone function of confidence, so the column held no
+    information the confidence column did not already have. On a real 315k store
+    that produced `malware-distribution` at 50,181 "medium" and 50,024 "high" -
+    one activity, two severities, decided by nothing but the number beside it -
+    and left 81% of every indicator reading "high".
+
+    NVD rows are left alone: their severity is the published CVSS band, which is
+    a real external judgement rather than something we derived.
+
+    Gated on a settings flag rather than a WHERE clause because, unlike the other
+    backfills, this one is not self-limiting - an analyst who corrects a severity
+    by hand must not have it overwritten on the next boot.
+    """
+    done = conn.execute(
+        "SELECT value FROM settings WHERE key='severity_reclassified'").fetchone()
+    if done:
+        return 0
+    from dashboard_api.connectors import severity_for
+    rows = conn.execute(
+        "SELECT id, threat_type, tags, severity FROM iocs "
+        "WHERE source IS NULL OR source != 'nvd'").fetchall()
+    updates = []
+    for r in rows:
+        tags = r["tags"]
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (ValueError, TypeError):
+                tags = []
+        fresh = severity_for(r["threat_type"], tags or [])
+        if fresh != r["severity"]:
+            updates.append((fresh, r["id"]))
+    if updates:
+        conn.executemany("UPDATE iocs SET severity=? WHERE id=?", updates)
+    conn.execute("INSERT INTO settings (key,value) VALUES ('severity_reclassified','1') "
+                 "ON CONFLICT(key) DO UPDATE SET value='1'")
+    return len(updates)
+
+
 def _utc_now_iso() -> str:
     import datetime
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
@@ -1349,6 +1398,16 @@ def init_db():
         except Exception:
             import logging
             logging.getLogger("dashboard_api.db").exception("host backfill failed")
+        try:
+            fixed = _reclassify_severities(conn)
+            if fixed:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Reclassified severity for %d indicators (was derived from "
+                    "confidence, now from the asserted activity)", fixed)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("severity reclassify failed")
         # Migration-gating: refuse to run against a DB newer than this code
         # (rollback safety) before we touch any data.
         _schema_version_gate(conn)

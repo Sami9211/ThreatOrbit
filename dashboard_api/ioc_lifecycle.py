@@ -102,23 +102,60 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
     """Recompute lifecycle status across the store: expire decayed indicators,
     reactivate ones a sighting has refreshed. Known-good is left untouched.
     Returns {scanned, expired, reactivated}."""
+    from dashboard_api.intel_scoring import DEFAULT_RELIABILITY, score_indicator
+
     now = now or datetime.now(timezone.utc)
     rows = conn.execute(
-        "SELECT id, type, confidence, last_seen, status FROM iocs "
+        "SELECT id, type, value, confidence, last_seen, status, sightings, "
+        "source, actor, report_id, intel_score FROM iocs "
         "WHERE status != 'known-good'").fetchall()
-    expired = reactivated = 0
+
+    # Corroboration and reliability for the whole pass, read once rather than
+    # per row: at 315k indicators a query per row is the difference between a
+    # maintenance job and an outage.
+    #
+    # MIN(reliability) is the BEST grade asserting the value ("A" < "B" < ...),
+    # which is what the API scores with. Persisting a score computed from a
+    # different grade would mean sorting by one number and displaying another.
+    corr = {r["value"]: (r["n"], r["g"]) for r in conn.execute(
+        "SELECT o.value AS value, COUNT(*) AS n, MIN(COALESCE(s.reliability,?)) AS g "
+        "FROM observable_sources o LEFT JOIN intel_sources s ON s.id = o.source_id "
+        "GROUP BY o.value", (DEFAULT_RELIABILITY,)).fetchall()}
+    grades = {r["id"]: r["reliability"] for r in conn.execute(
+        "SELECT id, reliability FROM intel_sources").fetchall()}
+
+    expired = reactivated = rescored = 0
+    status_updates, score_updates = [], []
     for r in rows:
         eff = effective_confidence(r["confidence"], r["last_seen"], r["type"], now)
         age = age_days(r["last_seen"], now)
         should_expire = eff < EXPIRY_FLOOR or age > half_life(r["type"]) * MAX_AGE_HALFLIVES
         target = "expired" if should_expire else "active"
         if target != r["status"]:
-            conn.execute("UPDATE iocs SET status=? WHERE id=?", (target, r["id"]))
+            status_updates.append((target, r["id"]))
             if target == "expired":
                 expired += 1
             else:
                 reactivated += 1
-    return {"scanned": len(rows), "expired": expired, "reactivated": reactivated}
+        # The score decays with the indicator and moves as new sources
+        # corroborate it, so this pass is also where it is kept honest.
+        row = dict(r)
+        n, best = corr.get(r["value"], (1, None))
+        own = grades.get(r["source"] or "")
+        if own and (best is None or own < best):
+            best = own
+        fresh = score_indicator(
+            row, source_count=n, reliability=best or DEFAULT_RELIABILITY,
+            local_sightings=max(0, (r["sightings"] or 1) - 1), now=now)["score"]
+        if fresh != (r["intel_score"] or 0):
+            score_updates.append((fresh, r["id"]))
+            rescored += 1
+    if status_updates:
+        conn.executemany("UPDATE iocs SET status=? WHERE id=?", status_updates)
+    if score_updates:
+        conn.executemany("UPDATE iocs SET intel_score=? WHERE id=?", score_updates)
+    return {"scanned": len(rows), "expired": expired, "reactivated": reactivated,
+            "rescored": rescored}
 
 
 def record_sighting(conn, *, ioc_id: str | None = None, value: str | None = None,

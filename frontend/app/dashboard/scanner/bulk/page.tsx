@@ -6,7 +6,7 @@ import {
   ListChecks, Loader2, AlertTriangle, ShieldCheck, Download, Search, Eraser,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SEVERITY_COLOR as SEV_COLOR } from '@/lib/colors'
+import { SEVERITY_COLOR as SEV_COLOR, tk } from '@/lib/colors'
 import { lookupIocsBulk, BULK_LOOKUP_MAX, type BulkLookupRow } from '@/lib/api'
 
 /** Verdict presentation. `unverified` is deliberately NOT styled as a pass:
@@ -22,6 +22,13 @@ const VERDICT: Record<string, { label: string; cls: string }> = {
 }
 
 const HITS = new Set(['malicious', 'suspicious'])
+
+// Intel-score band -> colour. Distinct from the severity palette on purpose:
+// severity is what the indicator would DO, the score is how much evidence
+// stands behind the claim.
+const BAND_COLOR: Record<string, string> = {
+  high: tk('magenta'), moderate: tk('amber'), low: tk('violet'), weak: '#665B7D',
+}
 
 /** Split a paste into candidate indicators. Analysts paste log extracts, CSV
  *  columns and one-per-line lists interchangeably, so accept all three rather
@@ -79,8 +86,10 @@ export default function BulkCheckPage() {
   function exportCsv() {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const csv = [
-      'value,verdict,matched_indicator,source_count,sources,severity,confidence,threat_type,actor,source,last_seen',
+      'value,verdict,matched_indicator,intel_score,score_band,source_count,sources,'
+      + 'severity,confidence,threat_type,actor,source,last_seen',
       ...(rows ?? []).map((r) => [r.value, r.verdict, r.matched ?? '',
+        r.found ? (r.intelScore ?? '') : '', r.found ? (r.scoreBand ?? '') : '',
         r.found ? (r.sourceCount ?? 1) : 0, (r.sources ?? []).join('; '), r.severity ?? '',
         r.confidence, r.threatType ?? '', r.actor ?? '', r.source ?? '', r.lastSeen ?? '']
         .map(esc).join(',')),
@@ -207,7 +216,12 @@ export default function BulkCheckPage() {
                       <th className="px-3 py-2 font-medium">Threat</th>
                       <th className="px-3 py-2 font-medium">Actor</th>
                       <th className="px-3 py-2 font-medium">Source</th>
-                      <th className="px-3 py-2 font-medium text-right">Conf.</th>
+                      <th className="px-3 py-2 font-medium text-right"
+                        title="Composite intel score: aged confidence weighted by source reliability, plus corroboration, local sightings and attribution">
+                        Score
+                      </th>
+                      <th className="px-3 py-2 font-medium text-right"
+                        title="The originating feed's own claim, unweighted">Conf.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -251,6 +265,23 @@ export default function BulkCheckPage() {
                           <td className="px-3 py-2 text-ink-400">{r.actor || '—'}</td>
                           <td className="px-3 py-2 text-ink-500 max-w-[180px] truncate" title={r.source ?? ''}>
                             {r.source || '—'}
+                          </td>
+                          {/* Score, then the raw feed claim it was built from -
+                              side by side, so a 90%-confidence value that only
+                              one unreliable feed asserts cannot pass itself off
+                              as the strongest thing on the page. */}
+                          <td className="px-3 py-2 text-right">
+                            {r.found && typeof r.intelScore === 'number' ? (
+                              <span className="inline-flex px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums border"
+                                title={`${r.scoreBand} confidence in this claim`}
+                                style={{
+                                  color: BAND_COLOR[r.scoreBand ?? 'weak'],
+                                  background: `${BAND_COLOR[r.scoreBand ?? 'weak']}14`,
+                                  borderColor: `${BAND_COLOR[r.scoreBand ?? 'weak']}40`,
+                                }}>
+                                {r.intelScore}
+                              </span>
+                            ) : <span className="text-ink-600">—</span>}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums"
                             style={{ color: r.severity ? (SEV_COLOR[r.severity] ?? '#999') : '#666' }}>

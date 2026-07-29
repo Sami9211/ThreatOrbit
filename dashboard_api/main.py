@@ -14,7 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from dashboard_api.config import AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ALLOWED, CORS_ORIGIN_REGEX, DATA_MODE
+from dashboard_api.config import (AUTO_SEED, CONNECTOR_TICK_SECONDS, CORS_ALLOWED,
+                                  CORS_ORIGIN_REGEX, DATA_MODE, LIFECYCLE_TICK_SECONDS)
 from dashboard_api.db import get_conn, init_db
 from dashboard_api.routers import (
     assets, assistant as assistant_router, auth, billing as billing_router,
@@ -120,6 +121,7 @@ def _connector_scheduler():
     except Exception:
         logger.exception("Connector crash-recovery failed")
     _last_report_check = [0.0]
+    _last_lifecycle = [0.0]
     # Small initial delay so the companion services have time to come up.
     time.sleep(8)
     while True:
@@ -148,6 +150,30 @@ def _connector_scheduler():
                     logger.info("Connector %s imported %d indicators", r.get("connector"), r["imported"])
         except Exception:  # never let the scheduler thread die
             logger.exception("Connector scheduler tick failed")
+        # IOC lifecycle maintenance: expire decayed indicators and refresh the
+        # composite intel score. This used to hang off the SYNTHETIC engine tick
+        # only, so in live mode - the mode that actually matters - it never ran
+        # unless somebody clicked the button. The persisted `intel_score` is what
+        # the IOC list sorts by, so without this the default ranking silently
+        # froze at whatever each indicator scored when it was imported, before
+        # any other source had corroborated it.
+        #
+        # On its own slow cadence: a full pass is ~24s over a 315k store, which
+        # is fine every few minutes and absurd every few seconds.
+        if time.monotonic() - _last_lifecycle[0] >= LIFECYCLE_TICK_SECONDS:
+            _last_lifecycle[0] = time.monotonic()
+            try:
+                from dashboard_api.db import get_conn
+                from dashboard_api.ioc_lifecycle import decay_iocs
+                with get_conn() as conn:
+                    res = decay_iocs(conn)
+                    conn.commit()
+                if res.get("expired") or res.get("reactivated") or res.get("rescored"):
+                    logger.info("IOC lifecycle: %d expired, %d reactivated, %d rescored",
+                                res.get("expired", 0), res.get("reactivated", 0),
+                                res.get("rescored", 0))
+            except Exception:
+                logger.exception("IOC lifecycle tick failed")
         try:  # agentless S3 log pull (no-op unless configured; honours its own interval)
             from dashboard_api.s3_pull import poll_if_configured
             poll_if_configured()

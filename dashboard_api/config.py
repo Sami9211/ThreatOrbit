@@ -285,6 +285,13 @@ DATA_MODE = os.environ.get("DASHBOARD_DATA_MODE", "demo").lower()
 # check is a single indexed query, so a short tick is cheap.
 CONNECTOR_TICK_SECONDS = int(os.environ.get("DASHBOARD_CONNECTOR_TICK_SECONDS", "1"))
 
+# How often the scheduler runs IOC lifecycle maintenance: expire decayed
+# indicators and recompute the composite intel score the IOC list ranks by.
+# A full pass measured ~24s over a 315k-indicator store, so this is deliberately
+# far slower than the connector tick - scores move as corroboration and age
+# accumulate, which is a matter of minutes and hours, not seconds.
+LIFECYCLE_TICK_SECONDS = int(os.environ.get("DASHBOARD_LIFECYCLE_TICK_SECONDS", "300"))
+
 # Live processing engine (live mode): how often it generates a telemetry batch
 # and how many events per batch. Lower the interval for a more active demo.
 ENGINE_TICK_SECONDS = int(os.environ.get("DASHBOARD_ENGINE_TICK_SECONDS", "20"))

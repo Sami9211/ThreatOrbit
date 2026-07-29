@@ -1138,6 +1138,19 @@ consensus and a single stale blocklist hit look identical.
 **Done when:** the default IOC list, sorted by score, puts genuinely actionable
 things on page one - and each score is explainable in the UI.
 
+**Status (2026-07-29): scoring + severity decoupling DONE; decay rules as records
+still outstanding.** Shipped: `intel_scoring.py` (aged claim x Admiralty
+reliability + corroboration + local sightings + attribution), persisted
+`iocs.intel_score` with an index, rescoring folded into the decay pass, `sort=score`
+as the IOC list's default, and the full component breakdown surfaced in the IOC
+drawer, IntelScope and the bulk check (score + band also in the CSV export).
+`_severity_from_confidence` is gone, replaced by `severity_for()` classifying the
+activity a feed actually names, with a one-time reclassification migration.
+
+Still open in this phase: **decay rules as records** (reaction points, revoke
+score, `valid_until`, per-type curves as data rather than constants). The current
+decay is still a hardcoded per-type half-life.
+
 ---
 
 ### Phase 4 · Ingestion screen as a live system
@@ -1231,7 +1244,9 @@ Removal is half the work and usually skipped. Each of these actively costs us:
 
 - [ ] **The `feeds` table** - duplicates `connectors`, empty by design in live
       mode, caused the "0 Sources Online" front-page bug. (Phase 1)
-- [ ] **`_severity_from_confidence`** - conflates two unrelated axes. (Phase 3)
+- [x] **`_severity_from_confidence`** - conflated two unrelated axes. Removed
+      2026-07-29; `connectors.severity_for()` classifies the asserted activity
+      instead, and a one-time migration rebuilt the column. (Phase 3)
 - [ ] **Eight hand-written `INSERT INTO iocs`** - one ingest function. (Phase 1)
 - [ ] **Frontend seed/demo arrays** (`CONFIRMED_SEED`, `ALERTS`, `SEED` assets…)
       shipped inside live page components. They exist for an offline preview and
@@ -1676,6 +1691,59 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-29 · Phase 3: a score that means something, and a severity that is
+  not the same number twice.** The store held 315,185 indicators ranked by
+  `confidence` - a value copied verbatim from whichever feed wrote the row first
+  - so a value two sources independently agree on sorted identically to one stale
+  list's guess. Added `intel_scoring.py`: the feed's own claim aged by
+  `effective_confidence`, multiplied by an Admiralty reliability grade, plus a
+  front-loaded and capped corroboration bonus (1→2 sources is the informative
+  step; the tenth is not), plus local sightings weighted above every third-party
+  term, plus attribution. Every score returns WITH its components, including a
+  "Capped" term so the parts always reconcile to the total - a ranking an analyst
+  cannot interrogate is one they are right to ignore. Persisted as
+  `iocs.intel_score` (schema v13, `idx_iocs_score`), rescored in the decay pass,
+  and `sort=score` is now the IOC list's default. Surfaced in three places: the
+  IOC drawer (full derivation + which sources assert it + the grade), IntelScope
+  (same, next to the verdict), and the bulk check (score column + band, and both
+  in the CSV export). Wrote 16 property tests first; **four of them failed and
+  each exposed a genuine design flaw** - the corroboration curve was not
+  front-loaded, the first local sighting scored below a fully corroborated value,
+  and clamping at 100 broke component reconciliation - all fixed in the model
+  rather than by weakening the assertions.
+
+  In the same pass, removed `_severity_from_confidence()`. Severity was
+  `critical if conf>=85 else high if conf>=70 …`, so the column carried nothing
+  the confidence column did not already have. The damage was measurable on the
+  real store: `malware-distribution` held **50,181 rows at "medium" and 50,024 at
+  "high"** - one activity, two severities, separated by nothing but the number
+  beside them - and **81% of every indicator read "high"**. Replaced with
+  `severity_for()`, which classifies the activity a feed actually names
+  (ransomware/C2/exfil → critical, malware/phishing/exploitation → high,
+  scanning/brute-force/spam → medium) and returns an honest `medium` when the
+  feed names no activity at all, rather than inventing one. Matching is on
+  tokens, not substrings: a plain `"rce" in text` test classified `attack-source`
+  and `brute-force-source` as exploitation. A one-time gated migration rebuilt
+  the column for 106,927 indicators (NVD rows left alone - their CVSS band is a
+  real external judgement). `/cti/lookup` also stopped returning `verdict:
+  "clean"` for indicators that are *in* the store: a listed value is never clean,
+  and `unverified` on the not-found path is the honest "we have nothing".
+
+  Also fixed, found while chasing a flaky Postgres run: **one crashing connector
+  could starve every connector after it.** `run_due_connectors` iterates enabled
+  connectors in a stable order and `run_connector` guards its own fetch, but
+  credential decryption and the `status='running'` write happen *outside* that
+  guard - so a connector whose stored key fails to decrypt (an ordinary
+  consequence of rotating the secret key) aborted the whole tick, and the same
+  feeds were starved on every subsequent tick while the UI showed them as merely
+  "not due yet". Fenced each connector; the regression test was rewritten after
+  the first version passed against the unfixed code, because it raised from
+  inside the guard and proved nothing. Verified: 737 SQLite, 732 Postgres, clean
+  `tsc`, `eslint` (0 errors), a clean `next build`, and a real browser pass over
+  the CTI drawer, IntelScope and the bulk check with zero console errors - which
+  is also how the CTI header was caught reading **"0 IOCs"** above a panel saying
+  315,185 (it summed the per-actor attributed counts and labelled them "IOCs").
 
 - **2026-07-09 · Batched ingest writes: ~5.7x Postgres EPS, verified empirically
   before committing to the approach.** `ingest_lines` issued one

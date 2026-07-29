@@ -723,6 +723,10 @@ export default function CTIPage() {
   // Empty until the API answers - the per-type counts are the store's, never
   // the demo constants. IOC_TYPES shows only if the fetch fails (offline).
   const [iocTypes, setIocTypes] = useState<typeof IOC_TYPES>([])
+  // Store totals. The header used to sum the per-actor iocCount and label the
+  // result "IOCs", so a 315k-indicator store read as "0 IOCs" directly above a
+  // panel saying 315,185 - the number was right, the word for it was wrong.
+  const [storeSummary, setStoreSummary] = useState<CtiSummary | null>(null)
   const [mode] = useExperienceMode()
   const isPower = mode === 'power'
   const graph = selectedActor ? buildGraph(selectedActor) : null
@@ -736,6 +740,7 @@ export default function CTIPage() {
       })
       .catch(() => { setActors(ACTORS); setSelectedActor(ACTORS[0] ?? null) })  // offline fallback only
       .finally(() => setActorsLoaded(true))
+    fetchCtiSummary().then(setStoreSummary).catch(() => {})
     // Live IOC counts per indicator type, keeping the static strip as fallback.
     fetchIocTypes()
       .then((rows) => {
@@ -764,8 +769,13 @@ export default function CTIPage() {
         <div>
           <h1 className="font-display text-xl font-bold text-white">Cyber Threat Intelligence</h1>
           <p className="text-xs text-ink-500 mt-0.5">
-            {actors.length} tracked actors · {actors.reduce((s, a) => s + a.iocCount, 0).toLocaleString()} IOCs ·
-            {' '}{actors.reduce((s, a) => s + a.campaigns, 0)} campaigns
+            {actors.length} tracked actors ·{' '}
+            {(storeSummary?.totalIocs ?? 0).toLocaleString()} indicators ·{' '}
+            {/* Stated separately, because "attributed to a named actor" is a far
+                smaller and far more interesting number than the store total, and
+                collapsing the two hides both. */}
+            {actors.reduce((s, a) => s + a.iocCount, 0).toLocaleString()} attributed ·{' '}
+            {actors.reduce((s, a) => s + a.campaigns, 0)} campaigns
           </p>
         </div>
         <div className="flex items-center gap-2">

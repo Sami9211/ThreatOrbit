@@ -352,9 +352,25 @@ export interface Actor {
   flag?: string
 }
 
+/** One term of an intel score, and why it applied. The number on its own is a
+ *  ranking an analyst has no reason to trust. */
+export interface ScoreComponent {
+  label: string
+  delta: number
+  why: string
+}
+export type ScoreBand = 'high' | 'moderate' | 'low' | 'weak'
+
 export interface Ioc {
   /** Independent sources asserting this value (see IocLookup.sourceCount). */
   sourceCount?: number
+  /** Which sources, oldest assertion first. */
+  sources?: string[]
+  /** Composite 0-100 ranking: aged claim x source reliability, plus
+   *  corroboration, local sightings and attribution. Not `confidence`, which is
+   *  only whichever feed wrote the row first saying how sure IT is. */
+  intelScore?: number
+  scoreBand?: ScoreBand
   id: string
   type: string
   value: string
@@ -383,6 +399,9 @@ export interface IocLifecycle {
 export interface IocDetail extends Ioc {
   lifecycle: IocLifecycle
   sightingsHistory: Array<{ id: string; ts: string; source: string | null; context: string | null }>
+  /** Why the score is what it is. Present on the detail endpoint only. */
+  scoreComponents?: ScoreComponent[]
+  reliability?: string
 }
 
 export interface IocType {
@@ -424,6 +443,13 @@ export interface IocLookup {
   effectiveConfidence?: number
   sightings?: number
   knownGood?: boolean
+  intelScore?: number
+  scoreBand?: ScoreBand
+  /** The full reasoning, single-value lookup only - the bulk response omits it
+   *  because 1,000 rows of per-term prose is payload nobody reads. */
+  scoreComponents?: ScoreComponent[]
+  /** Admiralty grade of the best-rated source asserting this value. */
+  reliability?: string
 }
 
 export interface SavedHunt {

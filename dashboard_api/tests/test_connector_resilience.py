@@ -11,7 +11,7 @@ dump would OOM the dashboard. `_read_capped` streams and rejects past
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -418,7 +418,11 @@ def test_import_indicators_shares_alert_budget_across_subbatches(monkeypatch):
     monkeypatch.setattr(conn_mod, "_IMPORT_BATCH", 10)        # force multiple sub-batches
 
     src = "budget-fence"
-    inds = [{"type": "ip", "value": f"203.0.113.{i}", "confidence": 95}   # 95 -> critical
+    # Critical because of what the feed says the activity IS. Confidence used to
+    # decide severity on its own (95 -> critical); it no longer does, and a test
+    # that still leaned on that would be asserting a coupling we deliberately cut.
+    inds = [{"type": "ip", "value": f"203.0.113.{i}", "confidence": 95,
+             "threat_type": "ransomware"}
             for i in range(25)]
     try:
         res = conn_mod.import_indicators(inds, src)
@@ -1944,3 +1948,63 @@ def test_a_failed_poll_is_never_folded_away(client, auth):
     finally:
         with real_get_conn() as c:
             c.execute("DELETE FROM connector_works"); c.commit()
+
+
+def test_one_crashing_connector_cannot_stop_the_others_from_syncing(monkeypatch):
+    """A scheduler tick iterates every enabled connector in a stable order.
+
+    run_connector swallows fetch/parse failures, but the status write and the
+    fetcher dispatch around them do not - so an exception escaping there aborted
+    the whole tick and every connector AFTER the failing one silently never ran.
+    Because the row order is stable, the same feeds would be starved on every
+    tick, while the UI showed them as merely "not due yet". That is
+    indistinguishable, from the outside, from the reported symptom that
+    connectors do not sync on their own.
+    """
+    from dashboard_api.db import get_conn as real_get_conn
+
+    monkeypatch.setitem(conn_mod._FETCHERS, "json",
+                        lambda c: [{"type": "ip", "value": "198.51.100.9"}])
+
+    # Credential decryption happens BEFORE run_connector's try block. Rotating
+    # the secret key is the ordinary way this throws for real: every connector
+    # with a stored api_key starts failing there, outside every guard.
+    import dashboard_api.secretstore as secretstore
+    real_decrypt = secretstore.decrypt
+
+    def decrypt_or_die(v):
+        if v == "rotated-away":
+            raise ValueError("stored credential was encrypted with a previous key")
+        return real_decrypt(v)
+
+    monkeypatch.setattr(secretstore, "decrypt", decrypt_or_die)
+
+    tag = uuid.uuid4().hex[:8]
+    bad_id, good_id = f"boom-{tag}", f"fine-{tag}"
+    bad_name, good_name = f"boom {tag}", f"fine {tag}"
+    stale = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with real_get_conn() as c:
+        for cid, name, key in ((bad_id, bad_name, "rotated-away"), (good_id, good_name, None)):
+            c.execute(
+                "INSERT INTO connectors (id,name,kind,url,api_key,enabled,interval_minutes,"
+                "interval_seconds,field_map,status,builtin,created_at,last_run) "
+                "VALUES (?,?,?,?,?,1,1,60,'{}','idle',0,?,?)",
+                (cid, name, "json", "https://example.test/feed", key,
+                 conn_mod._now(), stale))
+        c.commit()
+    try:
+        ran = {r["connector"]: r for r in conn_mod.run_due_connectors()}
+        # The healthy connector ran even though the other one crashed...
+        assert good_name in ran, f"a crashing connector starved the rest: {sorted(ran)}"
+        assert ran[good_name].get("imported") == 1, ran[good_name]
+        # ...and the crash was recorded rather than swallowed silently.
+        assert bad_name in ran and "error" in ran[bad_name], ran.get(bad_name)
+        with real_get_conn() as c:
+            row = c.execute("SELECT status,last_error FROM connectors WHERE id=?",
+                            (bad_id,)).fetchone()
+        assert row["status"] == "error" and row["last_error"]
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id IN (?,?)", (bad_id, good_id))
+            c.execute("DELETE FROM iocs WHERE source=?", (good_name,))
+            c.commit()

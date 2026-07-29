@@ -302,8 +302,76 @@ def _http_post(url: str, headers: dict | None = None, json_body: dict | None = N
 
 # -- Normalisation + import -----------------------------------------------------
 
-def _severity_from_confidence(c: int) -> str:
-    return "critical" if c >= 85 else "high" if c >= 70 else "medium" if c >= 40 else "low"
+# Severity = what this indicator would DO if the claim is true. It used to be a
+# monotone function of confidence, which made it carry no information at all:
+# two numbers, one meaning. The damage is measurable in a real 315k store -
+# `malware-distribution` landed 50,181 rows at "medium" and 50,024 at "high",
+# the SAME activity split purely by whichever confidence the feed happened to
+# assert, and 81% of the whole store read "high". A severity that is "high" four
+# times out of five is not a triage signal.
+#
+# So severity is now classified from the activity the feed actually names, and
+# "how sure are we" lives in the intel score instead. Keys are substrings
+# matched against the normalised threat type and tags; ordered most-specific
+# first because "ransomware-c2" must classify as ransomware, not as C2.
+#
+# Matching is on TOKENS, not raw substrings. A plain `"rce" in text` test
+# classified "attack-source" and "brute-force-source" as exploitation, because
+# both contain the letters of "rce" - the sort of quiet miscategorisation that
+# looks like it works until someone reads the numbers.
+_ACTIVITY_SEVERITY: tuple[tuple[tuple[str, ...], str], ...] = (
+    # Hands-on-target or destructive: an active intrusion, not a nuisance.
+    (("ransom", "wiper", "apt", "targeted attack", "nation state",
+      "advanced persistent"), "critical"),
+    (("c2", "command and control", "beacon", "cobalt"), "critical"),
+    (("exfil", "data theft"), "critical"),
+    # Delivery and access: bad, but a step earlier in the chain.
+    (("malware", "trojan", "stealer", "loader", "rat", "backdoor", "botnet",
+      "worm", "dropper", "miner", "mining"), "high"),
+    (("phish", "spoof", "harvest"), "high"),
+    (("exploit", "rce", "vulnerab", "cve"), "high"),
+    # Noise floor: real, but a SOC does not wake anyone for it.
+    (("scan", "recon", "probe", "brute", "spray", "stuffing", "credential",
+      "attack", "abuse"), "medium"),
+    (("spam", "scam", "fraud", "proxy", "proxies", "tor", "vpn", "anonym"), "medium"),
+    (("suspicious", "unwanted", "adware", "pup"), "low"),
+)
+
+# What a bare blocklist row is: flagged by somebody, activity unstated. It is
+# NOT low (the feed does assert it is bad) and NOT high (nothing says what it
+# does). Anything better would be invented.
+UNCLASSIFIED_SEVERITY = "medium"
+
+
+def severity_for(threat_type: str | None, tags=None) -> str:
+    """Impact class of the activity a feed asserts, independent of confidence.
+
+    Returns UNCLASSIFIED_SEVERITY when the feed names no activity, which is the
+    honest answer for the bulk of any blocklist - guessing from confidence is
+    what produced a store that was 81% "high".
+    """
+    raw = " ".join([str(threat_type or "")] + [str(t) for t in (tags or [])]).lower()
+    # Punctuation to spaces, so "malware-distribution" and "malware_distribution"
+    # and "CVE-2024-1234" all tokenise the same way.
+    text = "".join(ch if ch.isalnum() else " " for ch in raw)
+    tokens = text.split()
+    if not tokens:
+        return UNCLASSIFIED_SEVERITY
+    for needles, sev in _ACTIVITY_SEVERITY:
+        if any(_hits(n, text, tokens) for n in needles):
+            return sev
+    return UNCLASSIFIED_SEVERITY
+
+
+def _hits(needle: str, text: str, tokens: list[str]) -> bool:
+    """Phrases match the normalised text; short acronyms ("c2", "rce", "apt")
+    must be a WHOLE token so they cannot hide inside an unrelated word; longer
+    needles match a token prefix, so "ransom" catches "ransomware"."""
+    if " " in needle:
+        return needle in text
+    if len(needle) <= 3:
+        return needle in tokens
+    return any(t.startswith(needle) for t in tokens)
 
 
 def _to_confidence(raw, default: int = 50) -> int:
@@ -569,6 +637,14 @@ def import_indicators(indicators: list[dict], source: str,
     return totals
 
 
+def _initial_score(itype: str, conf: int, ind: dict, now: str) -> int:
+    from dashboard_api.intel_scoring import score_indicator
+    return score_indicator(
+        {"type": itype, "confidence": conf, "last_seen": now,
+         "report_id": ind.get("report_id"), "actor": ind.get("actor")},
+        source_count=1)["score"]
+
+
 def record_source_assertions(conn, candidates: list[dict], now: str) -> None:
     """Upsert one (value, source) row per candidate, and keep intel_sources fresh.
 
@@ -640,7 +716,10 @@ def _import(indicators: list[dict], source: str,
             continue
         seen.add(value)
         conf = _to_confidence(ind.get("confidence"))
-        severity = ind.get("severity") or _severity_from_confidence(conf)
+        # A feed's own severity wins; otherwise classify by the activity it
+        # names. Never by confidence - see _ACTIVITY_SEVERITY.
+        severity = ind.get("severity") or severity_for(
+            ind.get("threat_type"), ind.get("tags"))
         candidates.append({
             "value": value, "itype": itype, "conf": conf, "severity": severity,
             "threat_type": ind.get("threat_type") or "",
@@ -656,6 +735,11 @@ def _import(indicators: list[dict], source: str,
                     # Indexed host, so "is this domain known-bad?" is a lookup
                     # rather than a wildcard scan of every URL in the store.
                     host_of(value, itype)),
+            # Scored at insert so a new indicator ranks immediately instead of
+            # sitting at zero until the next maintenance pass. Corroboration is
+            # not yet known for THIS import, so the score starts from the feed's
+            # claim and is raised by the decay pass once other sources agree.
+            "score": _initial_score(itype, conf, ind, now),
         })
 
     if not candidates:
@@ -689,8 +773,9 @@ def _import(indicators: list[dict], source: str,
         if new:
             conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,report_id,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                [c["row"] for c in new],
+                "first_seen,last_seen,tags,report_id,host,intel_score) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                [c["row"] + (c["score"],) for c in new],
             )
             imported = len(new)
             # Raise capped critical-intel alerts for the newly inserted rows only.
@@ -1733,6 +1818,26 @@ def run_due_connectors() -> list[dict]:
                 last = None
             stuck = last is None or (now - last) >= timedelta(seconds=STUCK_RUNNING_AFTER)
         if due and (c.get("status") != "running" or stuck):
-            res = run_connector(c, actor="scheduler")
+            # Fenced per connector. run_connector already swallows fetch/parse
+            # failures, but the status write and the fetcher dispatch around them
+            # do not - and an exception escaping here aborted the whole tick, so
+            # every connector AFTER the failing one silently never ran. Row order
+            # is stable, so the same feeds would be starved on every tick while
+            # the UI showed them merely as "not due yet". One broken connector
+            # must never be able to stop the others.
+            try:
+                res = run_connector(c, actor="scheduler")
+            except Exception as e:                       # noqa: BLE001
+                logging.getLogger(__name__).exception(
+                    "connector %s crashed the scheduler tick", c.get("name"))
+                res = {"error": describe_fetch_error(e, c)[:300]}
+                try:
+                    with get_conn() as conn:
+                        conn.execute(
+                            "UPDATE connectors SET status='error', last_error=? WHERE id=?",
+                            (res["error"], c["id"]))
+                        conn.commit()
+                except Exception:                        # noqa: BLE001
+                    pass                                 # never let bookkeeping stop the tick
             ran.append({"connector": c["name"], **res})
     return ran

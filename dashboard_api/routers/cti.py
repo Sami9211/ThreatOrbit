@@ -12,6 +12,7 @@ from dashboard_api.db import audit, get_conn, host_of, row_to_dict, rows_to_dict
 from dashboard_api.webhooks import dispatch
 from dashboard_api.ioc_lifecycle import (
     decay_iocs, effective_confidence, lifecycle_of, record_sighting, set_known_good)
+from dashboard_api.intel_scoring import DEFAULT_RELIABILITY, score_indicator
 
 router = APIRouter(prefix="/cti", tags=["cti"], dependencies=[Depends(current_user)])
 
@@ -81,6 +82,10 @@ def get_actor(actor_id: str, user: dict = Depends(current_user)):
 
 # Whitelisted IOC sort columns; anything else is rejected (no SQL injection).
 _IOC_SORTS = {
+    # Relevance first. The default stays last_seen (a feed view), but `score` is
+    # what makes a 315k store usable: it ranks by how much an analyst should
+    # care rather than by what happened to arrive most recently.
+    "score": "intel_score",
     "last_seen": "last_seen",
     "first_seen": "first_seen",
     "confidence": "confidence",
@@ -142,15 +147,18 @@ def list_iocs(type: str | None = None, severity: str | None = None,
     if items:
         vals = [i["value"] for i in items]
         with get_conn() as conn:
-            ph = ",".join("?" * len(vals))
-            counts = {r["value"]: r["n"] for r in conn.execute(
-                f"SELECT value, COUNT(*) AS n FROM observable_sources "
-                f"WHERE value IN ({ph}) GROUP BY value", tuple(vals)).fetchall()}
+            by_value = corroboration(conn, vals)
+            grades = reliability_grades(conn)
         for i in items:
+            srcs = by_value.get(i["value"], [])
             # 1, not 0, when unrecorded: the row exists because SOMETHING
             # asserted it. Pre-corroboration rows would otherwise read as
             # "no source claims this", which is false.
-            i["sourceCount"] = counts.get(i["value"], 1)
+            i["sourceCount"] = len(srcs) or 1
+            i["sources"] = srcs
+            scored = _score_of(i, srcs, grades)
+            i["intelScore"] = scored["score"]
+            i["scoreBand"] = scored["band"]
 
     rids = {i.get("report_id") for i in items if i.get("report_id")}
     if rids:
@@ -356,6 +364,35 @@ def corroboration(conn, values: list[str]) -> dict[str, list[str]]:
     return out
 
 
+def reliability_grades(conn) -> dict[str, str]:
+    """Admiralty grade per source id. One query - the table is tiny (one row per
+    configured feed) and every scoring path needs the whole of it."""
+    return {r["id"]: r["reliability"]
+            for r in conn.execute("SELECT id, reliability FROM intel_sources").fetchall()}
+
+
+def _score_of(row, sources: list[str], grades: dict[str, str]) -> dict:
+    """Score one matched indicator, using the BEST-graded source that asserts it.
+
+    Taking the best rather than the row's own `source` matters: whichever feed
+    happened to write the row first is an accident of scheduling, and a value a
+    grade-A tracker also lists should not be weighted as if only the grade-D
+    aggregator had it.
+    """
+    ioc = row if isinstance(row, dict) else row_to_dict(row)
+    # Upper-cased before comparing: the ordering is lexical ("A" < "B" < ...) and
+    # a lowercase grade from the DB would sort after every uppercase one, so a
+    # stored "a" would read as the WORST source rather than the best.
+    candidates = [str(g).upper()[:1] for g in (grades.get(s) for s in sources) if g]
+    own = grades.get(ioc.get("source") or "")
+    if own:
+        candidates.append(str(own).upper()[:1])
+    best = min(candidates, default=DEFAULT_RELIABILITY)
+    return score_indicator(
+        ioc, source_count=max(1, len(sources)), reliability=best,
+        local_sightings=max(0, (ioc.get("sightings") or 1) - 1))
+
+
 def _lookup_payload(v: str, row) -> dict:
     """The verdict for one queried value. Shared by the single and bulk lookups:
     two triage paths that disagreed about whether a value is malicious would be
@@ -371,8 +408,11 @@ def _lookup_payload(v: str, row) -> dict:
     elif life["status"] == "expired":
         verdict = "expired"
     else:
-        verdict = "malicious" if ioc["severity"] in ("critical", "high") else (
-            "suspicious" if ioc["severity"] == "medium" else "clean")
+        # A row that EXISTS in the store is never "clean" - something asserted it
+        # is bad, and returning "clean" for a listed indicator is the one wrong
+        # answer a lookup can give. Low-impact activity is still suspicious; the
+        # honest "we have nothing" answer is `unverified`, on the not-found path.
+        verdict = "malicious" if ioc["severity"] in ("critical", "high") else "suspicious"
     return {
         "value": v, "matched": ioc["value"], "found": True, "verdict": verdict,
         "confidence": ioc["confidence"], "severity": ioc["severity"],
@@ -391,9 +431,18 @@ def ioc_lookup(value: str):
         row = _match_indicator(conn, v)
         matched = row["value"] if row is not None else v
         srcs = corroboration(conn, [matched]).get(matched, [])
+        scored = _score_of(row, srcs, reliability_grades(conn)) if row is not None else None
     out = _lookup_payload(v, row)
     out["sources"] = srcs
     out["sourceCount"] = len(srcs) or (1 if out["found"] else 0)
+    if scored is not None:
+        # WITH the components. A ranking an analyst cannot interrogate is one
+        # they are right to ignore, so "why is this 84?" is answered here rather
+        # than left for them to guess at from the number alone.
+        out["intelScore"] = scored["score"]
+        out["scoreBand"] = scored["band"]
+        out["scoreComponents"] = scored["components"]
+        out["reliability"] = scored["reliability"]
     # The single-value response has always keyed `value` to the MATCHED
     # indicator, not the query; keep that shape for existing callers.
     if out["found"]:
@@ -463,11 +512,19 @@ def ioc_lookup_bulk(body: BulkLookup):
     if matched_values:
         with get_conn() as conn:
             by_value = corroboration(conn, matched_values)
+            grades = reliability_grades(conn)
         for r in results:
             if r["found"]:
-                srcs = by_value.get(r.get("matched") or r["value"], [])
+                key = r.get("matched") or r["value"]
+                srcs = by_value.get(key, [])
                 r["sources"] = srcs
                 r["sourceCount"] = len(srcs) or 1
+                # Score but NOT its components: at 1,000 rows the per-row
+                # reasoning is several hundred KB of JSON nobody reads. The
+                # single lookup is where an analyst drills in.
+                scored = _score_of(rows[r["value"]], srcs, grades)
+                r["intelScore"] = scored["score"]
+                r["scoreBand"] = scored["band"]
     return {"total": len(results),
             "found": sum(1 for r in results if r["found"]),
             "results": results}
@@ -490,7 +547,14 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
         sightings = rows_to_dicts(conn.execute(
             "SELECT id, ts, source, context FROM ioc_sightings WHERE ioc_id=? "
             "ORDER BY ts DESC LIMIT 50", (ioc_id,)).fetchall())
-    return {**ioc, "lifecycle": lifecycle_of(ioc), "sightingsHistory": sightings}
+        srcs = corroboration(conn, [ioc["value"]]).get(ioc["value"], [])
+        scored = _score_of(ioc, srcs, reliability_grades(conn))
+    return {**ioc, "lifecycle": lifecycle_of(ioc), "sightingsHistory": sightings,
+            # The drawer is where an analyst decides whether to act, so it gets
+            # the full derivation rather than a bare number.
+            "sources": srcs, "sourceCount": len(srcs) or 1,
+            "intelScore": scored["score"], "scoreBand": scored["band"],
+            "scoreComponents": scored["components"], "reliability": scored["reliability"]}
 
 
 @router.get("/iocs/{ioc_id}/fp-assessment")

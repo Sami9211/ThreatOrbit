@@ -460,6 +460,17 @@ function EmptyNote({ text }: { text: string }) {
 const providerOf = (r: ScanResult, name: string): EnrichProvider | undefined =>
   (r.providers ?? []).find((p) => p.provider === name)
 
+// Intel-score band -> colour. Separate from the severity palette on purpose:
+// severity is what the indicator would DO, the score is how much of the store's
+// evidence stands behind the claim, and colouring them alike would suggest a
+// 20/100 "critical" deserves the same attention as an 90/100 one.
+const SCORE_BAND: Record<string, { color: string; label: string }> = {
+  high: { color: tk('magenta'), label: 'high' },
+  moderate: { color: tk('amber'), label: 'moderate' },
+  low: { color: tk('violet'), label: 'low' },
+  weak: { color: '#665B7D', label: 'weak' },
+}
+
 /* -- Details tab: the full record behind the verdict ----------------- */
 function DetailsTab({ result }: { result: ScanResult }) {
   const lu = result.lookup
@@ -473,9 +484,58 @@ function DetailsTab({ result }: { result: ScanResult }) {
         right={lu?.found ? <SevBadge sev={String(lu.severity)} /> : undefined}>
         {lu?.found ? (
           <div>
+            {/* Intel score first, with the terms that produced it. The verdict
+                badge says WHAT this would be; the score says how much of the
+                store's own evidence stands behind that, and an analyst deciding
+                whether to block something needs the second answer too. */}
+            {typeof lu.intelScore === 'number' && (() => {
+              const band = SCORE_BAND[lu.scoreBand ?? 'weak'] ?? SCORE_BAND.weak
+              return (
+                <div className="mb-3 rounded-lg border p-3"
+                  style={{ borderColor: `${band.color}30`, background: `${band.color}0d` }}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[10px] uppercase tracking-wider text-ink-500">
+                      Intel score
+                      <span className="ml-1.5 normal-case tracking-normal text-ink-600">
+                        how much to believe it
+                      </span>
+                    </span>
+                    <span className="text-base font-bold tabular-nums" style={{ color: band.color }}>
+                      {lu.intelScore}<span className="text-[10px] text-ink-600">/100 {band.label}</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/8 overflow-hidden my-2">
+                    <div className="h-full rounded-full transition-[width] duration-500"
+                      style={{ width: `${lu.intelScore}%`, background: band.color }} />
+                  </div>
+                  <div className="space-y-1">
+                    {(lu.scoreComponents ?? []).map((c, n) => (
+                      <div key={n} className="flex items-start justify-between gap-3 text-[10px]">
+                        <span className="text-ink-500 leading-snug">
+                          <span className="text-ink-300">{c.label}</span> — {c.why}
+                        </span>
+                        <span className="font-mono tabular-nums shrink-0"
+                          style={{ color: c.delta < 0 ? tk('amber') : tk('safe') }}>
+                          {c.delta > 0 ? '+' : ''}{c.delta}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
             <KV k="Threat type" v={lu.threatType} mono={false} />
             <KV k="Attributed actor" v={lu.actor} mono={false} />
             <KV k="Feed source" v={lu.source} mono={false} />
+            {(lu.sourceCount ?? 0) > 1 && (
+              <div className="flex justify-between gap-4 py-1 text-xs border-b border-white/4">
+                <span className="text-ink-500 shrink-0">Corroboration</span>
+                <span className="text-right" style={{ color: tk('safe') }}>
+                  {lu.sourceCount} independent sources
+                  <span className="block text-[10px] text-ink-600 font-mono">{(lu.sources ?? []).join(', ')}</span>
+                </span>
+              </div>
+            )}
             {(() => {
               const p = provClass(lu.source)
               return p ? (

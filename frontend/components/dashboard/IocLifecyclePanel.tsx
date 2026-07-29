@@ -97,6 +97,25 @@ const FILTERS = ['all', 'active', 'expired', 'known-good']
 const TYPES = ['all', 'ip', 'domain', 'url', 'hash', 'email', 'cve']
 const PAGE = 60
 
+// Intel score band -> colour. Deliberately not SEV_COLOR: severity is what the
+// thing would DO, the score is how much we believe it, and painting them the
+// same makes an unbelievable "critical" look like an emergency.
+const BAND_STYLE: Record<string, { color: string; label: string }> = {
+  high: { color: tk('magenta'), label: 'High' },
+  moderate: { color: tk('amber'), label: 'Moderate' },
+  low: { color: tk('violet'), label: 'Low' },
+  weak: { color: '#665B7D', label: 'Weak' },
+}
+
+// Ordering. Score is the DEFAULT: a store this size sorted by arrival time
+// shows whatever a bulk feed happened to write last, which is not the same
+// thing as what an analyst should look at first.
+const SORTS: Array<{ key: string; label: string; hint: string }> = [
+  { key: 'score', label: 'Score', hint: 'Corroboration, source reliability, decay and local sightings combined' },
+  { key: 'last_seen', label: 'Recent', hint: 'Most recently asserted first' },
+  { key: 'confidence', label: 'Confidence', hint: "The originating feed's own claim, unweighted" },
+]
+
 function relTime(iso: string | null): string {
   if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
@@ -118,6 +137,7 @@ export default function IocLifecyclePanel() {
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [filter, setFilter] = useState('all')
+  const [sort, setSort] = useState('score')
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<IocDetail | null>(null)
   const [busy, setBusy] = useState(false)
@@ -131,7 +151,7 @@ export default function IocLifecyclePanel() {
   const load = useCallback(() => {
     setLoading(true)
     const params: Record<string, string> = {
-      limit: String(PAGE), offset: String(page * PAGE), sort: 'last_seen', order: 'desc',
+      limit: String(PAGE), offset: String(page * PAGE), sort, order: 'desc',
     }
     if (filter !== 'all') params.status = filter
     if (typeFilter !== 'all') params.type = typeFilter
@@ -143,7 +163,7 @@ export default function IocLifecyclePanel() {
       .then(({ items, total }) => { setItems(items); setTotal(total) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [filter, typeFilter, query, page])
+  }, [filter, typeFilter, query, page, sort])
 
   useEffect(() => {
     // Debounced: at this table size every keystroke would otherwise run a
@@ -160,6 +180,7 @@ export default function IocLifecyclePanel() {
   const applyFilter = (f: string) => { setFilter(f); setPage(0) }
   const applyType = (t: string) => { setTypeFilter(t); setPage(0) }
   const applyQuery = (q: string) => { setQuery(q); setPage(0) }
+  const applySort = (s: string) => { setSort(s); setPage(0) }
 
   function open(id: string) {
     setEnrichment(null)
@@ -288,6 +309,20 @@ export default function IocLifecyclePanel() {
           className="px-2 py-1.5 rounded-lg bg-surface-2 border border-white/8 text-[11px] text-ink-200 focus:outline-hidden focus:border-violet/40">
           {TYPES.map((t) => <option key={t} value={t}>{t === 'all' ? 'All types' : t}</option>)}
         </select>
+        {/* Ranking. Explicit rather than implied - an analyst working a queue
+            has to know whether the top row is the most believed or merely the
+            most recent. */}
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-ink-600 mr-0.5">Rank by</span>
+          {SORTS.map((s) => (
+            <button key={s.key} onClick={() => applySort(s.key)} title={s.hint}
+              className={cn('px-2 py-1 rounded-lg text-[10px] font-medium transition-colors',
+                sort === s.key ? 'bg-violet/15 text-violet border border-violet/30'
+                               : 'text-ink-500 hover:text-ink-200 border border-white/8')}>
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="divide-y divide-white/4 max-h-96 overflow-y-auto">
@@ -302,18 +337,41 @@ export default function IocLifecyclePanel() {
         {items.map((i) => {
           const st = STATUS_STYLE[i.status] ?? STATUS_STYLE.active
           const decayed = i.effectiveConfidence < i.confidence - 2
+          const band = BAND_STYLE[i.scoreBand ?? 'weak'] ?? BAND_STYLE.weak
+          const srcN = i.sourceCount ?? 1
           return (
             <button key={i.id} onClick={() => open(i.id)}
-              className="w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-white/3 transition-colors">
+              className="group w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-white/3 transition-colors">
+              {/* Intel score. First thing on the row because it is the answer to
+                  "does this deserve my next ten minutes?" */}
+              <span
+                title={`Intel score ${i.intelScore ?? 0}/100 (${band.label}) - ${srcN} source${srcN === 1 ? '' : 's'}, ${i.effectiveConfidence}% aged confidence. Open for the full breakdown.`}
+                className="shrink-0 w-9 h-9 rounded-lg grid place-items-center text-[12px] font-semibold tabular-nums border transition-transform duration-150 group-hover:scale-110"
+                style={{ color: band.color, background: `${band.color}14`, borderColor: `${band.color}40` }}>
+                {i.intelScore ?? 0}
+              </span>
               <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-white/5 text-ink-400 shrink-0 w-12 text-center">{i.type}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono text-white truncate">{i.value}</span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full uppercase font-semibold shrink-0"
                     style={{ color: st.color, background: `${st.color}15` }}>{st.label}</span>
+                  {/* Corroboration is the one signal a single public feed can
+                      never give you, so it goes on the row rather than buried. */}
+                  {srcN > 1 && (
+                    <span title={(i.sources ?? []).join(', ')}
+                      className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-semibold"
+                      style={{ color: tk('safe'), background: `${tk('safe')}14`, border: `1px solid ${tk('safe')}40` }}>
+                      {srcN}× corroborated
+                    </span>
+                  )}
                 </div>
                 <p className="text-[10px] text-ink-600 mt-0.5 truncate">
                   {i.threatType || 'indicator'} · {i.sightings} sighting{i.sightings !== 1 ? 's' : ''} · {relTime(i.lastSeen)}
+                  {/* Revealed on hover: which feed(s) actually asserted it. */}
+                  <span className="text-ink-700 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                    {' · '}{srcN > 1 ? (i.sources ?? []).join(', ') : (i.source || 'unattributed')}
+                  </span>
                 </p>
               </div>
               {/* effective vs asserted confidence */}
@@ -368,6 +426,68 @@ export default function IocLifecyclePanel() {
                 </div>
                 <button onClick={() => setDetail(null)} className="p-1.5 rounded-lg text-ink-500 hover:text-white shrink-0"><X className="w-4 h-4" /></button>
               </div>
+
+              {/* Intel score, WITH its derivation. A ranking an analyst cannot
+                  interrogate is a ranking they are right not to trust, so every
+                  term that moved the number is shown with the reason it applied
+                  and the parts always reconcile to the total. */}
+              {typeof detail.intelScore === 'number' && (() => {
+                const band = BAND_STYLE[detail.scoreBand ?? 'weak'] ?? BAND_STYLE.weak
+                const comps = detail.scoreComponents ?? []
+                return (
+                  <div className="rounded-xl border border-white/8 bg-surface-2/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-ink-500 uppercase tracking-wider">Intel score</span>
+                        <p className="text-[10px] text-ink-600 mt-0.5">
+                          How much to believe this, not how bad it would be
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold"
+                          style={{ color: band.color, background: `${band.color}18` }}>{band.label}</span>
+                        <span className="text-lg font-semibold tabular-nums" style={{ color: band.color }}>
+                          {detail.intelScore}<span className="text-[11px] text-ink-600">/100</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/8 overflow-hidden">
+                      <motion.div className="h-full rounded-full" style={{ background: band.color }}
+                        initial={{ width: 0 }} animate={{ width: `${detail.intelScore}%` }}
+                        transition={{ duration: 0.4, ease: 'easeOut' }} />
+                    </div>
+                    <div className="space-y-1.5">
+                      {comps.map((c, n) => (
+                        <div key={n} title={c.why}
+                          className="flex items-start justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-white/4 transition-colors">
+                          <div className="min-w-0">
+                            <div className="text-[11px] text-ink-200">{c.label}</div>
+                            <div className="text-[10px] text-ink-600 leading-snug">{c.why}</div>
+                          </div>
+                          <span className="text-[11px] font-mono tabular-nums shrink-0"
+                            style={{ color: c.delta < 0 ? tk('amber') : tk('safe') }}>
+                            {c.delta > 0 ? '+' : ''}{c.delta}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {(detail.sources?.length ?? 0) > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1 border-t border-white/6">
+                        <span className="text-[10px] text-ink-600 mr-1 mt-0.5">Asserted by</span>
+                        {detail.sources!.map((s) => (
+                          <span key={s} className="text-[9px] font-mono px-1.5 py-0.5 rounded-sm bg-white/6 text-ink-300">{s}</span>
+                        ))}
+                        {detail.reliability && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-white/6 text-ink-400"
+                            title="Admiralty reliability of the best-rated source asserting this value">
+                            grade {detail.reliability}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Lifecycle */}
               {(() => {
