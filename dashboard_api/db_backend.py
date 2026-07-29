@@ -242,6 +242,16 @@ class _PgCursor:  # pragma: no cover - exercised only against a live Postgres
     def fetchall(self):
         return [self._wrap(r) for r in self._cur.fetchall()]
 
+    def __iter__(self):
+        """A sqlite3 cursor is iterable, and this class exists to be a drop-in
+        for one. Without this, `for row in conn.execute(...)` - which the
+        codebase uses in ~20 places - raised "'_PgCursor' object is not
+        iterable" on Postgres only. CI caught exactly one of those sites (bulk
+        lookup); the rest are simply not exercised by the Postgres job, so they
+        were latent crashes rather than working code. Adapting the interface
+        once is the fix; chasing call sites is not."""
+        return iter(self.fetchall())
+
 
 class PgConnection:  # pragma: no cover - exercised only against a live Postgres
     """Adapts a psycopg connection to the sqlite3-ish interface the codebase

@@ -407,7 +407,11 @@ def ioc_lookup_bulk(body: BulkLookup):
         for i in range(0, len(ordered), _IMPORT_PROBE_CHUNK):
             chunk = ordered[i:i + _IMPORT_PROBE_CHUNK]
             ph = ",".join("?" * len(chunk))
-            for r in conn.execute(f"SELECT * FROM iocs WHERE value IN ({ph})", chunk):
+            # .fetchall(), not iteration: a sqlite3 cursor is iterable and the
+            # Postgres wrapper's is not, so the loop form worked in every local
+            # run and broke bulk lookup outright on Postgres.
+            for r in conn.execute(f"SELECT * FROM iocs WHERE value IN ({ph})",
+                                  chunk).fetchall():
                 rows[r["value"]] = r
         for v in ordered:
             if v not in rows:

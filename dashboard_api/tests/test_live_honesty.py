@@ -242,3 +242,38 @@ print(json.dumps({{"version": ver, "total": total, "filled": filled,
         "invisible to domain lookups")
     assert res["host"] == "legacy-7.example", f"host parsed wrong: {res['host']!r}"
     assert res["version"] == "10", f"schema version not bumped: {res['version']}"
+
+
+def test_url_host_backfill_runs_on_the_configured_backend():
+    """The backfill must work on the backend this run actually uses.
+
+    test_upgrading_an_existing_database_backfills_url_hosts pins SQLite in its
+    subprocess, so it proved nothing about Postgres - where the query
+    `... LIKE '%://%'` raised "only '%s', '%b', '%t' are allowed as
+    placeholders" on every boot and the backfill silently never ran. The caller
+    logs and continues, so the only symptom was domain lookups quietly failing
+    to find URLs imported before the column existed."""
+    import uuid
+
+    from dashboard_api.db import _backfill_ioc_hosts, get_conn, host_of
+
+    value = f"https://backfill-{uuid.uuid4().hex[:8]}.example/p?q=1"
+    with get_conn() as c:
+        c.execute(
+            "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,"
+            "source,actor,first_seen,last_seen,tags) VALUES (?,?,?,?,?,?,?,?,?,?,'[]')",
+            (str(uuid.uuid4()), "url", value, "phishing", 80, "high",
+             "backfill-test", "", "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+        c.commit()
+    try:
+        with get_conn() as c:
+            _backfill_ioc_hosts(c)          # must not raise on ANY backend
+            c.commit()
+            row = c.execute("SELECT host FROM iocs WHERE value=?", (value,)).fetchone()
+        assert row["host"] == host_of(value, "url"), (
+            "the backfill did not populate host - domain lookups will silently "
+            "stop finding indicators imported before the column existed")
+    finally:
+        with get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE value=?", (value,))
+            c.commit()

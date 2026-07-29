@@ -36,11 +36,66 @@ def _allow_private() -> bool:
     return os.environ.get("DASHBOARD_ALLOW_PRIVATE_URLS", "false").lower() == "true"
 
 
+# NAT64 prefixes. `64:ff9b::/96` is the RFC 6052 Well-Known Prefix; operators may
+# also use a Network-Specific Prefix, which RFC 7050 discovers and which can be
+# declared here. Extra prefixes are comma-separated in DASHBOARD_NAT64_PREFIXES.
+_NAT64_WELL_KNOWN = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _nat64_prefixes() -> list[ipaddress.IPv6Network]:
+    nets = [_NAT64_WELL_KNOWN]
+    for raw in os.environ.get("DASHBOARD_NAT64_PREFIXES", "").split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            net = ipaddress.ip_network(raw, strict=False)
+        except ValueError:
+            continue
+        if isinstance(net, ipaddress.IPv6Network):
+            nets.append(net)
+    return nets
+
+
+def embedded_ipv4(ip: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
+    """The IPv4 address a NAT64 address stands for, or None.
+
+    On an IPv6-only network with DNS64, a public IPv4-only host resolves to a
+    SYNTHESIZED AAAA record inside a NAT64 prefix - e.g. otx.alienvault.com ->
+    64:ff9b::12f5:fd66, which carries the public 18.245.253.102. Python reports
+    `is_reserved` for that range, so range-checking the synthesized address
+    rejects a perfectly public destination and every outbound connector fails on
+    such a host. The address to judge is the one it actually reaches."""
+    for net in _nat64_prefixes():
+        if ip in net:
+            # RFC 6052: for a /96 the IPv4 is the last 32 bits. Shorter prefixes
+            # interleave around the u-octet at bits 64-71, which is skipped.
+            plen = net.prefixlen
+            if plen == 96:
+                return ipaddress.ip_address(int(ip) & 0xFFFFFFFF)
+            if plen in (32, 40, 48, 56, 64):
+                bits = int(ip)
+                v4 = (bits >> (128 - plen - 32)) & 0xFFFFFFFF if plen <= 56 else \
+                     (bits >> 24) & 0xFFFFFFFF
+                try:
+                    return ipaddress.ip_address(v4)
+                except ValueError:
+                    return None
+    return None
+
+
 def _blocked(ip_str: str) -> bool:
     try:
         ip = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
+    if isinstance(ip, ipaddress.IPv6Address):
+        # Judge a NAT64 address by the IPv4 host it reaches. A synthesized
+        # address for an internal IPv4 still gets blocked - it decodes to a
+        # private address and fails the same checks below.
+        mapped = embedded_ipv4(ip)
+        if mapped is not None:
+            ip = mapped
     return bool(
         ip.is_private or ip.is_loopback or ip.is_link_local
         or ip.is_reserved or ip.is_multicast or ip.is_unspecified

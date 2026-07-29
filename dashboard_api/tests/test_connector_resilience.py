@@ -1642,9 +1642,15 @@ def test_incomplete_schema_is_reported_against_the_table_that_is_missing():
     migration. The check names what is actually missing."""
     import dashboard_api.db as db_mod
 
+    from dashboard_api.db_backend import is_postgres
+    # The catalogue query differs per backend; assert against whichever one this
+    # run actually uses rather than hardcoding SQLite's. Pinning sqlite_master
+    # made this fail on the Postgres job for a check that was working correctly.
+    catalogue = "pg_tables" if is_postgres() else "sqlite_master"
+
     class _FakeConn:
         def execute(self, sql, *a):
-            assert "sqlite_master" in sql
+            assert catalogue in sql, f"expected a {catalogue} query, got: {sql}"
             return self
         def fetchall(self):
             return [{"name": "users"}]        # everything else "missing"
@@ -1712,3 +1718,43 @@ def test_a_failed_sync_is_not_reported_as_100_percent(client, auth):
         with real_get_conn() as c:
             c.execute("DELETE FROM connector_works WHERE id IN (?,?)", (dead, done))
             c.commit()
+
+def test_schema_splitter_does_not_break_statements_on_comment_semicolons():
+    """`SCHEMA.split(";")` is not a SQL parser and the schema is full of prose.
+
+    One comment - `-- ingest source name (collector|syslog-udp|…; 'engine' for
+    synthetic)` - contains a semicolon, which cut the `events` CREATE TABLE in
+    half. Postgres reported `syntax error at end of input` and never created the
+    table; 25 of the 89 naive fragments were not statements at all. SQLite hid
+    it because the whole script normally goes through executescript()."""
+    from dashboard_api.db import SCHEMA, split_statements
+
+    stmts = split_statements(SCHEMA)
+    starts = ("CREATE", "ALTER", "INSERT", "DROP")
+    bad = [s[:80] for s in stmts if not s.upper().startswith(starts)]
+    assert not bad, f"splitter produced non-statements: {bad}"
+
+    # The table the comment-semicolon actually broke, kept whole.
+    events = [s for s in stmts if "CREATE TABLE IF NOT EXISTS events" in s]
+    assert len(events) == 1, "events CREATE TABLE was split or lost"
+    assert events[0].rstrip().endswith(")"), "events CREATE TABLE is truncated"
+
+    # Every table the schema declares survives the split.
+    import re
+    declared = set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", SCHEMA))
+    split_out = set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)",
+                               "\n".join(stmts)))
+    assert declared == split_out, f"lost tables: {sorted(declared - split_out)}"
+
+
+@pytest.mark.parametrize("sql,expect", [
+    ("SELECT 1; -- trailing; comment\nSELECT 2;", ["SELECT 1", "SELECT 2"]),
+    ("INSERT INTO t VALUES ('a;b');", ["INSERT INTO t VALUES ('a;b')"]),
+    ("/* block; comment */ SELECT 1;", ["SELECT 1"]),
+    ("SELECT 1", ["SELECT 1"]),                        # no trailing semicolon
+    ("  \n -- only a comment;\n ", []),                # nothing executable
+])
+def test_schema_splitter_handles_strings_and_comments(sql, expect):
+    """Semicolons inside string literals and comments are data, not separators."""
+    from dashboard_api.db import split_statements
+    assert [s.strip() for s in split_statements(sql)] == expect

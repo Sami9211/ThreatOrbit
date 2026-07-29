@@ -1029,6 +1029,82 @@ def _apply_migrations(conn: sqlite3.Connection):
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
+def split_statements(sql: str) -> list[str]:
+    """Split a SQL script into statements, ignoring `;` inside comments/strings.
+
+    `sql.split(";")` is not a SQL parser, and the schema is full of prose
+    comments. One of them - `-- ingest source name (collector|syslog-udp|…;
+    'engine' for synthetic)` - contains a semicolon, which split the `events`
+    CREATE TABLE in half; Postgres then reported `syntax error at end of input`
+    and the table was never created. 25 of the 89 fragments the naive split
+    produced were not statements at all. SQLite hid this because it takes the
+    whole script through executescript(); only the per-statement fallback (used
+    on Postgres, and on SQLite whenever the script errors) went through here."""
+    out: list[str] = []
+    buf: list[str] = []
+    i, n = 0, len(sql)
+    in_squote = in_dquote = in_line_comment = in_block_comment = False
+    while i < n:
+        ch = sql[i]
+        nxt = sql[i + 1] if i + 1 < n else ""
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+                buf.append(ch)
+            i += 1
+            continue
+        if in_block_comment:
+            if ch == "*" and nxt == "/":
+                in_block_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if in_squote:
+            buf.append(ch)
+            if ch == "'":
+                in_squote = False
+            i += 1
+            continue
+        if in_dquote:
+            buf.append(ch)
+            if ch == '"':
+                in_dquote = False
+            i += 1
+            continue
+        if ch == "-" and nxt == "-":
+            in_line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            in_block_comment = True
+            i += 2
+            continue
+        if ch == "'":
+            in_squote = True
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == '"':
+            in_dquote = True
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ";":
+            stmt = "".join(buf).strip()
+            if stmt:
+                out.append(stmt)
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
 def _safe_schema(conn: sqlite3.Connection):
     """Apply the schema, tolerating index statements that reference columns a
     migration hasn't added yet (re-applied after migrations below).
@@ -1051,12 +1127,9 @@ def _safe_schema(conn: sqlite3.Connection):
         # An index on a migrated column against a pre-migration table - run the
         # statements individually so everything else still applies.
         _rollback()
-        for stmt in SCHEMA.split(";"):
-            s = stmt.strip()
-            if not s:
-                continue
+        for stmt in split_statements(SCHEMA):
             try:
-                conn.execute(s)
+                conn.execute(stmt)
                 conn.commit()
             except Exception:
                 _rollback()
@@ -1088,8 +1161,15 @@ def _backfill_ioc_hosts(conn) -> int:
     silently stop finding URLs hosted on it for everything already imported -
     a lookup that quietly gets less accurate after an upgrade is worse than one
     that is slow."""
+    # The pattern is BOUND, not inlined. psycopg reads `%` in the SQL text as a
+    # placeholder marker, so the literal `'%://%'` raised "only '%s', '%b', '%t'
+    # are allowed as placeholders, got '%:'" and the backfill failed on every
+    # Postgres boot - silently, because the caller logs and continues. That is
+    # exactly the quiet degradation this function exists to prevent: pre-upgrade
+    # URLs keep answering exact lookups while dropping out of domain queries.
     rows = conn.execute(
-        "SELECT id, value, type FROM iocs WHERE host IS NULL AND value LIKE '%://%'"
+        "SELECT id, value, type FROM iocs WHERE host IS NULL AND value LIKE ?",
+        ("%://%",),
     ).fetchall()
     updates = [(h, r["id"]) for r in rows if (h := host_of(r["value"], r["type"]))]
     if updates:
