@@ -80,6 +80,8 @@
     "/connectors/kinds",
     "/connectors/works",
     "/connectors/{connector_id}",
+    "/connectors/{connector_id}/pause",
+    "/connectors/{connector_id}/reset-state",
     "/connectors/{connector_id}/run",
     "/cti/actors",
     "/cti/actors/{actor_id}",

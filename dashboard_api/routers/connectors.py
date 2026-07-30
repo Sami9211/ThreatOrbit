@@ -283,6 +283,72 @@ def delete_connector(connector_id: str, user: dict = Depends(require_perm("conne
     return None
 
 
+@router.post("/{connector_id}/reset-state")
+def reset_state(connector_id: str, user: dict = Depends(require_perm("connectors.manage"))):
+    """Forget this connector's HTTP validators so the next sync re-fetches in full.
+
+    The conditional-GET state (ETag / Last-Modified per feed URL) is what makes a
+    short cadence cheap: an unchanged feed answers 304 and costs nothing. The cost
+    is that there is no way back if that state is WRONG - a feed that changed its
+    content while reusing an ETag, or a truncated import that recorded a validator
+    for data we never actually stored, leaves the connector permanently convinced
+    it is up to date. Without this the only remedy is deleting and recreating the
+    connector, which throws away its history and its id.
+
+    Deliberately does NOT delete indicators: they may be corroborated by other
+    sources, and discarding another feed's evidence is not this button's job.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT id, name, state FROM connectors WHERE id=?",
+                           (connector_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Connector not found")
+        had = row["state"]
+        cleared = 0
+        if had:
+            try:
+                parsed = had if isinstance(had, dict) else json.loads(had)
+                cleared = len(parsed or {})
+            except (ValueError, TypeError):
+                cleared = 0
+        # next_allowed_at goes too: an operator forcing a re-fetch has decided to
+        # spend the request, and a stale 429 hold would silently swallow it.
+        conn.execute("UPDATE connectors SET state='{}', next_allowed_at=NULL WHERE id=?",
+                     (connector_id,))
+        audit(conn, user["email"], "connector.reset_state", connector_id,
+              f"cleared {cleared} feed validator(s)")
+        conn.commit()
+        updated = conn.execute(f"SELECT {_PUBLIC} FROM connectors WHERE id=?",
+                               (connector_id,)).fetchone()
+    return {"cleared": cleared, "connector": row_to_dict(updated)}
+
+
+@router.post("/{connector_id}/pause")
+def pause_connector(connector_id: str, resume: bool = False,
+                    user: dict = Depends(require_perm("connectors.manage"))):
+    """Stop (or restart) automatic syncing without losing the connector.
+
+    Disabling is already possible via PATCH, but an operator triaging a noisy or
+    misbehaving feed at 3am needs one obvious control, and "delete it and set it
+    up again later" is how configuration and history get lost.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM connectors WHERE id=?", (connector_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Connector not found")
+        # Clearing 'running' on pause matters: a connector paused mid-sync would
+        # otherwise stay 'running' forever and be skipped even after resuming.
+        conn.execute(
+            "UPDATE connectors SET enabled=?, status=? WHERE id=?",
+            (1 if resume else 0, "idle", connector_id))
+        audit(conn, user["email"], "connector.pause", connector_id,
+              "resumed" if resume else "paused")
+        conn.commit()
+        updated = conn.execute(f"SELECT {_PUBLIC} FROM connectors WHERE id=?",
+                               (connector_id,)).fetchone()
+    return row_to_dict(updated)
+
+
 @router.post("/{connector_id}/run")
 def run_now(connector_id: str, user: dict = Depends(require_perm("connectors.manage"))):
     """Sync this connector immediately and return the import result."""

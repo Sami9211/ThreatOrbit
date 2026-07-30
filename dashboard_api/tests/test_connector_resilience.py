@@ -2023,3 +2023,141 @@ def test_one_crashing_connector_cannot_stop_the_others_from_syncing(monkeypatch)
             c.execute("DELETE FROM connectors WHERE id IN (?,?)", (bad_id, good_id))
             c.execute("DELETE FROM iocs WHERE source=?", (good_name,))
             c.commit()
+
+
+def test_reset_state_forces_a_full_refetch_instead_of_another_304(client, auth, monkeypatch):
+    """Conditional GET is what makes a short cadence cheap: an unchanged feed
+    answers 304 and costs nothing. The cost is that there is no way back when the
+    stored validator is WRONG - a feed that changed content while reusing an
+    ETag, or a truncated import that recorded a validator for data we never
+    stored, leaves the connector permanently convinced it is up to date.
+
+    Before this endpoint the only remedy was deleting and recreating the
+    connector, throwing away its id and its history.
+    """
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:8]
+    cid = f"rs-{tag}"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at,state,next_allowed_at) "
+            "VALUES (?,?,?,?,1,5,300,'{}','ok',0,?,?,?)",
+            (cid, f"Reset {tag}", "json", "https://example.test/f", conn_mod._now(),
+             json.dumps({"https://example.test/f": {"etag": "W/\"stale\""}}),
+             "2099-01-01T00:00:00+00:00"))
+        c.commit()
+    try:
+        r = client.post(f"/connectors/{cid}/reset-state", headers=auth)
+        assert r.status_code == 200, r.text
+        assert r.json()["cleared"] == 1
+
+        with real_get_conn() as c:
+            row = c.execute("SELECT state, next_allowed_at FROM connectors WHERE id=?",
+                            (cid,)).fetchone()
+        state = row["state"]
+        if isinstance(state, str):
+            state = json.loads(state)
+        assert not state, f"validators survived the reset: {state}"
+        # A stale rate-limit hold must go too, or the forced re-fetch an operator
+        # just asked for is silently swallowed by a 429 from hours ago.
+        assert row["next_allowed_at"] is None
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_reset_state_does_not_delete_indicators(client, auth):
+    """Those values may be corroborated by other sources. Throwing away another
+    feed's evidence is not this button's job."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:8]
+    cid, name = f"rsk-{tag}", f"Keep {tag}"
+    val = f"keep-{tag}.test"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at,state) "
+            "VALUES (?,?,?,?,1,5,300,'{}','ok',0,?,'{}')",
+            (cid, name, "json", "https://example.test/f", conn_mod._now()))
+        c.execute(
+            "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,"
+            "actor,first_seen,last_seen,tags,status,sightings) "
+            "VALUES (?,'domain',?,'c2',70,'critical',?,'', ?,?,'[]','active',1)",
+            (f"ioc-{tag}", val, name, conn_mod._now(), conn_mod._now()))
+        c.commit()
+    try:
+        assert client.post(f"/connectors/{cid}/reset-state", headers=auth).status_code == 200
+        with real_get_conn() as c:
+            still = c.execute("SELECT COUNT(*) AS n FROM iocs WHERE value=?", (val,)).fetchone()
+        assert still["n"] == 1, "reset-state deleted indicators it should have left alone"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE id=?", (f"ioc-{tag}",))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_pause_stops_the_scheduler_and_resume_restarts_it(client, auth, monkeypatch):
+    from dashboard_api.db import get_conn as real_get_conn
+
+    monkeypatch.setitem(conn_mod._FETCHERS, "json",
+                        lambda c: [{"type": "domain", "value": f"p-{c['id']}.test"}])
+    tag = uuid.uuid4().hex[:8]
+    cid, name = f"pz-{tag}", f"Pause {tag}"
+    stale = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at,last_run) "
+            "VALUES (?,?,?,?,1,1,60,'{}','idle',0,?,?)",
+            (cid, name, "json", "https://example.test/f", conn_mod._now(), stale))
+        c.commit()
+    try:
+        # Truthiness, not `is False`: this endpoint family returns the stored
+        # integer and the frontend already reads it that way, so asserting a
+        # bool here would invent a contract nothing else honours.
+        assert not client.post(f"/connectors/{cid}/pause", headers=auth).json()["enabled"]
+        ran = {r["connector"] for r in conn_mod.run_due_connectors()}
+        assert name not in ran, "a paused connector still synced"
+
+        assert client.post(f"/connectors/{cid}/pause?resume=true",
+                           headers=auth).json()["enabled"]
+        ran = {r["connector"] for r in conn_mod.run_due_connectors()}
+        assert name in ran, "a resumed connector did not sync"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM iocs WHERE source=?", (name,))
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_pause_clears_a_stuck_running_status(client, auth):
+    """A connector paused mid-sync would otherwise stay 'running' forever and be
+    skipped by the scheduler even after being resumed."""
+    from dashboard_api.db import get_conn as real_get_conn
+
+    tag = uuid.uuid4().hex[:8]
+    cid = f"pr-{tag}"
+    with real_get_conn() as c:
+        c.execute(
+            "INSERT INTO connectors (id,name,kind,url,enabled,interval_minutes,"
+            "interval_seconds,field_map,status,builtin,created_at) "
+            "VALUES (?,?,?,?,1,1,60,'{}','running',0,?)",
+            (cid, f"Stuck {tag}", "json", "https://example.test/f", conn_mod._now()))
+        c.commit()
+    try:
+        assert client.post(f"/connectors/{cid}/pause", headers=auth).json()["status"] == "idle"
+    finally:
+        with real_get_conn() as c:
+            c.execute("DELETE FROM connectors WHERE id=?", (cid,))
+            c.commit()
+
+
+def test_operator_controls_need_permission_and_a_real_connector(client, auth):
+    for path in ("reset-state", "pause"):
+        assert client.post(f"/connectors/does-not-exist/{path}", headers=auth).status_code == 404
+        assert client.post(f"/connectors/x/{path}").status_code in (401, 403)

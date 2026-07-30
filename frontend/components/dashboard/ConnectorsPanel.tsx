@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plug, RefreshCw, Plus, X, Trash2, Play, Pause, CheckCircle,
-  AlertTriangle, Loader2, Database, Pencil,
+  AlertTriangle, Loader2, Database, Pencil, RotateCcw,
 } from 'lucide-react'
 import { cn, formatEvery } from '@/lib/utils'
 import { usePermissions } from '@/lib/usePermissions'
 import {
   fetchConnectors, fetchConnectorKinds, createConnector, patchConnector,
-  deleteConnector, runConnector, fetchConnectorWorks,
+  deleteConnector, runConnector, fetchConnectorWorks, resetConnectorState,
   type Connector, type ConnectorKind, type ConnectorWork,
 } from '@/lib/api'
 
@@ -110,6 +110,24 @@ export default function ConnectorsPanel() {
     const next = !c.enabled
     setConnectors((prev) => prev?.map((x) => (x.id === c.id ? { ...x, enabled: next ? 1 : 0 } : x)) ?? prev)
     patchConnector(c.id, { enabled: next }).catch(() => load())
+  }
+
+  function resetState(c: Connector) {
+    if (!window.confirm(
+      `Forget cached feed validators for "${c.name}"?\n\n`
+      + 'The next sync re-downloads everything instead of asking "changed?". '
+      + 'Indicators already imported are kept - they may be corroborated by other '
+      + 'sources.')) return
+    setBusy(c.id)
+    resetConnectorState(c.id)
+      .then(({ cleared, connector }) => {
+        setConnectors((prev) => prev?.map((x) => (x.id === c.id ? connector : x)) ?? prev)
+        flash(cleared
+          ? `${c.name}: cleared ${cleared} cached validator${cleared === 1 ? '' : 's'} — next sync re-fetches in full.`
+          : `${c.name}: had no cached validators; the next sync already re-fetches in full.`)
+      })
+      .catch(() => flash(`${c.name}: could not reset state (needs connectors.manage).`))
+      .finally(() => setBusy(null))
   }
 
   function remove(c: Connector) {
@@ -314,6 +332,19 @@ export default function ConnectorsPanel() {
                   title={!canManage ? adminOnly : c.enabled ? 'Pause auto-sync' : 'Resume auto-sync'}
                   className="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-400 disabled:hover:bg-transparent">
                   {c.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                </button>
+                {/* Force a full re-fetch. Conditional GET is what makes a short
+                    cadence cheap, but there was no way back when a stored ETag
+                    was WRONG - the connector stays permanently convinced it is up
+                    to date, and the only remedy was deleting and recreating it. */}
+                <button
+                  onClick={() => resetState(c)}
+                  disabled={busy === c.id || !canManage}
+                  title={canManage
+                    ? 'Forget cached feed validators and re-fetch everything on the next sync'
+                    : adminOnly}
+                  className="p-1.5 rounded-lg text-ink-400 hover:text-amber hover:bg-amber/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-400 disabled:hover:bg-transparent">
+                  <RotateCcw className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => setEditing(c)}

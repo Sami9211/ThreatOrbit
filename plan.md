@@ -1211,6 +1211,19 @@ limited.
 **Done when:** an idle system is visibly idle, a syncing system shows a live rate,
 and an operator can force a full re-fetch without touching the database.
 
+**Status (2026-07-30): the operator controls are DONE; SSE push is not.**
+No-op collapsing, live rates and a visible `next_allowed_at` landed in Phase 0.
+`POST /connectors/{id}/reset-state` now forgets the cached HTTP validators (and
+any stale 429 hold) so the next sync re-fetches in full, with a button in the
+connectors panel - the last part of the done-criterion, since previously the only
+remedy for a wrong stored ETag was deleting and recreating the connector.
+`POST /connectors/{id}/pause` adds an audited pause that also clears a stuck
+`running` status; **note that pause itself already existed in the UI via PATCH**,
+so what is new there is the audit trail and the stuck-status recovery.
+
+Still open in this phase: pushing updates over SSE instead of polling, and queue
+depth / promoted-vs-observed counters in the header.
+
 ---
 
 ### Phase 5 · Entity depth and navigation
@@ -1279,6 +1292,13 @@ Removal is half the work and usually skipped. Each of these actively costs us:
 
 - [ ] **The `feeds` table** - duplicates `connectors`, empty by design in live
       mode, caused the "0 Sources Online" front-page bug. (Phase 1)
+      **2026-07-30: the SYMPTOM is fixed, the table is not gone.** `/feeds` and
+      `/feeds/summary` now fall back to `connectors` when the table is empty, and
+      `totalIndicators` is the store's own COUNT rather than a sum of per-source
+      tallies (which double-count anything two feeds both list). The Threat Feeds
+      page had been reading "from 0 sources · No sources configured yet · Total
+      IOCs 0" over a store holding 315,185. The duplicate table still needs
+      removing; this stops it lying in the meantime.
 - [x] **`_severity_from_confidence`** - conflated two unrelated axes. Removed
       2026-07-29; `connectors.severity_for()` classifies the asserted activity
       instead, and a one-time migration rebuilt the column. (Phase 3)
@@ -1726,6 +1746,49 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · Operator controls: a way back when a cached validator is wrong.**
+  Conditional GET is what makes a short sync cadence cheap - an unchanged feed
+  answers 304 and costs nothing to download, parse or dedup. The cost is that
+  there was no way back when the stored validator was WRONG: a feed that changed
+  its content while reusing an ETag, or a truncated import that recorded a
+  validator for data we never actually stored, left the connector permanently
+  convinced it was up to date. The only remedy was deleting and recreating it,
+  throwing away its id, its history and its configuration.
+
+  `POST /connectors/{id}/reset-state` clears the per-feed validators and any stale
+  `next_allowed_at` hold - an operator forcing a re-fetch has decided to spend the
+  request, and a 429 hold from hours ago should not silently swallow it. It
+  deliberately does NOT delete indicators: they may be corroborated by other
+  sources, and discarding another feed's evidence is not that button's job (there
+  is a test for exactly this). Exposed in the connectors panel with a confirm
+  dialog that says what will and will not happen.
+
+  `POST /connectors/{id}/pause` adds an audited pause that also clears a stuck
+  `running` status - a connector paused mid-sync would otherwise stay `running`
+  forever and be skipped by the scheduler even after being resumed. **Pause itself
+  already existed in the UI via PATCH**; what is new is the audit trail and the
+  stuck-status recovery, and the plan entry says so rather than claiming a
+  feature that was already there.
+
+  One test of mine asserted `enabled is False` where this endpoint family returns
+  the stored integer and the frontend already reads it as truthy. The test was
+  wrong, not the API - inventing a stricter contract than the rest of the system
+  honours would have been the actual defect.
+
+  **Also fixed, spotted in the browser while verifying the above:** the Threat
+  Feeds page read "Real-time threat intelligence from **0 sources** · No sources
+  configured yet" and "**Total IOCs 0**" while two connectors were actively
+  importing and the store held 315,185 indicators. It was reading the vestigial
+  `feeds` table, which the removal list has flagged for a while and which is
+  empty by design in live mode. `/feeds` and `/feeds/summary` now fall back to
+  `connectors`, and `totalIndicators` is the store's own COUNT rather than a sum
+  of per-source tallies - those double-count anything two feeds both list, which
+  after the corroboration work is a large and growing share of the store. Same
+  class of defect as the "0 IOCs" CTI header from yesterday: the number was
+  computed correctly from the wrong table. My first version of the regression test
+  SKIPPED whenever the suite had seeded `feeds`, meaning it never ran; it now
+  empties the table for the duration and restores it.
 
 - **2026-07-30 · First-party passive DNS: the one enrichment nobody else can sell
   you.** Every other enrichment in this platform is somebody else's opinion about

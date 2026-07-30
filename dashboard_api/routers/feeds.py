@@ -43,7 +43,49 @@ def list_feeds(type: str | None = None, status: str | None = None,
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_conn() as conn:
         rows = conn.execute(f"SELECT * FROM feeds {where} ORDER BY indicators DESC", params).fetchall()
-    return rows_to_dicts(rows)
+        out = rows_to_dicts(rows)
+        if not out:
+            # The `feeds` table is a vestigial duplicate of `connectors` and is
+            # empty by design in live mode - which is why the Threat Feeds page
+            # read "from 0 sources" and "No sources configured yet" while two
+            # connectors were actively importing 315,185 indicators. Until the
+            # table is removed (see the Phase 1 removal list), report the real
+            # sources rather than an empty list that is simply false.
+            out = _feeds_from_connectors(conn, type_filter=type, status_filter=status)
+    return out
+
+
+def _feeds_from_connectors(conn, *, type_filter=None, status_filter=None) -> list[dict]:
+    """Present configured connectors in the `feeds` response shape.
+
+    Same fields the page already reads, sourced from the table that actually
+    holds the truth. `indicators` is the connector's own running total, which is
+    what it has imported - not a nominal daily rate.
+    """
+    rows = conn.execute(
+        "SELECT id, name, kind, url, enabled, status, last_run, indicator_count "
+        "FROM connectors ORDER BY indicator_count DESC").fetchall()
+    out = []
+    for r in rows:
+        status = "active" if (r["enabled"] and r["status"] != "error") else (
+            "error" if r["status"] == "error" else "paused")
+        if status_filter and status != status_filter:
+            continue
+        # Every connector this platform ships is an open-source feed; a bespoke
+        # one added by an operator is too, as far as this field is concerned.
+        if type_filter and type_filter != "opensource":
+            continue
+        out.append({
+            "id": r["id"], "name": r["name"], "provider": r["kind"],
+            "type": "opensource", "url": r["url"], "format": "native",
+            "enabled": r["enabled"], "status": status,
+            "indicators": r["indicator_count"] or 0,
+            "last_sync": r["last_run"], "reliability": "B",
+            # Flagged so a caller can tell this came from the connector table
+            # rather than from a configured `feeds` row.
+            "derived_from": "connector",
+        })
+    return out
 
 
 @router.get("/summary")
@@ -55,16 +97,37 @@ def feeds_summary(user: dict = Depends(current_user)):
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT status, enabled, indicators, type FROM feeds WHERE 1=1 {sc}", sp).fetchall()
+        derived = []
+        if not rows:
+            # Same reason as list_feeds: the `feeds` table is empty by design in
+            # live mode, so summing it reported "Total IOCs 0" over a store
+            # holding 315,185.
+            derived = _feeds_from_connectors(conn)
         # Real "IOCs today" - indicators first seen since midnight UTC, not a sum
         # of per-feed nominal daily rates.
         new_today = conn.execute(
             f"SELECT COUNT(*) AS n FROM iocs WHERE first_seen >= ? {sc}", [midnight] + sp
         ).fetchone()["n"]
+        # The store's OWN count, not a sum of per-source tallies. Those tallies
+        # double-count anything two feeds both list, which after the
+        # corroboration work is a large and growing share of the store.
+        total_indicators = conn.execute(
+            f"SELECT COUNT(*) AS n FROM iocs WHERE 1=1 {sc}", sp).fetchone()["n"]
+    if derived:
+        return {
+            "totalFeeds": len(derived),
+            "active": sum(1 for r in derived if r["status"] == "active"),
+            "errored": sum(1 for r in derived if r["status"] == "error"),
+            "totalIndicators": total_indicators,
+            "newToday": new_today,
+            "byType": {"commercial": 0, "opensource": len(derived),
+                       "community": 0, "internal": 0},
+        }
     return {
         "totalFeeds": len(rows),
         "active": sum(1 for r in rows if r["status"] == "active"),
         "errored": sum(1 for r in rows if r["status"] == "error"),
-        "totalIndicators": sum(r["indicators"] for r in rows),
+        "totalIndicators": total_indicators,
         "newToday": new_today,
         "byType": {t: sum(1 for r in rows if r["type"] == t)
                    for t in ("commercial", "opensource", "community", "internal")},

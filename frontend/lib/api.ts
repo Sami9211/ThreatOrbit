@@ -1857,6 +1857,15 @@ export interface ConnectorRunResult {
 export const runConnector = (id: string) =>
   api<ConnectorRunResult>(`/connectors/${id}/run`, { method: 'POST' })
 
+/** Forget this connector's cached HTTP validators so the next sync re-fetches in
+ *  full. Conditional GET is what makes a short cadence cheap, but there was no
+ *  way back when a stored ETag was wrong - the connector stayed convinced it was
+ *  up to date and the only remedy was deleting and recreating it. Indicators are
+ *  NOT deleted: they may be corroborated by other sources. */
+export const resetConnectorState = (id: string) =>
+  api<{ cleared: number; connector: Connector }>(
+    `/connectors/${id}/reset-state`, { method: 'POST' })
+
 /** A single import run, updated *while* it is in flight. Lets the UI show a
  *  sync that is slow but healthy differently from one that is stuck. */
 export interface ConnectorWork {
