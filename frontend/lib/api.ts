@@ -404,6 +404,24 @@ export interface IocDetail extends Ioc {
   reliability?: string
 }
 
+/** One pivot group: what else the store holds that is part of the same thing.
+ *  `why` is the evidence for the link - a graph an analyst cannot interrogate is
+ *  one they are right to ignore. `total` is the true count, which can far exceed
+ *  the items returned. */
+export interface RelatedGroup {
+  key: 'report' | 'actor' | 'host' | 'sibling' | 'network'
+  label: string
+  why: string
+  total: number
+  items: Array<{
+    id: string; type: string; value: string; severity: string
+    intelScore: number; threatType: string | null; status: string
+  }>
+  pivot: { kind: string; value: string }
+}
+export const fetchIocRelated = (id: string, limit = 8) =>
+  api<{ groups: RelatedGroup[]; total: number }>(`/cti/iocs/${id}/related?limit=${limit}`)
+
 export interface IocType {
   label: string
   count: number

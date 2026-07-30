@@ -30,7 +30,8 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from dashboard_api.config import THREAT_API_URL, SERVICES_API_KEY
-from dashboard_api.db import audit, dumps, get_conn, host_of, record_ioc_import, record_job
+from dashboard_api.db import (audit, dumps, get_conn, host_of, ip_hex_of,
+                              record_ioc_import, record_job)
 
 _TIMEOUT = 20.0
 # Cap the response body a feed may return (DoS guard). httpx reads the whole
@@ -740,7 +741,10 @@ def _import(indicators: list[dict], source: str,
                     ind.get("report_id"),
                     # Indexed host, so "is this domain known-bad?" is a lookup
                     # rather than a wildcard scan of every URL in the store.
-                    host_of(value, itype)),
+                    host_of(value, itype),
+                    # Indexed network key, so "what else do we hold in this AS's
+                    # range?" is a BETWEEN rather than decoding every address.
+                    ip_hex_of(value, itype)),
             # Scored at insert so a new indicator ranks immediately instead of
             # sitting at zero until the next maintenance pass. Corroboration is
             # not yet known for THIS import, so the score starts from the feed's
@@ -779,8 +783,8 @@ def _import(indicators: list[dict], source: str,
         if new:
             conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,report_id,host,intel_score) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,report_id,host,ip_hex,intel_score) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 [c["row"] + (c["score"],) for c in new],
             )
             imported = len(new)

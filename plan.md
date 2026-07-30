@@ -1712,6 +1712,54 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-07-30 · Pivots: an indicator stops being a dead end.** The drawer could
+  answer "should I care about this?" but not "what else is this part of?", and
+  315,185 dead ends is a list rather than intelligence. `relations.py` derives
+  five pivot groups from data the store already holds - same report, same actor,
+  same host (a domain and the URLs served from it, both directions), sibling
+  subdomains under one registration, and same announced network range. Every
+  group carries the EVIDENCE for the link and its true total, because a graph an
+  analyst cannot interrogate is one they are right to ignore, and an isolated
+  indicator returns nothing rather than a weak guess.
+
+  Three indexed columns added so this is a set of index seeks and not five table
+  scans: `reg_domain`, `ip_hex` and an index on `report_id`. Each has a one-time
+  backfill, because a pivot that only sees post-upgrade rows is a view that
+  silently gets less complete - the failure mode this project keeps having to
+  hunt down. Measured on the real 315k store: **512 ms → 0.1 ms** for the sibling
+  query (`EXPLAIN` went from `SCAN iocs` to `SEARCH iocs USING INDEX
+  idx_iocs_reg_domain`); full `related()` runs in 1 ms, or 9 ms against a
+  4,900-member cluster. Migration + all three backfills over 315,185 rows: 5.9 s.
+
+  **The correctness problem the real data exposed.** The first working version
+  reported 4,911 "siblings under 000webhostapp.com" - and 2,837 under
+  `vercel.app`, 1,846 under `github.io`. Those are free-hosting platforms where
+  every subdomain is a DIFFERENT tenant, so the pivot was telling an analyst that
+  thousands of unrelated abusers of one free host were a single actor's cluster:
+  a fabricated relationship, presented as evidence. Fixed by treating platform
+  suffixes as suffixes (the Public Suffix List's "private" section), built from
+  the suffixes actually observed in this deployment's feeds. Longest suffix wins,
+  because `r.appspot.com` is itself a platform suffix and matching `appspot.com`
+  first would resolve `x.r.appspot.com` back to the platform. After the fix the
+  top clusters are exactly what they should be: `corolain.ru` (1,940 generated
+  subdomains, one registration), `bortogat.ru` (1,769), `qwo231sdx.club` (1,057)
+  - real DGA families. The list is deliberately partial and says so; an unlisted
+  platform will over-cluster.
+
+  UI: a "Related" section in the indicator drawer, each row clickable straight
+  into that indicator's own drawer. "See all N" appears **only** for pivots the
+  IOC list can actually serve (actor, host, domain) - `report` and `asn` pivot on
+  a UUID / AS number, and `?q=` is a substring search over the indicator value,
+  so the link would have landed on a page matching nothing while looking like it
+  worked. Those groups show a plain "N more" instead. Deep links are read on
+  mount, following the pattern the SIEM and Actors pages already use - the link
+  had to actually filter, not just navigate.
+
+  Two of my own test defects fixed on the way: the fixture inserted rows without
+  going through the same derived-column helpers as the import path (a pivot test
+  that populates its own index tests nothing), and the ASN freshness tests
+  hardcoded a sync timestamp that expired when the calendar rolled past it.
+
 - **2026-07-29 · Phase 2: an IP stops being just an IP - network ownership from a
   LOCAL BGP table.** "203.0.113.7" tells an analyst nothing. "announced by
   AS14061 DigitalOcean, US" tells them it is cheap rented infrastructure, and it

@@ -15,6 +15,7 @@ live download is not exercised here - the suite must not depend on a third-party
 file being reachable.
 """
 import ipaddress
+from datetime import datetime, timezone
 
 import pytest
 
@@ -40,12 +41,23 @@ FIXTURE = "\n".join([
 STALE = "2020-01-01T00:00:00+00:00"
 
 
+def _fresh_ts() -> str:
+    """A sync timestamp that is fresh RIGHT NOW.
+
+    Hardcoding a date here made the freshness tests pass until the calendar
+    rolled past it, at which point the fixture's table was older than
+    SYNC_INTERVAL_HOURS and sync() correctly stopped skipping. A test that
+    expires on a date is a test that will fail for reasons unrelated to the code.
+    """
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
 @pytest.fixture
 def loaded():
     with get_conn() as conn:
         conn.execute("DELETE FROM asn_ranges")
         n = asn_mod.load_rows(conn, asn_mod.parse_dataset(FIXTURE))
-        asn_mod._record_sync(conn, n, "2026-07-29T00:00:00+00:00")
+        asn_mod._record_sync(conn, n, _fresh_ts())
         conn.commit()
         yield conn
         conn.execute("DELETE FROM asn_ranges")

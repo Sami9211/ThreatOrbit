@@ -103,6 +103,7 @@
     "/cti/iocs/{ioc_id}/enrichment",
     "/cti/iocs/{ioc_id}/fp-assessment",
     "/cti/iocs/{ioc_id}/known-good",
+    "/cti/iocs/{ioc_id}/related",
     "/cti/iocs/{ioc_id}/sighting",
     "/cti/lookup",
     "/cti/lookup/bulk",

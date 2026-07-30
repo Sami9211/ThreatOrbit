@@ -6,14 +6,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
   TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search, BookOpen,
-  Send, FolderPlus, ArrowUpRight,
+  Send, FolderPlus, ArrowUpRight, Network,
 } from 'lucide-react'
 import { cn, isSimulatedSource } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
   fetchStixBundle, enrichIoc, fetchIocFpAssessment, createAlert, createCase,
-  type Ioc, type IocDetail, type EnrichmentResult, type FpAssessment,
+  fetchIocRelated,
+  type Ioc, type IocDetail, type EnrichmentResult, type FpAssessment, type RelatedGroup,
 } from '@/lib/api'
 
 // Analyst context per indicator TYPE - honest, generic SOC guidance keyed on
@@ -116,6 +117,24 @@ const SORTS: Array<{ key: string; label: string; hint: string }> = [
   { key: 'confidence', label: 'Confidence', hint: "The originating feed's own claim, unweighted" },
 ]
 
+/** Where "See all N" goes, or null when the list cannot actually serve it.
+ *
+ *  Only the pivots the IOC list has a real filter for get a link. `report` and
+ *  `asn` do not: their pivot value is a UUID / an AS number, and `?q=` is a
+ *  substring search over the indicator VALUE, so the link would land on a page
+ *  matching nothing while looking like it worked. A missing link is honest; a
+ *  link that silently does the wrong thing is not. */
+function pivotHref(g: RelatedGroup): string | null {
+  const p = g.pivot
+  if (p.kind === 'actor') return `/dashboard/cti?actor=${encodeURIComponent(p.value)}`
+  // host and domain are both substrings of every value in their group, so `q`
+  // reproduces the group exactly.
+  if (p.kind === 'host' || p.kind === 'domain') {
+    return `/dashboard/cti?q=${encodeURIComponent(p.value)}`
+  }
+  return null
+}
+
 function relTime(iso: string | null): string {
   if (!iso) return '-'
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
@@ -138,6 +157,8 @@ export default function IocLifecyclePanel() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [filter, setFilter] = useState('all')
   const [sort, setSort] = useState('score')
+  // Set by a deep link from an actor pivot; empty means no actor narrowing.
+  const [actorFilter, setActorFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<IocDetail | null>(null)
   const [busy, setBusy] = useState(false)
@@ -147,6 +168,8 @@ export default function IocLifecyclePanel() {
   const [fpAssessment, setFpAssessment] = useState<FpAssessment | null>(null)
   const [fpChecking, setFpChecking] = useState(false)
   const [actionMsg, setActionMsg] = useState<{ text: string; href: string; label: string } | null>(null)
+  const [related, setRelated] = useState<{ groups: RelatedGroup[]; total: number } | null>(null)
+  const [relating, setRelating] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -156,6 +179,7 @@ export default function IocLifecyclePanel() {
     if (filter !== 'all') params.status = filter
     if (typeFilter !== 'all') params.type = typeFilter
     if (query.trim()) params.q = query.trim()
+    if (actorFilter) params.actor = actorFilter
     // `total` was thrown away and there was no offset: the panel showed the 60
     // most recent indicators and nothing else, so a store holding 310k was
     // 99.98% unreachable from the UI.
@@ -163,7 +187,19 @@ export default function IocLifecyclePanel() {
       .then(({ items, total }) => { setItems(items); setTotal(total) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [filter, typeFilter, query, page, sort])
+  }, [filter, typeFilter, query, page, sort, actorFilter])
+
+  // Deep links from a pivot ("See all 1,939 siblings under corolain.ru"). Read
+  // once on mount, same pattern the SIEM and Actors pages already use. Without
+  // this the pivot link lands here and shows the whole store, silently ignoring
+  // the thing the analyst clicked - which is worse than not offering the link.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const q = p.get('q')
+    const a = p.get('actor')
+    if (q) setQuery(q)
+    if (a) setActorFilter(a)
+  }, [])
 
   useEffect(() => {
     // Debounced: at this table size every keystroke would otherwise run a
@@ -186,7 +222,12 @@ export default function IocLifecyclePanel() {
     setEnrichment(null)
     setFpAssessment(null)
     setActionMsg(null)
+    // Cleared, not left showing the PREVIOUS indicator's relations while the new
+    // ones load - stale pivots are worse than none, because they look current.
+    setRelated(null)
+    setRelating(true)
     fetchIoc(id).then(setDetail).catch(() => {})
+    fetchIocRelated(id).then(setRelated).catch(() => {}).finally(() => setRelating(false))
   }
   function enrich() {
     if (!detail || enriching) return
@@ -691,6 +732,72 @@ export default function IocLifecyclePanel() {
                     <div className="text-ink-200 truncate capitalize">{v}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* Pivots. An indicator an analyst cannot pivot from is a dead
+                  end, and 315k dead ends is a list rather than intelligence.
+                  Each group states the evidence for the link, so an analyst can
+                  judge the edge instead of taking the graph's word for it. */}
+              <div>
+                <p className="text-[10px] text-ink-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Network className="w-3 h-3" /> Related
+                  {relating && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+                  {related && related.total > 0 && (
+                    <span className="text-ink-600 normal-case tracking-normal">
+                      {related.total.toLocaleString()} across {related.groups.length} link
+                      {related.groups.length === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </p>
+                {!relating && related && related.groups.length === 0 && (
+                  <p className="text-[10px] text-ink-600">
+                    Nothing else in the store connects to this. An isolated indicator
+                    is a real answer - a graph padded with coincidental edges would
+                    be worse than none.
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {(related?.groups ?? []).map((g) => (
+                    <div key={g.key} className="rounded-lg border border-white/6 bg-surface-2/40 overflow-hidden">
+                      <div className="px-2.5 py-1.5 border-b border-white/5">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-[10px] text-ink-200 truncate">{g.label}</span>
+                          <span className="text-[9px] text-ink-600 tabular-nums shrink-0">
+                            {g.total.toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-ink-600 leading-snug">{g.why}</p>
+                      </div>
+                      <div className="divide-y divide-white/4">
+                        {g.items.map((i) => (
+                          <button key={i.id} onClick={() => open(i.id)}
+                            className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 hover:bg-white/4 transition-colors group/row">
+                            <span className="text-[9px] font-mono tabular-nums w-6 text-center shrink-0"
+                              style={{ color: (BAND_STYLE[i.intelScore >= 75 ? 'high' : i.intelScore >= 50 ? 'moderate' : i.intelScore >= 25 ? 'low' : 'weak']).color }}>
+                              {i.intelScore}
+                            </span>
+                            <span className="text-[8px] font-mono uppercase px-1 py-0.5 rounded-sm bg-white/5 text-ink-500 shrink-0 w-9 text-center">
+                              {i.type}
+                            </span>
+                            <span className="text-[10px] font-mono text-ink-300 truncate flex-1">{i.value}</span>
+                            <ArrowUpRight className="w-2.5 h-2.5 text-ink-700 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                      {g.total > g.items.length && (pivotHref(g)
+                        ? (
+                          <a href={pivotHref(g)!}
+                            className="block px-2.5 py-1.5 text-[9px] text-violet hover:bg-violet/8 transition-colors border-t border-white/5">
+                            See all {g.total.toLocaleString()} →
+                          </a>
+                        ) : (
+                          <p className="px-2.5 py-1.5 text-[9px] text-ink-600 border-t border-white/5">
+                            {(g.total - g.items.length).toLocaleString()} more
+                          </p>
+                        ))}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Sightings timeline */}

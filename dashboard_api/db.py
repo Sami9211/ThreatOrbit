@@ -839,6 +839,16 @@ CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
 -- 315k rows by score rebuilds a temp B-tree on every page.
 CREATE INDEX IF NOT EXISTS idx_iocs_score ON iocs(intel_score DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
+-- Pivots from one indicator to everything that shares its provenance. Without
+-- this, "what else came from this report?" scans the whole table, and the
+-- indicator drawer that asks the question on every open becomes unusable at
+-- 315k rows.
+CREATE INDEX IF NOT EXISTS idx_iocs_report ON iocs(report_id);
+-- Network-range pivot: "everything we hold inside this AS's announced range",
+-- as an indexed BETWEEN over the same hex encoding asn_ranges uses.
+CREATE INDEX IF NOT EXISTS idx_iocs_ip_hex ON iocs(ip_hex);
+-- Sibling clustering: every name registered under the same domain.
+CREATE INDEX IF NOT EXISTS idx_iocs_reg_domain ON iocs(reg_domain);
 -- Only the reverse direction needs its own index. Corroboration looks up
 -- value -> sources, which the PRIMARY KEY (value, source_id) already serves as
 -- its leading column; a second index on value alone is pure insert cost -
@@ -986,6 +996,15 @@ _MIGRATIONS = [
     ("intel_reports", "industries", "TEXT NOT NULL DEFAULT '[]'"),
     ("iocs", "report_id", "TEXT"),                    # the pulse/report it came from
     ("iocs", "host", "TEXT"),                         # host of a url indicator (see _backfill_ioc_hosts)
+    # Fixed-width hex of an `ip` indicator's address, so "what else do we hold in
+    # this network range?" is an indexed BETWEEN instead of a scan that decodes
+    # every address in Python. Same encoding as asn_ranges (see asn.hex_key), so
+    # the two compare directly.
+    ("iocs", "ip_hex", "TEXT"),                       # see _backfill_ioc_ip_hex
+    # Registrable domain of a domain/url indicator, so sibling clustering
+    # (`login.x.test` next to `mail.x.test`) is an indexed equality match rather
+    # than a leading-wildcard LIKE no index can serve. See _backfill_ioc_reg_domain.
+    ("iocs", "reg_domain", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.
@@ -1225,6 +1244,148 @@ def host_of(value: str, ioc_type: str = "") -> str | None:
         return None
 
 
+# Where the registrable boundary sits for multi-label suffixes. A partial Public
+# Suffix List: getting `co.uk` wrong would make every `*.co.uk` a "sibling" of
+# every other, which is a fabricated relationship presented as evidence. Anything
+# unlisted falls back to the last two labels, which is right for the
+# overwhelming majority of TLDs.
+#
+# TWO kinds of entry, both needed for the same reason:
+#
+#  * registry suffixes (`co.uk`) - the registry sells the level below.
+#  * PLATFORM suffixes (`vercel.app`, `github.io`) - free hosting, where every
+#    subdomain is a DIFFERENT tenant. These matter as much as the ccTLDs: in the
+#    real store, `000webhostapp.com` has 4,912 subdomains and `vercel.app` 2,837.
+#    Without them, opening any one of those indicators claimed 4,911 "siblings
+#    under the same registration" - 4,911 unrelated people abusing one free host,
+#    presented to an analyst as a single actor's cluster. Meanwhile a genuine DGA
+#    cluster like `corolain.ru` (1,940 generated subdomains, one registration)
+#    is exactly what the pivot SHOULD surface, and still does.
+#
+# This list is deliberately partial and cannot be otherwise without shipping the
+# real PSL: a platform not listed here will over-cluster. The entries below are
+# the ones actually observed in this deployment's feeds, highest-volume first.
+_MULTI_LABEL_SUFFIXES = frozenset({
+    # Free hosting / dynamic DNS / preview platforms - one tenant per subdomain.
+    "000webhostapp.com", "vercel.app", "appspot.com", "r.appspot.com",
+    "github.io", "xsph.ru",
+    "blogspot.com", "pages.dev", "weebly.com", "duckdns.org", "ddns.net",
+    "wcomhost.com", "repl.co", "cprapid.com", "netlify.app", "web.app",
+    "firebaseapp.com", "workers.dev", "herokuapp.com", "azurewebsites.net",
+    "glitch.me", "surge.sh", "neocities.org", "wixsite.com", "myshopify.com",
+    "trycloudflare.com", "ngrok.io", "ngrok-free.app", "r2.dev", "loca.lt",
+    "hopto.org", "no-ip.org", "serveo.net", "onrender.com", "fleek.co",
+    # Registry suffixes.
+    "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk", "sch.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au",
+    "co.nz", "net.nz", "org.nz", "govt.nz",
+    "co.za", "org.za", "web.za",
+    "com.br", "net.br", "org.br", "gov.br",
+    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp",
+    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn",
+    "co.in", "net.in", "org.in", "gov.in", "ac.in",
+    "com.mx", "com.ar", "com.tr", "com.sg", "com.hk", "com.tw",
+    "co.kr", "or.kr", "go.kr",
+    "com.pl", "com.ua", "com.ru", "co.il", "com.my", "co.id", "com.ph",
+})
+
+
+def registrable_domain(host: str) -> str | None:
+    """The part someone registered: `login.mail.x.co.uk` -> `x.co.uk`.
+
+    None for anything that is not a multi-label hostname, so no caller can build
+    a "sibling" group out of a bare TLD or a dotted-quad.
+    """
+    h = (host or "").strip().strip(".").lower()
+    if not h or "/" in h or ":" in h:
+        return None
+    labels = h.split(".")
+    if len(labels) < 2 or any(not part for part in labels):
+        return None
+    if labels[-1].isdigit():                  # dotted-quad, not a domain
+        return None
+    # LONGEST suffix wins. `r.appspot.com` is itself a platform suffix, and
+    # testing only the last two labels would match `appspot.com` first and
+    # resolve `x.r.appspot.com` to `r.appspot.com` - the platform again, which is
+    # the exact over-clustering the list exists to prevent.
+    for take in (3, 2):
+        if len(labels) > take and ".".join(labels[-take:]) in _MULTI_LABEL_SUFFIXES:
+            return ".".join(labels[-(take + 1):])
+    return ".".join(labels[-2:])
+
+
+def reg_domain_of(value: str, ioc_type: str = "") -> str | None:
+    """Registrable domain for the indexed `iocs.reg_domain` column.
+
+    Sibling clustering - `login.x.test` next to `mail.x.test`, which is how
+    phishing kits and generated-domain families surface - needs an EQUALITY
+    match. Done as `host LIKE '%.x.test'` it is a leading wildcard, which no
+    index can serve: measured at 512 ms per lookup over 315k rows, on a query
+    the indicator drawer runs every time it opens.
+    """
+    t = (ioc_type or "").lower()
+    if t == "url":
+        host = host_of(value, "url")
+    elif t == "domain":
+        host = (value or "").strip().strip(".").lower()
+    else:
+        return None
+    return registrable_domain(host or "")
+
+
+def ip_hex_of(value: str, ioc_type: str = "") -> str | None:
+    """Fixed-width hex of an IP indicator, for the indexed `iocs.ip_hex` column.
+
+    Same encoding as `asn.hex_key`, so an indicator and a BGP range compare
+    directly and "everything we hold in this AS's range" is an indexed BETWEEN.
+    Only `ip` rows get one; a domain has no address to compare.
+    """
+    v = (value or "").strip()
+    if ioc_type and ioc_type != "ip":
+        return None
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(v)
+    except ValueError:
+        return None
+    return format(int(ip), "0%dx" % (8 if ip.version == 4 else 32))
+
+
+def _backfill_ioc_ip_hex(conn) -> int:
+    """Populate `iocs.ip_hex` for IP rows imported before the column existed.
+
+    Runs once per database: afterwards every ip row either has a key or has been
+    examined and genuinely cannot have one, so the WHERE clause matches nothing
+    on later boots. Without it, the network pivot would silently see only
+    indicators imported after the upgrade - a view that gets quietly less
+    complete over time, which is worse than one that is slow.
+    """
+    rows = conn.execute(
+        "SELECT id, value FROM iocs WHERE type='ip' AND ip_hex IS NULL").fetchall()
+    updates = [(h, r["id"]) for r in rows if (h := ip_hex_of(r["value"], "ip"))]
+    if updates:
+        conn.executemany("UPDATE iocs SET ip_hex=? WHERE id=?", updates)
+    return len(updates)
+
+
+def _backfill_ioc_reg_domain(conn) -> int:
+    """Populate `iocs.reg_domain` for domain/url rows imported before the column.
+
+    Runs once per database: afterwards every domain/url row either has a value or
+    has been examined and genuinely has none, so the WHERE clause matches nothing
+    on later boots. Without it the sibling pivot would see only indicators
+    imported after the upgrade - a view that silently gets less complete, which
+    is the failure mode this project keeps having to hunt down.
+    """
+    rows = conn.execute(
+        "SELECT id, value, type FROM iocs "
+        "WHERE reg_domain IS NULL AND type IN ('domain','url')").fetchall()
+    updates = [(d, r["id"]) for r in rows if (d := reg_domain_of(r["value"], r["type"]))]
+    if updates:
+        conn.executemany("UPDATE iocs SET reg_domain=? WHERE id=?", updates)
+    return len(updates)
+
+
 def _backfill_ioc_hosts(conn) -> int:
     """Populate `iocs.host` for URL rows imported before the column existed.
 
@@ -1419,6 +1580,24 @@ def init_db():
         except Exception:
             import logging
             logging.getLogger("dashboard_api.db").exception("host backfill failed")
+        try:
+            keyed = _backfill_ioc_ip_hex(conn)
+            if keyed:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Backfilled network key for %d IP indicators", keyed)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("ip_hex backfill failed")
+        try:
+            regs = _backfill_ioc_reg_domain(conn)
+            if regs:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Backfilled registrable domain for %d indicators", regs)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("reg_domain backfill failed")
         try:
             fixed = _reclassify_severities(conn)
             if fixed:

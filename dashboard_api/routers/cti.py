@@ -8,7 +8,8 @@ from pydantic import BaseModel
 
 from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
-from dashboard_api.db import audit, get_conn, host_of, row_to_dict, rows_to_dicts
+from dashboard_api.db import (audit, get_conn, host_of, ip_hex_of, row_to_dict,
+                              rows_to_dicts)
 from dashboard_api.webhooks import dispatch
 from dashboard_api.ioc_lifecycle import (
     decay_iocs, effective_confidence, lifecycle_of, record_sighting, set_known_good)
@@ -226,9 +227,11 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
         if new:
             conn.executemany(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,org_id,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,org_id,host,ip_hex) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 [(str(uuid.uuid4()), t, v, body.threat_type, conf, body.severity,
-                  body.source, body.actor, now, now, tags_json, org, host_of(v, t))
+                  body.source, body.actor, now, now, tags_json, org, host_of(v, t),
+                  ip_hex_of(v, t))
                  for v, t in new],
             )
             imported = len(new)
@@ -762,10 +765,12 @@ def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write")
             sev = "high" if a.get("to_ids") else "medium"
             conn.execute(
                 "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,org_id,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "first_seen,last_seen,tags,org_id,host,ip_hex) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (str(uuid.uuid4()), a["type"], val, a.get("comment") or "misp-import",
                  70 if a.get("to_ids") else 50, sev, "MISP import", "", now, now,
-                 dumps([f"tlp:{tlp}", "misp"]), tenancy.org_of(user), host_of(val, a["type"])))
+                 dumps([f"tlp:{tlp}", "misp"]), tenancy.org_of(user),
+                 host_of(val, a["type"]), ip_hex_of(val, a["type"])))
             imported += 1
         _record_import(conn, f"MISP event ({body.event.get('Event', {}).get('info', 'import')})"[:100],
                        "misp", imported, duplicates, skipped, user["email"])
@@ -816,6 +821,26 @@ def list_enrichers():
     """Available enrichers and whether each external provider is configured."""
     from dashboard_api.enrichment import provider_status
     return provider_status()
+
+
+@router.get("/iocs/{ioc_id}/related")
+def ioc_related(ioc_id: str, limit: int = Query(8, ge=1, le=50),
+                user: dict = Depends(current_user)):
+    """What else this deployment holds that is part of the same thing.
+
+    An indicator an analyst cannot pivot from is a dead end, and 315k dead ends
+    is a list rather than intelligence. Every group states the evidence for the
+    link so an analyst can judge whether to trust the edge; nothing here invents
+    a relationship, so "no relations" is a legitimate answer.
+    """
+    from dashboard_api.relations import related
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        groups = related(conn, row_to_dict(row), limit=limit)
+    return {"groups": groups,
+            "total": sum(g["total"] for g in groups)}
 
 
 @router.get("/asn/status")
