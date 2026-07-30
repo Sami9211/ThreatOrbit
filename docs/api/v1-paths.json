@@ -122,6 +122,7 @@
     "/cti/scan/enrich",
     "/cti/scans",
     "/cti/stix/bundle",
+    "/cti/store-summary",
     "/cti/summary",
     "/darkweb/findings",
     "/darkweb/findings/{finding_id}",

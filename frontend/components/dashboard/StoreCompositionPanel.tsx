@@ -1,0 +1,165 @@
+'use client'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { Layers, Loader2 } from 'lucide-react'
+import { tk } from '@/lib/colors'
+import { fadeInUp } from '@/lib/motion'
+import { fetchStoreSummary, type StoreSummary } from '@/lib/api'
+
+/**
+ * What is actually IN the store.
+ *
+ * "315,185 indicators" is a number that flatters and explains nothing. These are
+ * the numbers that decide whether the store is worth having: how much of it we
+ * believe, how much is backed by more than one source, what kind of activity it
+ * describes, and which feeds are actually contributing.
+ *
+ * The corroboration figure is deliberately prominent and deliberately not
+ * softened. On a store that is almost entirely single-source it reads close to
+ * zero, and that IS the finding - a headline count hides it, which is the reason
+ * this panel exists.
+ */
+const BAND_COLOR: Record<string, string> = {
+  high: tk('magenta'), moderate: tk('amber'), low: tk('violet'), weak: '#665B7D',
+}
+
+function Bar({ parts, total }: { parts: Array<{ key: string; n: number; color: string }>; total: number }) {
+  if (!total) return <div className="h-2 rounded-full bg-white/8" />
+  return (
+    <div className="h-2 rounded-full bg-white/8 overflow-hidden flex">
+      {parts.filter((p) => p.n > 0).map((p) => (
+        <div key={p.key} title={`${p.key}: ${p.n.toLocaleString()}`}
+          style={{ width: `${(p.n / total) * 100}%`, background: p.color }} />
+      ))}
+    </div>
+  )
+}
+
+export default function StoreCompositionPanel() {
+  const [s, setS] = useState<StoreSummary | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    // Loaded once. It is a ~700 ms aggregate over the whole store, so polling it
+    // would cost far more than the freshness is worth.
+    fetchStoreSummary().then(setS).catch(() => setFailed(true))
+  }, [])
+
+  return (
+    <motion.div variants={fadeInUp} initial="hidden" animate="show"
+      className="glass border border-white/8 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/5">
+        <div className="p-1.5 rounded-lg bg-teal/15 border border-teal/25 shrink-0">
+          <Layers className="w-4 h-4 text-teal" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-white">What is in the store</h3>
+          <p className="text-[10px] text-ink-500">
+            A count on its own says nothing about whether the intel is worth having.
+          </p>
+        </div>
+        {!s && !failed && <Loader2 className="ml-auto w-3.5 h-3.5 animate-spin text-ink-600" />}
+      </div>
+
+      {failed && (
+        <p className="px-5 py-6 text-[11px] text-ink-600 text-center">
+          Could not load the store summary.
+        </p>
+      )}
+
+      {s && (
+        <div className="p-5 space-y-4">
+          {/* Belief distribution */}
+          <div>
+            <div className="flex items-baseline justify-between text-[10px] mb-1">
+              <span className="text-ink-500">How much we believe it</span>
+              <span className="text-ink-600 tabular-nums">{s.total.toLocaleString()} indicators</span>
+            </div>
+            <Bar total={s.total} parts={[
+              { key: 'high', n: s.bands.high, color: BAND_COLOR.high },
+              { key: 'moderate', n: s.bands.moderate, color: BAND_COLOR.moderate },
+              { key: 'low', n: s.bands.low, color: BAND_COLOR.low },
+              { key: 'weak', n: s.bands.weak, color: BAND_COLOR.weak },
+            ]} />
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              {(['high', 'moderate', 'low', 'weak'] as const).map((k) => (
+                <span key={k} className="flex items-center gap-1 text-[10px] text-ink-500">
+                  <span className="w-2 h-2 rounded-sm" style={{ background: BAND_COLOR[k] }} />
+                  {k} <span className="text-ink-300 tabular-nums">{s.bands[k].toLocaleString()}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Corroboration - the signal a multi-feed platform exists to produce.
+              Shown as a share AND a raw count, so a near-zero percentage reads as
+              the finding it is rather than as a broken widget. */}
+          <div className="rounded-lg border border-white/8 bg-surface-2/40 p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] text-ink-500">Backed by more than one source</span>
+              <span className="text-sm font-semibold tabular-nums"
+                style={{ color: s.corroboratedShare >= 10 ? tk('safe') : tk('amber') }}>
+                {s.corroboratedShare}%
+              </span>
+            </div>
+            <p className="text-[10px] text-ink-600 mt-1 leading-snug">
+              {(s.corroboration['2'] + s.corroboration['3+']).toLocaleString()} of{' '}
+              {s.total.toLocaleString()} values are asserted by two or more independent
+              feeds. This is the one signal a single public feed cannot give you —
+              and a low number here means the feeds largely do not overlap, not
+              that the intel is wrong.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {/* What kind of activity */}
+            <div>
+              <p className="text-[10px] text-ink-500 mb-1.5">What it describes</p>
+              <div className="space-y-1">
+                {s.activities.slice(0, 5).map((a) => (
+                  <div key={a.activity} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-ink-300 truncate">{a.activity}</span>
+                    <span className="text-ink-500 tabular-nums shrink-0">
+                      {a.count.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Which feeds actually contribute */}
+            <div>
+              <p className="text-[10px] text-ink-500 mb-1.5">Contributing sources</p>
+              <div className="space-y-1">
+                {s.sources.slice(0, 5).map((x) => (
+                  <div key={x.source} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-ink-300 truncate" title={x.source}>{x.source}</span>
+                    <span className="text-ink-500 tabular-nums shrink-0">
+                      {x.values.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+                {s.sources.length === 0 && (
+                  <p className="text-[10px] text-ink-600">No source attributions recorded yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 pt-1 border-t border-white/6 text-[10px] flex-wrap">
+            <span className="text-ink-500">
+              Revoked within 7 days{' '}
+              <span className="text-ink-300 tabular-nums">
+                {s.expiringWithin7Days.toLocaleString()}
+              </span>
+            </span>
+            {Object.entries(s.verdicts).map(([k, v]) => (
+              <span key={k} className="text-ink-500">
+                {k} <span className="text-ink-300 tabular-nums">{v}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  )
+}

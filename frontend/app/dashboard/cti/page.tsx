@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import ReportButton from '@/components/dashboard/ReportButton'
 import IocLifecyclePanel from '@/components/dashboard/IocLifecyclePanel'
+import StoreCompositionPanel from '@/components/dashboard/StoreCompositionPanel'
 import IntelReportsPanel from '@/components/dashboard/IntelReportsPanel'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EntityGraph, { type GraphData } from '@/components/dashboard/EntityGraph'
@@ -809,6 +810,9 @@ export default function CTIPage() {
       </div>
 
       {/* IOC database with lifecycle (decay / sightings / known-good) */}
+      {/* What the store is MADE OF, above the list of what is in it. */}
+      <StoreCompositionPanel />
+
       <IocLifecyclePanel />
 
       {/* Campaign & report management: author, publish, share as MISP */}

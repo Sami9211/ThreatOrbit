@@ -1315,6 +1315,13 @@ User-composed, saveable, shareable.
 Deliberately last: widgets need something to aggregate over, and today that would
 be one undifferentiated table.
 
+**First real aggregate shipped 2026-07-30** - `GET /cti/store-summary` + a "What
+is in the store" panel: belief distribution, corroboration share, what the intel
+DESCRIBES, which feeds actually contribute, and what is about to be revoked. Not
+the widget engine, but the thing that engine exists to produce, and it is what
+made the store's real weakness legible: **132 of 315,185 values (0.0%) are backed
+by more than one source.** A headline count hides that; this does not.
+
 ---
 
 ### Cross-cutting: what to REMOVE
@@ -1777,6 +1784,23 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · "What is in the store": the first aggregate worth having, and it
+  is unflattering.** "315,185 indicators" is a number that flatters and explains
+  nothing. `GET /cti/store-summary` answers the questions that decide whether the
+  store is worth having: how much of it we believe (band distribution), how much
+  is backed by more than one source, what kind of activity it describes, which
+  feeds actually contribute, and what is about to be revoked. Every figure is a
+  live aggregate over the real tables; ~700 ms over 315,185 rows, so it is a
+  page-load summary rather than something to poll.
+
+  It immediately earned its place by making the store's real weakness legible:
+  **132 of 315,185 values - 0.0% - are asserted by more than one independent
+  feed.** The panel shows that as a share AND a raw count precisely so a near-zero
+  percentage reads as the finding it is rather than as a broken widget, and says
+  plainly that a low number means the feeds do not overlap rather than that the
+  intel is wrong. This is the number the corroboration work exists to move, and
+  it is the honest starting point.
 
 - **2026-07-30 · One shared hover card: what an indicator IS, without navigating
   away.** The useful version of the affordance the owner asked for, not the

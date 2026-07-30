@@ -519,6 +519,21 @@ export interface DecayRule {
   enabled: boolean
   builtin: boolean
 }
+/** What is actually IN the store. "315,185 indicators" says nothing about
+ *  whether they are worth having; these are the numbers that do. */
+export interface StoreSummary {
+  total: number
+  bands: { high: number; moderate: number; low: number; weak: number }
+  corroboration: { '1': number; '2': number; '3+': number }
+  /** Share of the store backed by more than one independent source. */
+  corroboratedShare: number
+  activities: Array<{ activity: string; count: number }>
+  sources: Array<{ source: string; values: number }>
+  expiringWithin7Days: number
+  verdicts: Record<string, number>
+}
+export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
+
 export const fetchDecayRules = () => api<DecayRule[]>('/cti/decay-rules')
 export const updateDecayRule = (id: string, body: Partial<{
   half_life_days: number; revoke_score: number

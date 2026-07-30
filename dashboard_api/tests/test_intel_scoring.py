@@ -171,3 +171,30 @@ def test_the_persisted_score_agrees_with_a_freshly_computed_one(tmp_path, monkey
         conn.execute("DELETE FROM observable_sources WHERE value IN (?,?)",
                      (vals[0][1], vals[1][1]))
         conn.commit()
+
+
+def test_store_summary_answers_what_is_actually_in_the_store(client, auth):
+    """"315,185 indicators" says nothing about whether they are worth having.
+    These are the numbers that do."""
+    r = client.get("/cti/store-summary", headers=auth)
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert set(s["bands"]) == {"high", "moderate", "low", "weak"}
+    assert sum(s["bands"].values()) == s["total"], (
+        "the band counts do not add up to the total")
+    assert set(s["corroboration"]) == {"1", "2", "3+"}
+    assert 0 <= s["corroboratedShare"] <= 100
+    assert isinstance(s["activities"], list) and isinstance(s["sources"], list)
+    assert isinstance(s["expiringWithin7Days"], int)
+
+
+def test_store_summary_share_is_consistent_with_its_own_counts(client, auth):
+    """The share is the honest figure - 4,000 corroborated out of 315,185 is a
+    very different store from 4,000 out of 6,000 - so it must not drift from the
+    counts it is derived from."""
+    s = client.get("/cti/store-summary", headers=auth).json()
+    corr = s["corroboration"]
+    known = corr["1"] + corr["2"] + corr["3+"]
+    if known and s["total"]:
+        expected = round(100 * (corr["2"] + corr["3+"]) / s["total"], 1)
+        assert abs(s["corroboratedShare"] - expected) < 0.05
