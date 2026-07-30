@@ -1327,6 +1327,39 @@ investigation, attach it to a case. We render a static graph today.
 **Done when:** an analyst can start at an alert and reach the actor without typing
 a search.
 
+**Status (2026-07-30): indicator entity pages are DONE.** An indicator could
+previously be described only inside a drawer on a list page: you could not link
+to one, an alert could not point at one, and closing the list lost your place.
+`/dashboard/cti/indicator/[value]` is the destination, addressed by VALUE rather
+than by record id, so an alert's matched indicator, a bulk-check row and a pasted
+log line all reach it without first finding out where the record lives (`/cti/
+lookup` now returns the id for exactly this). Four tabs, in the order the
+questions are actually asked: **Overview** (score derivation term by term,
+lifecycle against its governing decay rule, who asserts it, what your team
+concluded), **Knowledge** (the pivot groups, each stating its evidence),
+**Enrichment** (lazy - it can call providers, so it runs when asked, and an
+unconfigured provider says so rather than reporting a clean result nobody
+obtained), and **Activity**.
+
+Activity is backed by a new `GET /cti/iocs/{id}/timeline` that merges the four
+tables each holding a piece of the story - the assertion ledger, our own
+sightings, analyst verdicts, deliberate actions, and the alerts the value raised.
+"Score 74, active, three sources" answers what we think NOW and nothing about how
+we got there. Lifecycle transitions are recorded nowhere, so they are **absent
+rather than reconstructed from timestamps**: an event nobody witnessed is worse
+than a gap, because the gap is honest.
+
+The alert → indicator half of the done-criterion now holds: a threat-intel alert
+names what it matched (`alerts.ti_value`), hovers to the full card, and clicks
+through to the page. Actor pages are still outstanding, as is the hot/cold
+navigation split and the investigation graph.
+
+Caught while verifying against the real store: a host pivot returns one site's
+page set - `.../atb/login.html`, `.../atb/details.html`, `.../atb/logging.php` -
+whose members differ only in the tail, and both pivot lists rendered them with
+`truncate`, which cuts the tail. Four identical-looking rows, with the only thing
+that made them worth listing thrown away. Fixed in both.
+
 ---
 
 ### Phase 6 · SOC workflow (what a team, not a user, needs)

@@ -429,6 +429,10 @@ def _lookup_payload(v: str, row) -> dict:
         # honest "we have nothing" answer is `unverified`, on the not-found path.
         verdict = "malicious" if ioc["severity"] in ("critical", "high") else "suspicious"
     return {
+        # The record's id, so a caller holding only a VALUE - an alert's
+        # ti_value, a pasted log line, a hover card - can reach the indicator's
+        # own page without a second round trip to find out where it lives.
+        "id": ioc["id"],
         "value": v, "matched": ioc["value"], "found": True, "verdict": verdict,
         "confidence": ioc["confidence"], "severity": ioc["severity"],
         "threatType": ioc["threat_type"], "actor": ioc["actor"], "source": ioc["source"],
@@ -583,6 +587,85 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
             "intelScore": scored["score"], "scoreBand": scored["band"],
             "scoreComponents": scored["components"], "reliability": scored["reliability"],
             "verdicts": vhistory, "verdictSummary": vsum}
+
+
+@router.get("/iocs/{ioc_id}/timeline")
+def ioc_timeline(ioc_id: str, limit: int = Query(80, ge=1, le=300),
+                 user: dict = Depends(current_user)):
+    """Everything that has happened to this indicator, in order.
+
+    An indicator's current state - score 74, active, three sources - answers
+    "what do we think now?" and nothing at all about how we got there. Was it
+    corroborated on arrival or two weeks later? Has this deployment ever seen it?
+    Did someone already look at it and call it a false positive? That history
+    lives across four tables and was never assembled anywhere, so every analyst
+    who met the same indicator started from the same blank page.
+
+    Nothing is inferred. Lifecycle transitions (expired, reactivated) are not
+    recorded as events anywhere, so they are absent rather than reconstructed
+    from timestamps - a plausible-looking event nobody witnessed is worse than a
+    gap, because the gap is honest about what we know.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        ioc = row_to_dict(row)
+        value, org = ioc["value"], tenancy.org_of(user)
+        events: list[dict] = []
+
+        # Who asserted it, and when. Two entries per source where the feed has
+        # re-asserted it since: "still listed" is a different claim from "first
+        # listed", and collapsing them loses the only freshness evidence we have.
+        for r in conn.execute(
+                "SELECT source_id, first_seen, last_seen, raw_label FROM observable_sources "
+                "WHERE value=? ORDER BY first_seen", (value,)).fetchall():
+            label = f" as {r['raw_label']}" if r["raw_label"] else ""
+            events.append({"ts": r["first_seen"], "kind": "asserted",
+                           "actor": r["source_id"],
+                           "title": f"First asserted by {r['source_id']}{label}"})
+            if r["last_seen"] and r["last_seen"] != r["first_seen"]:
+                events.append({"ts": r["last_seen"], "kind": "reasserted",
+                               "actor": r["source_id"],
+                               "title": f"Still listed by {r['source_id']}"})
+
+        # Seen HERE. The only entries on this timeline about our own network.
+        for r in conn.execute(
+                "SELECT ts, source, context FROM ioc_sightings WHERE ioc_id=? "
+                "ORDER BY ts DESC LIMIT ?", (ioc_id, limit)).fetchall():
+            events.append({"ts": r["ts"], "kind": "sighting", "actor": r["source"],
+                           "title": "Observed in this deployment's telemetry",
+                           "detail": r["context"] or None})
+
+        # What our analysts concluded - the entries that make the store learn.
+        from dashboard_api import verdicts as verdict_mod
+        for v in verdict_mod.history(conn, value, org):
+            events.append({"ts": v.get("ts"), "kind": "verdict", "actor": v.get("analyst"),
+                           "title": f"Analyst verdict: {v.get('verdict')}",
+                           "detail": v.get("reason") or None})
+
+        # Deliberate human action on the record itself (whitelisting, manual
+        # sightings, edits). Keyed on the id, so it survives a value being
+        # re-imported under a new row only for what actually touched this one.
+        for r in conn.execute(
+                "SELECT ts, actor, action, detail FROM audit_log WHERE target=? "
+                "ORDER BY ts DESC LIMIT ?", (ioc_id, limit)).fetchall():
+            events.append({"ts": r["ts"], "kind": "action", "actor": r["actor"],
+                           "title": r["action"], "detail": r["detail"] or None})
+
+        # Alerts this value raised. An indicator that has fired on local traffic
+        # is a different object from one that has only ever been listed.
+        for r in conn.execute(
+                "SELECT id, ts, title, severity FROM alerts WHERE ti_value=? "
+                "ORDER BY ts DESC LIMIT ?", (value, limit)).fetchall():
+            events.append({"ts": r["ts"], "kind": "alert", "actor": "detection",
+                           "title": r["title"], "severity": r["severity"],
+                           "ref": r["id"]})
+
+    # Newest first, and stable: several of these carry only second precision, so
+    # without a secondary key the order of a same-second group is arbitrary.
+    events.sort(key=lambda e: (e.get("ts") or "", e.get("kind") or ""), reverse=True)
+    return {"value": value, "total": len(events), "items": events[:limit]}
 
 
 @router.get("/iocs/{ioc_id}/fp-assessment")

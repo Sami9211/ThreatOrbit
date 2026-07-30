@@ -508,6 +508,22 @@ export interface RelatedGroup {
 export const fetchIocRelated = (id: string, limit = 8) =>
   api<{ groups: RelatedGroup[]; total: number }>(`/cti/iocs/${id}/related?limit=${limit}`)
 
+/** One thing that happened to an indicator. Assembled from the four tables that
+ *  each hold a piece of it - nothing is inferred, so lifecycle transitions
+ *  (which are recorded nowhere) are absent rather than reconstructed. */
+export interface IocTimelineEvent {
+  ts: string | null
+  kind: 'asserted' | 'reasserted' | 'sighting' | 'verdict' | 'action' | 'alert'
+  actor: string | null
+  title: string
+  detail?: string | null
+  severity?: string | null
+  ref?: string | null
+}
+export const fetchIocTimeline = (id: string, limit = 80) =>
+  api<{ value: string; total: number; items: IocTimelineEvent[] }>(
+    `/cti/iocs/${id}/timeline?limit=${limit}`)
+
 /** Decay policy as a record. How fast intel stops being actionable is a policy
  *  decision that differs per deployment, so it is editable rather than compiled in. */
 export interface DecayRule {
@@ -604,6 +620,9 @@ export interface CtiSummary {
 export interface IocLookup {
   value: string
   found: boolean
+  /** The record's id when found, so a caller holding only a value can reach the
+   *  indicator's own page without a second round trip. */
+  id?: string
   /** How many independent sources assert this value. 1 is a single feed's word;
    *  4 is four feeds agreeing, which is a different claim entirely. */
   sourceCount?: number

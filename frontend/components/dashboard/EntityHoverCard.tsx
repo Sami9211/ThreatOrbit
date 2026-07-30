@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useCallback, useEffect } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { tk } from '@/lib/colors'
 import { lookupIoc, type IocLookup } from '@/lib/api'
@@ -55,8 +56,14 @@ function rel(iso: string | null | undefined): string {
 }
 
 export default function EntityHoverCard(
-  { value, children, className }:
-  { value: string; children: React.ReactNode; className?: string },
+  { value, children, className, link }:
+  {
+    value: string; children: React.ReactNode; className?: string
+    /** Render the trigger as a link to the indicator's own page. Off by default:
+     *  several call sites already sit inside a button or a link of their own,
+     *  and nesting interactive elements produces markup a keyboard cannot use. */
+    link?: boolean
+  },
 ) {
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<IocLookup | null>(cache.get(value) ?? null)
@@ -90,7 +97,10 @@ export default function EntityHoverCard(
   return (
     <span className={className} onMouseEnter={enter} onMouseLeave={leave}
       onFocus={enter} onBlur={leave} style={{ position: 'relative', display: 'inline-block' }}>
-      {children}
+      {link
+        ? <Link href={`/dashboard/cti/indicator/${encodeURIComponent(value)}`}
+            className="hover:underline decoration-dotted underline-offset-2">{children}</Link>
+        : children}
       <AnimatePresence>
         {open && (
           <motion.span
@@ -148,6 +158,16 @@ export default function EntityHoverCard(
                 {data.knownGood && (
                   <p className="text-[10px]" style={{ color: tk('violet') }}>
                     Marked known-good — it does not match.
+                  </p>
+                )}
+                {/* The card answers "what is this?" in place. When that is not
+                    enough, the indicator has a page - and the hover is where to
+                    say so, since an analyst who does not know a destination
+                    exists never navigates to it. Only claimed where the trigger
+                    really is a link. */}
+                {link && (
+                  <p className="text-[9px] text-ink-700 pt-1 border-t border-white/6">
+                    Click for sources, relations, enrichment and history.
                   </p>
                 )}
               </div>

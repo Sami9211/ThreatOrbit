@@ -843,8 +843,8 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               {alert.tiValue && (
                 <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-white/5">
                   <span className="text-[10px] text-ink-500 shrink-0">Matched Indicator</span>
-                  <EntityHoverCard value={alert.tiValue} className="min-w-0">
-                    <span className="text-[11px] font-mono truncate cursor-help"
+                  <EntityHoverCard value={alert.tiValue} link className="min-w-0">
+                    <span className="text-[11px] font-mono truncate"
                       style={{ color: tk('magenta') }}>{alert.tiValue}</span>
                   </EntityHoverCard>
                 </div>

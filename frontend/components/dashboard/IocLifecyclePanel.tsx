@@ -2,6 +2,7 @@
 import { tk } from '@/lib/colors'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
@@ -502,6 +503,15 @@ export default function IocLifecyclePanel() {
                 <div className="min-w-0">
                   <p className="text-[10px] text-ink-500 uppercase">{detail.type} indicator</p>
                   <h2 className="text-sm font-semibold text-white font-mono break-all">{detail.value}</h2>
+                  {/* The drawer is for deciding whether to act without losing
+                      your place in the queue. The page is for actually
+                      investigating - and it is a URL, so it can be sent to
+                      somebody or attached to a case. */}
+                  <Link href={`/dashboard/cti/indicator/${encodeURIComponent(detail.value)}`}
+                    className="inline-flex items-center gap-1 text-[10px] mt-1 hover:underline"
+                    style={{ color: tk('violet') }}>
+                    Open full page <ArrowUpRight className="w-3 h-3" />
+                  </Link>
                 </div>
                 <button onClick={() => setDetail(null)} className="p-1.5 rounded-lg text-ink-500 hover:text-white shrink-0"><X className="w-4 h-4" /></button>
               </div>
@@ -903,7 +913,15 @@ export default function IocLifecyclePanel() {
                             <span className="text-[8px] font-mono uppercase px-1 py-0.5 rounded-sm bg-white/5 text-ink-500 shrink-0 w-9 text-center">
                               {i.type}
                             </span>
-                            <span className="text-[10px] font-mono text-ink-300 truncate flex-1">{i.value}</span>
+                            {/* Not truncated: a host pivot returns one site's
+                                page set, whose members differ only in the tail,
+                                so cutting the tail renders them all identical.
+                                `title` keeps the full value reachable when the
+                                narrow drawer still has to wrap it. */}
+                            <span title={i.value}
+                              className="text-[10px] font-mono text-ink-300 break-all flex-1 text-left">
+                              {i.value}
+                            </span>
                             <ArrowUpRight className="w-2.5 h-2.5 text-ink-700 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
                           </button>
                         ))}
