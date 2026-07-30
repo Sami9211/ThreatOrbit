@@ -476,6 +476,23 @@ CREATE TABLE IF NOT EXISTS asn_ranges (
     description TEXT
 );
 
+-- Decay policy as RECORDS rather than a Python dict, so how fast intel stops
+-- being actionable is tunable per deployment instead of being one opinion baked
+-- into the source. See dashboard_api/decay.py; the seeded rules reproduce the
+-- previous hardcoded numbers exactly.
+CREATE TABLE IF NOT EXISTS decay_rules (
+    id                 TEXT PRIMARY KEY,
+    name               TEXT NOT NULL,
+    applies_to         TEXT NOT NULL DEFAULT '["*"]',  -- JSON list of ioc types, "*" = any
+    half_life_days     INTEGER NOT NULL,
+    revoke_score       INTEGER NOT NULL,               -- stops matching below this
+    max_age_half_lives INTEGER NOT NULL DEFAULT 4,     -- hard ceiling regardless of score
+    reaction_points    TEXT NOT NULL DEFAULT '[]',     -- JSON list of scores worth reporting
+    enabled            INTEGER NOT NULL DEFAULT 1,
+    builtin            INTEGER NOT NULL DEFAULT 0,
+    created_at         TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ioc_sightings (
     id      TEXT PRIMARY KEY,
     ioc_id  TEXT NOT NULL,
@@ -849,6 +866,8 @@ CREATE INDEX IF NOT EXISTS idx_iocs_report ON iocs(report_id);
 CREATE INDEX IF NOT EXISTS idx_iocs_ip_hex ON iocs(ip_hex);
 -- Sibling clustering: every name registered under the same domain.
 CREATE INDEX IF NOT EXISTS idx_iocs_reg_domain ON iocs(reg_domain);
+-- "What is about to be revoked?" as a range scan over stored timestamps.
+CREATE INDEX IF NOT EXISTS idx_iocs_valid_until ON iocs(valid_until);
 -- Only the reverse direction needs its own index. Corroboration looks up
 -- value -> sources, which the PRIMARY KEY (value, source_id) already serves as
 -- its leading column; a second index on value alone is pure insert cost -
@@ -1005,6 +1024,10 @@ _MIGRATIONS = [
     # (`login.x.test` next to `mail.x.test`) is an indexed equality match rather
     # than a leading-wildcard LIKE no index can serve. See _backfill_ioc_reg_domain.
     ("iocs", "reg_domain", "TEXT"),
+    # When this indicator reaches its decay rule's revoke score. Derived and
+    # stored so "what expires this week?" is a range scan rather than a decay
+    # computation over every row. See decay.valid_until.
+    ("iocs", "valid_until", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.
@@ -1589,6 +1612,17 @@ def init_db():
         except Exception:
             import logging
             logging.getLogger("dashboard_api.db").exception("ip_hex backfill failed")
+        try:
+            from dashboard_api.decay import seed_builtin_rules
+            made = seed_builtin_rules(conn)
+            if made:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Seeded %d builtin decay rules (same curves as before, now editable)",
+                    made)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("decay rule seeding failed")
         try:
             regs = _backfill_ioc_reg_domain(conn)
             if regs:

@@ -1167,9 +1167,12 @@ drawer, IntelScope and the bulk check (score + band also in the CSV export).
 `_severity_from_confidence` is gone, replaced by `severity_for()` classifying the
 activity a feed actually names, with a one-time reclassification migration.
 
-Still open in this phase: **decay rules as records** (reaction points, revoke
-score, `valid_until`, per-type curves as data rather than constants). The current
-decay is still a hardcoded per-type half-life.
+**Phase 3 is now COMPLETE (2026-07-30).** Decay rules landed as records:
+`decay_rules` table, per-type half-life, revoke score, reaction points and a
+stored+indexed `valid_until`, with a GET/PATCH API and an editor in
+Settings → Feed Sources. The seeded rules reproduce the previous hardcoded
+curves exactly, so the upgrade is a refactor rather than a silent re-dating of
+315,185 indicators.
 
 ---
 
@@ -1711,6 +1714,48 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · Decay policy becomes a record, and Phase 3 closes.** How fast
+  intel stops being worth acting on is a POLICY decision that differs per
+  deployment - a bank chasing payment fraud and a hosting provider fighting abuse
+  do not agree on how long a phishing URL stays actionable. It lived in a Python
+  dict, so tuning it meant editing source and redeploying, which in practice
+  means nobody ever tunes it and the platform quietly imposes one opinion on
+  every customer.
+
+  `decay_rules` now holds, per indicator type: **half-life**, **revoke score**
+  (below which the indicator stops matching, so stale intel cannot raise alerts),
+  a hard age ceiling, and **reaction points** - scores worth reporting on the way
+  down, because decay with no reaction points is invisible until an indicator
+  silently vanishes. `valid_until` is derived, stored and indexed, so "what
+  expires this week?" is a range scan rather than a decay computation over the
+  whole store. Modelled on
+  [OpenCTI's indicator lifecycle](https://docs.opencti.io/latest/usage/indicators-lifecycle/).
+
+  **The seeded rules reproduce the previous hardcoded curves exactly**, and a
+  test asserts that type by type against the old constants - an upgrade that
+  silently re-dated 315,185 indicators would be a data change disguised as a
+  refactor. `effective_confidence` is also asserted to return the identical
+  number with and without a rule, because hot loops pass one and one-off callers
+  do not, and what an analyst sees must not depend on which path produced it.
+
+  Performance was the real risk: the decay pass calls `effective_confidence` once
+  per indicator, so a rule query per row would have turned a maintenance job into
+  an outage. Rules are cached in-process and invalidated on write, with the pass
+  resolving one rule per TYPE rather than per row. Measured on the real store:
+  **12.3 s for 315,185 rows** on the first pass (dating all of them), 5.6 s in
+  steady state with `dated=0` - idempotent, no write churn. The maths was verified
+  by hand against the stored values: an IP at 70% under a 14-day half-life and a
+  revoke score of 15 gives 14·log₂(70/15) = 31.1 days, and the row reads
+  2026-07-28 → 2026-08-28.
+
+  API validates rather than trusts: a 0-day half-life expires the entire store
+  instantly and a revoke score of 100 revokes everything on import. Both are one
+  keystroke away and invisible until the store is empty, so both are rejected at
+  the boundary and again in the UI. The drawer now names the governing rule and
+  links to it, so "expires in 12 days" became "expires in 12 days under the
+  14-day IP rule" - a fact an analyst can go and change rather than one they have
+  to accept.
 
 - **2026-07-30 · Pivots: an indicator stops being a dead end.** The drawer could
   answer "should I care about this?" but not "what else is this part of?", and

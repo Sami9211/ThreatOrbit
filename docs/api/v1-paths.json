@@ -87,6 +87,8 @@
     "/cti/asn/sync",
     "/cti/attribution",
     "/cti/attribution/case/{case_id}",
+    "/cti/decay-rules",
+    "/cti/decay-rules/{rule_id}",
     "/cti/enrichers",
     "/cti/graph",
     "/cti/graph/expand",

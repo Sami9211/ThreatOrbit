@@ -54,47 +54,81 @@ def age_days(last_seen, now: datetime | None = None) -> float:
     return max(0.0, (now - dt).total_seconds() / 86400.0)
 
 
-def half_life(ioc_type: str | None) -> int:
+def half_life(ioc_type: str | None, rule: dict | None = None) -> int:
+    """Half-life for a type. `rule` wins when the caller has already looked it up.
+
+    The constants remain the fallback, and the seeded records hold exactly these
+    numbers - so a deployment that has not been tuned decays identically whether
+    the rule table is reachable or not.
+    """
+    if rule:
+        return rule.get("halfLifeDays") or DEFAULT_HALFLIFE
     return DECAY_HALFLIFE_DAYS.get((ioc_type or "").lower(), DEFAULT_HALFLIFE)
 
 
 def effective_confidence(confidence: int, last_seen, ioc_type: str | None,
-                         now: datetime | None = None) -> int:
-    """Asserted confidence decayed by age since last seen (half-life per type)."""
-    hl = half_life(ioc_type)
+                         now: datetime | None = None, rule: dict | None = None) -> int:
+    """Asserted confidence decayed by age since last seen (half-life per type).
+
+    `rule` is the decay record when the caller already has it. Deliberately NOT
+    looked up here: this is called once per indicator, and the decay pass makes
+    315k of those - a rule query per call would turn a 24-second maintenance job
+    into an outage. Callers in a loop resolve the rule once and pass it down.
+    """
+    hl = half_life(ioc_type, rule)
     age = age_days(last_seen, now)
     factor = 0.5 ** (age / hl) if hl > 0 else 1.0
     return max(0, round((confidence or 0) * factor))
 
 
-def lifecycle_of(ioc: dict, now: datetime | None = None) -> dict:
-    """Presentational lifecycle block for an IOC row."""
-    eff = effective_confidence(ioc.get("confidence", 0), ioc.get("last_seen"),
-                               ioc.get("type"), now)
-    hl = half_life(ioc.get("type"))
+def lifecycle_of(ioc: dict, now: datetime | None = None, rule: dict | None = None) -> dict:
+    """Presentational lifecycle block for an IOC row.
+
+    `rule` is the governing decay record when the caller has it. Without one this
+    falls back to the constants, which the seeded rules match exactly - so the
+    numbers an analyst sees never depend on whether the lookup happened.
+    """
+    conf = ioc.get("confidence", 0)
+    eff = effective_confidence(conf, ioc.get("last_seen"), ioc.get("type"), now, rule)
+    hl = half_life(ioc.get("type"), rule)
+    revoke = rule["revokeScore"] if rule else EXPIRY_FLOOR
+    ceiling = (rule["maxAgeHalfLives"] if rule else MAX_AGE_HALFLIVES)
     age = age_days(ioc.get("last_seen"), now)
     status = ioc.get("status") or "active"
     if status != "known-good":
-        status = "expired" if (eff < EXPIRY_FLOOR or age > hl * MAX_AGE_HALFLIVES) else "active"
-    return {
+        status = "expired" if (eff < revoke or age > hl * ceiling) else "active"
+    out = {
         "effectiveConfidence": eff,
-        "assertedConfidence": ioc.get("confidence", 0),
+        "assertedConfidence": conf,
         "ageDays": round(age, 1),
         "halfLifeDays": hl,
         "sightings": ioc.get("sightings", 1),
         "status": status,
-        "expiresInDays": _expires_in_days(ioc.get("confidence", 0), age, hl),
+        "expiresInDays": _expires_in_days(conf, age, hl, revoke, ceiling),
+        "revokeScore": revoke,
     }
+    if rule:
+        # The policy that governs this indicator, named. "Expires in 12 days" is
+        # a fact an analyst cannot argue with; "expires in 12 days under the
+        # 14-day IP rule" is one they can go and change.
+        from dashboard_api import decay as decay_mod
+        out["rule"] = {"id": rule["id"], "name": rule["name"]}
+        out["validUntil"] = ioc.get("valid_until") or decay_mod.valid_until(
+            conf, ioc.get("last_seen"), rule)
+        out["nextReaction"] = decay_mod.next_reaction(conf, age, rule)
+    return out
 
 
-def _expires_in_days(confidence: int, age: float, hl: int) -> float | None:
-    """Days until effective confidence reaches the expiry floor (None if already)."""
-    if not confidence or confidence <= EXPIRY_FLOOR:
+def _expires_in_days(confidence: int, age: float, hl: int,
+                     revoke: int = EXPIRY_FLOOR,
+                     ceiling: int = MAX_AGE_HALFLIVES) -> float | None:
+    """Days until effective confidence reaches the revoke score (0 if already)."""
+    if not confidence or confidence <= revoke:
         return 0.0
     import math
-    # confidence * 0.5^(t/hl) = FLOOR  →  t = hl * log2(confidence/FLOOR)
-    t_floor = hl * math.log2(confidence / EXPIRY_FLOOR)
-    remaining = min(t_floor, hl * MAX_AGE_HALFLIVES) - age
+    # confidence * 0.5^(t/hl) = revoke  →  t = hl * log2(confidence/revoke)
+    t_floor = hl * math.log2(confidence / revoke)
+    remaining = min(t_floor, hl * ceiling) - age
     return round(max(0.0, remaining), 1)
 
 
@@ -107,7 +141,7 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     rows = conn.execute(
         "SELECT id, type, value, confidence, last_seen, status, sightings, "
-        "source, actor, report_id, intel_score FROM iocs "
+        "source, actor, report_id, intel_score, valid_until FROM iocs "
         "WHERE status != 'known-good'").fetchall()
 
     # Corroboration and reliability for the whole pass, read once rather than
@@ -124,13 +158,32 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
     grades = {r["id"]: r["reliability"] for r in conn.execute(
         "SELECT id, reliability FROM intel_sources").fetchall()}
 
+    # Decay rules resolved ONCE per indicator type, not per row. There are a
+    # handful of types and 315k rows; the ratio is the whole reason this is a
+    # maintenance job rather than an outage.
+    from dashboard_api import decay as decay_mod
+    rule_cache: dict[str, dict] = {}
+
+    def rule_of(t):
+        key = (t or "").lower()
+        if key not in rule_cache:
+            rule_cache[key] = decay_mod.rule_for(conn, key)
+        return rule_cache[key]
+
     expired = reactivated = rescored = 0
-    status_updates, score_updates = [], []
+    status_updates, score_updates, valid_updates = [], [], []
     for r in rows:
-        eff = effective_confidence(r["confidence"], r["last_seen"], r["type"], now)
+        rule = rule_of(r["type"])
+        eff = effective_confidence(r["confidence"], r["last_seen"], r["type"], now, rule)
         age = age_days(r["last_seen"], now)
-        should_expire = eff < EXPIRY_FLOOR or age > half_life(r["type"]) * MAX_AGE_HALFLIVES
+        should_expire = (eff < rule["revokeScore"]
+                         or age > rule["halfLifeDays"] * rule["maxAgeHalfLives"])
         target = "expired" if should_expire else "active"
+        # Stored so "what expires this week?" is an indexed range scan instead of
+        # a decay computation over the whole store.
+        vu = decay_mod.valid_until(r["confidence"], r["last_seen"], rule)
+        if vu != r["valid_until"]:
+            valid_updates.append((vu, r["id"]))
         if target != r["status"]:
             status_updates.append((target, r["id"]))
             if target == "expired":
@@ -154,8 +207,10 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
         conn.executemany("UPDATE iocs SET status=? WHERE id=?", status_updates)
     if score_updates:
         conn.executemany("UPDATE iocs SET intel_score=? WHERE id=?", score_updates)
+    if valid_updates:
+        conn.executemany("UPDATE iocs SET valid_until=? WHERE id=?", valid_updates)
     return {"scanned": len(rows), "expired": expired, "reactivated": reactivated,
-            "rescored": rescored}
+            "rescored": rescored, "dated": len(valid_updates)}
 
 
 def record_sighting(conn, *, ioc_id: str | None = None, value: str | None = None,

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import { Toggle as Switch } from '@/components/dashboard/Toggle'
 import EnrichmentProvidersPanel from '@/components/dashboard/EnrichmentProvidersPanel'
+import DecayRulesPanel from '@/components/dashboard/DecayRulesPanel'
 import FloatingSave from '@/components/dashboard/FloatingSave'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
@@ -1824,6 +1825,14 @@ export default function ConfigPage() {
               <div className="mb-4 text-xs text-ink-400">Enable or disable threat intelligence feeds. Changes persist immediately and take effect on the next scheduled sync.</div>
               <LiveFeedSources />
             </Section>
+          )}
+
+          {/* Decay policy lives with the feeds: it governs what happens to
+              everything they import once nobody re-asserts it. */}
+          {tab === 'sources' && (
+            <div className="mt-6">
+              <DecayRulesPanel />
+            </div>
           )}
 
           {tab === 'alerts' && (

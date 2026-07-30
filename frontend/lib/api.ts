@@ -395,6 +395,14 @@ export interface IocLifecycle {
   effectiveConfidence: number; assertedConfidence: number
   ageDays: number; halfLifeDays: number; sightings: number
   status: 'active' | 'expired' | 'known-good'; expiresInDays: number | null
+  /** Score below which this stops matching, from its decay rule. */
+  revokeScore?: number
+  /** The policy that produced these numbers, so it can be argued with. */
+  rule?: { id: string; name: string }
+  /** When the curve reaches the revoke score. */
+  validUntil?: string | null
+  /** The next score worth reporting on the way down, and when it is reached. */
+  nextReaction?: { score: number; inDays: number } | null
 }
 export interface IocDetail extends Ioc {
   lifecycle: IocLifecycle
@@ -421,6 +429,27 @@ export interface RelatedGroup {
 }
 export const fetchIocRelated = (id: string, limit = 8) =>
   api<{ groups: RelatedGroup[]; total: number }>(`/cti/iocs/${id}/related?limit=${limit}`)
+
+/** Decay policy as a record. How fast intel stops being actionable is a policy
+ *  decision that differs per deployment, so it is editable rather than compiled in. */
+export interface DecayRule {
+  id: string
+  name: string
+  appliesTo: string[]
+  halfLifeDays: number
+  /** Score at which the indicator stops matching. */
+  revokeScore: number
+  maxAgeHalfLives: number
+  /** Scores worth reporting on the way down, so decay is visible before it bites. */
+  reactionPoints: number[]
+  enabled: boolean
+  builtin: boolean
+}
+export const fetchDecayRules = () => api<DecayRule[]>('/cti/decay-rules')
+export const updateDecayRule = (id: string, body: Partial<{
+  half_life_days: number; revoke_score: number
+  max_age_half_lives: number; reaction_points: number[]; enabled: boolean
+}>) => api<DecayRule>(`/cti/decay-rules/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
 export interface IocType {
   label: string

@@ -552,7 +552,11 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
             "ORDER BY ts DESC LIMIT 50", (ioc_id,)).fetchall())
         srcs = corroboration(conn, [ioc["value"]]).get(ioc["value"], [])
         scored = _score_of(ioc, srcs, reliability_grades(conn))
-    return {**ioc, "lifecycle": lifecycle_of(ioc), "sightingsHistory": sightings,
+        # The governing decay rule, so the drawer can name the policy behind
+        # "expires in 12 days" rather than presenting it as a law of nature.
+        from dashboard_api.decay import rule_for
+        rule = rule_for(conn, ioc.get("type"))
+    return {**ioc, "lifecycle": lifecycle_of(ioc, rule=rule), "sightingsHistory": sightings,
             # The drawer is where an analyst decides whether to act, so it gets
             # the full derivation rather than a bare number.
             "sources": srcs, "sourceCount": len(srcs) or 1,
@@ -821,6 +825,78 @@ def list_enrichers():
     """Available enrichers and whether each external provider is configured."""
     from dashboard_api.enrichment import provider_status
     return provider_status()
+
+
+class DecayRuleUpdate(BaseModel):
+    half_life_days: int | None = None
+    revoke_score: int | None = None
+    max_age_half_lives: int | None = None
+    reaction_points: list[int] | None = None
+    enabled: bool | None = None
+
+
+@router.get("/decay-rules")
+def list_decay_rules():
+    """The decay policy governing every indicator type.
+
+    How fast intel stops being actionable is a policy decision that differs per
+    deployment, so it is a record an operator can read and change rather than a
+    constant in the source."""
+    from dashboard_api.decay import rules
+    with get_conn() as conn:
+        return rules(conn)
+
+
+@router.patch("/decay-rules/{rule_id}")
+def update_decay_rule(rule_id: str, body: DecayRuleUpdate,
+                      user: dict = Depends(require_perm("cti.write"))):
+    """Tune one decay rule. Takes effect on the next maintenance pass.
+
+    Validated rather than trusted: a zero half-life would make every indicator
+    expire instantly, and a revoke score at or above 100 would expire everything
+    the moment it was imported. Both are easy to type and impossible to notice
+    until the store is empty.
+    """
+    from dashboard_api.decay import invalidate_cache
+    sets, params = [], []
+    if body.half_life_days is not None:
+        if not 1 <= body.half_life_days <= 3650:
+            raise HTTPException(status_code=400,
+                                detail="half_life_days must be between 1 and 3650")
+        sets.append("half_life_days=?"); params.append(body.half_life_days)
+    if body.revoke_score is not None:
+        if not 1 <= body.revoke_score <= 99:
+            raise HTTPException(
+                status_code=400,
+                detail="revoke_score must be between 1 and 99 - at 100 every "
+                       "indicator is revoked on import, at 0 none ever is")
+        sets.append("revoke_score=?"); params.append(body.revoke_score)
+    if body.max_age_half_lives is not None:
+        if not 1 <= body.max_age_half_lives <= 20:
+            raise HTTPException(status_code=400,
+                                detail="max_age_half_lives must be between 1 and 20")
+        sets.append("max_age_half_lives=?"); params.append(body.max_age_half_lives)
+    if body.reaction_points is not None:
+        pts = sorted({int(p) for p in body.reaction_points if 1 <= int(p) <= 99},
+                     reverse=True)
+        sets.append("reaction_points=?"); params.append(json.dumps(pts))
+    if body.enabled is not None:
+        sets.append("enabled=?"); params.append(1 if body.enabled else 0)
+    if not sets:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM decay_rules WHERE id=?", (rule_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Decay rule not found")
+        conn.execute(f"UPDATE decay_rules SET {', '.join(sets)} WHERE id=?",
+                     params + [rule_id])
+        audit(conn, user["email"], "cti.decay_rule", rule_id, ", ".join(sets))
+        conn.commit()
+        # The rule table is cached in-process for the hot decay path; a write that
+        # skipped this would keep serving the old policy until a restart.
+        invalidate_cache()
+        from dashboard_api.decay import rules
+        return next((r for r in rules(conn) if r["id"] == rule_id), None)
 
 
 @router.get("/iocs/{ioc_id}/related")

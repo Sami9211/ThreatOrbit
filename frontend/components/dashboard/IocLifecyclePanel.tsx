@@ -563,6 +563,41 @@ export default function IocLifecyclePanel() {
                         </div>
                       ))}
                     </div>
+                    {/* The POLICY behind those numbers, named. "Expires in 12
+                        days" is a fact an analyst cannot argue with; "under the
+                        14-day IP rule, revoked below 15" is one they can go and
+                        change in Settings → Feed Sources. */}
+                    {lc.rule && (
+                      <div className="pt-2 border-t border-white/6 space-y-1">
+                        <div className="flex items-baseline justify-between gap-2 text-[10px]">
+                          <span className="text-ink-500">Decay rule</span>
+                          <a href="/dashboard/config?tab=sources"
+                            className="text-ink-300 hover:text-violet transition-colors truncate text-right">
+                            {lc.rule.name}
+                          </a>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 text-[10px]">
+                          <span className="text-ink-500">Stops matching below</span>
+                          <span className="font-mono text-ink-300">{lc.revokeScore}</span>
+                        </div>
+                        {lc.validUntil && (
+                          <div className="flex items-baseline justify-between gap-2 text-[10px]">
+                            <span className="text-ink-500">Revoked on</span>
+                            <span className="font-mono text-ink-300">{lc.validUntil.slice(0, 10)}</span>
+                          </div>
+                        )}
+                        {lc.nextReaction && (
+                          <div className="flex items-baseline justify-between gap-2 text-[10px]">
+                            <span className="text-ink-500" title="Decay with no reaction points is invisible until the indicator silently vanishes">
+                              Next review at {lc.nextReaction.score}
+                            </span>
+                            <span className="font-mono text-ink-300">
+                              in {lc.nextReaction.inDays}d
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })()}
