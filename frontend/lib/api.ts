@@ -531,6 +531,14 @@ export interface StoreSummary {
   sources: Array<{ source: string; values: number }>
   expiringWithin7Days: number
   verdicts: Record<string, number>
+  /** Configured bulk feeds that have actually contributed a value, vs how many
+   *  are configured. A low corroboration share means very different things
+   *  depending on this ratio: feeds that genuinely do not overlap, or feeds
+   *  that never fetched. `sourcesTotal` counts everything asserting values,
+   *  including non-feed sources (OTX, TAXII, hand-entered). */
+  sourcesContributing: number
+  sourcesConfigured: number
+  sourcesTotal: number
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
 

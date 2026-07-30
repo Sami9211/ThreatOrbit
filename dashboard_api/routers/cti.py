@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
+from dashboard_api.connectors import bulk_feed_source_ids
 from dashboard_api.db import (audit, get_conn, host_of, ip_hex_of, row_to_dict,
                               rows_to_dicts)
 from dashboard_api.webhooks import dispatch
@@ -940,10 +941,10 @@ def store_summary(user: dict = Depends(current_user)):
                       for r in conn.execute(
                           "SELECT threat_type, COUNT(*) AS n FROM iocs "
                           "GROUP BY threat_type ORDER BY n DESC LIMIT 8").fetchall()]
-        sources = [{"source": r["source_id"], "values": r["n"]}
-                   for r in conn.execute(
-                       "SELECT source_id, COUNT(*) AS n FROM observable_sources "
-                       "GROUP BY source_id ORDER BY n DESC LIMIT 8").fetchall()]
+        sources_all = conn.execute(
+            "SELECT source_id, COUNT(*) AS n FROM observable_sources "
+            "GROUP BY source_id ORDER BY n DESC").fetchall()
+        sources = [{"source": r["source_id"], "values": r["n"]} for r in sources_all[:8]]
         now = datetime.now(timezone.utc)
         week = (now + timedelta(days=7)).replace(microsecond=0).isoformat()
         expiring = conn.execute(
@@ -954,6 +955,20 @@ def store_summary(user: dict = Depends(current_user)):
             "SELECT verdict, COUNT(*) AS n FROM ioc_verdicts WHERE org_id=? "
             "GROUP BY verdict", (tenancy.org_of(user),)).fetchall()}
         total = sum(bands.values())
+    # How many feeds are CONFIGURED versus how many have actually contributed a
+    # value. A low corroboration share means very different things depending on
+    # this ratio: feeds that genuinely do not overlap, or feeds that never
+    # fetched. Leaving the reader to deduce which is how a number gets misread -
+    # it happened here, on a development environment whose egress policy could
+    # reach 9 of the 16.
+    #
+    # Counted against the configured feed list rather than "distinct source_ids
+    # seen", because the store also carries sources that are not bulk feeds at
+    # all (OTX, NVD, TAXII, hand-entered indicators). Those belong in `sources`
+    # but not in a feed-coverage ratio, where they would inflate the numerator
+    # past the denominator and read as full coverage.
+    feed_ids = bulk_feed_source_ids()
+    contributing = sum(1 for r in sources_all if r["source_id"] in feed_ids)
     return {
         "total": total,
         "bands": {k: bands.get(k, 0) for k in ("high", "moderate", "low", "weak")},
@@ -966,6 +981,11 @@ def store_summary(user: dict = Depends(current_user)):
         "sources": sources,
         "expiringWithin7Days": expiring,
         "verdicts": verdicts,
+        "sourcesContributing": contributing,
+        "sourcesConfigured": len(feed_ids),
+        # Everything asserting values, feeds or otherwise - so a store fed
+        # entirely by OTX does not look empty next to "0 of 16 feeds".
+        "sourcesTotal": len(sources_all),
     }
 
 

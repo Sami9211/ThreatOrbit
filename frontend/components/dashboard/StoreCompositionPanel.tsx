@@ -109,6 +109,24 @@ export default function StoreCompositionPanel() {
               and a low number here means the feeds largely do not overlap, not
               that the intel is wrong.
             </p>
+            {/* Without this, a low share is ambiguous between "the feeds do not
+                overlap" and "most feeds never fetched". Leaving the reader to
+                deduce which is how a number gets misread. */}
+            {s.sourcesConfigured > 0 && (
+              <p className="text-[10px] mt-1.5"
+                style={{ color: s.sourcesContributing < s.sourcesConfigured ? tk('amber') : tk('safe') }}>
+                {s.sourcesContributing} of {s.sourcesConfigured} configured feeds have
+                contributed
+                {s.sourcesTotal > s.sourcesContributing &&
+                  ` (${s.sourcesTotal} sources in all, counting non-feed intel)`}.
+                {s.sourcesContributing < s.sourcesConfigured && (
+                  <span className="text-ink-600">
+                    {' '}The rest have not fetched — check Sources for errors, since
+                    missing feeds depress this figure independently of real overlap.
+                  </span>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">

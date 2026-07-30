@@ -1389,6 +1389,22 @@ _BULK_FEEDS = [
      "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level2.netset",
      "netset", "ip", 70, "attack-source"),
 ]
+
+
+def _bulk_source_id(name: str) -> str:
+    """The `source` (and so `observable_sources.source_id`) a bulk feed writes.
+
+    One function so that "which feeds have actually contributed?" is answered
+    against the same string the importer wrote, rather than against a prefix a
+    caller guessed and that silently stops matching if this changes."""
+    return f"osint:{name}"
+
+
+def bulk_feed_source_ids() -> set[str]:
+    """Every configured bulk feed's source_id, for coverage questions."""
+    return {_bulk_source_id(f[0]) for f in _BULK_FEEDS}
+
+
 # Deliberately NOT included: the undifferentiated multi-million-entry hosts
 # aggregations (e.g. Blocklist Project's `malware`/`abuse` lists). They exceed
 # the per-feed cap several times over, so we would import whatever happens to
@@ -1464,7 +1480,7 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
                 "type": t, "value": value,
                 "threat_type": f"{threat}{f' ({note})' if note else ''}",
                 "confidence": conf, "actor": note or "",
-                "source": f"osint:{name}",
+                "source": _bulk_source_id(name),
                 "tags": ["osint", "public-feed"],
             })
         return rows

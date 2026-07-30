@@ -198,3 +198,61 @@ def test_store_summary_share_is_consistent_with_its_own_counts(client, auth):
     if known and s["total"]:
         expected = round(100 * (corr["2"] + corr["3+"]) / s["total"], 1)
         assert abs(s["corroboratedShare"] - expected) < 0.05
+
+
+def test_feed_coverage_is_counted_against_the_configured_feeds(client, auth):
+    """A low corroboration share means one of two very different things: feeds
+    that genuinely do not overlap, or feeds that never fetched. Only the
+    coverage ratio separates them - so it has to be measured against the
+    CONFIGURED feed list, not against "distinct things that asserted a value".
+    A store also carries OTX, TAXII and hand-entered sources; counting those
+    pushes the numerator past the denominator and reads as full coverage on a
+    store where most feeds are dead.
+    """
+    from dashboard_api.connectors import bulk_feed_source_ids
+    from dashboard_api.db import get_conn
+
+    feeds = sorted(bulk_feed_source_ids())
+    now = datetime.now(timezone.utc).isoformat()
+    # Every configured feed asserts one value, plus one source that is not a
+    # feed at all. Full feed coverage, one extra source.
+    marks = [(f"coverage-{i}.test", sid) for i, sid in enumerate(feeds)]
+    marks.append(("coverage-hand-entered.test", "analyst:desk-note"))
+    with get_conn() as conn:
+        conn.executemany(
+            "INSERT INTO observable_sources (value,source_id,first_seen,last_seen,"
+            "raw_label,confidence) VALUES (?,?,?,?,'',50) "
+            "ON CONFLICT(value,source_id) DO NOTHING",
+            [(v, sid, now, now) for v, sid in marks])
+        conn.commit()
+    try:
+        s = client.get("/cti/store-summary", headers=auth).json()
+        assert s["sourcesConfigured"] == len(feeds)
+        assert s["sourcesContributing"] == len(feeds), (
+            f"every configured feed asserted a value, so coverage must read "
+            f"full, not {s['sourcesContributing']}/{s['sourcesConfigured']}")
+        assert s["sourcesTotal"] > s["sourcesContributing"], (
+            "a hand-entered source belongs in the source list but not in a "
+            "feed-coverage ratio")
+    finally:
+        with get_conn() as conn:
+            conn.executemany(
+                "DELETE FROM observable_sources WHERE value=? AND source_id=?",
+                [(v, sid) for v, sid in marks])
+            conn.commit()
+
+
+def test_the_feed_coverage_denominator_matches_what_the_importer_writes(client, auth):
+    """The ratio is only meaningful if the source_id it looks for is the one the
+    importer actually stored. These are built in two different places at two
+    different times, so a changed prefix would silently read as "0 of 16 feeds
+    have contributed" on a perfectly healthy store."""
+    from dashboard_api.connectors import _BULK_FEEDS, _fetch_bulk_osint, bulk_feed_source_ids
+    import inspect
+
+    ids = bulk_feed_source_ids()
+    assert len(ids) == len(_BULK_FEEDS), "two feeds share a source_id"
+    src = inspect.getsource(_fetch_bulk_osint)
+    assert '"source": _bulk_source_id(name)' in src, (
+        "the importer must build its source through the same helper the "
+        "coverage ratio reads, or the two drift apart unnoticed")
