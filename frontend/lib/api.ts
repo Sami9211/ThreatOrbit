@@ -404,12 +404,38 @@ export interface IocLifecycle {
   /** The next score worth reporting on the way down, and when it is reached. */
   nextReaction?: { score: number; inDays: number } | null
 }
+/** An analyst conclusion recorded against an indicator. Evidence, not an
+ *  override: it carries an author and a reason, accumulates as history, and moves
+ *  the intel score rather than switching matching off (that is `known-good`). */
+export interface IocVerdict {
+  id: string
+  verdict: 'confirmed' | 'false-positive' | 'benign-here'
+  reason: string | null
+  analyst: string
+  ts: string
+}
+export interface VerdictSummary {
+  counts: Record<string, number>
+  /** Net score movement from every conclusion, clamped. */
+  shift: number
+  latest: { verdict: string; analyst: string; reason: string | null; ts: string } | null
+  total: number
+}
+export const recordIocVerdict = (id: string, verdict: string, reason?: string) =>
+  api<{
+    verdict: IocVerdict; summary: VerdictSummary
+    intelScore: number; scoreBand: ScoreBand; scoreComponents: ScoreComponent[]
+  }>(`/cti/iocs/${id}/verdict`, { method: 'POST', body: JSON.stringify({ verdict, reason }) })
+
 export interface IocDetail extends Ioc {
   lifecycle: IocLifecycle
   sightingsHistory: Array<{ id: string; ts: string; source: string | null; context: string | null }>
   /** Why the score is what it is. Present on the detail endpoint only. */
   scoreComponents?: ScoreComponent[]
   reliability?: string
+  /** Your team's own conclusions about this value, newest first. */
+  verdicts?: IocVerdict[]
+  verdictSummary?: VerdictSummary
 }
 
 /** One pivot group: what else the store holds that is part of the same thing.

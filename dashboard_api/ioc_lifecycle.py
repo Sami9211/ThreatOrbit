@@ -157,6 +157,12 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
         "GROUP BY o.value", (DEFAULT_RELIABILITY,)).fetchall()}
     grades = {r["id"]: r["reliability"] for r in conn.execute(
         "SELECT id, reliability FROM intel_sources").fetchall()}
+    # Analyst conclusions, read once for the whole pass. This is the line that
+    # makes "a verdict reached on Tuesday affects Wednesday's scoring" true rather
+    # than aspirational - before it, nothing an analyst concluded ever reached the
+    # store's own ranking.
+    from dashboard_api import verdicts as verdict_mod
+    shifts = verdict_mod.all_shifts(conn)
 
     # Decay rules resolved ONCE per indicator type, not per row. There are a
     # handful of types and 315k rows; the ratio is the whole reason this is a
@@ -199,7 +205,8 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
             best = own
         fresh = score_indicator(
             row, source_count=n, reliability=best or DEFAULT_RELIABILITY,
-            local_sightings=max(0, (r["sightings"] or 1) - 1), now=now)["score"]
+            local_sightings=max(0, (r["sightings"] or 1) - 1),
+            verdict_shift=shifts.get(r["value"], 0), now=now)["score"]
         if fresh != (r["intel_score"] or 0):
             score_updates.append((fresh, r["id"]))
             rescored += 1

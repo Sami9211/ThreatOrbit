@@ -109,6 +109,8 @@
     "/cti/iocs/{ioc_id}/known-good",
     "/cti/iocs/{ioc_id}/related",
     "/cti/iocs/{ioc_id}/sighting",
+    "/cti/iocs/{ioc_id}/verdict",
+    "/cti/iocs/{ioc_id}/verdicts",
     "/cti/lookup",
     "/cti/lookup/bulk",
     "/cti/misp/export",

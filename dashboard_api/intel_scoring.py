@@ -80,12 +80,16 @@ def _sighting_bonus(sightings: int) -> int:
 
 def score_indicator(ioc: dict, *, source_count: int = 1,
                     reliability: str = DEFAULT_RELIABILITY,
-                    local_sightings: int = 0, now=None) -> dict:
+                    local_sightings: int = 0, verdict_shift: int = 0,
+                    verdict_note: str = "", now=None) -> dict:
     """Score one indicator 0-100, with the reasoning that produced it.
 
     `ioc` is a row from the IOC store. `source_count` is how many independent
     sources assert the value (see observable_sources), `local_sightings` how
-    many times it has been seen in this deployment's own telemetry.
+    many times it has been seen in this deployment's own telemetry, and
+    `verdict_shift` the net movement from analyst conclusions recorded against it
+    (see verdicts.py) - the term that lets a conclusion reached on Tuesday change
+    Wednesday's ranking.
     """
     grade = (reliability or DEFAULT_RELIABILITY).upper()[:1]
     weight = RELIABILITY_WEIGHT.get(grade, RELIABILITY_WEIGHT[DEFAULT_RELIABILITY])
@@ -98,7 +102,7 @@ def score_indicator(ioc: dict, *, source_count: int = 1,
     sighting = _sighting_bonus(local_sightings)
     attribution = ATTRIBUTION_BONUS if (ioc.get("report_id") or ioc.get("actor")) else 0
 
-    raw = base + corroboration + sighting + attribution
+    raw = base + corroboration + sighting + attribution + verdict_shift
     total = max(0, min(100, raw))
 
     components = [{
@@ -125,14 +129,27 @@ def score_indicator(ioc: dict, *, source_count: int = 1,
             "delta": attribution,
             "why": f"arrived with {'a report' if ioc.get('report_id') else 'an actor'} attached",
         })
-
-    if raw > total:
-        # Without this the parts do not add up to the whole, and an explanation
-        # that does not reconcile is worse than none - it looks like a bug.
+    if verdict_shift:
+        # Named as an analyst conclusion rather than folded into the base, so a
+        # score that dropped 35 points overnight is explainable to the analyst
+        # who comes to it next - and traceable to the colleague who decided it.
         components.append({
-            "label": "Capped",
+            "label": "Analyst conclusion",
+            "delta": verdict_shift,
+            "why": verdict_note or ("your team's own conclusions about this value "
+                                    "in this environment"),
+        })
+
+    if raw != total:
+        # Without this the parts do not add up to the whole, and an explanation
+        # that does not reconcile is worse than none - it looks like a bug. Now
+        # that a negative analyst verdict can drive the total below zero, the
+        # reason has to name the end of the scale that was actually hit.
+        components.append({
+            "label": "Capped" if raw > total else "Floored",
             "delta": total - raw,
-            "why": f"the parts total {raw}; the scale stops at 100",
+            "why": f"the parts total {raw}; the scale "
+                   f"{'stops at 100' if raw > total else 'starts at 0'}",
         })
 
     return {

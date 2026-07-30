@@ -6,14 +6,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Fingerprint, X, ShieldCheck, ShieldOff, Eye, Clock,
   TrendingDown, RefreshCw, Loader2, Share2, Sparkles, Gauge, Search, BookOpen,
-  Send, FolderPlus, ArrowUpRight, Network,
+  Send, FolderPlus, ArrowUpRight, Network, ShieldAlert,
 } from 'lucide-react'
 import { cn, isSimulatedSource } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
   fetchStixBundle, enrichIoc, fetchIocFpAssessment, createAlert, createCase,
-  fetchIocRelated,
+  fetchIocRelated, recordIocVerdict,
   type Ioc, type IocDetail, type EnrichmentResult, type FpAssessment, type RelatedGroup,
 } from '@/lib/api'
 
@@ -117,6 +117,24 @@ const SORTS: Array<{ key: string; label: string; hint: string }> = [
   { key: 'confidence', label: 'Confidence', hint: "The originating feed's own claim, unweighted" },
 ]
 
+/** What an analyst can conclude. Deliberately three options: a vocabulary an
+ *  analyst has to think about is one they will use inconsistently.
+ *  `benign-here` is separate from `false-positive` because the indicator may be
+ *  perfectly real and simply expected in this network - collapsing them would
+ *  lose the distinction and over-suppress genuine intel. */
+const VERDICT_CHOICES = [
+  { key: 'confirmed', label: 'Confirmed', color: tk('magenta'), icon: ShieldAlert,
+    hint: 'Really is malicious here — raises the score for everyone in this workspace' },
+  { key: 'false-positive', label: 'False positive', color: tk('safe'), icon: ShieldCheck,
+    hint: 'Not malicious at all — the feed is wrong. Lowers the score most.' },
+  { key: 'benign-here', label: 'Expected here', color: tk('teal'), icon: ShieldOff,
+    hint: 'Real elsewhere, but normal traffic in this network. Lowers the score less.' },
+] as const
+
+const VERDICT_COLOR_BY_KEY: Record<string, string> = {
+  confirmed: tk('magenta'), 'false-positive': tk('safe'), 'benign-here': tk('teal'),
+}
+
 /** Where "See all N" goes, or null when the list cannot actually serve it.
  *
  *  Only the pivots the IOC list has a real filter for get a link. `report` and
@@ -170,6 +188,7 @@ export default function IocLifecyclePanel() {
   const [actionMsg, setActionMsg] = useState<{ text: string; href: string; label: string } | null>(null)
   const [related, setRelated] = useState<{ groups: RelatedGroup[]; total: number } | null>(null)
   const [relating, setRelating] = useState(false)
+  const [verdicting, setVerdicting] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -250,6 +269,22 @@ export default function IocLifecyclePanel() {
     addIocSighting(detail.id, 'analyst', 'Confirmed from CTI console')
       .then((d) => { setDetail(d); load() }).catch(() => {}).finally(() => setBusy(false))
   }
+  function submitVerdict(verdict: string) {
+    if (!detail || verdicting) return
+    // Optional, because forcing a reason on every click is how a required field
+    // becomes a field full of "." - but it is asked for, because the reason is
+    // what makes the conclusion useful to the next analyst.
+    const reason = window.prompt(
+      `Why is this "${verdict}"? (optional, but the next analyst will thank you)`) ?? undefined
+    setVerdicting(verdict)
+    recordIocVerdict(detail.id, verdict, reason || undefined)
+      .then(() => { refreshDetail(detail.id) })
+      .catch(() => setActionMsg({
+        text: 'Could not record the verdict (needs cti.write).', href: '', label: '',
+      }))
+      .finally(() => setVerdicting(null))
+  }
+
   function toggleKnownGood() {
     if (!detail || busy) return
     setBusy(true)
@@ -640,6 +675,57 @@ export default function IocLifecyclePanel() {
                   </div>
                 )
               })()}
+
+              {/* Analyst conclusions. Until this existed, nothing an analyst
+                  concluded ever reached the intel store: twenty minutes spent
+                  establishing a false positive was written into a case note and
+                  the store scored the value the same way next week, for the next
+                  analyst, who spent the same twenty minutes. */}
+              <div className="rounded-xl border border-white/8 bg-surface-2/50 p-4 space-y-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] text-ink-500 uppercase tracking-wider">
+                    Your team&apos;s verdict
+                  </span>
+                  {detail.verdictSummary && detail.verdictSummary.shift !== 0 && (
+                    <span className="text-[10px] font-mono"
+                      style={{ color: detail.verdictSummary.shift < 0 ? tk('safe') : tk('magenta') }}>
+                      {detail.verdictSummary.shift > 0 ? '+' : ''}{detail.verdictSummary.shift} to score
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-ink-600 leading-snug">
+                  Recorded as evidence for this workspace only, and it moves the
+                  score — unlike known-good, which stops the indicator matching
+                  altogether.
+                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {VERDICT_CHOICES.map((v) => (
+                    <button key={v.key} onClick={() => submitVerdict(v.key)}
+                      disabled={verdicting !== null}
+                      title={v.hint}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors disabled:opacity-50"
+                      style={{ color: v.color, borderColor: `${v.color}40`, background: `${v.color}12` }}>
+                      {verdicting === v.key
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <v.icon className="w-3 h-3" />}
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+                {(detail.verdicts?.length ?? 0) > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-white/6">
+                    {detail.verdicts!.slice(0, 4).map((v) => (
+                      <div key={v.id} className="text-[10px]">
+                        <span style={{ color: VERDICT_COLOR_BY_KEY[v.verdict] ?? tk('violet') }}>
+                          {v.verdict}
+                        </span>
+                        <span className="text-ink-600"> · {v.analyst} · {relTime(v.ts)}</span>
+                        {v.reason && <div className="text-ink-500 leading-snug">{v.reason}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-wrap">

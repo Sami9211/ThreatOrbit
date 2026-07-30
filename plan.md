@@ -1272,6 +1272,17 @@ a search.
 **Done when:** two analysts can work the same queue without stepping on each
 other, and a conclusion reached on Tuesday affects Wednesday's scoring.
 
+**Status (2026-07-30): the verdict feedback loop is DONE** - the second half of
+the done-criterion. `ioc_verdicts` + `verdicts.py` record analyst conclusions
+(`confirmed` / `false-positive` / `benign-here`) as EVIDENCE: per tenant, with an
+author, a reason and full history, feeding a weighted term into the intel score
+and rescored both immediately and on every maintenance pass. A test states the
+criterion literally: record a verdict, run the decay pass, assert the score moved.
+
+Still open in this phase: tiered queues and escalation with per-tier SLA,
+investigation-as-artefact (timeline of pivots and conclusions), narrative
+reporting. Scheduled hunts already exist.
+
 ---
 
 ### Phase 7 · Dashboards
@@ -1746,6 +1757,44 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · The platform finally learns: analyst verdicts feed back into the
+  score.** Nothing an analyst concluded ever reached the intel store. An L1 could
+  spend twenty minutes establishing that an indicator is a false positive in this
+  environment, write it into a case note, and the store would score it exactly the
+  same way the following week - for the next analyst, who would spend the same
+  twenty minutes. That is the whole reason Phase 6's done-criterion is phrased as
+  "a conclusion reached on Tuesday affects Wednesday's scoring".
+
+  `ioc_verdicts` + `verdicts.py` record `confirmed` / `false-positive` /
+  `benign-here` as **evidence, not an override** - which is the distinction from
+  `known-good`, a hard global whitelist that switches matching off:
+
+  * **Per tenant.** One customer concluding "false positive in our environment"
+    must never silently suppress another customer's intel. Tested both ways.
+  * **Appended, never replaced.** An indicator called a false positive in March
+    and confirmed in July has a story, and overwriting the first conclusion would
+    hide it. Opposing verdicts partly cancel rather than the loudest winning.
+  * **Weighted above any single feed** (asserted in a test against
+    `CORROBORATION_FIRST`), on the same principle as local sightings: our own
+    analysts looking at our own environment beat a list's claim about the internet
+    in general. Capped, because ten analysts agreeing is not ten times the
+    evidence of one and an uncapped term would drive every score to the floor.
+  * **`benign-here` is deliberately milder than `false-positive`.** The indicator
+    may be perfectly real and simply expected traffic here; collapsing the two
+    would over-suppress genuine intel.
+
+  Rescored immediately on submission AND on every maintenance pass - an analyst
+  who has just concluded something needs the queue to reflect it, or they will
+  reasonably assume the button did nothing. The score breakdown names the
+  conclusion and its author, so a score that dropped 35 points overnight is
+  explainable to whoever picks it up next rather than looking like a bug.
+
+  One knock-on the new term exposed: the clamp component said "the parts total N;
+  the scale stops at 100" unconditionally, which is the wrong end of the scale now
+  that a negative verdict can drive a total below zero. It reports "Floored ·
+  starts at 0" in that direction, and a test asserts the components still
+  reconcile to the score at both ends.
 
 - **2026-07-30 · Operator controls: a way back when a cached validator is wrong.**
   Conditional GET is what makes a short sync cadence cheap - an unchanged feed

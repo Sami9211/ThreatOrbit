@@ -476,6 +476,27 @@ CREATE TABLE IF NOT EXISTS asn_ranges (
     description TEXT
 );
 
+-- Analyst conclusions, fed back into the intel store so the platform LEARNS.
+--
+-- Distinct from `iocs.status = 'known-good'`, which is a hard global whitelist
+-- that switches matching off. A verdict is EVIDENCE: it carries a reason, an
+-- author, a timestamp and a tenant, it accumulates as history, and it moves the
+-- intel score rather than overriding it. Two analysts disagreeing is a real
+-- state that the store should be able to represent.
+--
+-- Scoped per org on purpose: one tenant concluding "false positive in our
+-- environment" must never silently suppress another tenant's intel.
+CREATE TABLE IF NOT EXISTS ioc_verdicts (
+    id         TEXT PRIMARY KEY,
+    ioc_value  TEXT NOT NULL,          -- the VALUE, not the row id: verdicts
+                                       -- outlive re-imports of the same value
+    org_id     TEXT NOT NULL DEFAULT 'org-default',
+    verdict    TEXT NOT NULL,          -- confirmed | false-positive | benign-here
+    reason     TEXT,
+    analyst    TEXT NOT NULL,
+    ts         TEXT NOT NULL
+);
+
 -- First-party passive DNS: resolutions THIS deployment has actually observed.
 -- Every other enrichment is somebody else's opinion; this is a fact observed
 -- here, and no public CTI library can hold it for a given customer's
@@ -889,6 +910,8 @@ CREATE INDEX IF NOT EXISTS idx_iocs_reg_domain ON iocs(reg_domain);
 CREATE INDEX IF NOT EXISTS idx_iocs_valid_until ON iocs(valid_until);
 -- The passive-DNS pivot: every name observed resolving to one address. The
 -- (name,address) primary key already serves the forward direction.
+-- The scoring path reads verdicts per value, per tenant, on every rescore.
+CREATE INDEX IF NOT EXISTS idx_verdicts_value ON ioc_verdicts(ioc_value, org_id);
 CREATE INDEX IF NOT EXISTS idx_dns_address ON dns_observations(address);
 CREATE INDEX IF NOT EXISTS idx_dns_addr_hex ON dns_observations(addr_hex);
 -- Only the reverse direction needs its own index. Corroboration looks up

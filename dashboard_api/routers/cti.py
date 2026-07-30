@@ -374,7 +374,8 @@ def reliability_grades(conn) -> dict[str, str]:
             for r in conn.execute("SELECT id, reliability FROM intel_sources").fetchall()}
 
 
-def _score_of(row, sources: list[str], grades: dict[str, str]) -> dict:
+def _score_of(row, sources: list[str], grades: dict[str, str],
+              verdict_shift: int = 0, verdict_note: str = "") -> dict:
     """Score one matched indicator, using the BEST-graded source that asserts it.
 
     Taking the best rather than the row's own `source` matters: whichever feed
@@ -393,7 +394,8 @@ def _score_of(row, sources: list[str], grades: dict[str, str]) -> dict:
     best = min(candidates, default=DEFAULT_RELIABILITY)
     return score_indicator(
         ioc, source_count=max(1, len(sources)), reliability=best,
-        local_sightings=max(0, (ioc.get("sightings") or 1) - 1))
+        local_sightings=max(0, (ioc.get("sightings") or 1) - 1),
+        verdict_shift=verdict_shift, verdict_note=verdict_note)
 
 
 def _lookup_payload(v: str, row) -> dict:
@@ -551,7 +553,15 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
             "SELECT id, ts, source, context FROM ioc_sightings WHERE ioc_id=? "
             "ORDER BY ts DESC LIMIT 50", (ioc_id,)).fetchall())
         srcs = corroboration(conn, [ioc["value"]]).get(ioc["value"], [])
-        scored = _score_of(ioc, srcs, reliability_grades(conn))
+        from dashboard_api import verdicts as verdict_mod
+        vsum = verdict_mod.summary(conn, ioc["value"], tenancy.org_of(user))
+        note = ""
+        if vsum["latest"]:
+            note = (f"{vsum['total']} conclusion(s) from your team; most recently "
+                    f"\"{vsum['latest']['verdict']}\" by {vsum['latest']['analyst']}")
+        scored = _score_of(ioc, srcs, reliability_grades(conn),
+                           verdict_shift=vsum["shift"], verdict_note=note)
+        vhistory = verdict_mod.history(conn, ioc["value"], tenancy.org_of(user))
         # The governing decay rule, so the drawer can name the policy behind
         # "expires in 12 days" rather than presenting it as a law of nature.
         from dashboard_api.decay import rule_for
@@ -561,7 +571,8 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
             # the full derivation rather than a bare number.
             "sources": srcs, "sourceCount": len(srcs) or 1,
             "intelScore": scored["score"], "scoreBand": scored["band"],
-            "scoreComponents": scored["components"], "reliability": scored["reliability"]}
+            "scoreComponents": scored["components"], "reliability": scored["reliability"],
+            "verdicts": vhistory, "verdictSummary": vsum}
 
 
 @router.get("/iocs/{ioc_id}/fp-assessment")
@@ -825,6 +836,68 @@ def list_enrichers():
     """Available enrichers and whether each external provider is configured."""
     from dashboard_api.enrichment import provider_status
     return provider_status()
+
+
+class VerdictBody(BaseModel):
+    verdict: str
+    reason: str | None = None
+
+
+@router.post("/iocs/{ioc_id}/verdict", status_code=201)
+def record_verdict(ioc_id: str, body: VerdictBody,
+                   user: dict = Depends(require_perm("cti.write"))):
+    """Record an analyst conclusion, and feed it back into the score.
+
+    Until this existed, nothing an analyst concluded ever reached the intel store:
+    an L1 could spend twenty minutes establishing that an indicator is a false
+    positive here, write it in a case note, and the store would score it the same
+    way again next week for the next analyst.
+
+    Appends rather than replaces - the history is the point, and two analysts
+    disagreeing is a real state. Scoped to the caller's workspace, because one
+    tenant's "false positive in our environment" must never suppress another's.
+    """
+    from dashboard_api import verdicts as verdict_mod
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        ioc = row_to_dict(row)
+        try:
+            rec = verdict_mod.record(
+                conn, value=ioc["value"], verdict=body.verdict,
+                analyst=user["email"], reason=body.reason,
+                org_id=tenancy.org_of(user))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        summary = verdict_mod.summary(conn, ioc["value"], tenancy.org_of(user))
+        # Rescored immediately, not at the next maintenance pass: an analyst who
+        # has just concluded something needs to see the queue reflect it, or they
+        # will reasonably assume the button did nothing.
+        srcs = corroboration(conn, [ioc["value"]]).get(ioc["value"], [])
+        scored = _score_of(ioc, srcs, reliability_grades(conn),
+                           verdict_shift=summary["shift"])
+        conn.execute("UPDATE iocs SET intel_score=? WHERE id=?",
+                     (scored["score"], ioc_id))
+        audit(conn, user["email"], "ioc.verdict", ioc_id,
+              f"{rec['verdict']} (score {ioc.get('intel_score') or 0} -> {scored['score']})")
+        conn.commit()
+    return {"verdict": rec, "summary": summary, "intelScore": scored["score"],
+            "scoreBand": scored["band"], "scoreComponents": scored["components"]}
+
+
+@router.get("/iocs/{ioc_id}/verdicts")
+def list_verdicts(ioc_id: str, user: dict = Depends(current_user)):
+    """Every conclusion this workspace has recorded for the indicator."""
+    from dashboard_api import verdicts as verdict_mod
+    with get_conn() as conn:
+        row = conn.execute("SELECT value, org_id FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="IOC not found")
+        org = tenancy.org_of(user)
+        return {"history": verdict_mod.history(conn, row["value"], org),
+                "summary": verdict_mod.summary(conn, row["value"], org),
+                "options": list(verdict_mod.VERDICTS)}
 
 
 class DecayRuleUpdate(BaseModel):
