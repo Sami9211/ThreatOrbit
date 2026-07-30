@@ -1795,12 +1795,35 @@ _Move completed items here with the date so the roadmap stays honest._
   page-load summary rather than something to poll.
 
   It immediately earned its place by making the store's real weakness legible:
-  **132 of 315,185 values - 0.0% - are asserted by more than one independent
+  **132 of 315,185 values - 0.0% - were asserted by more than one independent
   feed.** The panel shows that as a share AND a raw count precisely so a near-zero
   percentage reads as the finding it is rather than as a broken widget, and says
   plainly that a low number means the feeds do not overlap rather than that the
-  intel is wrong. This is the number the corroboration work exists to move, and
-  it is the honest starting point.
+  intel is wrong.
+
+  **CORRECTION, same day, measured rather than assumed.** That 0.0% was largely an
+  ARTEFACT, not the truth about the feeds. Corroboration is recorded at write
+  time by comparing what each feed asserts; every one of those 315,185 rows
+  predated that code, and `_backfill_source_assertions` can only record each row's
+  OWN source - it cannot reconstruct a comparison that never happened. So the
+  panel was reporting history, not overlap.
+
+  Verified by doing it for real rather than reasoning about it: `reset-state` on
+  the OSINT connector (the control added earlier the same day) forced a full
+  re-fetch, and the feeds were compared at write time as designed.
+
+  | | before | after a real re-fetch |
+  |---|---|---|
+  | indicators | 315,185 | 327,981 |
+  | source assertions | 315,317 | 334,099 |
+  | values with 2+ sources | **132** | **6,117** |
+  | corroborated share | 0.04% | **1.87%** |
+
+  A 46x improvement, and one value (`209.141.43.146`) is now asserted by three
+  independent feeds. The engine works; it had simply never been given a chance to
+  compare anything. The honest reading of 1.87% is still that these five OSINT
+  feeds mostly do not overlap - which is useful to know and an argument for adding
+  feeds that do - but it is a real measurement rather than a leftover.
 
 - **2026-07-30 · One shared hover card: what an indicator IS, without navigating
   away.** The useful version of the affordance the owner asked for, not the
