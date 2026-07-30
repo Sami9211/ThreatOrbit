@@ -127,7 +127,16 @@ def list_iocs(type: str | None = None, severity: str | None = None,
     # id tie-breaker for a total order - same rationale as the alerts list:
     # tied sort keys (bulk imports share a last_seen second) otherwise come
     # back in arbitrary backend-dependent order, breaking offset pagination.
-    order_sql = f"{_IOC_SORTS[sort]} {order.upper()}, id {order.upper()}"
+    #
+    # Sorting by score needs a MEANINGFUL second key before that one. A store of
+    # single-source blocklist entries has little to differentiate it - measured
+    # here, 108,393 of 327,981 indicators share a five-point band - and breaking
+    # those ties on a random UUID makes "page one, sorted by relevance" a random
+    # sample of the tie. Recency is the one axis that still carries information
+    # once the score has said all it can, so it goes first and `id` stays only
+    # as the stable total order pagination needs.
+    tie = "last_seen DESC, " if sort == "score" else ""
+    order_sql = f"{_IOC_SORTS[sort]} {order.upper()}, {tie}id {order.upper()}"
     with get_conn() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM iocs {where}", params).fetchone()[0]
         rows = conn.execute(
@@ -907,6 +916,90 @@ class DecayRuleUpdate(BaseModel):
     max_age_half_lives: int | None = None
     reaction_points: list[int] | None = None
     enabled: bool | None = None
+
+
+class SourceGradeUpdate(BaseModel):
+    reliability: str
+    reason: str | None = None
+
+
+@router.get("/sources")
+def list_intel_sources(user: dict = Depends(current_user)):
+    """Every source that has asserted a value, with its Admiralty grade.
+
+    The grade is a MULTIPLIER on every score that source contributes, which
+    makes it the single most consequential number an operator can set - and it
+    was previously invisible, unchangeable, and identical for every feed. A
+    weighting nobody can inspect is one an analyst is right to distrust.
+
+    `values` is counted live from the assertion ledger rather than read from
+    `intel_sources.value_count`, which nothing maintains.
+    """
+    from dashboard_api.intel_scoring import RELIABILITY_WEIGHT
+    with get_conn() as conn:
+        counts = {r["source_id"]: r["n"] for r in conn.execute(
+            "SELECT source_id, COUNT(*) AS n FROM observable_sources "
+            "GROUP BY source_id").fetchall()}
+        rows = conn.execute(
+            "SELECT id, name, kind, reliability, reliability_reason, "
+            "reliability_set_by, first_seen, last_seen FROM intel_sources").fetchall()
+    out = [{
+        "id": r["id"], "name": r["name"], "kind": r["kind"],
+        "reliability": r["reliability"],
+        # What the grade actually does to a score, so the choice is not abstract.
+        "weight": RELIABILITY_WEIGHT.get((r["reliability"] or "C").upper()[:1], 0.82),
+        "reason": r["reliability_reason"],
+        # Whose judgement is in force. An operator's own grading is never
+        # overwritten by a shipped default, so this is load-bearing, not cosmetic.
+        "gradedBy": r["reliability_set_by"] or "shipped default",
+        "isDefault": not r["reliability_set_by"],
+        "firstSeen": r["first_seen"], "lastSeen": r["last_seen"],
+        "values": counts.get(r["id"], 0),
+    } for r in rows]
+    out.sort(key=lambda s: -s["values"])
+    return {"items": out, "scale": [
+        {"grade": g, "weight": w, "label": lbl} for g, w, lbl in [
+            ("A", RELIABILITY_WEIGHT["A"], "completely reliable"),
+            ("B", RELIABILITY_WEIGHT["B"], "usually reliable"),
+            ("C", RELIABILITY_WEIGHT["C"], "fairly reliable"),
+            ("D", RELIABILITY_WEIGHT["D"], "not usually reliable"),
+            ("E", RELIABILITY_WEIGHT["E"], "unreliable"),
+            ("F", RELIABILITY_WEIGHT["F"], "cannot be judged"),
+        ]]}
+
+
+@router.patch("/sources/{source_id:path}")
+def grade_intel_source(source_id: str, body: SourceGradeUpdate,
+                       user: dict = Depends(require_perm("cti.write"))):
+    """Re-grade a source. Takes effect on the next maintenance pass.
+
+    Recording WHO graded it is not bookkeeping: it is what stops a later upgrade
+    from overwriting the operator's judgement with a revised shipped default.
+    Ours is a starting assessment; theirs is knowledge of their own environment
+    and of which feeds have burned them.
+    """
+    from dashboard_api.intel_scoring import RELIABILITY_WEIGHT
+    grade = (body.reliability or "").strip().upper()[:1]
+    if grade not in RELIABILITY_WEIGHT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"reliability must be one of {sorted(RELIABILITY_WEIGHT)} "
+                   f"(Admiralty: A completely reliable .. F cannot be judged)")
+    with get_conn() as conn:
+        if not conn.execute("SELECT 1 FROM intel_sources WHERE id=?", (source_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Source not found")
+        conn.execute(
+            "UPDATE intel_sources SET reliability=?, reliability_reason=?, "
+            "reliability_set_by=? WHERE id=?",
+            (grade, (body.reason or "").strip()[:500] or None, user["email"], source_id))
+        audit(conn, user["email"], "cti.source_grade", source_id, f"reliability={grade}")
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, name, reliability, reliability_reason, reliability_set_by "
+            "FROM intel_sources WHERE id=?", (source_id,)).fetchone()
+    return {"id": row["id"], "name": row["name"], "reliability": row["reliability"],
+            "weight": RELIABILITY_WEIGHT[grade], "reason": row["reliability_reason"],
+            "gradedBy": row["reliability_set_by"], "isDefault": False}
 
 
 @router.get("/store-summary")

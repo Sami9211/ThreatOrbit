@@ -478,7 +478,9 @@ CREATE TABLE IF NOT EXISTS intel_sources (
     id           TEXT PRIMARY KEY,  -- stable slug, e.g. "osint:Maltrail malware domains"
     name         TEXT NOT NULL,
     kind         TEXT,              -- connector kind that produced it
-    reliability  TEXT NOT NULL DEFAULT 'C',
+    reliability  TEXT NOT NULL DEFAULT 'C',   -- Admiralty A..F; see connectors._FEED_RELIABILITY
+    reliability_reason TEXT,        -- why, in words an analyst can argue with
+    reliability_set_by TEXT,        -- NULL = shipped default, else the operator's email
     url          TEXT,
     first_seen   TEXT,
     last_seen    TEXT,
@@ -938,7 +940,14 @@ CREATE INDEX IF NOT EXISTS idx_ioc_imports_ts ON ioc_imports(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
 -- Relevance order. Same rationale as the browse-order index: without it, sorting
 -- 315k rows by score rebuilds a temp B-tree on every page.
-CREATE INDEX IF NOT EXISTS idx_iocs_score ON iocs(intel_score DESC, id DESC);
+-- Includes last_seen because the score list breaks its (very large) ties on
+-- recency: without it that ORDER BY is a sort of the whole table. A new NAME
+-- rather than a redefinition, because CREATE INDEX IF NOT EXISTS is a no-op
+-- against the two-column index an upgraded database already has - the change
+-- would silently never apply.
+CREATE INDEX IF NOT EXISTS idx_iocs_score_recent
+    ON iocs(intel_score DESC, last_seen DESC, id DESC);
+DROP INDEX IF EXISTS idx_iocs_score;
 CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
 -- Pivots from one indicator to everything that shares its provenance. Without
 -- this, "what else came from this report?" scans the whole table, and the
@@ -1145,6 +1154,13 @@ _MIGRATIONS = [
     ("events", "ti_checked", "INTEGER NOT NULL DEFAULT 0"),
     # The indicator value a threat-intel alert matched, whatever its type.
     ("alerts", "ti_value", "TEXT"),
+    # Why a source carries the Admiralty grade it does, and who decided. The
+    # grade is a MULTIPLIER on every score that source contributes, so a number
+    # nobody can interrogate is one they are right to distrust. NULL `set_by`
+    # means the shipped default is in force and may be revised on upgrade; an
+    # operator's own grading is never overwritten.
+    ("intel_sources", "reliability_reason", "TEXT"),
+    ("intel_sources", "reliability_set_by", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.
@@ -1596,6 +1612,38 @@ def _backfill_source_assertions(conn) -> int:
     return len(payload)
 
 
+def _apply_feed_reliability_defaults(conn) -> int:
+    """Grade the feeds we ship, without ever overwriting an operator's judgement.
+
+    The composite score multiplies every claim by its source's Admiralty grade -
+    the correct shape, and completely inert while every source sat at the default
+    C. Uniform across 327,981 indicators, the multiplier differentiated nothing:
+    the store held 20 distinct scores, 95% of them inside a 15-point band, so the
+    list an analyst opens "sorted by relevance" opened on whichever phishing
+    domain happened to sort first alphabetically.
+
+    Re-applied on every boot rather than seeded once, so a revised default
+    reaches existing installs - which is safe precisely because a source the
+    operator has graded (`reliability_set_by` set) is excluded. Their judgement
+    outranks ours; that is the whole point of making it editable."""
+    from dashboard_api.connectors import feed_reliability_defaults
+    updates = []
+    for sid, (grade, reason) in feed_reliability_defaults().items():
+        row = conn.execute(
+            "SELECT reliability, reliability_reason, reliability_set_by "
+            "FROM intel_sources WHERE id=?", (sid,)).fetchone()
+        if row is None or row["reliability_set_by"]:
+            continue
+        if row["reliability"] == grade and row["reliability_reason"] == reason:
+            continue
+        updates.append((grade, reason, sid))
+    if updates:
+        conn.executemany(
+            "UPDATE intel_sources SET reliability=?, reliability_reason=? WHERE id=?",
+            updates)
+    return len(updates)
+
+
 def _adopt_existing_events(conn) -> int:
     """Declare the pre-`ti_checked` event backlog already threat-intel checked.
 
@@ -1781,6 +1829,16 @@ def init_db():
         except Exception:
             import logging
             logging.getLogger("dashboard_api.db").exception("reg_domain backfill failed")
+        try:
+            graded = _apply_feed_reliability_defaults(conn)
+            if graded:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Applied shipped Admiralty grades to %d intel sources "
+                    "(operator-set grades untouched)", graded)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("source grading failed")
         try:
             fixed = _reclassify_severities(conn)
             if fixed:

@@ -551,6 +551,32 @@ export interface StoreSummary {
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
 
+/** A feed as a first-class record, with the Admiralty grade that multiplies
+ *  every score it contributes. */
+export interface IntelSource {
+  id: string
+  name: string
+  kind: string | null
+  reliability: string
+  /** What the grade actually does to a score, so the choice is not abstract. */
+  weight: number
+  reason: string | null
+  /** Whose judgement is in force - an operator's is never overwritten by a
+   *  shipped default, so this is load-bearing rather than cosmetic. */
+  gradedBy: string
+  isDefault: boolean
+  firstSeen: string | null
+  lastSeen: string | null
+  values: number
+}
+export interface IntelSourceScale { grade: string; weight: number; label: string }
+export const fetchIntelSources = () =>
+  api<{ items: IntelSource[]; scale: IntelSourceScale[] }>('/cti/sources')
+export const gradeIntelSource = (id: string, reliability: string, reason?: string) =>
+  api<IntelSource>(`/cti/sources/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify({ reliability, reason }),
+  })
+
 export const fetchDecayRules = () => api<DecayRule[]>('/cti/decay-rules')
 export const updateDecayRule = (id: string, body: Partial<{
   half_life_days: number; revoke_score: number

@@ -121,6 +121,8 @@
     "/cti/scan/context",
     "/cti/scan/enrich",
     "/cti/scans",
+    "/cti/sources",
+    "/cti/sources/{source_id}",
     "/cti/stix/bundle",
     "/cti/store-summary",
     "/cti/summary",

@@ -1405,6 +1405,82 @@ def bulk_feed_source_ids() -> set[str]:
     return {_bulk_source_id(f[0]) for f in _BULK_FEEDS}
 
 
+# Admiralty reliability, per feed. The score treats this as a MULTIPLIER on
+# whatever the feed claims, which is the right shape - but every source shipped
+# ungraded at the default C, so the multiplier was uniform across all 327,981
+# indicators and differentiated nothing. The observed consequence: 20 distinct
+# scores across the whole store, 95% of it inside a 15-point band, and a list
+# sorted by score that opened on whichever phishing domain sorted first
+# alphabetically.
+#
+# These are OUR starting assessment, not a measurement, so each one states the
+# property it is based on and an operator can change any of them (the default is
+# only ever applied to a source they have not graded themselves). The property in
+# question is always the same: does the feed publish per-entry evidence, is it
+# curated or aggregated, and does it age its own entries out. That is a judgement
+# about the SOURCE, not about whether a given entry is correct.
+#
+# Deliberately no A: "completely reliable" is a claim about a long history with
+# no known failures, and it is not ours to award to a public list.
+_FEED_RELIABILITY: dict[str, tuple[str, str]] = {
+    # -- B, usually reliable: per-entry provenance, actively maintained --------
+    "abuse.ch ThreatFox":
+        ("B", "Per-IOC submissions carrying a reporter, a malware family and the "
+              "submitter's own confidence; entries are reviewed and expire."),
+    "abuse.ch URLhaus":
+        ("B", "Each URL is tracked with a status and re-checked, so a dead entry "
+              "is retired rather than left to age in place."),
+    "abuse.ch Feodo Tracker":
+        ("B", "Tracks the C2 servers of specific named botnets rather than "
+              "generic badness - a narrow claim about identified infrastructure."),
+    "Tor exit nodes":
+        ("B", "Published by the Tor Project itself, so it is first-party and "
+              "authoritative for exactly what it asserts. That being a Tor exit "
+              "is not by itself a threat is a question of severity, not of "
+              "whether the source is right."),
+    # -- C, fairly reliable: real observation or vetted composition, but no
+    #    evidence attached to the individual entry ---------------------------
+    "blocklist.de":
+        ("C", "Automated abuse reports from participating servers - a real "
+              "observation, but high-volume and short-lived."),
+    "CINS Army":
+        ("C", "Derived from Sentinel IPS sensor telemetry via a scoring "
+              "heuristic; observed, but the per-entry reasoning is not published."),
+    "Emerging Threats":
+        ("C", "Maintained conservatively and kept small, which is a good sign, "
+              "but individual entries arrive without evidence."),
+    "FireHOL level2":
+        ("C", "A composition of vetted upstream lists with published inclusion "
+              "criteria and a stated false-positive policy."),
+    "Blocklist Project (ransomware)":
+        ("C", "Narrow and specific enough that inclusion is itself informative."),
+    # -- D, not usually reliable: bulk aggregation with no per-entry provenance.
+    #    Useful in volume; a single entry is a weak claim on its own. ---------
+    "Phishing.Database (active domains)":
+        ("D", "Tens of thousands of entries aggregated from several upstreams; "
+              "'active' is a periodic re-check, not evidence for the entry."),
+    "Phishing.Database (active links)":
+        ("D", "Same aggregation and the same re-check, at URL granularity."),
+    "Maltrail malware domains":
+        ("D", "A static aggregated list bundled with the tool, without "
+              "per-entry attribution or an expiry."),
+    "Marcoux malicious IPs":
+        ("D", "A bulk dump compiled from other lists; no provenance survives "
+              "the aggregation."),
+    "Marcoux malicious domains":
+        ("D", "As above, at domain granularity."),
+    "Blocklist Project (phishing)":
+        ("D", "Broad hosts-format aggregation covering a very general category."),
+    "Blocklist Project (scam)":
+        ("D", "Broadest category in the set, and the least specific claim."),
+}
+
+
+def feed_reliability_defaults() -> dict[str, tuple[str, str]]:
+    """Shipped Admiralty grade + stated reason, keyed by source_id."""
+    return {_bulk_source_id(name): gr for name, gr in _FEED_RELIABILITY.items()}
+
+
 # Deliberately NOT included: the undifferentiated multi-million-entry hosts
 # aggregations (e.g. Blocklist Project's `malware`/`abuse` lists). They exceed
 # the per-feed cap several times over, so we would import whatever happens to

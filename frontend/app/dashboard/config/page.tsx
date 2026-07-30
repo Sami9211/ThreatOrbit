@@ -14,6 +14,7 @@ import { fadeInUp } from '@/lib/motion'
 import { Toggle as Switch } from '@/components/dashboard/Toggle'
 import EnrichmentProvidersPanel from '@/components/dashboard/EnrichmentProvidersPanel'
 import DecayRulesPanel from '@/components/dashboard/DecayRulesPanel'
+import SourceGradingPanel from '@/components/dashboard/SourceGradingPanel'
 import FloatingSave from '@/components/dashboard/FloatingSave'
 import {
   fetchAuditLog, fetchSettings, updateSettings, authChangePassword,
@@ -1827,10 +1828,11 @@ export default function ConfigPage() {
             </Section>
           )}
 
-          {/* Decay policy lives with the feeds: it governs what happens to
-              everything they import once nobody re-asserts it. */}
+          {/* Both live with the feeds: grading governs how much each source's
+              claims are worth, decay governs how long they stay worth it. */}
           {tab === 'sources' && (
-            <div className="mt-6">
+            <div className="mt-6 space-y-6">
+              <SourceGradingPanel />
               <DecayRulesPanel />
             </div>
           )}

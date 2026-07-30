@@ -1221,12 +1221,39 @@ drawer, IntelScope and the bulk check (score + band also in the CSV export).
 `_severity_from_confidence` is gone, replaced by `severity_for()` classifying the
 activity a feed actually names, with a one-time reclassification migration.
 
-**Phase 3 is now COMPLETE (2026-07-30).** Decay rules landed as records:
-`decay_rules` table, per-type half-life, revoke score, reaction points and a
-stored+indexed `valid_until`, with a GET/PATCH API and an editor in
-Settings → Feed Sources. The seeded rules reproduce the previous hardcoded
-curves exactly, so the upgrade is a refactor rather than a silent re-dating of
-315,185 indicators.
+**Decay rules landed as records (2026-07-30):** `decay_rules` table, per-type
+half-life, revoke score, reaction points and a stored+indexed `valid_until`, with
+a GET/PATCH API and an editor in Settings → Feed Sources. The seeded rules
+reproduce the previous hardcoded curves exactly, so the upgrade is a refactor
+rather than a silent re-dating of 315,185 indicators.
+
+**The done-criterion was declared met and was not (2026-07-30).** Every mechanism
+existed and one of its inputs was never supplied: the score multiplies each claim
+by its source's Admiralty grade, and **all 16 feeds shipped ungraded at the
+default C**, so the multiplier was uniform across 327,981 indicators and
+differentiated nothing. Measured consequence: **20 distinct scores in the whole
+store, 95% of it inside a 15-point band**, and a list sorted by relevance whose
+page one was whichever phishing domain sorted first alphabetically - because the
+tie-break under a 108,393-row tie was a random UUID.
+
+Fixed by grading the feeds we ship, with a stated reason each, based on what is
+knowable about the SOURCE rather than about any entry: does it publish per-entry
+evidence, is it curated or aggregated, does it retire its own entries. No feed is
+graded A - "completely reliable" is a claim about a long history with no known
+failures and is not ours to award to a public list. `GET /cti/sources` +
+`PATCH /cti/sources/{id}` and a grading panel make it inspectable and editable,
+and an operator's grading is recorded against their name and never overwritten by
+a later revision of ours. Score ties now break on recency rather than on id, with
+the index widened to match.
+
+Measured after: page one is corroborated multi-source values rather than
+alphabetical noise. The distribution is still compressed - 23 distinct scores -
+and that residue is honest rather than a bug: 98% of the store is single-source,
+never-seen-here, unattributed and same-aged, so three of the score's four inputs
+are constant. **A store of undifferentiated input cannot be finely ranked, and
+that is the finding**, the same one corroboration share and feed coverage report.
+Ranking improves as sightings and corroboration accumulate, which is what the
+other two phases are for.
 
 ---
 
