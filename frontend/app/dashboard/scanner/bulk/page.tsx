@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SEVERITY_COLOR as SEV_COLOR, tk } from '@/lib/colors'
+import EntityHoverCard from '@/components/dashboard/EntityHoverCard'
 import { lookupIocsBulk, BULK_LOOKUP_MAX, type BulkLookupRow } from '@/lib/api'
 
 /** Verdict presentation. `unverified` is deliberately NOT styled as a pass:
@@ -230,8 +231,12 @@ export default function BulkCheckPage() {
                       return (
                         <tr key={r.value} className="border-t border-white/5 hover:bg-white/2">
                           <td className="px-3 py-2 font-mono text-ink-200 max-w-[280px]">
-                            <Link href={`/dashboard/scanner?value=${encodeURIComponent(r.value)}&run=1`}
-                              className="hover:text-magenta break-all">{r.value}</Link>
+                            {/* Hover for the four things that decide whether a
+                                row is worth opening, without leaving the page. */}
+                            <EntityHoverCard value={r.matched ?? r.value}>
+                              <Link href={`/dashboard/scanner?value=${encodeURIComponent(r.value)}&run=1`}
+                                className="hover:text-magenta break-all">{r.value}</Link>
+                            </EntityHoverCard>
                             {/* A domain query can hit a URL hosted on it - show
                                 which indicator actually matched, or the verdict
                                 looks like it came from nowhere. */}

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn, isSimulatedSource } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
+import EntityHoverCard from '@/components/dashboard/EntityHoverCard'
 import {
   fetchIocs, fetchIoc, addIocSighting, setIocKnownGood, removeIocKnownGood, runIocDecay,
   fetchStixBundle, enrichIoc, fetchIocFpAssessment, createAlert, createCase,
@@ -429,7 +430,9 @@ export default function IocLifecyclePanel() {
               <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-white/5 text-ink-400 shrink-0 w-12 text-center">{i.type}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-mono text-white truncate">{i.value}</span>
+                  <EntityHoverCard value={i.value}>
+                    <span className="text-[11px] font-mono text-white truncate">{i.value}</span>
+                  </EntityHoverCard>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full uppercase font-semibold shrink-0"
                     style={{ color: st.color, background: `${st.color}15` }}>{st.label}</span>
                   {/* Corroboration is the one signal a single public feed can

@@ -1246,6 +1246,11 @@ reachable from every mention of it.
 rather than decorative: hovering an indicator anywhere shows score, corroborating
 source count, first/last seen and local sighting count without navigating away.
 One shared `<EntityHoverCard>` so it behaves identically everywhere.
+**DONE 2026-07-30** - `EntityHoverCard` shipped and wired into the IOC list and
+the bulk-check table, with a page-lifetime cache and in-flight de-duplication so
+sweeping a queue does not become a burst of requests, a 350 ms open delay so an
+accidental pass-over fetches nothing, and three distinct states: not-in-store,
+lookup-failed ("we could not ask" is not "we have no record"), and found.
 
 **Add** - investigation graph: pivot from any node, expand neighbours, save the
 investigation, attach it to a case. We render a static graph today.
@@ -1772,6 +1777,27 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · One shared hover card: what an indicator IS, without navigating
+  away.** The useful version of the affordance the owner asked for, not the
+  decorative one. An analyst sweeping a queue wants to know whether a value is
+  worth opening, and opening it to find out is the cost this removes. It answers
+  exactly the four questions that decide that - how much do we believe it, who
+  else says so, when did we last see it, and have WE seen it - and nothing else.
+
+  One shared component on purpose: a hover card that behaves differently in the
+  IOC list, the bulk check and the alert table is three things to learn instead of
+  one, and the inconsistency is what makes people stop trusting it. Wired into the
+  IOC list and the bulk-check table so far.
+
+  The details that make it usable rather than annoying: a page-lifetime cache with
+  in-flight de-duplication, so crossing the same value repeatedly is one request
+  and two cards over one value share a call rather than racing; a 350 ms open
+  delay, so sweeping the pointer across a table fetches nothing; `pointer-events:
+  none`, so the card cannot swallow a click and make the row underneath feel
+  broken; and three distinct states - not-in-store, lookup-failed and found -
+  because "we could not reach the store" and "we have no record of this" are
+  different answers and only one of them is about the indicator.
 
 - **2026-07-30 · An investigation becomes an artefact, and a case records what it
   FOUND.** The case timeline already merged war-room notes, linked alerts and
