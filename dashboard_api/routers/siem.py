@@ -139,8 +139,12 @@ def list_alerts(
         if val:
             clauses.append(f"{col}=?"); params.append(val)
     if q:
-        clauses.append("(title LIKE ? OR rule_name LIKE ? OR src_ip LIKE ? OR hostname LIKE ?)")
-        params += [f"%{q}%"] * 4
+        # `ti_value` included so searching for the indicator itself finds the
+        # alert it raised. For a domain or URL match the value appears in no
+        # other searchable column - src_ip only ever carries an IP.
+        clauses.append("(title LIKE ? OR rule_name LIKE ? OR src_ip LIKE ? "
+                       "OR hostname LIKE ? OR ti_value LIKE ?)")
+        params += [f"%{q}%"] * 5
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     # `id` tie-breaker: ts has second precision, so a burst of alerts ties on
     # every sort key. Without a total order, tied rows come back in arbitrary

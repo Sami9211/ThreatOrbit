@@ -33,6 +33,7 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from dashboard_api.db import get_conn
 
@@ -135,6 +136,24 @@ def _is_ip(s) -> bool:
     return ":" in s and all(c in "0123456789abcdefABCDEF:." for c in s)  # rough IPv6
 
 
+def _host_of_url(value) -> str | None:
+    """The host part of a URL, lowercased, port and credentials stripped.
+
+    A proxy that logs only the full URL still tells us which host was reached,
+    and the store holds four times as many domains as URLs - so deriving this is
+    the difference between matching one exact URL and matching the domain every
+    feed actually lists. Returns None for anything that is not a URL, including a
+    bare hostname (which the caller already has)."""
+    s = str(value or "").strip()
+    if "://" not in s:
+        return None
+    try:
+        host = urlparse(s).hostname
+    except ValueError:                       # malformed IPv6 literal, bad port
+        return None
+    return host.lower() if host else None
+
+
 def _base_event(raw: str) -> dict:
     et, cat, sev, mitre = _infer(raw)
     ips = _IPV4.findall(raw)
@@ -146,8 +165,41 @@ def _base_event(raw: str) -> dict:
         "dest_ip": ips[1] if len(ips) > 1 else None,
         "username": user_m.group(1) if user_m else None,
         "hostname": host_m.group(1) if host_m else None,
+        # Only ever set from a field the producer explicitly labelled as the
+        # destination. Guessing a domain out of free text would put whatever
+        # word happened to contain a dot in front of the TI matcher.
+        "dest_host": None,
+        "url": None,
         "raw": raw[:1000],
     }
+
+
+_BARE_URL = re.compile(r"^[A-Za-z0-9._-]+\.[A-Za-z]{2,}(?::\d+)?/")
+
+
+def _set_target(ev: dict, *, url=None, host=None) -> None:
+    """Record what the event was aimed at, filling `dest_host` from a URL when
+    the producer only logged the URL. First writer wins - the specific parsers
+    run before the generic ECS pass, and the specific one knows more.
+
+    A path with no host ("/", "/index.html") is refused: FortiGate's webfilter
+    logs spell the visited site in `hostname` and put only the path in `url`, so
+    accepting it would fill the URL column with slashes that match nothing."""
+    u = str(url).strip() if url not in (None, "") else ""
+    if u and "://" not in u and not _BARE_URL.match(u):
+        u = ""                              # a path fragment is not a URL
+    if u and not ev.get("url"):
+        ev["url"] = u[:1000]
+    if host and not ev.get("dest_host"):
+        h = str(host).strip().rstrip(".").lower()
+        if h and "." in h and not _is_ip(h):  # an IP destination is dest_ip, not a name
+            ev["dest_host"] = h[:253]
+    if not ev.get("dest_host"):
+        candidate = ev.get("url") or u
+        derived = _host_of_url(candidate if "://" in candidate else f"http://{candidate}") \
+            if candidate else None
+        if derived and not _is_ip(derived):
+            ev["dest_host"] = derived[:253]
 
 
 # Depth guard for _flatten: ECS/real documents nest a handful of levels; a
@@ -257,6 +309,12 @@ def _apply_sysmon(ev: dict, obj: dict) -> bool:
             ev["dest_port"] = int(dport)
         except (ValueError, TypeError):
             pass
+    # Sysmon 22 (DNS query) is the best domain telemetry most estates have: it
+    # names the process that asked, on the endpoint that asked, before any
+    # connection is made. `QueryName` carried none of that through to the store
+    # until there was a destination field to put it in. Event 3's
+    # `DestinationHostname` is the same idea for an outbound connection.
+    _set_target(ev, host=g("QueryName", "DestinationHostname"))
     return True
 
 
@@ -743,6 +801,15 @@ def _parse_json(line: str) -> dict | None:
     ev["username"] = pick("user", "username", "user_name", "account") or ev["username"]
     ev["hostname"] = pick("host", "hostname", "computer", "device") or ev["hostname"]
     ev["process_name"] = pick("process", "process_name", "image")
+    # What the event was aimed at. `query` is Zeek dns.log and most DNS
+    # forwarders; `url`/`uri` is every proxy; `sni` is a TLS sensor. Bare `host`
+    # is deliberately NOT read here - in JSON it means the reporting device far
+    # more often than the destination, and a wrong destination is worse than a
+    # missing one because it silently matches the customer's own estate.
+    _set_target(ev,
+                url=pick("url", "request_url", "http_url", "uri", "full_url"),
+                host=pick("query", "qname", "dns_query", "question", "domain",
+                          "dest_host", "destination_host", "sni", "server_name"))
     dp = pick("dest_port", "dst_port", "port")
     if dp is not None:
         try:
@@ -791,6 +858,11 @@ def _parse_kv(line: str) -> dict:
             ev["username"] = v
         elif k in ("host", "hostname", "computer", "devname"):
             ev["hostname"] = v
+        elif k in ("url", "request", "requesturl", "uri", "referer", "referrer"):
+            _set_target(ev, url=v)
+        elif k in ("query", "qname", "question", "dns_query", "dnsquery",
+                   "domain", "dsthost", "dest_host", "sni", "servername"):
+            _set_target(ev, host=v)
         elif k in ("dport", "dest_port", "port", "dstport"):
             try:
                 ev["dest_port"] = int(v)
@@ -801,11 +873,23 @@ def _parse_kv(line: str) -> dict:
                 ev["bytes_out"] = int(v)
             except ValueError:
                 pass
-    # FortiGate key=value syslog: classify by type/subtype/action so a denied
-    # session / IPS / AV hit lands on the native vocabulary the rules read.
-    if ("devname" in fields or "devid" in fields or "logid" in fields or
-            (fields.get("type") in ("traffic", "utm", "attack", "virus", "anomaly")
-             and "srcip" in fields)):
+    fortigate = ("devname" in fields or "devid" in fields or "logid" in fields or
+                 (fields.get("type") in ("traffic", "utm", "attack", "virus", "anomaly")
+                  and "srcip" in fields))
+    if fortigate:
+        # FortiGate names the DEVICE in `devname` and the VISITED SITE in
+        # `hostname` - the opposite of the syslog convention the loop above
+        # assumes. Its webfilter and DNS-filter logs are the richest source of
+        # domain observations most networks have, and reading their destination
+        # as a device name is how they end up matching nothing.
+        if fields.get("hostname"):
+            _set_target(ev, host=fields["hostname"])
+            ev["hostname"] = fields.get("devname") or None
+        # `url` here is the path alone; `hostname` + `url` is the whole request.
+        if ev.get("dest_host") and fields.get("url", "").startswith("/"):
+            ev["url"] = f"http://{ev['dest_host']}{fields['url']}"[:1000]
+        # classify by type/subtype/action so a denied session / IPS / AV hit
+        # lands on the native vocabulary the rules read.
         _fortigate_classify(ev, fields.get("type"), fields.get("subtype"), fields.get("action"))
     return ev
 
@@ -900,6 +984,11 @@ def _apply_envelope(ev: dict, name_text: str, sev_raw, f: dict, fallback_type: s
     host = g(*field_map["host"])
     if host:
         ev["hostname"] = str(host)
+    # CEF's `request` is the requested URL and `dhost` the destination host;
+    # LEEF appliances spell the same thing `url` / `dstHostName`. Both are
+    # optional in the spec, so an envelope without them just contributes nothing.
+    _set_target(ev, url=g(*field_map.get("url", ())),
+                host=g(*field_map.get("dhost", ())))
     dpt = g(*field_map["dport"])
     if dpt is not None:
         try:
@@ -931,6 +1020,8 @@ def _parse_cef(line: str) -> dict | None:
         "host": ("shost", "sourceHostName", "dhost", "destinationHostName", "dvchost"),
         "dport": ("dpt", "destinationPort"), "act": ("act", "deviceAction"),
         "proc": ("fname", "deviceProcessName", "sproc"),
+        "url": ("request", "requestUrl", "requestURL"),
+        "dhost": ("dhost", "destinationHostName", "destinationDnsDomain"),
     })
     return ev
 
@@ -975,6 +1066,8 @@ def _parse_leef(line: str) -> dict | None:
                         "user": ("usrName", "user", "srcUserName"),
                         "host": ("identHostName", "srcHostName", "dstHostName"),
                         "dport": ("dstPort", "dstport"), "act": ("action", "act"),
+                        "url": ("url", "URL", "request"),
+                        "dhost": ("dstHostName", "domain"),
                     })
     return ev
 
@@ -1051,15 +1144,17 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
             ev["raw"] = redaction.redact(ev.get("raw"))
             rows.append((str(uuid.uuid4()), now, ev.get("category"), ev.get("event_type"),
                         ev.get("src_ip"), ev.get("dest_ip"), ev.get("dest_port"), ev.get("username"),
-                        ev.get("hostname"), ev.get("process_name"), ev.get("action"),
+                        ev.get("hostname"), ev.get("dest_host"), ev.get("url"),
+                        ev.get("process_name"), ev.get("action"),
                         ev.get("bytes_out", 0), ev.get("country"), ev.get("severity_hint"),
                         ev.get("mitre_tech_id"), ev.get("raw"), source, org_id))
             parsed += 1
         if rows:
             conn.executemany(
                 "INSERT INTO events (id,ts,category,event_type,src_ip,dest_ip,dest_port,username,"
-                "hostname,process_name,action,bytes_out,country,severity_hint,mitre_tech_id,raw,"
-                "source,processed,org_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
+                "hostname,dest_host,url,process_name,action,bytes_out,country,severity_hint,"
+                "mitre_tech_id,raw,source,processed,org_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
                 rows)
             # Auto-discover the source: a collector whose name has no log_sources
             # row is invisible on SIEM → Sources. Register it on first ingest so
@@ -1089,40 +1184,117 @@ def ingest_lines(lines: list[str], fmt: str = "auto", source: str = "collector",
             "alerts": det["alerts"] + ti, "tiMatches": ti, "source": source}
 
 
-def match_threat_intel(conn) -> int:
-    """First-class TI detection: any event whose src/dest IP or hostname matches
-    a known malicious IOC raises an enriched 'threat intel match' alert."""
+# How many events one TI pass examines. A pass runs after every ingest, and the
+# marker means a backlog drains over consecutive passes instead of being silently
+# truncated to "the most recent N" and never revisited.
+_TI_BATCH = 500
+# Bound on the IN-list of one lookup. Both backends accept far more, but a
+# parameter list in the thousands is where planners stop using the index.
+_TI_CHUNK = 400
+
+
+def _ti_alertable(sev: str | None, score) -> bool:
+    """Whether a match deserves an ALERT, as opposed to just a sighting.
+
+    Matching and alerting are different decisions, and conflating them is what
+    kept 98% of the store out of local detection. Every match is evidence and is
+    recorded as a sighting; only some of them are worth waking someone for. A Tor
+    exit node or a scanning source appearing in a firewall log is a fact about
+    the internet, not an incident - `severity_for()` already classifies exactly
+    that difference, so the severity of the ACTIVITY is the right gate. A high
+    intel score alone also qualifies: a value many independent sources corroborate
+    and we have seen here before is worth surfacing whatever its activity class.
+    """
+    if (sev or "").lower() in ("critical", "high"):
+        return True
+    try:
+        return int(score or 0) >= 75          # `high` band - see intel_scoring.band_for
+    except (TypeError, ValueError):
+        return False
+
+
+def match_threat_intel(conn, *, limit: int = _TI_BATCH) -> int:
+    """Match local telemetry against the intel store. Returns alerts raised.
+
+    Four observable channels, not one: the source and destination addresses, the
+    name the traffic was aimed at (`dest_host` - DNS query, HTTP Host, proxy
+    destination, SNI), and the full URL. Before `dest_host` existed this pass
+    compared IPs only, which meant 259,522 of the store's 327,981 indicators -
+    every domain and every URL - could not fire on local telemetry no matter how
+    good they were. It also required `severity IN ('critical','high')`, which
+    after severity was decoupled from confidence excluded a further 63k IPs. The
+    reachable share was 1.7%.
+
+    Progress is tracked on `events.ti_checked`, not on the detection queue's
+    `processed`: sharing that marker meant every pass re-examined the same recent
+    events and recorded a fresh sighting each time, inflating the one score term
+    that outranks any amount of third-party agreement.
+    """
     from dashboard_api.detections import alert_from_intel
+    from dashboard_api.ioc_lifecycle import record_sighting
+
     rows = conn.execute(
-        "SELECT id, src_ip, dest_ip, hostname, org_id FROM events WHERE processed IN (0,1) "
-        "ORDER BY ts DESC LIMIT 300"
-    ).fetchall()
-    raised = 0
-    seen = set()
+        "SELECT id, src_ip, dest_ip, dest_host, url, org_id FROM events "
+        "WHERE ti_checked=0 ORDER BY ts LIMIT ?", (limit,)).fetchall()
+    if not rows:
+        return 0
+    event_ids = [r["id"] for r in rows]
+
+    # One lookup for the whole batch. The previous shape issued a point query per
+    # address per event - up to 600 round trips for one ingest, which on Postgres
+    # is 600 network round trips.
+    candidates: dict[str, list] = {}
     for e in rows:
-        for val in (e["src_ip"], e["dest_ip"]):
-            if not val or val in seen:
-                continue
-            ioc = conn.execute(
-                "SELECT id, type, value, severity, confidence, threat_type, actor, source "
-                "FROM iocs WHERE value=? AND severity IN ('critical','high') AND status='active'", (val,)
-            ).fetchone()
-            if not ioc:
-                continue
-            # the event observing this indicator IS a sighting - record it.
-            from dashboard_api.ioc_lifecycle import record_sighting
+        host = (e["dest_host"] or "").strip().lower()
+        for val in (e["src_ip"], e["dest_ip"], host or None, e["url"]):
+            if val:
+                candidates.setdefault(str(val), []).append(e)
+    hits: dict[str, dict] = {}
+    values = list(candidates)
+    for i in range(0, len(values), _TI_CHUNK):
+        chunk = values[i:i + _TI_CHUNK]
+        marks = ",".join("?" * len(chunk))
+        for ioc in conn.execute(
+                "SELECT id, type, value, severity, confidence, threat_type, actor, "
+                "source, intel_score FROM iocs "
+                f"WHERE status='active' AND value IN ({marks})", chunk).fetchall():
+            hits[ioc["value"]] = dict(ioc)
+
+    raised = 0
+    alerted: set[str] = set()
+    for value, events in candidates.items():
+        ioc = hits.get(value)
+        if not ioc:
+            continue
+        for e in events:
+            # The event observing this indicator IS a sighting - and now that a
+            # batch is examined exactly once, the count means what it says.
             record_sighting(conn, ioc_id=ioc["id"], source="siem:event",
-                            context=f"event {e['id']} matched {val}")
-            # avoid duplicate intel alerts for the same value
-            if conn.execute("SELECT 1 FROM alerts WHERE src_ip=? AND rule_id='R-TIMATCH'", (val,)).fetchone():
-                seen.add(val)
-                continue
-            aid = alert_from_intel(conn, value=ioc["value"], ioc_type=ioc["type"],
-                                   severity=ioc["severity"], confidence=ioc["confidence"] or 70,
-                                   threat_type=ioc["threat_type"] or "", actor_name=ioc["actor"] or "",
-                                   source=ioc["source"] or "CTI",
-                                   org_id=e["org_id"] or "org-default")
-            conn.execute("UPDATE alerts SET rule_id='R-TIMATCH' WHERE id=?", (aid,))
-            raised += 1
-            seen.add(val)
+                            context=f"event {e['id']} matched {value}")
+        if not _ti_alertable(ioc["severity"], ioc.get("intel_score")):
+            continue
+        if value in alerted:
+            continue
+        alerted.add(value)
+        # One standing alert per value: a beaconing host produces the same match
+        # every few seconds, and a queue of identical alerts is how a real one
+        # gets missed. `value` rather than `src_ip`, because a domain match never
+        # populates src_ip and would otherwise re-alert forever.
+        if conn.execute(
+                "SELECT 1 FROM alerts WHERE rule_id='R-TIMATCH' AND ti_value=?",
+                (value,)).fetchone():
+            continue
+        e = events[0]
+        aid = alert_from_intel(conn, value=ioc["value"], ioc_type=ioc["type"],
+                               severity=ioc["severity"], confidence=ioc["confidence"] or 70,
+                               threat_type=ioc["threat_type"] or "", actor_name=ioc["actor"] or "",
+                               source=ioc["source"] or "CTI",
+                               org_id=e["org_id"] or "org-default")
+        conn.execute("UPDATE alerts SET rule_id='R-TIMATCH' WHERE id=?", (aid,))
+        raised += 1
+
+    for i in range(0, len(event_ids), _TI_CHUNK):
+        chunk = event_ids[i:i + _TI_CHUNK]
+        marks = ",".join("?" * len(chunk))
+        conn.execute(f"UPDATE events SET ti_checked=1 WHERE id IN ({marks})", chunk)
     return raised

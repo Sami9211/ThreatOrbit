@@ -16,6 +16,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { Skeleton, SkeletonRows } from '@/components/dashboard/Skeleton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import EntityHoverCard from '@/components/dashboard/EntityHoverCard'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import { fetchSiemAlerts, fetchSiemKpis, fetchCorrelations, fetchMitreDistribution, fetchSiemTrends, fetchEntityDetail, patchAlert, createCase, createSuppression, fetchPlaybooks, runPlaybook, fetchAlertFpAssessment, fetchFpTriage, bulkDismissAlerts, type SiemKpis, type Correlation, type FpAssessment, type FpTriageAlert, type SiemTrendDay, type EntityDetail } from '@/lib/api'
@@ -69,6 +70,9 @@ type SiemAlert = {
   rawLog: string
   eventCount: number
   tiHits: number
+  /** The indicator value a threat-intel match fired on. Optional: only alerts
+   *  raised by TI matching carry one. */
+  tiValue?: string | null
   bytesOut: number
 }
 
@@ -832,6 +836,19 @@ function AlertDetail({ alert, onClose, simplified, onUpdate }: {
               <Row label="MITRE Tactic" value={`${alert.mitreTacticId} ${alert.mitreTactic}`} />
               <Row label="MITRE Technique" value={`${alert.mitreTechId} ${alert.mitreTech}`} />
               <Row label="Matched Events" value={alert.eventCount.toLocaleString()} />
+              {/* The indicator this alert actually matched. Until it was
+                  recorded, a domain or URL match named its value only inside the
+                  title - so the alert could not be pivoted from, and hovering it
+                  could not reach what the store already knew. */}
+              {alert.tiValue && (
+                <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-white/5">
+                  <span className="text-[10px] text-ink-500 shrink-0">Matched Indicator</span>
+                  <EntityHoverCard value={alert.tiValue} className="min-w-0">
+                    <span className="text-[11px] font-mono truncate cursor-help"
+                      style={{ color: tk('magenta') }}>{alert.tiValue}</span>
+                  </EntityHoverCard>
+                </div>
+              )}
               <Row label="TI Feed Hits" value={alert.tiHits > 0 ? `${alert.tiHits} feeds matched` : 'No TI hits'} highlight={alert.tiHits > 0 ? 'threat' : undefined} />
               <Row label="Bytes Egressed" value={fmtBytes(alert.bytesOut)} highlight={alert.bytesOut > 1000000 ? 'threat' : undefined} />
             </Section>

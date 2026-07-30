@@ -186,6 +186,9 @@ def test_store_summary_answers_what_is_actually_in_the_store(client, auth):
     assert 0 <= s["corroboratedShare"] <= 100
     assert isinstance(s["activities"], list) and isinstance(s["sources"], list)
     assert isinstance(s["expiringWithin7Days"], int)
+    # The one figure a public CTI library structurally cannot produce.
+    assert s["seenLocally"] <= s["localObservations"], (
+        "you cannot have observed more distinct values than observations")
 
 
 def test_store_summary_share_is_consistent_with_its_own_counts(client, auth):

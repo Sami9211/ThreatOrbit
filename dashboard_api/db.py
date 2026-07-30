@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 class SchemaVersionError(RuntimeError):
@@ -225,6 +225,12 @@ CREATE TABLE IF NOT EXISTS alerts (
     raw_log         TEXT,
     event_count     INTEGER NOT NULL DEFAULT 1,
     ti_hits         INTEGER NOT NULL DEFAULT 0,
+    ti_value        TEXT,             -- the indicator value that matched, whatever
+                                      -- its type. `src_ip` only ever held it for IP
+                                      -- indicators, so a domain match had nothing
+                                      -- identifying it but its title - and the
+                                      -- duplicate-suppression that reads it could
+                                      -- never see one.
     bytes_out       INTEGER NOT NULL DEFAULT 0,
     detect_latency_sec  INTEGER,   -- event→detection latency (drives MTTD)
     ack_latency_sec     INTEGER,   -- detection→acknowledge latency (drives MTTA)
@@ -755,7 +761,14 @@ CREATE TABLE IF NOT EXISTS events (
     dest_ip      TEXT,
     dest_port    INTEGER,
     username     TEXT,
-    hostname     TEXT,
+    hostname     TEXT,            -- the REPORTING device (Computer/devname/observer)
+    dest_host    TEXT,            -- the network name the event TARGETED: DNS query
+                                  -- name, HTTP Host, proxy destination, TLS SNI.
+                                  -- Distinct from `hostname`, which is the box
+                                  -- that wrote the log. Without this there is no
+                                  -- channel by which a domain or URL indicator can
+                                  -- ever match local telemetry.
+    url          TEXT,            -- full URL when the source carries one
     process_name TEXT,
     action       TEXT,
     bytes_out    INTEGER NOT NULL DEFAULT 0,
@@ -764,12 +777,21 @@ CREATE TABLE IF NOT EXISTS events (
     mitre_tech_id TEXT,
     raw          TEXT,
     source       TEXT,            -- ingest source name (collector|syslog-udp|…); 'engine' for synthetic
-    processed    INTEGER NOT NULL DEFAULT 0   -- 0 until the detection pass evaluates it
+    processed    INTEGER NOT NULL DEFAULT 0,  -- 0 until the detection pass evaluates it
+    ti_checked   INTEGER NOT NULL DEFAULT 0   -- 0 until threat-intel matching has
+                                  -- examined it. Its OWN marker, because the
+                                  -- detection queue owns `processed`: sharing one
+                                  -- flag meant TI matching re-scanned the same
+                                  -- events on every ingest, re-recording sightings
+                                  -- and inflating the score term that outranks
+                                  -- every feed.
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_events_proc ON events(processed);
 CREATE INDEX IF NOT EXISTS idx_events_host ON events(hostname);
+CREATE INDEX IF NOT EXISTS idx_events_dest_host ON events(dest_host);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+CREATE INDEX IF NOT EXISTS idx_events_ti ON events(ti_checked);
 
 CREATE TABLE IF NOT EXISTS dark_web_findings (
     id        TEXT PRIMARY KEY,
@@ -880,6 +902,9 @@ CREATE INDEX IF NOT EXISTS idx_alerts_sev_status ON alerts(severity, status);
 CREATE INDEX IF NOT EXISTS idx_alerts_host ON alerts(hostname);
 CREATE INDEX IF NOT EXISTS idx_alerts_src ON alerts(src_ip);
 CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(username);
+-- Duplicate suppression for threat-intel matches runs on every ingest; a
+-- beaconing host asks the same question every few seconds.
+CREATE INDEX IF NOT EXISTS idx_alerts_ti_value ON alerts(ti_value);
 CREATE INDEX IF NOT EXISTS idx_iocs_value ON iocs(value);
 CREATE INDEX IF NOT EXISTS idx_iocs_status ON iocs(status);
 CREATE INDEX IF NOT EXISTS idx_iocs_actor ON iocs(actor);
@@ -1105,6 +1130,21 @@ _MIGRATIONS = [
     ("cases", "conclusion", "TEXT"),
     ("cases", "outcome", "TEXT"),          # true-positive | false-positive | benign | inconclusive
     ("cases", "closed_at", "TEXT"),
+    # The network name an event TARGETED, and the URL it carried. `hostname` is
+    # the reporting device, so before these there was no field a domain or URL
+    # indicator could ever match against - which left 79% of the intel store
+    # structurally unable to fire on local telemetry no matter how good it was.
+    ("events", "dest_host", "TEXT"),
+    ("events", "url", "TEXT"),
+    # Threat-intel matching's own progress marker. `processed` belongs to the
+    # detection queue and is set to 1 the moment detection completes, so a TI
+    # pass keyed off it re-examined the same events on every ingest, recording
+    # a fresh sighting each time. Sightings feed the score term that outranks
+    # any amount of third-party agreement, so that inflation went straight into
+    # the ranking.
+    ("events", "ti_checked", "INTEGER NOT NULL DEFAULT 0"),
+    # The indicator value a threat-intel alert matched, whatever its type.
+    ("alerts", "ti_value", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.
@@ -1209,8 +1249,15 @@ _MIGRATIONS = [
 ]
 
 
-def _apply_migrations(conn: sqlite3.Connection):
+def _apply_migrations(conn: sqlite3.Connection) -> set[tuple[str, str]]:
+    """Add any missing columns. Returns the (table, column) pairs actually added.
+
+    The return value matters for migrations whose correct one-time action depends
+    on the column having JUST appeared - `events.ti_checked` marks the existing
+    backlog as already examined, which is right exactly once and wrong on every
+    boot after."""
     from dashboard_api.db_backend import is_postgres, table_columns_sql
+    added: set[tuple[str, str]] = set()
     for table, column, ddl in _MIGRATIONS:
         if is_postgres():  # pragma: no cover - opt-in backend
             rows = conn.execute(table_columns_sql(), (table,)).fetchall()
@@ -1219,6 +1266,8 @@ def _apply_migrations(conn: sqlite3.Connection):
         cols = {r["name"] for r in rows}
         if column not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+            added.add((table, column))
+    return added
 
 
 def split_statements(sql: str) -> list[str]:
@@ -1547,6 +1596,22 @@ def _backfill_source_assertions(conn) -> int:
     return len(payload)
 
 
+def _adopt_existing_events(conn) -> int:
+    """Declare the pre-`ti_checked` event backlog already threat-intel checked.
+
+    Every event that existed before the column did HAS been through the matching
+    pass - repeatedly, in fact, which is the bug the column fixes: the pass keyed
+    off `processed`, which the detection queue sets the moment detection
+    completes, so each ingest re-examined the same recent events and recorded a
+    fresh sighting every time. Re-examining that backlog now would add a second
+    sighting for observations already counted, and sightings feed the one score
+    term that outranks any amount of third-party agreement.
+
+    Called only from the boot where the column is first added, so it runs exactly
+    once - on every later boot the column exists and nothing is adopted."""
+    return conn.execute("UPDATE events SET ti_checked=1").rowcount
+
+
 def _reclassify_severities(conn) -> int:
     """One-time: rebuild `iocs.severity` from the activity each feed named.
 
@@ -1658,10 +1723,17 @@ def schema_versions() -> dict:
 def init_db():
     with get_conn() as conn:
         _safe_schema(conn)
-        _apply_migrations(conn)
+        added = _apply_migrations(conn)
         # second pass: indexes that needed migrated columns now succeed
         _safe_schema(conn)
         _verify_schema(conn)
+        if ("events", "ti_checked") in added:
+            n = _adopt_existing_events(conn)
+            if n:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Marked %d pre-existing events as threat-intel checked "
+                    "(they were, under the old shared marker)", n)
         try:
             seeded = _backfill_source_assertions(conn)
             if seeded:

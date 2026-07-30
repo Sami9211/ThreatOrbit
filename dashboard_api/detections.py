@@ -41,19 +41,20 @@ def _now() -> str:
 def _insert_alert(conn, *, title, severity, risk, rule_name, src_ip=None, username=None,
                   hostname=None, mitre_tech_id=None, mitre_tech=None, mitre_tactic=None,
                   mitre_tactic_id=None, description=None, raw_log=None, event_count=1,
-                  ti_hits=0, src_country=None, org_id="org-default") -> str:
+                  ti_hits=0, ti_value=None, src_country=None, org_id="org-default") -> str:
     aid = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,rule_id,"
         "rule_name,mitre_tactic,mitre_tactic_id,mitre_tech,mitre_tech_id,src_ip,src_country,"
         "src_port,src_hostname,src_asn,dest_ip,dest_port,dest_service,username,hostname,"
-        "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,bytes_out,"
-        "detect_latency_sec,ack_latency_sec,respond_latency_sec,org_id) "
+        "host_criticality,process_name,cmd_line,description,raw_log,event_count,ti_hits,ti_value,"
+        "bytes_out,detect_latency_sec,ack_latency_sec,respond_latency_sec,org_id) "
         "VALUES (?,?,?,?,'new','undetermined','',?,'R-ENGINE',?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,"
-        "NULL,NULL,?,?,NULL,NULL,NULL,?,?,?,?,0,?,NULL,NULL,?)",
+        "NULL,NULL,?,?,NULL,NULL,NULL,?,?,?,?,?,0,?,NULL,NULL,?)",
         (aid, _now(), title, severity, risk, rule_name,
          mitre_tactic, mitre_tactic_id, mitre_tech, mitre_tech_id, src_ip, src_country,
-         username, hostname, description, raw_log, event_count, ti_hits, max(0, 60), org_id),
+         username, hostname, description, raw_log, event_count, ti_hits, ti_value,
+         max(0, 60), org_id),
     )
     return aid
 
@@ -112,5 +113,8 @@ def alert_from_intel(conn, *, value: str, ioc_type: str, severity: str, confiden
         mitre_tactic="Command and Control", mitre_tactic_id="TA0011",
         description=f"{threat_type or 'Malicious indicator'} ingested from {source}"
                     + (f", attributed to {actor_name}" if actor_name else "") + ".",
-        ti_hits=1, org_id=org_id,
+        # Recorded whatever the type. `src_ip` above only carries it for IP
+        # indicators, so a domain or URL match had no field identifying what it
+        # matched - which is why duplicate suppression could not see one.
+        ti_hits=1, ti_value=value, org_id=org_id,
     )

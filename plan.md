@@ -1134,8 +1134,50 @@ an observed address - the classic passive-DNS pivot, and the one that turns a
 single indicator into a piece of infrastructure. The pivot reads only recorded
 data, so opening a drawer cannot become a burst of DNS traffic.
 
+**(5) sighting counts from local telemetry is DONE (2026-07-30)** - and it was
+not a matter of counting something already being collected. The matching pass
+compared `src_ip` and `dest_ip` against indicators of severity critical or high,
+which is **5,466 values - 1.7% of a 327,981-indicator store**. Every domain
+(208,845) and every URL (50,678) was structurally undetectable no matter how well
+corroborated, because the event model had no field naming what traffic was AIMED
+at: `hostname` is the box that wrote the log. The severity gate, correct when
+severity meant confidence, excluded a further 62,991 IPs once Phase 3 made
+severity describe the ACTIVITY.
+
+Shipped: `events.dest_host` + `events.url`, populated from the fields real
+sources use - Sysmon 22 `QueryName`, FortiGate webfilter (which spells the
+visited site in `hostname` and the appliance in `devname`, the opposite of the
+syslog convention), ECS `dns.question.name` / `destination.domain` / `url.domain`
+/ `tls.client.server_name`, CEF `request`/`dhost`, LEEF, and a host derived from
+any full URL. Never guessed from free text: a wrong destination silently matches
+the customer's own estate, so only a field the producer LABELLED as the
+destination may set it.
+
+Matching and alerting are now separate decisions - conflating them is what kept
+98% of the store out of local detection. **Every** active indicator that matches
+records a sighting, because a value touched here is evidence whatever its class;
+only critical/high activity or a high intel score raises an alert, so a Tor exit
+node in a firewall log informs the score without waking anyone.
+
+Two correctness bugs fell out of the same pass. It keyed off `processed`, which
+the detection queue sets the moment detection completes - so every ingest
+re-examined the same recent events and recorded a fresh sighting each time,
+inflating the one score term that outranks any amount of third-party agreement.
+And `ORDER BY ts DESC LIMIT 300` is a recency window, not a queue: on a burst the
+older events were never examined by anything, ever. `events.ti_checked` fixes
+both, and the live scheduler drains it so events from the syslog listeners, the
+S3 pull and the worker pool - none of which go through the ingest endpoint - are
+matched too. `alerts.ti_value` records WHAT matched, whatever its type, so a
+domain alert can be searched, deduplicated and pivoted from at all.
+
+Verified end-to-end against the real 327,981-indicator store: one DNS query, one
+proxy URL and one connection, matched against a real domain, URL and IP already
+in the library - all three recorded a sighting and raised an alert, and the
+following maintenance pass moved each from ~65 to 100. Before this, two of the
+three could not have matched anything.
+
 Still open in this phase: TLS certificate observation (the other half of (4)),
-(5) sighting counts from local telemetry, (6) keyed enrichers.
+(6) keyed enrichers.
 
 ---
 

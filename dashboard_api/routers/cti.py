@@ -954,6 +954,15 @@ def store_summary(user: dict = Depends(current_user)):
         verdicts = {r["verdict"]: r["n"] for r in conn.execute(
             "SELECT verdict, COUNT(*) AS n FROM ioc_verdicts WHERE org_id=? "
             "GROUP BY verdict", (tenancy.org_of(user),)).fetchall()}
+        # Indicators this deployment has actually OBSERVED, and how many times.
+        # The only figure on this panel a public CTI library structurally cannot
+        # produce: everything else here describes what someone else published,
+        # this describes what happened on your network. Counted from the sighting
+        # ledger rather than `iocs.sightings`, because that column starts at 1 for
+        # every import and a count of "1" means nothing was ever seen.
+        seen = conn.execute(
+            "SELECT COUNT(DISTINCT ioc_id) AS values_seen, COUNT(*) AS observations "
+            "FROM ioc_sightings").fetchone()
         total = sum(bands.values())
     # How many feeds are CONFIGURED versus how many have actually contributed a
     # value. A low corroboration share means very different things depending on
@@ -981,6 +990,8 @@ def store_summary(user: dict = Depends(current_user)):
         "sources": sources,
         "expiringWithin7Days": expiring,
         "verdicts": verdicts,
+        "seenLocally": seen["values_seen"] or 0,
+        "localObservations": seen["observations"] or 0,
         "sourcesContributing": contributing,
         "sourcesConfigured": len(feed_ids),
         # Everything asserting values, feeds or otherwise - so a store fed

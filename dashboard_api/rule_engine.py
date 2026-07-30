@@ -22,8 +22,8 @@ import re
 from datetime import datetime, timedelta, timezone
 
 FIELDS = ["event_type", "category", "src_ip", "dest_ip", "dest_port", "username",
-          "hostname", "process_name", "action", "country", "bytes_out", "severity_hint",
-          "mitre_tech_id", "raw"]
+          "hostname", "dest_host", "url", "process_name", "action", "country",
+          "bytes_out", "severity_hint", "mitre_tech_id", "raw"]
 OPERATORS = ["equals", "not_equals", "contains", "in", "gt", "lt", "gte", "lte", "regex", "cidr"]
 
 # Elastic Common Schema (ECS) field aliases → ThreatOrbit's native event fields.
@@ -42,6 +42,18 @@ ECS_ALIASES = {
     "host.name": "hostname",
     "host.hostname": "hostname",
     "observer.hostname": "hostname",
+    # The name the traffic was AIMED at, which ECS spreads across four fields
+    # depending on the producer: a DNS log names it in the question, a proxy in
+    # the URL, a firewall in destination.domain, a TLS sensor in the SNI. All
+    # four answer "which host did this endpoint try to reach", and that is the
+    # only field a domain indicator can ever match.
+    "destination.domain": "dest_host",
+    "dns.question.name": "dest_host",
+    "url.domain": "dest_host",
+    "server.domain": "dest_host",
+    "tls.client.server_name": "dest_host",
+    "url.full": "url",
+    "url.original": "url",
     "process.name": "process_name",
     "process.executable": "process_name",
     "event.action": "action",

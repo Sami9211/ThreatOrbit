@@ -174,6 +174,24 @@ def _connector_scheduler():
                                 res.get("rescored", 0))
             except Exception:
                 logger.exception("IOC lifecycle tick failed")
+        # Threat-intel matching over any events nothing has examined yet. The
+        # ingest endpoint runs a pass on its own batch, but that is not the only
+        # way events arrive - the syslog/TLS listeners, the agentless S3 pull and
+        # the detection worker pool all write events that no TI pass would ever
+        # see. Draining the marker here means "did anything in our estate touch a
+        # known-bad value?" is answered for every event however it got here, and
+        # a burst larger than one batch catches up over consecutive ticks rather
+        # than being lost.
+        try:
+            from dashboard_api.db import get_conn
+            from dashboard_api.ingest import match_threat_intel
+            with get_conn() as conn:
+                hits = match_threat_intel(conn)
+                conn.commit()
+            if hits:
+                logger.info("Threat-intel matching raised %d alerts", hits)
+        except Exception:
+            logger.exception("Threat-intel matching tick failed")
         # Network-ownership table (iptoasn). Enforces its own 24h cadence, so
         # calling it every tick costs one settings read until it is actually due.
         try:

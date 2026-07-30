@@ -129,6 +129,38 @@ export default function StoreCompositionPanel() {
             )}
           </div>
 
+          {/* Seen here. The only number on this panel a public CTI library
+              structurally cannot produce - everything else describes what
+              someone else published. Shown even at zero, because "we have never
+              seen any of this" is itself the finding on a store of 328,000. */}
+          <div className="rounded-lg border border-white/8 bg-surface-2/40 p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] text-ink-500">Seen in your own telemetry</span>
+              <span className="text-sm font-semibold tabular-nums"
+                style={{ color: s.seenLocally > 0 ? tk('magenta') : tk('violet') }}>
+                {s.seenLocally.toLocaleString()}
+              </span>
+            </div>
+            <p className="text-[10px] text-ink-600 mt-1 leading-snug">
+              {s.seenLocally > 0 ? (
+                <>
+                  {s.seenLocally.toLocaleString()} of these values have been
+                  observed on your network, across{' '}
+                  {s.localObservations.toLocaleString()} observations. A value
+                  seen here concerns you in a way a value merely listed does not,
+                  and it outranks any amount of third-party agreement.
+                </>
+              ) : (
+                <>
+                  None of these values have been observed on your network yet.
+                  Addresses, DNS queries, proxy destinations and URLs are all
+                  compared as logs arrive — so this stays at zero until either
+                  something matches, or logs stop arriving.
+                </>
+              )}
+            </p>
+          </div>
+
           <div className="grid sm:grid-cols-2 gap-4">
             {/* What kind of activity */}
             <div>

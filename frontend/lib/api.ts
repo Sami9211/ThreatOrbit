@@ -211,6 +211,10 @@ export interface SiemAlert {
   rawLog: string
   eventCount: number
   tiHits: number
+  /** The indicator value this alert matched, whatever its type. `srcIp` only
+   *  ever carries it for IP indicators, so a domain or URL match had nothing
+   *  identifying what it matched. */
+  tiValue: string | null
   bytesOut: number
 }
 
@@ -539,6 +543,11 @@ export interface StoreSummary {
   sourcesContributing: number
   sourcesConfigured: number
   sourcesTotal: number
+  /** Indicators this deployment has actually observed in its own telemetry, and
+   *  how many observations. The only figure here a public CTI library cannot
+   *  produce: everything else describes what someone else published. */
+  seenLocally: number
+  localObservations: number
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
 
