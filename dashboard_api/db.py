@@ -305,6 +305,25 @@ CREATE TABLE IF NOT EXISTS cases (
     evidence    TEXT NOT NULL DEFAULT '[]'
 );
 
+-- Tier hand-offs. A SOC is tiered - L1 triages, L2 investigates, L3 does
+-- attribution and threat research - and the moment that matters is the hand-off:
+-- who passed this on, to whom, and WHY. Without a record, an escalation is just
+-- an owner field changing, and the receiving analyst starts from nothing.
+--
+-- Append-only history, kept separate from `cases` so a case carries its own
+-- chain of custody rather than only its current state.
+CREATE TABLE IF NOT EXISTS case_escalations (
+    id         TEXT PRIMARY KEY,
+    case_id    TEXT NOT NULL,
+    from_tier  INTEGER,
+    to_tier    INTEGER NOT NULL,
+    from_owner TEXT,
+    to_owner   TEXT,
+    note       TEXT,               -- what the receiving analyst needs to know
+    actor      TEXT NOT NULL,      -- who performed the hand-off
+    ts         TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS playbooks (
     id                TEXT PRIMARY KEY,
     name              TEXT NOT NULL,
@@ -912,6 +931,8 @@ CREATE INDEX IF NOT EXISTS idx_iocs_valid_until ON iocs(valid_until);
 -- (name,address) primary key already serves the forward direction.
 -- The scoring path reads verdicts per value, per tenant, on every rescore.
 CREATE INDEX IF NOT EXISTS idx_verdicts_value ON ioc_verdicts(ioc_value, org_id);
+-- A case's chain of custody, read every time its detail is opened.
+CREATE INDEX IF NOT EXISTS idx_escalations_case ON case_escalations(case_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_dns_address ON dns_observations(address);
 CREATE INDEX IF NOT EXISTS idx_dns_addr_hex ON dns_observations(addr_hex);
 -- Only the reverse direction needs its own index. Corroboration looks up
@@ -1074,6 +1095,10 @@ _MIGRATIONS = [
     # stored so "what expires this week?" is a range scan rather than a decay
     # computation over every row. See decay.valid_until.
     ("iocs", "valid_until", "TEXT"),
+    # SOC tier currently working the case: 1 triage, 2 investigation, 3 threat
+    # research / attribution. Defaults to 1 so every existing case is where a
+    # case starts, rather than silently appearing to have been escalated.
+    ("cases", "tier", "INTEGER NOT NULL DEFAULT 1"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.

@@ -1279,9 +1279,15 @@ author, a reason and full history, feeding a weighted term into the intel score
 and rescored both immediately and on every maintenance pass. A test states the
 criterion literally: record a verdict, run the decay pass, assert the score moved.
 
-Still open in this phase: tiered queues and escalation with per-tier SLA,
-investigation-as-artefact (timeline of pivots and conclusions), narrative
-reporting. Scheduled hunts already exist.
+**Tiered queues and escalation are DONE (2026-07-30)** - the first half of the
+done-criterion. `case_escalations` + `escalation.py` model the HAND-OFF as a
+first-class append-only event (who, to whom, from which tier to which, and why),
+with per-tier SLA that moves with the case and a `/soar/queues` endpoint
+reporting open and **unassigned** counts per tier - unassigned being the number
+that matters for two analysts working one queue without colliding.
+
+Still open in this phase: investigation-as-artefact (timeline of pivots and
+conclusions), narrative reporting. Scheduled hunts already exist.
 
 ---
 
@@ -1757,6 +1763,47 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · Tiered SOC queues: the hand-off becomes a first-class event.**
+  A SOC is tiered - L1 triages, L2 investigates what L1 could not close, L3 does
+  attribution - and the platform had RBAC capabilities with no workflow on top of
+  them. "Escalating" meant editing an owner field, so the receiving analyst
+  inherited a case with no statement of what had already been ruled out or why it
+  was being passed on.
+
+  `case_escalations` + `escalation.py` record who passed it, to whom, from which
+  tier to which, and the part that actually saves the next analyst's time: why.
+  Append-only, kept separate from `cases` so a case carries its own chain of
+  custody rather than only its current state.
+
+  **Per-tier SLA**, because a triage queue cleared within the hour and a
+  threat-research question that reasonably takes days cannot share one deadline -
+  forcing them to is how SLA numbers stop meaning anything. The clock restarts on
+  hand-off: the receiving tier is not accountable for time spent before the case
+  reached them. **De-escalation is allowed on purpose** - L2 establishing that
+  something is routine and handing it back to L1 is a normal outcome, and a
+  workflow that only ratchets upward quietly pushes everything to the most
+  expensive tier. A no-op hand-off (same tier, same owner) is refused rather than
+  padding the chain of custody with noise.
+
+  `/soar/queues` reports open **and unassigned** cases per tier. Unassigned is the
+  number that matters for "two analysts working the same queue without stepping on
+  each other": it is the pile nobody has claimed.
+
+  **A real ordering bug, caught by a test and then demonstrated live.** Hand-off
+  timestamps used the same second-resolution `_now()` as the rest of the app, and
+  the chain of custody is ordered by that column - so two hand-offs in the same
+  second came back in arbitrary order. An L1 passing to L2 who immediately passes
+  to L3 is a completely ordinary sequence. Fixed with microsecond precision (ISO
+  strings sort lexicographically, so it costs nothing), and the live check proved
+  the point: the two events landed **20 ms apart** at `10:24:33.735331` and
+  `10:24:33.755414`. Same class as the fabricated-rate bug from the connectors
+  work, which had the same root cause.
+
+  The migration defaults `tier` to 1, with a test asserting it - a default of 2
+  would make every case predating this feature appear to have been escalated by
+  somebody. The smoke-test case was deleted afterwards and the store left at zero
+  cases.
 
 - **2026-07-30 · The platform finally learns: analyst verdicts feed back into the
   score.** Nothing an analyst concluded ever reached the intel store. An L1 could

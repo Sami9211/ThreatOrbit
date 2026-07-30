@@ -7,7 +7,7 @@ import {
   FileText, MessageSquare, Play, RefreshCw,
   BarChart2, Paperclip, Eye,
   GitBranch, Activity, TrendingUp, TrendingDown,
-  Circle, Lock, Server, Globe, Clock, ArrowUpRight,
+  Circle, Lock, Server, Globe, Clock, ArrowUpRight, Layers, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -15,7 +15,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, type SoarMetrics, type CaseRelated } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, escalateCase, fetchCaseEscalations, type SoarMetrics, type CaseRelated } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
 /* -- Types ---------------------------------------------------------- */
@@ -33,6 +33,14 @@ type Severity = 'critical' | 'high' | 'medium' | 'low'
 type CaseStatus = 'new' | 'assigned' | 'in-progress' | 'pending' | 'resolved' | 'closed'
 type StepType = 'check' | 'action' | 'decision' | 'notify' | 'human' | 'sub-playbook'
 type StepStatus = 'idle' | 'running' | 'completed' | 'failed' | 'skipped'
+
+// Shown before the API answers, so the hand-off control is not blank on open.
+// The server is authoritative - this only avoids a flash of nothing.
+const DEFAULT_TIERS = [
+  { tier: 1, name: 'L1 · Triage', slaHours: 4 },
+  { tier: 2, name: 'L2 · Investigation', slaHours: 24 },
+  { tier: 3, name: 'L3 · Threat research', slaHours: 72 },
+]
 
 type CaseRecord = {
   id: string
@@ -53,6 +61,9 @@ type CaseRecord = {
   // Static seeds carry added/by; live API items carry ts/addedBy (+sha256).
   evidence: { name: string; type: string; added?: string; by?: string;
               ts?: string; addedBy?: string; sha256?: string }[]
+  /** SOC tier working this case: 1 triage, 2 investigation, 3 research. */
+  tier?: number
+  tierName?: string
 }
 
 type Playbook = {
@@ -445,9 +456,28 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   const [evidence, setEvidence] = useState(c.evidence)
   const [note, setNote] = useState('')
   const [related, setRelated] = useState<CaseRelated | null>(null)
+  const [tierState, setTierState] = useState<Awaited<ReturnType<typeof fetchCaseEscalations>> | null>(null)
+  const [escalating, setEscalating] = useState(false)
   useEffect(() => {
     fetchCaseRelated(c.id).then(setRelated).catch(() => {})
+    fetchCaseEscalations(c.id).then(setTierState).catch(() => {})
   }, [c.id])
+
+  function handOff(toTier: number) {
+    if (escalating) return
+    // Asked for, not required: a mandatory field becomes a field full of ".",
+    // but the note is what stops the receiving analyst starting from nothing.
+    const note = window.prompt(
+      'What does the receiving analyst need to know? (what you ruled out, and why '
+      + 'you are passing it on)') ?? undefined
+    const owner = window.prompt('Assign to (email, optional — leave blank to keep unassigned)')
+      ?? undefined
+    setEscalating(true)
+    escalateCase(c.id, toTier, owner || undefined, note || undefined)
+      .then(() => fetchCaseEscalations(c.id).then(setTierState))
+      .catch(() => {})
+      .finally(() => setEscalating(false))
+  }
 
   // Affected systems: the distinct hosts / IPs / users named across this case's
   // linked alerts, ranked by how many alerts touched each. Derived live from
@@ -548,10 +578,49 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
         </div>
 
         {/* Quick metadata */}
-        <div className="flex items-center gap-3 mt-3 text-[10px] text-ink-500">
+        <div className="flex items-center gap-3 mt-3 text-[10px] text-ink-500 flex-wrap">
           <span className="flex items-center gap-1"><User className="w-3 h-3" />{c.owner ?? 'Unassigned'}</span>
           <span className="flex items-center gap-1"><Zap className="w-3 h-3" />{c.playbook}</span>
+          <span className="flex items-center gap-1" title={`SLA ${c.slaHours}h at this tier`}>
+            <Layers className="w-3 h-3" />{tierState?.tierName ?? c.tierName ?? 'L1 · Triage'}
+          </span>
         </div>
+
+        {/* Tier hand-off. Escalating used to mean editing an owner field, so the
+            receiving analyst inherited a case with no statement of what had been
+            ruled out or why it was passed on. The note is the point. */}
+        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] text-ink-600">Hand off to</span>
+          {(tierState?.tiers ?? DEFAULT_TIERS).map((t) => {
+            const current = (tierState?.tier ?? c.tier ?? 1) === t.tier
+            return (
+              <button key={t.tier} onClick={() => handOff(t.tier)}
+                disabled={current || escalating}
+                title={current ? 'Already at this tier' : `${t.name} — SLA ${t.slaHours}h`}
+                className={cn('px-2 py-1 rounded-lg text-[10px] font-medium border transition-colors',
+                  current
+                    ? 'border-violet/40 bg-violet/15 text-violet cursor-default'
+                    : 'border-white/10 text-ink-400 hover:text-white hover:border-white/25')}>
+                {t.name.split(' · ')[0]}
+              </button>
+            )
+          })}
+          {escalating && <Loader2 className="w-3 h-3 animate-spin text-ink-500" />}
+        </div>
+        {(tierState?.history?.length ?? 0) > 0 && (
+          <div className="mt-2 space-y-1">
+            {tierState!.history.slice(0, 3).map((h) => (
+              <div key={h.id} className="text-[10px] text-ink-600 leading-snug">
+                <span className="text-ink-400">
+                  {h.fromTierName?.split(' · ')[0] ?? '—'} → {h.toTierName.split(' · ')[0]}
+                </span>
+                {' by '}{h.actor}
+                {h.toOwner && <> → <span className="text-ink-400">{h.toOwner}</span></>}
+                {h.note && <div className="text-ink-500">{h.note}</div>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

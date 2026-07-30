@@ -60,7 +60,12 @@ def _sla(case: dict) -> dict:
 
 
 def _with_sla(case_dict: dict) -> dict:
-    return {**case_dict, **_sla(case_dict)}
+    # tierName travels with every case so a queue can be read at a glance -
+    # "L2 · Investigation" says what a bare `2` does not.
+    from dashboard_api import escalation
+    tier = case_dict.get("tier") or escalation.TRIAGE
+    return {**case_dict, **_sla(case_dict), "tier": tier,
+            "tierName": escalation.tier_name(tier)}
 
 
 class CaseUpdate(BaseModel):
@@ -157,6 +162,72 @@ def get_case(case_id: str, user: dict = Depends(current_user)):
     if not row or tenancy.cross_org(row, user):
         raise HTTPException(status_code=404, detail="Case not found")
     return _with_sla(row_to_dict(row))
+
+
+class EscalateBody(BaseModel):
+    to_tier: int
+    to_owner: str | None = None
+    note: str | None = None
+
+
+@router.post("/cases/{case_id}/escalate", status_code=201)
+def escalate_case(case_id: str, body: EscalateBody,
+                  user: dict = Depends(require_perm("soar.write"))):
+    """Hand a case to another SOC tier, recording who, to whom, and WHY.
+
+    Escalating used to mean editing an owner field, so the receiving analyst
+    inherited a case with no statement of what had been ruled out or why it was
+    being passed on. The hand-off note is the part that saves their time.
+
+    De-escalation is allowed: L2 establishing that something is routine and
+    handing it back to L1 is a normal outcome, and a workflow that only ratchets
+    upward quietly pushes everything to the most expensive tier.
+    """
+    from dashboard_api import escalation
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="Case not found")
+        try:
+            event = escalation.escalate(
+                conn, case_id=case_id, to_tier=body.to_tier, actor=user["email"],
+                to_owner=body.to_owner, note=body.note)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        audit(conn, user["email"], "case.escalate", case_id,
+              f"{event['fromTierName']} -> {event['toTierName']}")
+        conn.commit()
+        updated = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        return {"event": event, "case": _with_sla(row_to_dict(updated)),
+                "history": escalation.history(conn, case_id)}
+
+
+@router.get("/cases/{case_id}/escalations")
+def case_escalations(case_id: str, user: dict = Depends(current_user)):
+    """A case's chain of custody: every tier hand-off, newest first."""
+    from dashboard_api import escalation
+    with get_conn() as conn:
+        row = conn.execute("SELECT id, org_id, tier FROM cases WHERE id=?",
+                           (case_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="Case not found")
+        return {"tier": row["tier"] or escalation.TRIAGE,
+                "tierName": escalation.tier_name(row["tier"] or escalation.TRIAGE),
+                "history": escalation.history(conn, case_id),
+                "tiers": [{"tier": t, "name": escalation.tier_name(t),
+                           "slaHours": escalation.sla_for(t)} for t in escalation.TIERS]}
+
+
+@router.get("/queues")
+def tier_queues(user: dict = Depends(current_user)):
+    """Open cases per tier, and how many nobody has claimed.
+
+    Unassigned is the number that matters for two analysts working the same queue
+    without stepping on each other - it is the pile with no owner."""
+    from dashboard_api import escalation
+    with get_conn() as conn:
+        return escalation.queue_counts(
+            conn, tenancy.org_of(user) if tenancy.enforced() else None)
 
 
 @router.get("/cases/{case_id}/related")

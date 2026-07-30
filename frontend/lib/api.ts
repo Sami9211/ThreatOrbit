@@ -280,7 +280,41 @@ export interface Case {
   warRoom: Array<{ ts: string; actor: string; type: string; content: string }>
   tasks: Array<{ id: string; phase: string; name: string; status: string; assignee: string | null; notes: string }>
   evidence: Array<{ name: string; type: string; added: string; by: string }>
+  /** SOC tier currently working this: 1 triage, 2 investigation, 3 research. */
+  tier?: number
+  tierName?: string
 }
+
+/** One tier hand-off. The `note` is the part that saves the receiving analyst's
+ *  time - what was already ruled out, and why this is being passed on. */
+export interface EscalationEvent {
+  id: string
+  fromTier: number | null
+  toTier: number
+  fromTierName: string | null
+  toTierName: string
+  fromOwner: string | null
+  toOwner: string | null
+  note: string | null
+  actor: string
+  ts: string
+}
+export const escalateCase = (id: string, toTier: number, toOwner?: string, note?: string) =>
+  api<{ event: EscalationEvent; case: Case; history: EscalationEvent[] }>(
+    `/soar/cases/${id}/escalate`,
+    { method: 'POST', body: JSON.stringify({ to_tier: toTier, to_owner: toOwner, note }) })
+export const fetchCaseEscalations = (id: string) =>
+  api<{
+    tier: number; tierName: string; history: EscalationEvent[]
+    tiers: Array<{ tier: number; name: string; slaHours: number }>
+  }>(`/soar/cases/${id}/escalations`)
+
+/** Open cases per tier, and how many nobody has claimed - the number that
+ *  matters for two analysts working one queue without colliding. */
+export interface TierQueue {
+  tier: number; name: string; slaHours: number; open: number; unassigned: number
+}
+export const fetchTierQueues = () => api<TierQueue[]>('/soar/queues')
 
 export interface Playbook {
   id: string
