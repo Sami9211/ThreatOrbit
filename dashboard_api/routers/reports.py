@@ -40,7 +40,7 @@ def incident_report(case_id: str = Query(..., description="SOAR case id"),
     actions, SLA verdict, lessons-learned scaffold."""
     from dashboard_api.reports import apply_audience, build_incident_report
     try:
-        report = apply_audience(build_incident_report(case_id), audience)
+        report = apply_audience(build_incident_report(case_id, user), audience)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     with get_conn() as conn:

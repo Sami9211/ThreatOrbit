@@ -1286,8 +1286,17 @@ with per-tier SLA that moves with the case and a `/soar/queues` endpoint
 reporting open and **unassigned** counts per tier - unassigned being the number
 that matters for two analysts working one queue without colliding.
 
-Still open in this phase: investigation-as-artefact (timeline of pivots and
-conclusions), narrative reporting. Scheduled hunts already exist.
+**Investigation-as-artefact is DONE (2026-07-30).** The case timeline now merges
+hand-offs, analyst verdicts on the case's own indicators, and evidence
+attachments alongside the war-room notes, alerts and playbook runs it already
+had - all three were being recorded but lived in separate tables, so nobody
+reviewing a case afterwards could see the sequence of DECISIONS, only the alerts
+that triggered it. Cases also carry an `outcome` + `conclusion`, required
+together: a case that closes with a status and no finding teaches nobody
+anything, and `inconclusive` is a first-class outcome because forcing a binary
+makes analysts pick whichever side is closest.
+
+Still open in this phase: narrative reporting. Scheduled hunts already exist.
 
 ---
 
@@ -1763,6 +1772,32 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · An investigation becomes an artefact, and a case records what it
+  FOUND.** The case timeline already merged war-room notes, linked alerts and
+  playbook runs. What it could not show was the sequence of DECISIONS: hand-offs,
+  analyst conclusions about the case's own indicators, and evidence attachments
+  were all being recorded but lived in separate tables, so anyone reviewing the
+  case afterwards saw only the alerts that triggered it. All three now merge into
+  the same ordered timeline - one timeline with more sources, rather than a
+  second competing one.
+
+  Cases also carry `outcome` + `conclusion`, and the endpoint **requires both**:
+  an outcome with no finding is precisely what it exists to prevent, since the
+  next analyst who meets the same infrastructure would start from scratch - the
+  same waste the indicator verdict loop was built to stop. `inconclusive` is a
+  first-class outcome because forcing a binary means analysts pick whichever side
+  is closest and the record stops being true, and `close: false` lets a case
+  carry a finding while work continues.
+
+  **A latent bug the change surfaced.** `build_incident_report` called the
+  `case_related` ROUTE HANDLER as a plain Python function with no principal, so
+  `user` was FastAPI's `Depends` sentinel. That worked only because nothing in
+  the handler ever dereferenced it - `tenancy.cross_org` tolerates a placeholder.
+  Adding one org-scoped lookup turned it into `AttributeError: 'Depends' object
+  has no attribute 'get'` on both backends. Fixed by threading the caller's real
+  principal through, which also means an incident report now respects the
+  workspace of whoever asked for it instead of quietly resolving to the default.
 
 - **2026-07-30 · Tiered SOC queues: the hand-off becomes a first-class event.**
   A SOC is tiered - L1 triages, L2 investigates what L1 could not close, L3 does

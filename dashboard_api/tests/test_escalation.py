@@ -219,3 +219,103 @@ def test_existing_cases_default_to_triage_rather_than_looking_escalated(cases):
     conn.commit()
     row = conn.execute("SELECT tier FROM cases WHERE id=?", (cid,)).fetchone()
     assert (row["tier"] or esc.TRIAGE) == esc.TRIAGE
+
+
+def test_the_timeline_includes_handoffs_verdicts_and_evidence(client, auth):
+    """An investigation is an ARTEFACT, not a status field. Hand-offs, analyst
+    conclusions and evidence were all being recorded but lived in separate
+    tables, so nobody reviewing the case afterwards could see the sequence of
+    decisions - only the alerts that triggered it."""
+    from dashboard_api import verdicts as vm
+    val = f"tl-{uuid.uuid4().hex[:8]}.test"
+    with get_conn() as conn:
+        cid = _mkcase(conn, owner="l1@x.com")
+        conn.execute("UPDATE cases SET entities=? WHERE id=?",
+                     (f'[{{"type":"domain","value":"{val}"}}]', cid))
+        vm.record(conn, value=val, verdict=vm.CONFIRMED, analyst="l2@x.com",
+                  reason="beaconing confirmed in proxy logs")
+        conn.commit()
+    try:
+        client.post(f"/soar/cases/{cid}/escalate",
+                    json={"to_tier": 2, "to_owner": "l2@x.com", "note": "needs forensics"},
+                    headers=auth)
+        tl = client.get(f"/soar/cases/{cid}/related", headers=auth).json()["timeline"]
+        kinds = {e["type"] for e in tl}
+        assert "escalation" in kinds, f"hand-offs missing from the timeline: {kinds}"
+        assert "verdict" in kinds, f"analyst conclusions missing from the timeline: {kinds}"
+        esc_entry = next(e for e in tl if e["type"] == "escalation")
+        assert "needs forensics" in esc_entry["title"]
+        v_entry = next(e for e in tl if e["type"] == "verdict")
+        assert val in v_entry["title"] and "beaconing" in v_entry["title"]
+        # Still ordered oldest-first, like the rest of the timeline.
+        stamps = [e["ts"] for e in tl if e.get("ts")]
+        assert stamps == sorted(stamps)
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM cases WHERE id=?", (cid,))
+            conn.execute("DELETE FROM case_escalations WHERE case_id=?", (cid,))
+            conn.execute("DELETE FROM ioc_verdicts WHERE ioc_value=?", (val,))
+            conn.commit()
+
+
+def test_a_case_records_what_it_found_not_just_that_it_closed(client, auth):
+    with get_conn() as conn:
+        cid = _mkcase(conn)
+        conn.commit()
+    try:
+        r = client.post(f"/soar/cases/{cid}/conclude",
+                        json={"outcome": "true-positive",
+                              "conclusion": "Confirmed C2 beaconing from HR-LAPTOP-14; "
+                                            "host isolated and reimaged."},
+                        headers=auth)
+        assert r.status_code == 201, r.text
+        c = r.json()
+        assert c["outcome"] == "true-positive"
+        assert "reimaged" in c["conclusion"]
+        assert c["status"] == "closed" and c["closed_at"]
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM cases WHERE id=?", (cid,))
+            conn.commit()
+
+
+def test_closing_without_a_finding_is_refused(client, auth):
+    """An outcome with no finding is exactly what this endpoint exists to
+    prevent."""
+    with get_conn() as conn:
+        cid = _mkcase(conn)
+        conn.commit()
+    try:
+        assert client.post(f"/soar/cases/{cid}/conclude",
+                           json={"outcome": "true-positive", "conclusion": "   "},
+                           headers=auth).status_code == 400
+        assert client.post(f"/soar/cases/{cid}/conclude",
+                           json={"outcome": "probably-fine", "conclusion": "x"},
+                           headers=auth).status_code == 400
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM cases WHERE id=?", (cid,))
+            conn.commit()
+
+
+def test_inconclusive_is_a_first_class_outcome(client, auth):
+    """Forcing a binary means analysts pick whichever side is closest and the
+    record stops being true."""
+    with get_conn() as conn:
+        cid = _mkcase(conn)
+        conn.commit()
+    try:
+        r = client.post(f"/soar/cases/{cid}/conclude",
+                        json={"outcome": "inconclusive",
+                              "conclusion": "Host was rebuilt before we could image it.",
+                              "close": False},
+                        headers=auth)
+        assert r.status_code == 201, r.text
+        assert r.json()["outcome"] == "inconclusive"
+        # close=false leaves it open, so a case can carry a finding while work
+        # continues.
+        assert r.json()["status"] != "closed"
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM cases WHERE id=?", (cid,))
+            conn.commit()

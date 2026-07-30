@@ -571,7 +571,7 @@ def build_report(kind: str, period: str = "weekly",
     return apply_audience(report, audience)
 
 
-def build_incident_report(case_id: str) -> dict:
+def build_incident_report(case_id: str, user: dict | None = None) -> dict:
     """Post-incident report for one case: what happened (MITRE-mapped
     timeline), how the response went (actions, SLA verdict), and a
     lessons-learned scaffold. Raises ValueError when the case is unknown."""
@@ -582,7 +582,13 @@ def build_incident_report(case_id: str) -> dict:
             raise ValueError(f"unknown case: {case_id}")
         from dashboard_api.db import row_to_dict
         case = row_to_dict(row)
-    related = case_related(case_id)
+    # The CALLER's principal, threaded through. This used to invoke the route
+    # handler with no user, so `user` was FastAPI's `Depends` sentinel - which
+    # happened to work only because nothing in the handler dereferenced it.
+    # Adding one org-scoped lookup turned that into an AttributeError, which is
+    # the honest signal that calling an HTTP handler as a plain function needs a
+    # real principal rather than a placeholder.
+    related = case_related(case_id, user=user or {})
     sla = _sla(case)
     alerts = related["alerts"]
     runs = related["runs"]

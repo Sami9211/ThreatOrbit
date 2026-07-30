@@ -15,7 +15,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { SkeletonRows } from '@/components/dashboard/Skeleton'
 import { useExperienceMode } from '@/lib/useExperienceMode'
-import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, escalateCase, fetchCaseEscalations, type SoarMetrics, type CaseRelated } from '@/lib/api'
+import { fetchCases, fetchPlaybooks, fetchSoarMetrics, createCase, addCaseNote, patchCaseTask, runPlaybook as apiRunPlaybook, fetchCaseRelated, addCaseEvidence, exportEvidenceBundle, escalateCase, fetchCaseEscalations, concludeCase, CASE_OUTCOMES, type SoarMetrics, type CaseRelated } from '@/lib/api'
 import { tk } from '@/lib/colors'
 
 /* -- Types ---------------------------------------------------------- */
@@ -64,6 +64,10 @@ type CaseRecord = {
   /** SOC tier working this case: 1 triage, 2 investigation, 3 research. */
   tier?: number
   tierName?: string
+  /** What the investigation found. A case that closes with a status and no
+   *  finding teaches nobody anything. */
+  outcome?: string | null
+  conclusion?: string | null
 }
 
 type Playbook = {
@@ -458,10 +462,26 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
   const [related, setRelated] = useState<CaseRelated | null>(null)
   const [tierState, setTierState] = useState<Awaited<ReturnType<typeof fetchCaseEscalations>> | null>(null)
   const [escalating, setEscalating] = useState(false)
+  const [concluding, setConcluding] = useState(false)
   useEffect(() => {
     fetchCaseRelated(c.id).then(setRelated).catch(() => {})
     fetchCaseEscalations(c.id).then(setTierState).catch(() => {})
   }, [c.id])
+
+  function conclude(outcome: string) {
+    if (concluding) return
+    // Required, unlike the hand-off note: an outcome with no finding is exactly
+    // what this control exists to prevent, so an empty answer cancels.
+    const text = window.prompt(
+      `What did this investigation find? (required — "${outcome}" on its own tells `
+      + 'the next analyst nothing)')
+    if (!text || !text.trim()) return
+    setConcluding(true)
+    concludeCase(c.id, outcome, text.trim())
+      .then(() => window.location.reload())
+      .catch(() => {})
+      .finally(() => setConcluding(false))
+  }
 
   function handOff(toTier: number) {
     if (escalating) return
@@ -607,6 +627,32 @@ function CaseDetail({ c, onClose, simplified }: { c: CaseRecord; onClose: () => 
           })}
           {escalating && <Loader2 className="w-3 h-3 animate-spin text-ink-500" />}
         </div>
+        {/* What the investigation FOUND. A case that closes with a status and
+            no finding teaches nobody anything. */}
+        {c.conclusion ? (
+          <div className="mt-3 rounded-lg border border-white/8 bg-surface-2/50 p-2.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] text-ink-500 uppercase tracking-wider">Finding</span>
+              <span className="text-[10px] font-semibold"
+                style={{ color: c.outcome === 'true-positive' ? tk('magenta')
+                  : c.outcome === 'false-positive' || c.outcome === 'benign' ? tk('safe')
+                  : tk('amber') }}>
+                {c.outcome}
+              </span>
+            </div>
+            <p className="text-[10px] text-ink-300 leading-snug mt-1">{c.conclusion}</p>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-ink-600">Conclude as</span>
+            {CASE_OUTCOMES.map((o) => (
+              <button key={o} onClick={() => conclude(o)} disabled={concluding}
+                className="px-2 py-1 rounded-lg text-[10px] border border-white/10 text-ink-400 hover:text-white hover:border-white/25 transition-colors disabled:opacity-50">
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
         {(tierState?.history?.length ?? 0) > 0 && (
           <div className="mt-2 space-y-1">
             {tierState!.history.slice(0, 3).map((h) => (

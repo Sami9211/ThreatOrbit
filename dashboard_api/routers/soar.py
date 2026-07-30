@@ -202,6 +202,52 @@ def escalate_case(case_id: str, body: EscalateBody,
                 "history": escalation.history(conn, case_id)}
 
 
+_OUTCOMES = ("true-positive", "false-positive", "benign", "inconclusive")
+
+
+class ConcludeBody(BaseModel):
+    outcome: str
+    conclusion: str
+    close: bool = True
+
+
+@router.post("/cases/{case_id}/conclude", status_code=201)
+def conclude_case(case_id: str, body: ConcludeBody,
+                  user: dict = Depends(require_perm("soar.write"))):
+    """Record what the investigation FOUND, and close it.
+
+    A case that closes with a status and no finding teaches nobody anything: the
+    next analyst who meets the same infrastructure starts from scratch, which is
+    the same waste the indicator verdict loop exists to stop.
+
+    `inconclusive` is a first-class outcome on purpose. Forcing a binary means
+    analysts pick whichever side is closest and the record stops being true.
+    """
+    outcome = (body.outcome or "").strip().lower()
+    if outcome not in _OUTCOMES:
+        raise HTTPException(status_code=400, detail=f"outcome must be one of {_OUTCOMES}")
+    text = (body.conclusion or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail="A conclusion is required - an outcome with no finding is the "
+                   "thing this endpoint exists to prevent")
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="Case not found")
+        conn.execute(
+            "UPDATE cases SET outcome=?, conclusion=?, closed_at=?, status=?, updated=? "
+            "WHERE id=?",
+            (outcome, text[:4000], now if body.close else None,
+             "closed" if body.close else row["status"], now, case_id))
+        audit(conn, user["email"], "case.conclude", case_id, outcome)
+        conn.commit()
+        updated = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    return _with_sla(row_to_dict(updated))
+
+
 @router.get("/cases/{case_id}/escalations")
 def case_escalations(case_id: str, user: dict = Depends(current_user)):
     """A case's chain of custody: every tier hand-off, newest first."""
@@ -269,6 +315,35 @@ def case_related(case_id: str, user: dict = Depends(current_user)):
     timeline += [{"ts": r["ts"], "type": "playbook", "actor": r.get("actor"),
                   "title": f"Playbook run: {r.get('playbook_name')} ({r.get('status')})",
                   "severity": None, "technique": None} for r in runs]
+    # An investigation is an ARTEFACT, not a status field: what was handed to
+    # whom, what an analyst concluded about each indicator, and what evidence was
+    # attached. Those three were all recorded but lived in separate tables, so
+    # nobody reviewing the case afterwards could see the sequence of decisions -
+    # only the alerts that triggered it.
+    from dashboard_api import escalation as esc_mod
+    from dashboard_api import verdicts as verdict_mod
+    with get_conn() as conn:
+        for h in esc_mod.history(conn, case_id):
+            owner = f" → {h['toOwner']}" if h["toOwner"] else ""
+            timeline.append({
+                "ts": h["ts"], "type": "escalation", "actor": h["actor"],
+                "title": f"Handed off {h['fromTierName'] or '—'} → {h['toTierName']}{owner}"
+                         + (f": {h['note']}" if h["note"] else ""),
+                "severity": None, "technique": None})
+        # Analyst conclusions about the indicators THIS case is about - the
+        # "cleared vs confirmed" record that used to exist nowhere.
+        for v in values[:50]:
+            for rec in verdict_mod.history(conn, v, tenancy.org_of(user), limit=10):
+                timeline.append({
+                    "ts": rec["ts"], "type": "verdict", "actor": rec["analyst"],
+                    "title": f"{v}: {rec['verdict']}"
+                             + (f" — {rec['reason']}" if rec["reason"] else ""),
+                    "severity": None, "technique": None})
+    timeline += [{"ts": e.get("ts") or e.get("added"), "type": "evidence",
+                  "actor": e.get("addedBy") or e.get("by"),
+                  "title": f"Evidence attached: {e.get('name')}",
+                  "severity": None, "technique": None}
+                 for e in (case.get("evidence") or []) if isinstance(e, dict)]
     timeline.sort(key=lambda x: x.get("ts") or "")
     techniques: dict[str, int] = {}
     for a in alerts:

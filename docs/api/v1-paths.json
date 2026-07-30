@@ -221,6 +221,7 @@
     "/soar/analysts",
     "/soar/cases",
     "/soar/cases/{case_id}",
+    "/soar/cases/{case_id}/conclude",
     "/soar/cases/{case_id}/escalate",
     "/soar/cases/{case_id}/escalations",
     "/soar/cases/{case_id}/evidence",

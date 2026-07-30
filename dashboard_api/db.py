@@ -1099,6 +1099,12 @@ _MIGRATIONS = [
     # research / attribution. Defaults to 1 so every existing case is where a
     # case starts, rather than silently appearing to have been escalated.
     ("cases", "tier", "INTEGER NOT NULL DEFAULT 1"),
+    # What the investigation actually FOUND. A case that closes with a status and
+    # no finding teaches nobody anything, and the next analyst who meets the same
+    # infrastructure starts from scratch.
+    ("cases", "conclusion", "TEXT"),
+    ("cases", "outcome", "TEXT"),          # true-positive | false-positive | benign | inconclusive
+    ("cases", "closed_at", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429
     # (Retry-After); the scheduler skips the connector until it passes, so we
     # stop retrying into a limit we have already been told about.

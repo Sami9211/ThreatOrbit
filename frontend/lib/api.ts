@@ -283,6 +283,10 @@ export interface Case {
   /** SOC tier currently working this: 1 triage, 2 investigation, 3 research. */
   tier?: number
   tierName?: string
+  /** What the investigation found, and when it was closed. */
+  outcome?: string | null
+  conclusion?: string | null
+  closed_at?: string | null
 }
 
 /** One tier hand-off. The `note` is the part that saves the receiving analyst's
@@ -315,6 +319,16 @@ export interface TierQueue {
   tier: number; name: string; slaHours: number; open: number; unassigned: number
 }
 export const fetchTierQueues = () => api<TierQueue[]>('/soar/queues')
+
+/** What the investigation FOUND. A case that closes with a status and no finding
+ *  teaches nobody anything - the next analyst meeting the same infrastructure
+ *  starts from scratch. `inconclusive` is first-class on purpose: forcing a
+ *  binary means analysts pick whichever side is closest and the record stops
+ *  being true. */
+export const CASE_OUTCOMES = ['true-positive', 'false-positive', 'benign', 'inconclusive'] as const
+export const concludeCase = (id: string, outcome: string, conclusion: string, close = true) =>
+  api<Case>(`/soar/cases/${id}/conclude`,
+    { method: 'POST', body: JSON.stringify({ outcome, conclusion, close }) })
 
 export interface Playbook {
   id: string
