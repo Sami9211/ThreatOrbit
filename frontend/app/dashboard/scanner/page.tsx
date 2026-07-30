@@ -568,6 +568,72 @@ function DetailsTab({ result }: { result: ScanResult }) {
         )}
       </Card>
 
+      {/* Passive DNS - OUR observations, not a third party's assertion. This is
+          the one enrichment a public CTI library structurally cannot provide for
+          a specific environment, and the history is the valuable part: a name
+          that has resolved to nine addresses in a week behaves very differently
+          from one that has resolved to the same address for months. */}
+      {(() => {
+        const d = providerOf(result, 'dns')
+        if (!d) return null
+        const data = (d.data ?? {}) as Record<string, unknown>
+        const obs = (data.observations ?? []) as Array<{
+          name: string; address: string; firstSeen: string; lastSeen: string
+          timesSeen: number; observedVia: string
+        }>
+        return (
+          <Card title="Passive DNS (observed here)"
+            right={obs.length > 0
+              ? <span className="text-[9px] text-ink-600">{obs.length} observed</span>
+              : undefined}>
+            {d.available ? (
+              <div>
+                {data.ptr ? <KV k="PTR record" v={data.ptr as string} /> : null}
+                {obs.length === 0 ? (
+                  <EmptyNote text={d.summary || 'Nothing observed for this value yet.'} />
+                ) : (
+                  <div className="space-y-1 mt-1">
+                    {obs.slice(0, 8).map((o) => (
+                      <div key={`${o.name}|${o.address}`}
+                        className="flex items-center justify-between gap-2 text-[10px] px-2 py-1 rounded-lg bg-surface-3/50">
+                        <span className="font-mono text-ink-300 truncate">
+                          {o.name} <span className="text-ink-600">→</span> {o.address}
+                        </span>
+                        <span className="shrink-0 flex items-center gap-1.5">
+                          {/* Forward AND reverse agreeing means the mapping is
+                              actually configured - a stronger claim than either
+                              direction alone, so it is labelled rather than
+                              flattened away. */}
+                          <span title={o.observedVia === 'both'
+                            ? 'Forward and reverse agree - a configured mapping'
+                            : o.observedVia === 'ptr'
+                              ? 'Seen only as a reverse (PTR) record'
+                              : 'Seen only as a forward resolution'}
+                            className="px-1 py-0.5 rounded-sm text-[9px]"
+                            style={{
+                              color: o.observedVia === 'both' ? tk('safe') : '#8A7FA8',
+                              background: o.observedVia === 'both' ? `${tk('safe')}14` : 'transparent',
+                            }}>
+                            {o.observedVia}
+                          </span>
+                          <span className="text-ink-600 tabular-nums">×{o.timesSeen}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11px] text-ink-500 mt-2 leading-relaxed">
+                  Recorded by this deployment when it resolved the value. Absence
+                  means we have not observed it - not that it resolves to nothing.
+                </p>
+              </div>
+            ) : (
+              <EmptyNote text={`Not available: ${d.reason || 'unknown'}.`} />
+            )}
+          </Card>
+        )
+      })()}
+
       {/* Network ownership. An IP on its own is barely intelligence; "announced
           by AS14061 DigitalOcean, US" says the infrastructure is cheap and
           rented. Answered from a local BGP table, so it is instant, works

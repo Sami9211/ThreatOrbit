@@ -476,6 +476,25 @@ CREATE TABLE IF NOT EXISTS asn_ranges (
     description TEXT
 );
 
+-- First-party passive DNS: resolutions THIS deployment has actually observed.
+-- Every other enrichment is somebody else's opinion; this is a fact observed
+-- here, and no public CTI library can hold it for a given customer's
+-- environment. See dashboard_api/passive_dns.py.
+CREATE TABLE IF NOT EXISTS dns_observations (
+    name         TEXT NOT NULL,
+    address      TEXT NOT NULL,
+    -- Same fixed-width hex as asn_ranges/iocs.ip_hex, so an observation can be
+    -- range-matched against a BGP prefix without decoding it again.
+    addr_hex     TEXT NOT NULL,
+    first_seen   TEXT NOT NULL,
+    last_seen    TEXT NOT NULL,
+    times_seen   INTEGER NOT NULL DEFAULT 1,
+    -- 'forward' | 'ptr' | 'both'. Both directions agreeing means the mapping is
+    -- actually configured, which is a stronger claim than either alone.
+    observed_via TEXT NOT NULL DEFAULT 'forward',
+    PRIMARY KEY (name, address)
+);
+
 -- Decay policy as RECORDS rather than a Python dict, so how fast intel stops
 -- being actionable is tunable per deployment instead of being one opinion baked
 -- into the source. See dashboard_api/decay.py; the seeded rules reproduce the
@@ -868,6 +887,10 @@ CREATE INDEX IF NOT EXISTS idx_iocs_ip_hex ON iocs(ip_hex);
 CREATE INDEX IF NOT EXISTS idx_iocs_reg_domain ON iocs(reg_domain);
 -- "What is about to be revoked?" as a range scan over stored timestamps.
 CREATE INDEX IF NOT EXISTS idx_iocs_valid_until ON iocs(valid_until);
+-- The passive-DNS pivot: every name observed resolving to one address. The
+-- (name,address) primary key already serves the forward direction.
+CREATE INDEX IF NOT EXISTS idx_dns_address ON dns_observations(address);
+CREATE INDEX IF NOT EXISTS idx_dns_addr_hex ON dns_observations(addr_hex);
 -- Only the reverse direction needs its own index. Corroboration looks up
 -- value -> sources, which the PRIMARY KEY (value, source_id) already serves as
 -- its leading column; a second index on value alone is pure insert cost -

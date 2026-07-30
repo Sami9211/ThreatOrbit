@@ -1122,8 +1122,20 @@ failure backoff are all covered by tests against a verbatim-format fixture; the
 one step not yet exercised end-to-end is the HTTP fetch itself, which will run
 the first time this is started on a host with ordinary internet access.
 
-Still open in this phase: (3) first-party passive DNS, (4) reverse DNS/PTR and
-TLS observation, (5) sighting counts from local telemetry, (6) keyed enrichers.
+**(3) first-party passive DNS and the PTR half of (4) are DONE (2026-07-30).**
+`passive_dns.py` + `dns_observations` record every resolution this deployment
+performs, forward and reverse. A pair seen from BOTH directions is recorded as
+`both` rather than flattened, because forward and reverse agreeing means the
+mapping is actually configured - a stronger claim than either alone. A failed
+lookup records NOTHING, so "we have not seen it" never becomes "it resolves to
+nothing". Wired in as an enrichment provider, a "Passive DNS (observed here)"
+card in IntelScope, and a `resolution` pivot group that links indicators sharing
+an observed address - the classic passive-DNS pivot, and the one that turns a
+single indicator into a piece of infrastructure. The pivot reads only recorded
+data, so opening a drawer cannot become a burst of DNS traffic.
+
+Still open in this phase: TLS certificate observation (the other half of (4)),
+(5) sighting counts from local telemetry, (6) keyed enrichers.
 
 ---
 
@@ -1714,6 +1726,46 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-07-30 · First-party passive DNS: the one enrichment nobody else can sell
+  you.** Every other enrichment in this platform is somebody else's opinion about
+  an indicator. A resolution observed HERE is not, and it answers questions a
+  public CTI library structurally cannot answer for a specific environment: what
+  did this domain resolve to and has it moved, what else resolved to this
+  address, and do forward and reverse agree.
+
+  `passive_dns.py` + `dns_observations` record every resolution the deployment
+  performs. Two honesty rules are load-bearing and both have tests: **a failed
+  lookup records nothing**, because "we have not seen it" and "it resolves to
+  nothing" are different claims and only one is true; and a pair observed from
+  BOTH directions is stored as `both` rather than flattened, because forward and
+  reverse agreeing means the mapping is actually configured. Addresses use the
+  same fixed-width hex encoding as `asn_ranges` and `iocs.ip_hex`, asserted
+  identical in a test, so an observation can be range-matched against a BGP
+  prefix without decoding it twice.
+
+  Resolution is hard-bounded (3s, in a worker) because the system resolver's own
+  timeouts are long and not always honoured, and this runs on a request path.
+  Names are normalised, so `Example.TEST.` and `example.test` are one row rather
+  than two halves of one history.
+
+  Surfaced three ways: an enrichment provider, a "Passive DNS (observed here)"
+  card in IntelScope showing each observation with its direction and count, and a
+  new `resolution` pivot group in the indicator drawer that links indicators
+  sharing an observed address. The pivot reads only recorded data - a tripwire
+  test asserts it performs no live resolution, so opening a drawer cannot become
+  a burst of DNS traffic.
+
+  Verified against real DNS outside the suite: forward and IPv6 resolutions
+  recorded, PTR working, a non-resolving name writing nothing, and the
+  forward+reverse upgrade firing for `1.1.1.1` only while its sibling addresses
+  stayed `forward`. Incidentally demonstrated the feature working as intended -
+  `github.com` returned `140.82.113.3` and then `140.82.114.4` across two
+  lookups, and the history captured both, which is exactly the address-churn
+  signal fast-flux hosting produces. The suite itself never resolves anything
+  (`DASHBOARD_DISABLE_DNS` in conftest, same pattern as RDAP): a suite that
+  depends on live DNS is slow, non-deterministic, and fails on an air-gapped
+  runner for reasons unrelated to the code.
 
 - **2026-07-30 · Decay policy becomes a record, and Phase 3 closes.** How fast
   intel stops being worth acting on is a POLICY decision that differs per

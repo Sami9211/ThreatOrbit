@@ -150,8 +150,69 @@ def related(conn, ioc: dict, *, limit: int = GROUP_LIMIT) -> list[dict]:
                     "pivot": {"kind": "domain", "value": reg},
                 })
 
+    groups.extend(_resolution_group(conn, ioc, ioc_id, limit))
     groups.extend(_network_group(conn, ioc, ioc_id, limit))
     return groups
+
+
+def _resolution_group(conn, ioc: dict, ioc_id: str, limit: int) -> list[dict]:
+    """Indicators tied together by a resolution THIS deployment observed.
+
+    The classic passive-DNS pivot, and the strongest kind of link here because it
+    is our own observation rather than a third party's assertion. For an IP:
+    every indicator whose name we saw resolving to it. For a domain/URL: every
+    indicator sharing one of its observed addresses.
+
+    Uses only what has already been recorded - it never resolves anything, so
+    opening a drawer cannot turn into a burst of DNS traffic.
+    """
+    from dashboard_api import passive_dns
+
+    itype = (ioc.get("type") or "").lower()
+    value = str(ioc.get("value") or "")
+    if itype == "ip":
+        addresses = [value.strip()]
+    else:
+        host = _host_of_row(ioc)
+        if not host:
+            return []
+        addresses = [o["address"] for o in passive_dns.for_name(conn, host)]
+    if not addresses:
+        return []
+
+    names, seen_addr = [], []
+    for addr in addresses[:8]:
+        obs = passive_dns.for_address(conn, addr)
+        if obs:
+            seen_addr.append(addr)
+        for o in obs:
+            if o["name"] not in names:
+                names.append(o["name"])
+    if not names:
+        return []
+
+    # Match those names back onto indicators we actually hold: a resolution to a
+    # name we have never seen as an indicator is real, but it is not a pivot to
+    # anything in this store.
+    ph = ",".join("?" * len(names[:_LOOKUP_CAP]))
+    where = (f"(value IN ({ph}) OR host IN ({ph})) AND id != ?")
+    params = tuple(names[:_LOOKUP_CAP]) * 2 + (ioc_id,)
+    items = _rows(conn, _SELECT + where + _ORDER, params + (limit + 1,), ioc_id)
+    if not items:
+        return []
+    where_label = ", ".join(seen_addr[:2]) or addresses[0]
+    return [{
+        "key": "resolution", "label": f"Resolved to {where_label}",
+        "why": f"this deployment observed these names resolving to the same "
+               f"address - our own observation, not a third party's claim",
+        "total": _count(conn, where, params), "items": items[:limit],
+        "pivot": {"kind": "address", "value": seen_addr[0] if seen_addr else addresses[0]},
+    }]
+
+
+# Names per resolution pivot fed into an IN (...) probe. Kept well under
+# SQLite's 999-bind ceiling, doubled because the clause binds them twice.
+_LOOKUP_CAP = 200
 
 
 def _network_group(conn, ioc: dict, ioc_id: str, limit: int) -> list[dict]:

@@ -507,7 +507,71 @@ def _enrich_asn(conn, value: str, ioc_type: str) -> dict:
                      "country": hit["country"], "synced": st["synced"]}}
 
 
+def _enrich_dns(conn, value: str, ioc_type: str) -> dict:
+    """First-party passive DNS: resolve it now, and report what we have seen.
+
+    This is the one enrichment that is OUR observation rather than a third
+    party's opinion, and it is the thing a public CTI library structurally cannot
+    provide for a specific environment. Historical observations are the valuable
+    part: a domain that has resolved to nine addresses in a week is behaving very
+    differently from one that has resolved to the same address for months.
+
+    Context, not a verdict. Plenty of legitimate services move addresses often.
+    """
+    from urllib.parse import urlparse
+    from dashboard_api import passive_dns
+
+    base = {"provider": "dns", "verdict": "unknown", "summary": "", "data": {}}
+    if os.environ.get("DASHBOARD_DISABLE_DNS", "").lower() == "true":
+        return {**base, "available": False, "reason": "disabled (DASHBOARD_DISABLE_DNS)",
+                "summary": "disabled"}
+    t = (ioc_type or "").lower()
+    target = value.strip()
+    if t == "url":
+        target = (urlparse(value).hostname or "").strip(".")
+        if not target:
+            return {**base, "available": False, "reason": "URL has no host",
+                    "summary": "URL has no host"}
+
+    if t == "ip" or passive_dns.addr_hex(target) is not None:
+        ptr = passive_dns.observe_address(conn, target)
+        history = passive_dns.for_address(conn, target)
+        names = [h["name"] for h in history]
+        if not ptr and not history:
+            return {**base, "available": True,
+                    "summary": "no PTR record, and nothing observed resolving here",
+                    "data": {"names": [], "ptr": None}}
+        # The pivot that matters: how many DISTINCT names this deployment has
+        # seen on one address.
+        summary = (f"PTR {ptr}" if ptr else "no PTR record")
+        if len(names) > 1:
+            summary += f" · {len(names)} names observed here"
+        return {**base, "available": True, "summary": summary,
+                "data": {"ptr": ptr, "names": names[:12], "observations": history[:12]}}
+
+    if t not in ("domain", "url"):
+        return {**base, "available": False, "reason": "not a resolvable name",
+                "summary": "not a resolvable name"}
+    fresh = passive_dns.observe_name(conn, target)
+    history = passive_dns.for_name(conn, target)
+    if not fresh and not history:
+        # An honest "we have not seen it". NOT "it resolves to nothing" - the
+        # lookup may simply have failed, and the two are not the same claim.
+        return {**base, "available": True,
+                "summary": "did not resolve, and nothing previously observed",
+                "data": {"addresses": [], "observations": []}}
+    addrs = [h["address"] for h in history] or fresh
+    summary = f"resolves to {', '.join(fresh[:3])}" if fresh else "not resolving now"
+    if len(addrs) > len(fresh):
+        summary += f" · {len(addrs)} addresses seen historically"
+    return {**base, "available": True, "summary": summary,
+            "data": {"addresses": fresh, "observations": history[:12]}}
+
+
 BUILTIN = {"internal": _enrich_internal, "indicator": _enrich_indicator,
+           # Our own observation, recorded locally, so it belongs with the
+           # builtins even though it makes a network call.
+           "dns": _enrich_dns,
            # Local dataset, so it belongs with the builtins rather than the
            # network-dependent providers: once synced it answers air-gapped.
            "asn": _enrich_asn}
@@ -521,8 +585,24 @@ ALL_PROVIDERS = list(BUILTIN) + list(PUBLIC) + list(EXTERNAL_PROVIDERS)
 def provider_status() -> list[dict]:
     out = [{"provider": p, "kind": "builtin", "available": True} for p in BUILTIN]
     # `asn` is a builtin but is only usable once the BGP table has been loaded,
-    # so report what is actually true rather than a blanket yes.
+    # and `dns` can be switched off, so report what is actually true rather than
+    # a blanket yes.
     for row in out:
+        if row["provider"] == "dns":
+            off = os.environ.get("DASHBOARD_DISABLE_DNS", "").lower() == "true"
+            row["available"] = not off
+            if off:
+                row["detail"] = "disabled (DASHBOARD_DISABLE_DNS)"
+            else:
+                try:
+                    from dashboard_api import passive_dns
+                    from dashboard_api.db import get_conn
+                    with get_conn() as conn:
+                        st = passive_dns.stats(conn)
+                    row["detail"] = (f"{st['pairs']:,} observations, "
+                                     f"{st['names']:,} names, {st['addresses']:,} addresses")
+                except Exception:                    # noqa: BLE001
+                    row["detail"] = "no observations yet"
         if row["provider"] == "asn":
             try:
                 from dashboard_api import asn as asn_mod

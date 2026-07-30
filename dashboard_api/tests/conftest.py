@@ -19,6 +19,11 @@ os.environ["DASHBOARD_ALLOW_PRIVATE_URLS"] = "true"
 # an honest "disabled" instead of making live rdap.org calls. The parser is
 # covered in test_scanner_lookup.py with a monkeypatched transport.
 os.environ["DASHBOARD_DISABLE_RDAP"] = "true"
+# Same reasoning for passive DNS: a suite that resolves real names is slow, is
+# non-deterministic, and fails on an air-gapped runner for reasons that have
+# nothing to do with the code. The recording, merging and pivot logic is covered
+# in test_passive_dns.py against a stubbed resolver.
+os.environ["DASHBOARD_DISABLE_DNS"] = "true"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
