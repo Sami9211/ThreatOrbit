@@ -152,6 +152,14 @@ function pivotHref(g: RelatedGroup): string | null {
   if (p.kind === 'host' || p.kind === 'domain') {
     return `/dashboard/cti?q=${encodeURIComponent(p.value)}`
   }
+  // A /24 is a value PREFIX ("124.88.113."), so the same substring search
+  // reproduces the group. Only IPv4: an IPv6 /64 is not a prefix of the
+  // textual form, and a query that quietly returned the wrong set would be
+  // worse than no link.
+  if (p.kind === 'subnet' && p.value.endsWith('/24')) {
+    const prefix = p.value.slice(0, p.value.lastIndexOf('.') + 1)
+    return `/dashboard/cti?q=${encodeURIComponent(prefix)}`
+  }
   return null
 }
 

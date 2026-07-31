@@ -495,7 +495,10 @@ export interface IocDetail extends Ioc {
  *  one they are right to ignore. `total` is the true count, which can far exceed
  *  the items returned. */
 export interface RelatedGroup {
-  key: 'report' | 'actor' | 'host' | 'sibling' | 'network'
+  // Kept in step with dashboard_api/relations.py. `resolution` (passive-DNS)
+  // and `subnet` were both missing here after they shipped - the response
+  // arrives untyped, so nothing complained.
+  key: 'report' | 'actor' | 'host' | 'sibling' | 'network' | 'resolution' | 'subnet'
   label: string
   why: string
   total: number

@@ -1176,8 +1176,31 @@ in the library - all three recorded a sighting and raised an alert, and the
 following maintenance pass moved each from ~65 to 100. Before this, two of the
 three could not have matched anything.
 
+**Pivot coverage measured, and a `subnet` group added (2026-07-31).** A survey of
+300 random indicators found that **roughly three in four were dead ends** - open
+one and there is nowhere to go. Broken down: `sibling` fired for 21%, `host` for
+9%, and for the 68,457 IP indicators (21% of the store) the figure was **zero**,
+because the only group that applies to an IP is `network` and that needs the BGP
+table synced - which a deployment behind an egress policy, or air-gapped, never
+gets. `asn_ranges` holds 0 rows here for exactly that reason.
+
+`subnet` is the offline answer. `ip_hex` is fixed-width, so "same /24" is a
+prefix, and a prefix on a fixed-width key is a BETWEEN the existing index already
+serves. **IP indicators with at least one pivot went from 0% to 56%**, at 0.1 ms
+each. It is honestly weaker evidence than a shared AS - adjacency in cloud space
+means unrelated tenants - and the group says so rather than presenting itself as
+equal. What makes it worth showing is that both ends are already known-bad, and
+that the DENSITY is the real finding: 5,147 /24s in this store hold more than one
+listed address, and the densest hold 253-255 of 256. That is not a set of hosts
+to block, it is a subnet.
+
 Still open in this phase: TLS certificate observation (the other half of (4)),
-(6) keyed enrichers.
+(6) keyed enrichers. Also outstanding, and visible in the same survey: **0% of
+the store is attributed to an actor and 0% is linked to a report** - not a code
+gap, since ThreatFox/URLhaus/Feodo do carry malware family and the importer does
+capture it, but those three feeds are among the seven unreachable from this
+sandbox. The store-summary panel already reports the coverage ratio that explains
+it.
 
 ---
 

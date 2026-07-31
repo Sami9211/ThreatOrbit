@@ -16,6 +16,8 @@ states the evidence for itself rather than asserting a connection:
     and DGA clusters show up (`login.x.test`, `mail.x.test`).
   * **same network (AS)** - only when the BGP table has been synced. One
     bulletproof host looks very different from 40 unrelated networks.
+  * **same subnet (/24)** - the offline fallback for that, and the only pivot an
+    IP indicator has on a deployment that has never reached the BGP table.
 
 Nothing here invents a relationship. If two indicators share nothing, the answer
 is an empty list, not a weak guess - a graph padded with coincidental edges is
@@ -152,7 +154,69 @@ def related(conn, ioc: dict, *, limit: int = GROUP_LIMIT) -> list[dict]:
 
     groups.extend(_resolution_group(conn, ioc, ioc_id, limit))
     groups.extend(_network_group(conn, ioc, ioc_id, limit))
+    groups.extend(_subnet_group(conn, ioc, ioc_id, limit))
     return groups
+
+
+# Adjacent address space. /24 for IPv4 because that is the smallest block
+# routinely allocated to a single customer, so neighbours are usually the same
+# tenant; /64 for IPv6 for the same reason (one LAN / one assignment).
+_SUBNET_PREFIX = {8: (6, 24), 32: (16, 64)}     # hex key length -> (prefix hex chars, bits)
+
+
+def _subnet_group(conn, ioc: dict, ioc_id: str, limit: int) -> list[dict]:
+    """Other known-bad addresses in the same /24.
+
+    The `network` group above is strictly better evidence - it knows who
+    ANNOUNCES the range - but it needs the BGP table synced, and on a deployment
+    that has never reached iptoasn it produces nothing at all. That leaves every
+    IP indicator with no pivot whatsoever: measured on a 327,984-indicator store,
+    68,457 IPs with `network` dead and no other group that applies to them.
+
+    This needs nothing external. `ip_hex` is fixed-width, so "same /24" is a
+    prefix, and a prefix on a fixed-width key is a BETWEEN the existing index
+    serves - no decoding every address in Python.
+
+    It is weaker evidence and says so: adjacency in a cloud provider's space
+    means two unrelated tenants. What makes it worth showing anyway is that both
+    ends are ALREADY known-bad, and the density is the actual finding - measured
+    on the same store, 5,147 /24s hold more than one listed address and the
+    densest hold 253 of 256, which is not a set of addresses to block but a
+    subnet.
+    """
+    if (ioc.get("type") or "").lower() != "ip":
+        return []
+    key = ip_hex_of(str(ioc.get("value") or ""), "ip")
+    if not key or len(key) not in _SUBNET_PREFIX:
+        return []
+    chars, bits = _SUBNET_PREFIX[len(key)]
+    prefix = key[:chars]
+    lo, hi = prefix + "0" * (len(key) - chars), prefix + "f" * (len(key) - chars)
+    where = "ip_hex IS NOT NULL AND ip_hex BETWEEN ? AND ? AND id != ?"
+    params = (lo, hi, ioc_id)
+    items = _rows(conn, _SELECT + where + _ORDER, params + (limit + 1,), ioc_id)
+    if not items:
+        return []
+    total = _count(conn, where, params)
+    # The block in dotted form, for a label an analyst can paste into a firewall.
+    if len(key) == 8:
+        o = [int(prefix[i:i + 2], 16) for i in (0, 2, 4)]
+        block = f"{o[0]}.{o[1]}.{o[2]}.0/{bits}"
+        capacity = 256
+    else:                                        # IPv6 /64
+        block = ":".join(prefix[i:i + 4] for i in range(0, chars, 4)) + "::/64"
+        capacity = None
+    density = (f" - {total + 1} of {capacity} addresses in it are listed"
+               if capacity and total + 1 > capacity // 8 else "")
+    return [{
+        "key": "subnet", "label": f"Same subnet - {block}",
+        "why": f"another listed address in {block}{density}. Adjacency is weaker "
+               "evidence than a shared AS - in cloud space neighbours can be "
+               "unrelated tenants - but both ends are already known-bad, and a "
+               "dense block is a subnet to act on rather than a list of hosts",
+        "total": total, "items": items[:limit],
+        "pivot": {"kind": "subnet", "value": block},
+    }]
 
 
 def _resolution_group(conn, ioc: dict, ioc_id: str, limit: int) -> list[dict]:

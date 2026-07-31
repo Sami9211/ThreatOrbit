@@ -10,8 +10,8 @@ import uuid
 
 import pytest
 
-from dashboard_api.db import get_conn, host_of, ip_hex_of, reg_domain_of
-from dashboard_api.db import registrable_domain
+from dashboard_api.db import get_conn, ip_hex_of, registrable_domain
+from dashboard_api.ioc_store import insert_ioc
 from dashboard_api.relations import related
 
 NOW = "2026-07-29T00:00:00+00:00"
@@ -19,18 +19,17 @@ NOW = "2026-07-29T00:00:00+00:00"
 
 def _ins(conn, value, itype, **kw):
     iid = f"rel-{uuid.uuid4().hex[:10]}"
-    # Derived columns go through the SAME helpers the import path uses. Setting
-    # them by hand here would let the fixture and production disagree, and a
-    # pivot test that populates its own index is testing nothing.
-    conn.execute(
-        "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-        "first_seen,last_seen,tags,status,report_id,host,ip_hex,reg_domain,intel_score) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,'[]','active',?,?,?,?,?)",
-        (iid, itype, value, kw.get("threat_type", "malicious-activity"),
-         kw.get("confidence", 60), kw.get("severity", "medium"),
-         kw.get("source", "feed-a"), kw.get("actor", ""), NOW, NOW,
-         kw.get("report_id"), host_of(value, itype), ip_hex_of(value, itype),
-         reg_domain_of(value, itype), kw.get("score", 50)))
+    # Written through the SAME writer production uses, so the derived columns
+    # every pivot indexes on are populated identically. A fixture that fills its
+    # own index is testing nothing - it was that exact gap that let `reg_domain`
+    # go unwritten by the whole import path while these tests stayed green.
+    insert_ioc(conn, id=iid, type=itype, value=value,
+               threat_type=kw.get("threat_type", "malicious-activity"),
+               confidence=kw.get("confidence", 60),
+               severity=kw.get("severity", "medium"),
+               source=kw.get("source", "feed-a"), actor=kw.get("actor", ""),
+               first_seen=NOW, last_seen=NOW, report_id=kw.get("report_id"),
+               intel_score=kw.get("score", 50))
     return iid
 
 
@@ -331,3 +330,98 @@ def test_platform_tenants_get_no_sibling_group_but_dga_clusters_do(store):
     dga = related(conn, dict(conn.execute("SELECT * FROM iocs WHERE id=?", (d1,)).fetchone()))
     sib = next((g for g in dga if g["key"] == "sibling"), None)
     assert sib is not None and f"222.dga-{tag}.ru" in [i["value"] for i in sib["items"]]
+
+
+# -- Same subnet: the only pivot an IP has without the BGP table ---------------
+
+
+def _ips(conn, made, *values):
+    for v in values:
+        made.append(_ins(conn, v, "ip"))
+    conn.commit()
+
+
+def _free_slash24(conn) -> str:
+    """A /24 no other test has put an indicator in, as `a.b.c.` ready to append.
+
+    Hard-coding one does not work: the suite seeds addresses across the
+    documentation and benchmarking ranges, so a fixed choice passes alone and
+    fails in a full run depending on which tests ran first. Emptiness is checked
+    rather than assumed."""
+    import random
+
+    from dashboard_api.db import ip_hex_of
+    for _ in range(50):
+        a, b, c = random.randint(11, 126), random.randint(0, 255), random.randint(0, 255)
+        prefix = ip_hex_of(f"{a}.{b}.{c}.1", "ip")[:6]
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM iocs WHERE ip_hex BETWEEN ? AND ?",
+            (prefix + "00", prefix + "ff")).fetchone()["n"]
+        if n == 0:
+            return f"{a}.{b}.{c}."
+    raise AssertionError("no empty /24 found - the store under test is unusually full")
+
+
+def test_ip_indicators_pivot_on_their_subnet(store):
+    """Measured on the real 327,984-indicator store: 68,457 IP indicators had no
+    pivot at all, because the only group that applies to them is `network` and
+    that needs the BGP table synced. A deployment that has never reached
+    iptoasn - air-gapped, or behind an egress policy - gets nothing.
+
+    `ip_hex` is fixed-width, so "same /24" is a prefix on the existing index."""
+    conn, made = store
+    net = _free_slash24(conn)
+    third = int(net.split(".")[2])
+    adjacent = ".".join(net.split(".")[:2] + [str((third + 1) % 256), ""])
+    _ips(conn, made, f"{net}7", f"{net}99", f"{net}203",
+         f"{adjacent}7")            # neighbouring /24 - deliberately NOT a match
+    row = conn.execute("SELECT * FROM iocs WHERE value=?", (f"{net}7",)).fetchone()
+    g = next((x for x in related(conn, dict(row)) if x["key"] == "subnet"), None)
+    assert g is not None, "an IP with listed neighbours must have somewhere to go"
+    assert g["total"] == 2, f"the neighbouring /24 leaked in: {g['total']}"
+    assert f"{net}0/24" in g["label"]
+    assert {i["value"] for i in g["items"]} == {f"{net}99", f"{net}203"}
+
+
+def test_a_lone_address_gets_no_subnet_group(store):
+    """The rule the whole module runs on: no link is an answer. A group holding
+    only the indicator you are already looking at is padding."""
+    conn, made = store
+    net = _free_slash24(conn)
+    _ips(conn, made, f"{net}42")
+    row = conn.execute("SELECT * FROM iocs WHERE value=?", (f"{net}42",)).fetchone()
+    assert "subnet" not in [x["key"] for x in related(conn, dict(row))]
+
+
+def test_a_dense_block_says_so(store):
+    """The finding is not "here are four more addresses", it is "most of this
+    subnet is listed" - a different remediation. An analyst blocks the /24
+    rather than chasing hosts."""
+    conn, made = store
+    net = _free_slash24(conn)
+    _ips(conn, made, *[f"{net}{n}" for n in range(1, 40)])
+    row = conn.execute("SELECT * FROM iocs WHERE value=?", (f"{net}1",)).fetchone()
+    g = next(x for x in related(conn, dict(row)) if x["key"] == "subnet")
+    assert "of 256 addresses in it are listed" in g["why"], g["why"]
+    assert g["total"] == 38
+
+
+def test_the_subnet_group_states_that_it_is_weaker_evidence(store):
+    """Adjacency in cloud space means unrelated tenants. The group is worth
+    showing because both ends are already known-bad - but an analyst has to see
+    which edges to trust, so it says so rather than presenting itself alongside
+    a shared-AS link as equal evidence."""
+    conn, made = store
+    net = _free_slash24(conn)
+    _ips(conn, made, f"{net}10", f"{net}11")
+    row = conn.execute("SELECT * FROM iocs WHERE value=?", (f"{net}10",)).fetchone()
+    g = next(x for x in related(conn, dict(row)) if x["key"] == "subnet")
+    assert "weaker evidence" in g["why"]
+
+
+def test_domains_get_no_subnet_group(store):
+    conn, made = store
+    made.append(_ins(conn, f"sub-{uuid.uuid4().hex[:8]}.test", "domain"))
+    conn.commit()
+    row = conn.execute("SELECT * FROM iocs WHERE id=?", (made[-1],)).fetchone()
+    assert "subnet" not in [x["key"] for x in related(conn, dict(row))]
