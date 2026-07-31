@@ -101,3 +101,59 @@ test.describe('Data honesty fences', () => {
     await expect(page.getByText(/case queue/i).first()).toBeVisible({ timeout: 20_000 })
   })
 })
+
+/**
+ * The failure path, which is where the fabrication actually lived.
+ *
+ * Eleven live pages answered a first-load API failure with a hardcoded demo
+ * dataset, rendered exactly like real records: a queue of fabricated critical
+ * alerts, a demo estate of healthy collectors, invented user accounts, and a
+ * scanner verdict carrying judgements attributed by name to Google, Kaspersky
+ * and CrowdStrike about a value they were never asked about.
+ *
+ * The Python guards (test_live_honesty.py) prove those datasets are gone from
+ * the source. These prove the thing an analyst actually experiences: that with
+ * one endpoint down the page SAYS SO, and shows nothing that could be mistaken
+ * for a finding. Auth is left working deliberately - a total outage bounces to
+ * the login screen and never renders a dashboard at all, so it cannot exercise
+ * this at all.
+ */
+const FICTION = [
+  'Ransomware file encryption pattern', 'Cobalt Strike', 'Google Safe Browsing',
+  'Kaspersky', 'malicious-phishing-site.xyz', 'DESKTOP-FIN-087',
+  'STARK INDUSTRIES', 'Fancy Bear', 'Cozy Bear', 'lambda.amazonaws.com',
+]
+
+const OUTAGE_CASES: Array<[string, RegExp, string]> = [
+  ['/dashboard/siem', /\/siem\/alerts/, 'the alert queue'],
+  ['/dashboard/siem/rules', /\/siem\/rules/, 'the detection rules'],
+  ['/dashboard/siem/sources', /\/siem\/sources/, 'your log sources'],
+  ['/dashboard/assets', /\/assets(\?|$)/, 'your asset inventory'],
+  ['/dashboard/soar', /\/soar\/cases/, 'the case queue'],
+  ['/dashboard/soar/playbooks', /\/soar\/playbooks/, 'your playbooks'],
+  ['/dashboard/cti/actors', /\/cti\/actors/, 'the threat actor library'],
+  ['/dashboard/config/users', /\/users(\?|$)/, 'the user list'],
+]
+
+test.describe('An unreachable endpoint is reported, never fabricated', () => {
+  for (const [route, endpoint, what] of OUTAGE_CASES) {
+    test(`${route} says it could not load`, async ({ authedPage: page }) => {
+      await powerMode(page)
+      // Only requests to the API ORIGIN are candidates. A pattern loose enough
+      // to match the PAGE url (/dashboard/siem/rules against /siem/rules)
+      // aborts the navigation itself, and the test then passes for entirely the
+      // wrong reason. Compared against the app's own origin rather than a
+      // hardcoded port, so it holds under E2E_BASE_URL too.
+      const appOrigin = new URL(page.url() || 'http://127.0.0.1:3000').origin
+      await page.route((url) => url.origin !== appOrigin && endpoint.test(url.pathname),
+        (r) => r.abort('failed'))
+      await page.goto(route)
+      await expect(page.getByText(/could not load/i).first())
+        .toBeVisible({ timeout: 25_000 })
+      await expect(page.locator('body')).toContainText(what)
+      for (const lie of FICTION) {
+        await expect(page.locator('body')).not.toContainText(lie)
+      }
+    })
+  }
+})

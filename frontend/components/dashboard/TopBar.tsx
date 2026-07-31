@@ -44,15 +44,60 @@ function ModeToggle() {
   )
 }
 
+// Every route, not just the section roots. This was eight exact matches with a
+// fallback to 'Overview', so the twenty-odd sub-routes - vulnerabilities,
+// detection rules, playbooks, the indicator page - all announced themselves as
+// "Overview". A breadcrumb that names the wrong page is worse than none: it is
+// the one element on screen whose entire job is telling you where you are.
 const LABELS: Record<string, string> = {
   '/dashboard': 'Overview',
+  '/dashboard/account': 'Account',
+  '/dashboard/admin': 'Administration',
+  '/dashboard/soc': 'SOC Console',
+  '/dashboard/darkweb': 'Dark Web',
   '/dashboard/feeds': 'Threat Feeds',
+  '/dashboard/feeds/import': 'Import Intel',
+  '/dashboard/feeds/imports': 'Import History',
+  '/dashboard/feeds/sources': 'Feed Sources',
   '/dashboard/scanner': 'Threat Scanner',
+  '/dashboard/scanner/bulk': 'Bulk Check',
   '/dashboard/assets': 'Asset Surface',
+  '/dashboard/assets/network': 'Network Map',
+  '/dashboard/assets/vulns': 'Vulnerabilities',
   '/dashboard/siem': 'SIEM Dashboard',
+  '/dashboard/siem/attack': 'ATT&CK Coverage',
+  '/dashboard/siem/entities': 'Entities',
+  '/dashboard/siem/hunt': 'Threat Hunt',
+  '/dashboard/siem/rules': 'Detection Rules',
+  '/dashboard/siem/sources': 'Log Sources',
   '/dashboard/soar': 'SOAR Dashboard',
+  '/dashboard/soar/integrations': 'Integrations',
+  '/dashboard/soar/metrics': 'SOC Metrics',
+  '/dashboard/soar/playbooks': 'Playbooks',
   '/dashboard/cti': 'CTI Intelligence',
+  '/dashboard/cti/actors': 'Threat Actors',
+  '/dashboard/cti/hunt': 'Intel Hunts',
+  '/dashboard/cti/indicator': 'Indicator',
   '/dashboard/config': 'Configuration',
+  '/dashboard/config/api': 'API & Webhooks',
+  '/dashboard/config/sources': 'Intel Sources',
+  '/dashboard/config/users': 'Users & Roles',
+}
+
+/** The most specific label for a path.
+ *
+ *  Longest-prefix rather than exact match, so a route nobody has labelled yet -
+ *  or a dynamic one like /dashboard/cti/indicator/1.2.3.4 - inherits its
+ *  parent's name instead of claiming to be the dashboard home. A new page is
+ *  then never WRONG here, only less specific than it could be. */
+function labelFor(pathname: string): string {
+  let best = ''
+  for (const route of Object.keys(LABELS)) {
+    if ((pathname === route || pathname.startsWith(`${route}/`)) && route.length > best.length) {
+      best = route
+    }
+  }
+  return LABELS[best] ?? LABELS['/dashboard']
 }
 
 
@@ -68,7 +113,7 @@ export default function TopBar() {
   // trailingSlash:true means usePathname() can return "/dashboard/siem/" -
   // normalise so the label lookup matches regardless of trailing slash.
   const pathname = raw.length > 1 ? raw.replace(/\/$/, '') : raw
-  const label = LABELS[pathname] ?? LABELS['/dashboard']
+  const label = labelFor(pathname)
 
   const router = useRouter()
   const [notifOpen, setNotifOpen] = useState(false)
