@@ -14,6 +14,16 @@
  * and bare anchors/queries. Template literals are validated on their literal
  * prefix (everything up to the first `${`, `?`, or `#`), which is enough to
  * catch a wrong base path while tolerating a dynamic query/segment.
+ *
+ * One exception to that prefix rule, and it is the whole reason dynamic routes
+ * work here: when the interpolation IS a path segment
+ * (`` `/dashboard/cti/indicator/${value}` ``), truncating at `${` leaves
+ * `/dashboard/cti/indicator`, which no page serves - the page is at
+ * `[value]`. Checked literally, every link into a dynamic route reads as dead
+ * while the route sits in this script's own known list. So an interpolated
+ * final segment is matched against a `[param]` segment instead. Interpolation
+ * inside a QUERY (`?value=${v}`) is unaffected: the literal prefix already
+ * ends before the `?`.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -77,6 +87,29 @@ function toRoute(raw) {
   return p === '' ? '/' : p
 }
 
+/** Does the raw target interpolate a whole PATH SEGMENT (rather than part of a
+ *  query string)? True exactly when the `${` follows a `/`. */
+function interpolatesSegment(raw) {
+  const i = raw.indexOf('${')
+  if (i < 1) return false
+  const literal = raw.slice(0, i)
+  return literal.endsWith('/') && !literal.includes('?') && !literal.includes('#')
+}
+
+/** Known routes with their segments pre-split, so a `[param]` can be matched
+ *  positionally against an interpolated segment. */
+const ROUTE_SEGMENTS = [...ROUTES].map((r) => ({ route: r, segs: r.split('/') }))
+
+/** A link whose final segment is interpolated is served by any route that has
+ *  the same literal prefix plus one dynamic segment. */
+function servedByDynamicRoute(prefix) {
+  const want = prefix.split('/')
+  return ROUTE_SEGMENTS.some(({ segs }) =>
+    segs.length === want.length + 1 &&
+    segs[segs.length - 1].startsWith('[') &&
+    segs.slice(0, want.length).every((s, i) => s === want[i]))
+}
+
 // In-page anchor targets. `href="#foo"` scrolls to an element with id="foo";
 // a bare `href="#"` (or empty) is a dead-end that goes nowhere, and an anchor
 // whose id no target renders is a silently-broken link a static export can't
@@ -110,9 +143,11 @@ for (const file of sources(ROOT === APP ? APP : ROOT)) {
       const route = toRoute(m[1])
       if (route === null) continue
       checked++
-      if (!ROUTES.has(route)) {
+      const dynamic = interpolatesSegment(m[1])
+      if (!ROUTES.has(route) && !(dynamic && servedByDynamicRoute(route))) {
         const line = text.slice(0, m.index).split('\n').length
-        failures.push(`${relative(ROOT, file)}:${line}  →  ${m[1]}  (resolves to ${route}, no such route)`)
+        const resolves = dynamic ? `${route}/[…]` : route
+        failures.push(`${relative(ROOT, file)}:${line}  →  ${m[1]}  (resolves to ${resolves}, no such route)`)
       }
     }
   }
