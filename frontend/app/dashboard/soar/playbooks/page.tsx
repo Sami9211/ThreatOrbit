@@ -14,6 +14,7 @@ import {
   Circle, Network, Cloud, Lock, FileCheck, Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 import { tk } from '@/lib/colors'
 
 /* -- Types ---------------------------------------------------------- */
@@ -100,197 +101,6 @@ const STATUS_LABEL: Record<RunStatus, string> = {
 }
 
 /* -- Playbook data -------------------------------------------------- */
-const PLAYBOOKS: Playbook[] = [
-  {
-    id: 'pb-001',
-    name: 'Endpoint Ransomware Containment',
-    category: 'Endpoint',
-    trigger: 'Auto: Critical ransomware indicator (EDR mass-encrypt)',
-    triggerType: 'auto',
-    stepsCount: 12,
-    estimatedRuntime: '8m 44s',
-    successRate: 98,
-    lastRun: '14m ago',
-    lastRunStatus: 'running',
-    runCount: 847,
-    enabled: true,
-    steps: [
-      { name: 'Verify detection confidence (EDR score ≥ 90)',       type: 'check',        status: 'completed', duration: '2s' },
-      { name: 'Isolate host from network via EDR API',              type: 'action',       status: 'completed', duration: '3s' },
-      { name: 'Capture live memory snapshot',                       type: 'action',       status: 'completed', duration: '4m 12s' },
-      { name: 'Hash all renamed / encrypted files',                 type: 'action',       status: 'completed', duration: '22s' },
-      { name: 'Submit hashes to VirusTotal + IntelMQ',             type: 'action',       status: 'completed', duration: '8s' },
-      { name: 'Known ransomware family?',                           type: 'decision',     status: 'completed', duration: '0s', note: 'Yes → continue; No → escalate to analyst' },
-      { name: 'Notify CISO + IR lead via PagerDuty',               type: 'notify',       status: 'completed', duration: '1s' },
-      { name: 'Create Jira P1 incident ticket',                     type: 'action',       status: 'running',   duration: undefined },
-      { name: 'Block C2 IPs on perimeter firewall',                 type: 'action',       status: 'idle' },
-      { name: 'Scan environment for additional IOCs',               type: 'action',       status: 'idle' },
-      { name: 'Analyst: identify patient zero (human task)',        type: 'human',        status: 'idle' },
-      { name: 'Execute Recovery Playbook (sub-playbook)',           type: 'sub-playbook', status: 'idle' },
-    ],
-  },
-  {
-    id: 'pb-002',
-    name: 'Phishing Email Response',
-    category: 'Identity',
-    trigger: 'Auto: Phishing detected - mail gateway + URL reputation',
-    triggerType: 'auto',
-    stepsCount: 8,
-    estimatedRuntime: '2m 14s',
-    successRate: 96,
-    lastRun: '12m ago',
-    lastRunStatus: 'success',
-    runCount: 2847,
-    enabled: true,
-    steps: [
-      { name: 'Extract email headers and attachments',              type: 'check',    status: 'completed', duration: '1s' },
-      { name: 'Check URLs against threat intel feeds',             type: 'check',    status: 'completed', duration: '4s' },
-      { name: 'Submit attachment hash to VirusTotal',              type: 'action',   status: 'completed', duration: '6s' },
-      { name: 'Malicious verdict?',                                type: 'decision', status: 'completed', duration: '0s', note: 'If ≥ 5 engines: malicious. Else: suspicious → human review' },
-      { name: 'Quarantine email across all mailboxes (Exchange)',  type: 'action',   status: 'completed', duration: '12s' },
-      { name: 'Block sender domain at email gateway',             type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Notify affected recipients via secure channel',    type: 'notify',   status: 'completed', duration: '3s' },
-      { name: 'Create SOAR case and link alert',                  type: 'action',   status: 'completed', duration: '1s' },
-    ],
-  },
-  {
-    id: 'pb-003',
-    name: 'Brute Force Block',
-    category: 'Network',
-    trigger: 'Auto: 5+ failed logins from single source within 60s',
-    triggerType: 'auto',
-    stepsCount: 5,
-    estimatedRuntime: '0m 28s',
-    successRate: 99,
-    lastRun: '3h ago',
-    lastRunStatus: 'success',
-    runCount: 14203,
-    enabled: true,
-    steps: [
-      { name: 'Aggregate failed login events from SIEM',           type: 'check',    status: 'completed', duration: '1s' },
-      { name: 'Threshold exceeded (≥5 fails / 60s)?',             type: 'decision', status: 'completed', duration: '0s', note: 'Yes → block. No → alert only.' },
-      { name: 'Block source IP on perimeter firewall (PA)',        type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Notify SOC via Slack #soc-alerts',                 type: 'notify',   status: 'completed', duration: '1s' },
-      { name: 'Log IOC to threat intel feed (TIP)',                type: 'action',   status: 'completed', duration: '3s' },
-    ],
-  },
-  {
-    id: 'pb-004',
-    name: 'C2 Beacon Isolation',
-    category: 'Network',
-    trigger: 'Auto: C2 IOC match - DNS/HTTP beacon to known C2 domain',
-    triggerType: 'auto',
-    stepsCount: 10,
-    estimatedRuntime: '5m 20s',
-    successRate: 97,
-    lastRun: '1h ago',
-    lastRunStatus: 'success',
-    runCount: 412,
-    enabled: true,
-    steps: [
-      { name: 'Cross-reference domain/IP with TI feeds',           type: 'check',    status: 'completed', duration: '3s' },
-      { name: 'Identify beaconing hosts from DNS/proxy logs',      type: 'check',    status: 'completed', duration: '8s' },
-      { name: 'Confidence ≥ 90% (≥3 TI feeds match)?',            type: 'decision', status: 'completed', duration: '0s', note: 'Yes → auto-isolate. No → analyst decision.' },
-      { name: 'Isolate host(s) via EDR API',                       type: 'action',   status: 'completed', duration: '4s' },
-      { name: 'Block domain and IPs on all firewalls',             type: 'action',   status: 'completed', duration: '6s' },
-      { name: 'Extract process responsible for DNS query',         type: 'check',    status: 'completed', duration: '5s' },
-      { name: 'Submit process binary to sandbox',                  type: 'action',   status: 'completed', duration: '3m 40s' },
-      { name: 'Notify IR team (PagerDuty P2)',                     type: 'notify',   status: 'completed', duration: '1s' },
-      { name: 'Analyst: review process tree and sandbox report',  type: 'human',    status: 'completed', duration: '12m' },
-      { name: 'Update threat intel with confirmed IOCs',           type: 'action',   status: 'completed', duration: '2s' },
-    ],
-  },
-  {
-    id: 'pb-005',
-    name: 'IAM Privilege Escalation Rollback',
-    category: 'Cloud',
-    trigger: 'Auto: IAM change detected - policy attach with admin scope',
-    triggerType: 'auto',
-    stepsCount: 7,
-    estimatedRuntime: '1m 42s',
-    successRate: 91,
-    lastRun: '2d ago',
-    lastRunStatus: 'success',
-    runCount: 94,
-    enabled: true,
-    steps: [
-      { name: 'Parse CloudTrail / Azure AD event details',         type: 'check',    status: 'completed', duration: '1s' },
-      { name: 'Authorized deployment action?',                     type: 'decision', status: 'completed', duration: '0s', note: 'Match change-management DB. Yes → close. No → rollback.' },
-      { name: 'Detach escalated IAM policy via API',               type: 'action',   status: 'completed', duration: '3s' },
-      { name: 'Export CloudTrail log for escalation window',       type: 'action',   status: 'completed', duration: '12s' },
-      { name: 'Check for data access during elevated period',      type: 'check',    status: 'completed', duration: '15s' },
-      { name: 'Create Jira ticket for IAM policy review',          type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Notify cloud security team (Slack + email)',        type: 'notify',   status: 'completed', duration: '1s' },
-    ],
-  },
-  {
-    id: 'pb-006',
-    name: 'Malware Sandboxing',
-    category: 'Endpoint',
-    trigger: 'Manual trigger - analyst submits file for detonation',
-    triggerType: 'manual',
-    stepsCount: 6,
-    estimatedRuntime: '12m 00s',
-    successRate: 88,
-    lastRun: '6h ago',
-    lastRunStatus: 'success',
-    runCount: 1289,
-    enabled: true,
-    steps: [
-      { name: 'Receive file hash or URL from analyst',             type: 'check',    status: 'completed', duration: '1s' },
-      { name: 'Check VirusTotal cache (last 24h)',                 type: 'check',    status: 'completed', duration: '2s' },
-      { name: 'Submit to Cuckoo/Any.run sandbox',                  type: 'action',   status: 'completed', duration: '10m 14s' },
-      { name: 'Parse sandbox report - extract IOCs',               type: 'action',   status: 'completed', duration: '30s' },
-      { name: 'Malicious verdict?',                                type: 'decision', status: 'completed', duration: '0s', note: 'Yes → push IOCs to SIEM + firewall. No → log benign.' },
-      { name: 'Notify requesting analyst with full report',        type: 'notify',   status: 'completed', duration: '1s' },
-    ],
-  },
-  {
-    id: 'pb-007',
-    name: 'GDPR Incident Notification',
-    category: 'Compliance',
-    trigger: 'Auto: PII breach indicator - DLP alert + data exfil pattern',
-    triggerType: 'auto',
-    stepsCount: 9,
-    estimatedRuntime: '4m 10s',
-    successRate: 95,
-    lastRun: '5d ago',
-    lastRunStatus: 'success',
-    runCount: 23,
-    enabled: true,
-    steps: [
-      { name: 'Identify data classification of affected records',  type: 'check',    status: 'completed', duration: '5s' },
-      { name: 'PII or regulated data confirmed?',                  type: 'decision', status: 'completed', duration: '0s', note: 'Yes → GDPR workflow. No → standard IR.' },
-      { name: 'Contain data source (revoke access/quarantine)',    type: 'action',   status: 'completed', duration: '20s' },
-      { name: 'Estimate scope: number of records affected',        type: 'check',    status: 'completed', duration: '2m' },
-      { name: '>250 records? Notify DPA within 72h required',      type: 'decision', status: 'completed', duration: '0s', note: 'Yes → schedule regulatory notification. No → internal report only.' },
-      { name: 'Draft breach notification (DPA template)',          type: 'action',   status: 'completed', duration: '45s' },
-      { name: 'Human: DPO review and approve notification',        type: 'human',    status: 'completed', duration: '30m' },
-      { name: 'Submit notification to supervisory authority',      type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Notify affected data subjects (email template)',    type: 'notify',   status: 'completed', duration: '5s' },
-    ],
-  },
-  {
-    id: 'pb-008',
-    name: 'Threat Intel Enrichment',
-    category: 'Intel',
-    trigger: 'Auto: New IOC received - STIX/TAXII feed or manual import',
-    triggerType: 'auto',
-    stepsCount: 4,
-    estimatedRuntime: '0m 45s',
-    successRate: 99,
-    lastRun: '2m ago',
-    lastRunStatus: 'success',
-    runCount: 38291,
-    enabled: true,
-    steps: [
-      { name: 'Parse IOC from STIX 2.1 bundle or CSV',             type: 'action',   status: 'completed', duration: '1s' },
-      { name: 'Enrich with VirusTotal + AbuseIPDB + Shodan',       type: 'check',    status: 'completed', duration: '8s' },
-      { name: 'Confidence ≥ 70%?',                                 type: 'decision', status: 'completed', duration: '0s', note: 'Yes → push to SIEM rules + blocklists. No → watchlist only.' },
-      { name: 'Publish enriched IOC to all integrated platforms',  type: 'action',   status: 'completed', duration: '3s' },
-    ],
-  },
-]
 
 /* KPI strip values are computed live from the loaded playbooks (this was a
    hardcoded array - "18 playbooks", "Next: 17:00 UTC" - shown as if live). */
@@ -599,15 +409,20 @@ export default function PlaybooksPage() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Empty until the API answers (skeletons meanwhile); the API's list is
-  // authoritative EVEN WHEN EMPTY - the demo PLAYBOOKS are an offline-only
-  // fallback, never a stand-in for a real deployment's empty library.
-  const [playbooks, setPlaybooks] = useState<typeof PLAYBOOKS>([])
+  // authoritative EVEN WHEN EMPTY. There is no demo library to stand in for it:
+  // a page listing automations that are not installed tells an operator they
+  // have response coverage they do not have.
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
   const [pbPending, setPbPending] = useState(true)
+  const [pbFailed, setPbFailed] = useState(false)
 
   const loadPlaybooks = useCallback(() => {
     fetchPlaybooks().then((data: ApiPlaybook[]) => {
-      const mapped = data.map((p) => {
-        const seed = PLAYBOOKS.find((s) => s.id === p.id || s.name === p.name)
+      // No seed merge. It matched by id OR NAME and then supplied `steps` where
+      // the API had none - so a real playbook with no stored steps displayed a
+      // demo playbook's actions as if those were what would run on execution.
+      // A playbook whose steps are unknown must show none.
+      const mapped: Playbook[] = data.map((p) => {
         const apiSteps = (p.steps ?? []).map((s) => ({
           name: s.name, type: (s.type ?? 'action') as StepType,
           status: (s.status ?? 'idle') as StepStatus, duration: `${s.duration ?? 5}s`,
@@ -615,10 +430,10 @@ export default function PlaybooksPage() {
         return {
           id: p.id,
           name: p.name,
-          category: p.category || seed?.category || 'Network',
+          category: p.category || 'Network',
           trigger: p.trigger,
           triggerType: (p.triggerType === 'manual' ? 'manual' : 'auto') as 'auto' | 'manual',
-          stepsCount: p.steps?.length ?? seed?.stepsCount ?? 0,
+          stepsCount: p.steps?.length ?? 0,
           estimatedRuntime: `${p.avgTime}s`,
           successRate: p.successRate,
           lastRun: p.lastRun ?? 'Never',
@@ -627,11 +442,11 @@ export default function PlaybooksPage() {
             : p.lastRunStatus === 'success' ? 'success' : 'idle') as RunStatus,
           runCount: p.runs,
           enabled: p.enabled === 1,
-          steps: apiSteps.length > 0 ? apiSteps : (seed?.steps ?? []),
+          steps: apiSteps,
         }
       })
       setPlaybooks(mapped)
-    }).catch(() => setPlaybooks(PLAYBOOKS))
+    }).catch(() => setPbFailed(true))
       .finally(() => setPbPending(false))
   }, [])
 
@@ -783,7 +598,9 @@ export default function PlaybooksPage() {
 
         {/* -- Grid --------------------------------------------------- */}
         <div className="flex-1 overflow-y-auto p-6">
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && pbFailed ? (
+            <ApiUnavailable what="your playbooks" />
+          ) : filtered.length === 0 ? (
             pbPending ? (
               <SkeletonRows rows={8} />
             ) : (

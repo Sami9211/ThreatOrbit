@@ -1443,10 +1443,32 @@ Removal is half the work and usually skipped. Each of these actively costs us:
       2026-07-29; `connectors.severity_for()` classifies the asserted activity
       instead, and a one-time migration rebuilt the column. (Phase 3)
 - [ ] **Eight hand-written `INSERT INTO iocs`** - one ingest function. (Phase 1)
-- [ ] **Frontend seed/demo arrays** (`CONFIRMED_SEED`, `ALERTS`, `SEED` assets…)
-      shipped inside live page components. They exist for an offline preview and
-      are one bad conditional away from rendering fabricated data in a live
-      deployment. Move to a demo-only module that live builds cannot import.
+- [x] **Frontend seed/demo arrays** - DONE (2026-07-30), and the diagnosis was
+      too kind. They were not "one bad conditional away": **the conditional was
+      already there**, in fourteen places across eleven live pages, and it fired
+      on any first-load API failure - an expired token, a restarting backend, a
+      network blip. What rendered was a SIEM queue of fabricated critical
+      alerts, a demo estate of healthy collectors, a rule list claiming
+      detections that were not running, fabricated **user accounts** on the
+      admin page, invented API keys, cases, playbooks, assets and CVE findings -
+      all styled exactly like real records. The scanner went further and
+      returned invented verdicts attributed BY NAME to Google Safe Browsing,
+      Kaspersky and CrowdStrike, about a value they were never asked about and
+      that was not even the one the analyst typed. The feeds page went furthest:
+      it showed seeded threats and ran a simulator that invented a new one every
+      8-14 seconds, animated and pulsing, so during an outage an analyst watched
+      fiction arrive live.
+      Three pages did not merely fall back - they MERGED a hardcoded seed over
+      live records, matching by id or NAME, with the seed winning: actor malware
+      lists, campaigns and "recent activity" prose; a hunt's techniques and
+      hypotheses; a playbook's steps. Those were fabrications in the primary
+      path, not the failure path.
+      All of it is deleted. Every site now renders a shared `<ApiUnavailable>`
+      that says a connection failed and that nothing on screen should be read as
+      "nothing found". Two guards in `test_live_honesty.py` keep it out: an
+      explicit list of the identifiers, and a search for the SHAPE
+      (`catch(() => setX(SOME_CONSTANT))`) - the second found five instances the
+      first missed, which is why both exist.
 - [ ] **The synthetic engine's reach.** It is correctly refused in live mode now,
       but it still owns the name "engine" in the UI and docs while the *real*
       engine (connectors + import) is presented as plumbing. Rename: the OSINT

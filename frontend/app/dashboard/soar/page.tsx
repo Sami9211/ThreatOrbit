@@ -10,6 +10,7 @@ import {
   Circle, Lock, Server, Globe, Clock, ArrowUpRight, Layers, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 import { fadeInUp } from '@/lib/motion'
 import ReportButton from '@/components/dashboard/ReportButton'
 import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
@@ -85,247 +86,8 @@ type Playbook = {
 }
 
 /* -- Case data ------------------------------------------------------ */
-const CASES: CaseRecord[] = [
-  {
-    id: 'CASE-0441',
-    title: 'Ransomware incident - DESKTOP-FIN-087 (msmith)',
-    type: 'Ransomware', severity: 'critical', status: 'in-progress',
-    owner: 'j.chen', playbook: 'Endpoint Ransomware Containment',
-    slaHours: 4, created: '2024-11-12T14:22:00Z', updated: '2024-11-12T14:35:00Z',
-    alertCount: 3,
-    description: 'Ransomware detected on Finance workstation DESKTOP-FIN-087. 1,247 files encrypted with .locked extension. Host isolated. Active investigation and recovery in progress.',
-    entities: [
-      { type: 'Host',    value: 'DESKTOP-FIN-087' },
-      { type: 'User',    value: 'msmith (Finance)' },
-      { type: 'Process', value: 'svchost.exe (PID 9823)' },
-      { type: 'Hash',    value: 'SHA256: 7a8b9c0d...' },
-      { type: 'IP',      value: '10.44.0.87 (internal)' },
-    ],
-    warRoom: [
-      { ts: '14:22:01', actor: 'SOAR Engine',  type: 'system', content: 'Case CASE-0441 created from SIEM alert a001 (EDR-9001). Playbook "Endpoint Ransomware Containment" triggered automatically.' },
-      { ts: '14:22:04', actor: 'CrowdStrike',  type: 'auto',   content: 'Host DESKTOP-FIN-087 isolated from network via EDR API. Isolation status: CONFIRMED.' },
-      { ts: '14:22:09', actor: 'VirusTotal',   type: 'auto',   content: 'Hash 7a8b9c0d: Detection ratio 58/72. Identified as LockBit 3.0 variant. TI confidence: HIGH.' },
-      { ts: '14:23:11', actor: 'SOAR Engine',  type: 'auto',   content: 'Memory snapshot initiated on DESKTOP-FIN-087. Estimated completion: 4 minutes. Evidence collection in progress.' },
-      { ts: '14:25:18', actor: 'j.chen',       type: 'manual', content: 'Confirmed ransomware - LockBit 3.0. Notified IR team lead and CISO. Checking for lateral spread indicators.' },
-      { ts: '14:27:00', actor: 'Jira',         type: 'auto',   content: 'Incident ticket INC-20241112-0441 created in Jira ServiceDesk. Priority: P1. Assigned to IR team.' },
-      { ts: '14:29:12', actor: 'j.chen',       type: 'manual', content: 'No lateral movement detected in last 2h based on EDR telemetry. Attack appears contained to single host.' },
-      { ts: '14:35:00', actor: 'SOAR Engine',  type: 'auto',   content: 'Memory snapshot complete. Evidence archived to S3://soc-evidence/CASE-0441/. SHA256 hash logged for chain of custody.' },
-    ],
-    tasks: [
-      { id: 't1', phase: 'Containment',  name: 'Isolate affected host from network',         status: 'done',       assignee: 'SOAR (automated)', notes: 'CrowdStrike API call successful' },
-      { id: 't2', phase: 'Containment',  name: 'Verify no lateral movement in last 24h',     status: 'done',       assignee: 'j.chen', notes: 'Checked EDR telemetry - clean' },
-      { id: 't3', phase: 'Evidence',     name: 'Collect memory snapshot and disk image',     status: 'done',       assignee: 'SOAR (automated)', notes: 'Archived to S3' },
-      { id: 't4', phase: 'Evidence',     name: 'Identify patient zero and initial vector',   status: 'in-progress',assignee: 'j.chen', notes: 'Reviewing process tree' },
-      { id: 't5', phase: 'Eradication',  name: 'Scan environment for additional IOCs',       status: 'pending',    assignee: null, notes: '' },
-      { id: 't6', phase: 'Eradication',  name: 'Patch vulnerable software on all endpoints', status: 'pending',    assignee: null, notes: '' },
-      { id: 't7', phase: 'Recovery',     name: 'Restore data from last known-good backup',  status: 'pending',    assignee: null, notes: '' },
-      { id: 't8', phase: 'Post-Incident','name': 'Draft incident report and lessons learned', status: 'pending',   assignee: null, notes: '' },
-    ],
-    evidence: [
-      { name: 'DESKTOP-FIN-087_mem.dmp',    type: 'Memory Dump', added: '14:35',  by: 'SOAR (automated)' },
-      { name: 'process_tree.json',          type: 'EDR Export',  added: '14:26',  by: 'j.chen' },
-      { name: 'network_connections.pcap',   type: 'PCAP',        added: '14:28',  by: 'j.chen' },
-      { name: 'locked_file_list.txt',       type: 'File List',   added: '14:22',  by: 'SOAR (automated)' },
-    ],
-  },
-  {
-    id: 'CASE-0440',
-    title: 'Phishing campaign targeting C-suite (14 recipients)',
-    type: 'Phishing', severity: 'high', status: 'in-progress',
-    owner: 'a.patel', playbook: 'Phishing Email Response',
-    slaHours: 8, created: '2024-11-12T12:30:00Z', updated: '2024-11-12T14:10:00Z',
-    alertCount: 2,
-    description: 'LockBit-affiliated spearphishing campaign delivered macro-laced Excel file to 14 executives. 3 recipients opened the file. Cobalt Strike stager payload detected and quarantined on 2 of 3 hosts.',
-    entities: [
-      { type: 'Email',  value: 'noreply@m1crosoft-reports.kz' },
-      { type: 'File',   value: 'Q4_Budget_Final.xlsm' },
-      { type: 'Hash',   value: 'SHA256: abc123def...' },
-      { type: 'Domain', value: 'm1crosoft-reports.kz' },
-      { type: 'IP',     value: '185.220.101.42 (DPRK-linked)' },
-    ],
-    warRoom: [
-      { ts: '12:30:05', actor: 'SOAR Engine', type: 'system', content: 'Case CASE-0440 created. 14 recipients identified. Playbook "Phishing Email Response" executing.' },
-      { ts: '12:30:12', actor: 'Exchange',    type: 'auto',   content: 'Quarantine executed: 11 of 14 emails quarantined across Exchange Online. 3 emails already opened.' },
-      { ts: '12:30:44', actor: 'VirusTotal',  type: 'auto',   content: 'Attachment SHA256 abc123def: 54/72 engines detected. Identified as Cobalt Strike stager (MalwareBytes: "CobaltStrikeStager.xlsm").' },
-      { ts: '12:32:10', actor: 'CrowdStrike', type: 'auto',   content: 'Macro execution detected on HOST-EXEC-01 (CEO workstation). Process tree: EXCEL.EXE → cmd.exe → powershell.exe. Host quarantined.' },
-      { ts: '12:40:00', actor: 'a.patel',     type: 'manual', content: 'Notified all 14 recipients via secure out-of-band communication. 3 confirmed opening file - conducting interviews.' },
-      { ts: '14:10:00', actor: 'a.patel',     type: 'manual', content: 'Two hosts confirmed clean (Cobalt Strike payload blocked by EDR). Third host (CEO) shows C2 beacon - escalating to CASE-0441 investigation scope.' },
-    ],
-    tasks: [
-      { id: 't1', phase: 'Triage',        name: 'Quarantine malicious emails',              status: 'done',       assignee: 'SOAR (automated)', notes: '11/14 quarantined; 3 opened' },
-      { id: 't2', phase: 'Analysis',      name: 'Analyze attachment in sandbox',            status: 'done',       assignee: 'SOAR (automated)', notes: 'CobaltStrike stager confirmed' },
-      { id: 't3', phase: 'Containment',   name: 'Block sender domain at email gateway',     status: 'done',       assignee: 'SOAR (automated)', notes: 'm1crosoft-reports.kz blocked' },
-      { id: 't4', phase: 'Containment',   name: 'Notify affected users',                   status: 'done',       assignee: 'a.patel', notes: 'Out-of-band notification sent' },
-      { id: 't5', phase: 'Investigation', name: 'Check 3 machines that opened file',       status: 'in-progress',assignee: 'a.patel', notes: '2 clean, 1 active C2' },
-      { id: 't6', phase: 'Eradication',   name: 'Force password reset for affected users', status: 'pending',    assignee: null, notes: '' },
-    ],
-    evidence: [
-      { name: 'Q4_Budget_Final.xlsm',   type: 'Malware Sample', added: '12:31', by: 'SOAR (automated)' },
-      { name: 'vt_report_abc123.json',  type: 'TI Report',      added: '12:30', by: 'SOAR (automated)' },
-      { name: 'email_headers.txt',      type: 'Email Headers',  added: '12:30', by: 'SOAR (automated)' },
-    ],
-  },
-  {
-    id: 'CASE-0439',
-    title: 'Credential compromise - alice (impossible travel + MFA fatigue)',
-    type: 'Account Compromise', severity: 'high', status: 'pending',
-    owner: 'r.osei', playbook: 'Account Compromise Response',
-    slaHours: 12, created: '2024-11-12T12:40:00Z', updated: '2024-11-12T13:45:00Z',
-    alertCount: 2,
-    description: 'User alice shows signs of credential compromise: impossible travel (New York → Singapore in 47 min) and 23 MFA push notifications from Russian IP. Awaiting user interview to confirm.',
-    entities: [
-      { type: 'User',   value: 'alice@corp.com' },
-      { type: 'IP',     value: '103.245.12.44 (Singapore)' },
-      { type: 'IP',     value: '91.108.56.0 (Russia)' },
-    ],
-    warRoom: [
-      { ts: '12:40:20', actor: 'SOAR Engine', type: 'system', content: 'Case CASE-0439 created from 2 correlated alerts: impossible travel + MFA fatigue. Auto-correlation confidence: 94%.' },
-      { ts: '12:41:00', actor: 'Okta',        type: 'auto',   content: 'User alice active session from SG IP terminated. Forced re-authentication required.' },
-      { ts: '12:45:10', actor: 'r.osei',      type: 'manual', content: 'Contacted alice via phone. She confirms she is in New York. No knowledge of Singapore login. Account compromise confirmed.' },
-      { ts: '13:00:00', actor: 'SOAR Engine', type: 'auto',   content: 'Emergency password reset token sent to alice recovery email (verified OOB). All active sessions revoked.' },
-      { ts: '13:45:00', actor: 'r.osei',      type: 'manual', content: 'Password reset completed. MFA devices re-enrolled. Investigating how credential was obtained - checking for prior phishing.' },
-    ],
-    tasks: [
-      { id: 't1', phase: 'Containment', name: 'Terminate active sessions',      status: 'done',       assignee: 'SOAR (automated)', notes: 'Okta API' },
-      { id: 't2', phase: 'Containment', name: 'Force password reset',           status: 'done',       assignee: 'SOAR (automated)', notes: 'Token sent OOB' },
-      { id: 't3', phase: 'Analysis',    name: 'Interview affected user',        status: 'done',       assignee: 'r.osei', notes: 'Confirmed compromise from NY' },
-      { id: 't4', phase: 'Investigation','name': 'Trace credential theft vector', status: 'in-progress',assignee: 'r.osei', notes: 'Checking email + endpoint logs' },
-      { id: 't5', phase: 'Post-Incident','name': 'Re-enroll MFA devices',       status: 'done',       assignee: 'r.osei', notes: 'Completed' },
-    ],
-    evidence: [],
-  },
-  {
-    id: 'CASE-0438',
-    title: 'IAM privilege escalation - lambda-svc (AWS AdministratorAccess)',
-    type: 'Cloud Security', severity: 'high', status: 'resolved',
-    owner: 'j.chen', playbook: 'Cloud Privilege Escalation',
-    slaHours: 8, created: '2024-11-12T14:10:00Z', updated: '2024-11-12T15:20:00Z',
-    alertCount: 1,
-    description: 'Lambda service account self-escalated to AdministratorAccess. Root cause identified: overly permissive IAM role trust policy. Policy corrected and least-privilege role applied.',
-    entities: [
-      { type: 'IAM Role', value: 'lambda-svc' },
-      { type: 'Policy',   value: 'AdministratorAccess' },
-    ],
-    warRoom: [
-      { ts: '14:10:05', actor: 'SOAR Engine', type: 'system', content: 'Case CASE-0438 created from CloudTrail alert. Policy escalation detected.' },
-      { ts: '14:10:11', actor: 'AWS',         type: 'auto',   content: 'AdministratorAccess policy detached from lambda-svc via IAM API. Role permissions reverted to previous state.' },
-      { ts: '14:15:00', actor: 'j.chen',      type: 'manual', content: 'Root cause: trust policy allowed lambda-svc to assume any role in account. Fix: restrict assume-role to specific target roles only.' },
-      { ts: '15:20:00', actor: 'j.chen',      type: 'manual', content: 'Least-privilege policy applied. Terraform PR raised for permanent fix. Case resolved - no data access occurred during elevated period.' },
-    ],
-    tasks: [
-      { id: 't1', phase: 'Containment',  name: 'Detach escalated policy',       status: 'done', assignee: 'SOAR (automated)', notes: 'Auto-remediated via API' },
-      { id: 't2', phase: 'Analysis',     name: 'Review CloudTrail for abuse',   status: 'done', assignee: 'j.chen', notes: 'No data access during window' },
-      { id: 't3', phase: 'Eradication',  name: 'Apply least-privilege policy',  status: 'done', assignee: 'j.chen', notes: 'Terraform PR raised' },
-    ],
-    evidence: [
-      { name: 'cloudtrail_export.json', type: 'Cloud Logs', added: '14:11', by: 'SOAR (automated)' },
-    ],
-  },
-  {
-    id: 'CASE-0437',
-    title: 'SQL injection campaign - 847 attempts, 15 bypass events',
-    type: 'Web Attack', severity: 'high', status: 'new',
-    owner: null, playbook: 'Web Attack Triage',
-    slaHours: 12, created: '2024-11-12T13:10:00Z', updated: '2024-11-12T13:10:00Z',
-    alertCount: 1,
-    description: 'Iranian IP launched 847 SQL injection attempts against /api/v2/users. WAF blocked 832 but 15 bypassed. Two 200 OK responses suggest partial data exposure. Investigation required.',
-    entities: [
-      { type: 'IP',       value: '91.92.251.103 (Iran, Stark Industries)' },
-      { type: 'Endpoint', value: '/api/v2/users' },
-    ],
-    warRoom: [
-      { ts: '13:10:10', actor: 'SOAR Engine', type: 'system', content: 'Case CASE-0437 auto-created from WAF-2231 alert. 15 bypass events flagged for immediate review.' },
-      { ts: '13:10:15', actor: 'SOAR Engine', type: 'auto',   content: 'IP 91.92.251.103 blocked on Palo Alto perimeter firewall (GeoBlock + IP reputation feed). All future requests from ASN44477 blocked.' },
-    ],
-    tasks: [
-      { id: 't1', phase: 'Containment', name: 'Block attacker IP at perimeter',         status: 'done',    assignee: 'SOAR (automated)', notes: 'PA FW API block applied' },
-      { id: 't2', phase: 'Analysis',    name: 'Review 15 WAF bypass requests',          status: 'pending', assignee: null, notes: '' },
-      { id: 't3', phase: 'Analysis',    name: 'Check DB logs for data exposure',        status: 'pending', assignee: null, notes: '' },
-      { id: 't4', phase: 'Eradication', name: 'Patch SQL injection in /api/v2/users',  status: 'pending', assignee: null, notes: '' },
-    ],
-    evidence: [],
-  },
-]
 
 /* -- Playbook data -------------------------------------------------- */
-const PLAYBOOKS: Playbook[] = [
-  {
-    id: 'pb-001', name: 'Endpoint Ransomware Containment', trigger: 'EDR: mass file encryption',
-    description: 'Immediate host isolation, memory collection, and IR escalation on ransomware detection.',
-    runs: 7, successRate: 100, avgTime: '8m 44s', lastRun: 'Running now', status: 'running', category: 'Endpoint',
-    steps: [
-      { name: 'Verify detection confidence (EDR)',           type: 'check',       status: 'completed', duration: '2s' },
-      { name: 'Isolate host from network',                   type: 'action',      status: 'completed', duration: '3s' },
-      { name: 'Capture memory snapshot',                     type: 'action',      status: 'completed', duration: '4m 12s' },
-      { name: 'Hash all renamed files',                      type: 'action',      status: 'completed', duration: '22s' },
-      { name: 'Submit sample hash to VirusTotal',            type: 'action',      status: 'completed', duration: '8s' },
-      { name: 'Known ransomware family?',                    type: 'decision',    status: 'completed', duration: '0s' },
-      { name: 'Notify CISO + IR lead (PagerDuty)',           type: 'notify',      status: 'completed', duration: '1s' },
-      { name: 'Create Jira P1 incident ticket',              type: 'action',      status: 'running',   duration: undefined },
-      { name: 'Identify patient zero (human task)',          type: 'human',       status: 'idle',      duration: undefined },
-      { name: 'Recovery plan execution',                     type: 'sub-playbook',status: 'idle',      duration: undefined },
-    ],
-  },
-  {
-    id: 'pb-002', name: 'Phishing Email Response', trigger: 'Mail gateway alert',
-    description: 'Automated triage, quarantine, and user notification for detected phishing emails.',
-    runs: 284, successRate: 97, avgTime: '2m 14s', lastRun: '12m ago', status: 'completed', category: 'Email',
-    steps: [
-      { name: 'Extract email headers & attachments',        type: 'check',    status: 'completed', duration: '1s' },
-      { name: 'Check URLs against threat intel feeds',      type: 'check',    status: 'completed', duration: '4s' },
-      { name: 'Submit attachment hash to VirusTotal',       type: 'action',   status: 'completed', duration: '6s' },
-      { name: 'Malicious?',                                 type: 'decision', status: 'completed', duration: '0s' },
-      { name: 'Quarantine email across all mailboxes',      type: 'action',   status: 'completed', duration: '12s' },
-      { name: 'Block sender domain at gateway',             type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Notify affected users',                      type: 'notify',   status: 'completed', duration: '3s' },
-      { name: 'Create SIEM investigation case',             type: 'action',   status: 'completed', duration: '1s' },
-    ],
-  },
-  {
-    id: 'pb-003', name: 'Account Compromise Response', trigger: 'Impossible travel / MFA fatigue',
-    description: 'Automated account lockout, session revocation, and credential reset on suspected identity compromise.',
-    runs: 41, successRate: 95, avgTime: '3m 55s', lastRun: '1h 40m ago', status: 'completed', category: 'Identity',
-    steps: [
-      { name: 'Correlate impossible travel events',         type: 'check',    status: 'completed', duration: '2s' },
-      { name: 'Terminate all active user sessions (Okta)',  type: 'action',   status: 'completed', duration: '4s' },
-      { name: 'Check recent auth log for other anomalies',  type: 'check',    status: 'completed', duration: '8s' },
-      { name: 'High confidence compromise?',                type: 'decision', status: 'completed', duration: '0s' },
-      { name: 'Force password reset (OOB notification)',    type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Disable FIDO2 hardware tokens',              type: 'action',   status: 'completed', duration: '1s' },
-      { name: 'Notify user and manager via secure channel', type: 'notify',   status: 'completed', duration: '2s' },
-      { name: 'Analyst interview + re-enrollment (human)',  type: 'human',    status: 'completed', duration: '45m' },
-    ],
-  },
-  {
-    id: 'pb-004', name: 'Cloud Privilege Escalation', trigger: 'CloudTrail: attach admin policy',
-    description: 'Detect and automatically remediate IAM privilege escalation events in AWS/Azure.',
-    runs: 12, successRate: 100, avgTime: '1m 42s', lastRun: '1h 10m ago', status: 'completed', category: 'Cloud',
-    steps: [
-      { name: 'Parse CloudTrail event details',             type: 'check',    status: 'completed', duration: '1s' },
-      { name: 'Is this an authorized deployment action?',   type: 'decision', status: 'completed', duration: '0s' },
-      { name: 'Detach escalated IAM policy via API',        type: 'action',   status: 'completed', duration: '3s' },
-      { name: 'Export CloudTrail actions during window',    type: 'action',   status: 'completed', duration: '12s' },
-      { name: 'Check for data access during escalation',   type: 'check',    status: 'completed', duration: '15s' },
-      { name: 'Create Jira ticket for IAM policy review',  type: 'action',   status: 'completed', duration: '2s' },
-      { name: 'Notify cloud security team',                 type: 'notify',   status: 'completed', duration: '1s' },
-    ],
-  },
-  {
-    id: 'pb-005', name: 'C2 Beacon Containment', trigger: 'DNS: known C2 domain',
-    description: 'Isolate and investigate hosts exhibiting C2 beacon behavior.',
-    runs: 33, successRate: 91, avgTime: '5m 20s', lastRun: '3h ago', status: 'idle', category: 'Network',
-    steps: [
-      { name: 'Verify C2 domain in TI feeds',               type: 'check',    status: 'idle' },
-      { name: 'Identify affected hosts via DNS logs',        type: 'check',    status: 'idle' },
-      { name: 'Confidence > 90%?',                          type: 'decision', status: 'idle' },
-      { name: 'Isolate host via EDR',                       type: 'action',   status: 'idle' },
-      { name: 'Block domain/IP on all firewalls',           type: 'action',   status: 'idle' },
-      { name: 'Extract process responsible for DNS query',  type: 'check',    status: 'idle' },
-      { name: 'Submit to sandbox for full analysis',        type: 'action',   status: 'idle' },
-      { name: 'Analyst review of process tree (human)',     type: 'human',    status: 'idle' },
-    ],
-  },
-]
 
 /* -- Metrics (offline fallback only; replaced by live /soar/metrics) - */
 const SOAR_METRICS = {
@@ -1196,12 +958,14 @@ export default function SOARPage() {
   // empty case board on a real deployment is honest; the demo constants are an
   // offline-only fallback (loadedRef gates them to a first-load failure).
   const [cases, setCases] = useState<CaseRecord[]>([])
+  const [casesFailed, setCasesFailed] = useState(false)
   // First answer pending → the board shows skeleton rows, not "No cases"
   const [casesPending, setCasesPending] = useState(true)
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null)
   const [selectedPBId, setSelectedPBId] = useState<string | null>(null)
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
   const loadedRef = useRef({ cases: false, playbooks: false })
+  const [playbooksFailed, setPlaybooksFailed] = useState(false)
   const [soarApi, setSoarApi] = useState<SoarMetrics | null>(null)
   const [showNewCase, setShowNewCase] = useState(false)
   const selectedPB = playbooks.find((p) => p.id === selectedPBId) ?? null
@@ -1215,11 +979,11 @@ export default function SOARPage() {
   useEffect(() => {
     fetchCases()
       .then((data) => { setCases(data as unknown as CaseRecord[]); loadedRef.current.cases = true })
-      .catch(() => { if (!loadedRef.current.cases) setCases(CASES) })
+      .catch(() => { if (!loadedRef.current.cases) setCasesFailed(true) })
       .finally(() => setCasesPending(false))
     fetchPlaybooks()
       .then((data) => { setPlaybooks(data as unknown as Playbook[]); loadedRef.current.playbooks = true })
-      .catch(() => { if (!loadedRef.current.playbooks) setPlaybooks(PLAYBOOKS) })
+      .catch(() => { if (!loadedRef.current.playbooks) setPlaybooksFailed(true) })
     fetchSoarMetrics().then(setSoarApi).catch(() => {})
   }, [])
 
@@ -1397,7 +1161,10 @@ export default function SOARPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {cases.length === 0 && casesPending && <SkeletonRows rows={8} />}
-                {cases.length === 0 && !casesPending && (
+                {cases.length === 0 && !casesPending && casesFailed && (
+                  <ApiUnavailable what="the case queue" />
+                )}
+                {cases.length === 0 && !casesPending && !casesFailed && (
                   <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
                     No cases yet - correlated alerts escalate here automatically
                   </div>
@@ -1416,6 +1183,9 @@ export default function SOARPage() {
               {/* Playbook list */}
               <div className={cn('flex-1 overflow-y-auto p-4 grid gap-3 content-start', selectedPB ? 'hidden lg:grid' : 'grid')}>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  {playbooks.length === 0 && playbooksFailed && (
+                    <ApiUnavailable what="your playbooks" compact />
+                  )}
                   {playbooks.map((pb) => (
                     <PlaybookCard key={pb.id} pb={pb} selected={selectedPBId === pb.id}
                       onClick={() => setSelectedPBId((prev) => prev === pb.id ? null : pb.id)}

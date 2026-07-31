@@ -9,6 +9,7 @@ import {
   Globe, Skull, DollarSign, Megaphone, Flame, Users, Fingerprint,
 } from 'lucide-react'
 import { tk, withAlpha } from '@/lib/colors'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 
 /* --- Types ----------------------------------------------------------- */
 type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction' | 'Disruption'
@@ -62,279 +63,6 @@ function attributionAssessment(actor: ThreatActor): { band: 'High' | 'Moderate' 
   return { band: 'Low', color: tk('ink'), reasons: reasons.length ? reasons : ['Limited corroborating evidence on file'] }
 }
 
-/* --- Seed data ------------------------------------------------------- */
-const ACTORS: ThreatActor[] = [
-  {
-    id: 'apt29',
-    name: 'APT29',
-    aliases: ['Cozy Bear', 'Nobelium', 'Midnight Blizzard', 'The Dukes'],
-    origin: 'Russia (SVR)', flag: '🇷🇺',
-    type: 'Nation-State',
-    motivations: ['Espionage'],
-    sophistication: 5,
-    threatLevel: 'critical',
-    sectors: ['Government', 'Defense', 'Technology', 'Think Tanks', 'Healthcare'],
-    campaignCount: 89,
-    firstSeen: '2008',
-    malware: ['WellMess', 'WellMail', 'SUNBURST', 'FoggyWeb', 'EnvyScout'],
-    ttps: ['T1566', 'T1078', 'T1195.002', 'T1059.001', 'T1114'],
-    recentActivity: 'Ongoing credential-theft operations against cloud tenants and ongoing targeting of NATO-aligned foreign ministries.',
-    description: 'Russian SVR foreign-intelligence APT known for patient, stealthy espionage. Responsible for the 2020 SolarWinds supply-chain compromise and the 2016 DNC intrusion. Highly capable in cloud and identity-based attack paths.',
-    campaigns: [
-      { year: '2024', name: 'Microsoft 365 mailbox theft', note: 'Targeted senior leadership inboxes via stolen OAuth tokens.' },
-      { year: '2021', name: 'SolarWinds (SUNBURST)', note: 'Supply-chain backdoor affecting 18,000+ organizations.' },
-      { year: '2016', name: 'DNC intrusion', note: 'Long-dwell espionage against US political organizations.' },
-    ],
-    iocs: ['domain: avsvmcloud[.]com', 'sha256:32519b…', 'ua: SolarWinds.BusinessLayerHost'],
-  },
-  {
-    id: 'apt28',
-    name: 'APT28',
-    aliases: ['Fancy Bear', 'Sofacy', 'Sednit', 'Strontium', 'Forest Blizzard'],
-    origin: 'Russia (GRU)', flag: '🇷🇺',
-    type: 'Nation-State',
-    motivations: ['Espionage'],
-    sophistication: 5,
-    threatLevel: 'critical',
-    sectors: ['Government', 'Military', 'Media', 'Energy', 'Aerospace'],
-    campaignCount: 76,
-    firstSeen: '2004',
-    malware: ['X-Agent', 'X-Tunnel', 'Zebrocy', 'Sofacy', 'GooseEgg'],
-    ttps: ['T1566.001', 'T1190', 'T1071', 'T1003', 'T1068'],
-    recentActivity: 'Exploitation of edge devices and Outlook elevation-of-privilege flaws against government and aerospace targets.',
-    description: 'Russian GRU military-intelligence APT focused on aggressive geopolitical espionage and influence operations. Linked to the 2016 DNC hack alongside APT29 and numerous attacks on Olympic and electoral infrastructure.',
-    campaigns: [
-      { year: '2024', name: 'GooseEgg / CVE-2022-38028', note: 'Print Spooler abuse for credential theft.' },
-      { year: '2018', name: 'VPNFilter', note: 'Router botnet affecting 500,000+ devices.' },
-      { year: '2015', name: 'Bundestag breach', note: 'Espionage against the German parliament.' },
-    ],
-    iocs: ['ip: 95.215.x.x', 'sha256:4b8806…', 'domain: actalliance[.]org'],
-  },
-  {
-    id: 'lazarus',
-    name: 'Lazarus Group',
-    aliases: ['Hidden Cobra', 'UNC4736', 'ZINC', 'Diamond Sleet', 'APT38'],
-    origin: 'North Korea (RGB)', flag: '🇰🇵',
-    type: 'Nation-State',
-    motivations: ['Financial', 'Espionage'],
-    sophistication: 5,
-    threatLevel: 'critical',
-    sectors: ['Finance', 'Cryptocurrency', 'Defense', 'Software', 'Aerospace'],
-    campaignCount: 64,
-    firstSeen: '2009',
-    malware: ['WannaCry', 'AppleJeus', 'BLINDINGCAN', 'MagicRAT', 'Manuscrypt'],
-    ttps: ['T1566', 'T1195.001', 'T1486', 'T1059', 'T1105'],
-    recentActivity: 'Aggressive cryptocurrency exchange heists and fake-job-offer social engineering against blockchain developers.',
-    description: 'North Korean state-sponsored umbrella group conducting both espionage and revenue-generating cybercrime to fund the regime. Behind the 2014 Sony hack, 2017 WannaCry outbreak, and billions in crypto theft.',
-    campaigns: [
-      { year: '2024', name: 'Operation Dream Job', note: 'Fake recruiter lures against defense and crypto staff.' },
-      { year: '2022', name: 'Ronin Bridge heist', note: '$625M cryptocurrency theft.' },
-      { year: '2017', name: 'WannaCry', note: 'Global ransomware worm via EternalBlue.' },
-    ],
-    iocs: ['sha256:ed01eb…', 'domain: blockchain-newtab[.]com', 'ip: 175.45.x.x'],
-  },
-  {
-    id: 'apt41',
-    name: 'APT41',
-    aliases: ['Double Dragon', 'Winnti', 'Barium', 'Wicked Panda'],
-    origin: 'China (MSS)', flag: '🇨🇳',
-    type: 'Nation-State',
-    motivations: ['Espionage', 'Financial'],
-    sophistication: 5,
-    threatLevel: 'critical',
-    sectors: ['Healthcare', 'Telecom', 'Gaming', 'Technology', 'Government'],
-    campaignCount: 58,
-    firstSeen: '2012',
-    malware: ['ShadowPad', 'Winnti', 'PlugX', 'Crosswalk', 'KEYPLUG'],
-    ttps: ['T1190', 'T1195.002', 'T1071', 'T1505.003', 'T1078'],
-    recentActivity: 'Web-application exploitation of state-government networks and continued gaming-industry supply-chain abuse.',
-    description: 'Chinese MSS-linked group uniquely blending state-directed espionage with personal financial cybercrime. Known for software supply-chain compromises and prolific use of digitally signed malware.',
-    campaigns: [
-      { year: '2022', name: 'US state government breaches', note: 'Exploited web apps across multiple state networks.' },
-      { year: '2019', name: 'Gaming supply chain', note: 'Trojanized game updates for mass distribution.' },
-      { year: '2017', name: 'CCleaner compromise', note: 'Supply-chain backdoor (Winnti overlap).' },
-    ],
-    iocs: ['sha256:6f7e…', 'domain: update.microsoft-cdn[.]net', 'ip: 67.229.x.x'],
-  },
-  {
-    id: 'volt',
-    name: 'Volt Typhoon',
-    aliases: ['Bronze Silhouette', 'Vanguard Panda', 'DEV-0391'],
-    origin: 'China (MSS)', flag: '🇨🇳',
-    type: 'Nation-State',
-    motivations: ['Espionage', 'Destruction'],
-    sophistication: 5,
-    threatLevel: 'critical',
-    sectors: ['Critical Infrastructure', 'Energy', 'Water', 'Communications', 'Transportation'],
-    campaignCount: 23,
-    firstSeen: '2021',
-    malware: ['(LOTL - no custom malware)', 'Earthworm', 'Fast Reverse Proxy'],
-    ttps: ['T1059', 'T1218', 'T1070', 'T1078', 'T1090'],
-    recentActivity: 'Pre-positioning within US critical-infrastructure OT networks via living-off-the-land and compromised SOHO routers.',
-    description: 'Chinese state-sponsored group focused on pre-positioning for potential disruptive or destructive attacks against US critical infrastructure. Relies almost entirely on living-off-the-land techniques to evade detection.',
-    campaigns: [
-      { year: '2024', name: 'Critical infra pre-positioning', note: 'Long-dwell access to energy and water utilities.' },
-      { year: '2023', name: 'Guam telecom intrusion', note: 'Targeted communications infrastructure.' },
-    ],
-    iocs: ['ip: SOHO-router proxies', 'cmd: wmic /node:', 'evt:1102 (log cleared)'],
-  },
-  {
-    id: 'sandworm',
-    name: 'Sandworm',
-    aliases: ['Voodoo Bear', 'Telebots', 'Iron Viking', 'Seashell Blizzard'],
-    origin: 'Russia (GRU)', flag: '🇷🇺',
-    type: 'Nation-State',
-    motivations: ['Destruction', 'Espionage'],
-    sophistication: 5,
-    threatLevel: 'critical',
-    sectors: ['Energy', 'Government', 'Critical Infrastructure', 'Logistics'],
-    campaignCount: 41,
-    firstSeen: '2009',
-    malware: ['NotPetya', 'Industroyer', 'BlackEnergy', 'CaddyWiper', 'Olympic Destroyer'],
-    ttps: ['T1485', 'T1561', 'T1499', 'T1190', 'T1078'],
-    recentActivity: 'Destructive wiper deployment and OT-targeted attacks against Ukrainian energy and government systems.',
-    description: 'Russian GRU Unit 74455, the most destructive known APT. Responsible for the 2015/2016 Ukraine power-grid blackouts, the 2017 NotPetya wiper ($10B+ damage), and ongoing wartime OT attacks.',
-    campaigns: [
-      { year: '2022', name: 'Industroyer2', note: 'Attempted blackout of a Ukrainian substation.' },
-      { year: '2017', name: 'NotPetya', note: 'Pseudo-ransomware wiper, $10B+ global damage.' },
-      { year: '2015', name: 'Ukraine grid blackout', note: 'First confirmed cyber-induced power outage.' },
-    ],
-    iocs: ['sha256:027cc4…', 'domain: coffeinoffice[.]xyz', 'tool: CaddyWiper'],
-  },
-  {
-    id: 'fin7',
-    name: 'FIN7',
-    aliases: ['Carbanak', 'Carbon Spider', 'Sangria Tempest'],
-    origin: 'Russia', flag: '🇷🇺',
-    type: 'Cybercrime',
-    motivations: ['Financial'],
-    sophistication: 4,
-    threatLevel: 'high',
-    sectors: ['Retail', 'Hospitality', 'Restaurant', 'Finance'],
-    campaignCount: 112,
-    firstSeen: '2015',
-    malware: ['Carbanak', 'GRIFFON', 'BIRDWATCH', 'POWERPLANT', 'Lizar'],
-    ttps: ['T1566.001', 'T1059.001', 'T1055', 'T1041', 'T1486'],
-    recentActivity: 'Pivot toward ransomware affiliation and malvertising-driven loader distribution.',
-    description: 'Financially motivated Russian-speaking cybercrime group responsible for over $1B in theft. Historically targeted point-of-sale systems via sophisticated spear-phishing, later pivoting to ransomware operations.',
-    campaigns: [
-      { year: '2023', name: 'Malvertising loaders', note: 'SEO-poisoned ads delivering POWERPLANT.' },
-      { year: '2018', name: 'POS data theft', note: '15M+ payment cards stolen from US chains.' },
-    ],
-    iocs: ['sha256:9b2c…', 'domain: gw-cdn[.]net', 'doc: macro-enabled invoice'],
-  },
-  {
-    id: 'scattered',
-    name: 'Scattered Spider',
-    aliases: ['UNC3944', 'Octo Tempest', 'Muddled Libra', 'Star Fraud'],
-    origin: 'Distributed (US/UK)', flag: '🌐',
-    type: 'Cybercrime',
-    motivations: ['Financial'],
-    sophistication: 4,
-    threatLevel: 'high',
-    sectors: ['Hospitality', 'Gaming', 'Telecom', 'Retail', 'Finance'],
-    campaignCount: 31,
-    firstSeen: '2022',
-    malware: ['(social engineering)', 'AveMaria/Warzone', 'RattyRAT', 'ALPHV (affiliate)'],
-    ttps: ['T1598', 'T1621', 'T1556', 'T1078', 'T1486'],
-    recentActivity: 'High-tempo help-desk social engineering and SIM-swap-driven account takeovers preceding ransomware deployment.',
-    description: 'Young, English-speaking financially motivated collective skilled at help-desk social engineering, SIM swapping, and MFA fatigue. Known for the 2023 MGM Resorts and Caesars Entertainment breaches.',
-    campaigns: [
-      { year: '2023', name: 'MGM Resorts breach', note: 'Vishing the help desk led to ALPHV ransomware.' },
-      { year: '2023', name: 'Caesars extortion', note: 'Reported multi-million-dollar ransom payment.' },
-      { year: '2022', name: '0ktapus', note: 'Phishing kit targeting Okta credentials at 130+ orgs.' },
-    ],
-    iocs: ['phish: okta-sso[.]help', 'technique: SIM swap', 'tool: AnyDesk abuse'],
-  },
-  {
-    id: 'lockbit',
-    name: 'LockBit',
-    aliases: ['Bitwise Spider', 'LockBit 3.0', 'Gold Mystic'],
-    origin: 'Russia-affiliated', flag: '🇷🇺',
-    type: 'Cybercrime',
-    motivations: ['Financial'],
-    sophistication: 4,
-    threatLevel: 'critical',
-    sectors: ['Manufacturing', 'Healthcare', 'Finance', 'Government', 'Logistics'],
-    campaignCount: 200,
-    firstSeen: '2019',
-    malware: ['LockBit 2.0', 'LockBit 3.0 (Black)', 'StealBit', 'LockBit Green'],
-    ttps: ['T1486', 'T1490', 'T1567', 'T1078', 'T1133'],
-    recentActivity: 'Rebuilding affiliate operations following Operation Cronos law-enforcement disruption.',
-    description: 'Prolific Ransomware-as-a-Service (RaaS) operation that dominated the ransomware ecosystem for years. Operates a double-extortion model with a public leak site; disrupted by Operation Cronos in early 2024.',
-    campaigns: [
-      { year: '2023', name: 'Boeing & ICBC attacks', note: 'High-profile double-extortion victims.' },
-      { year: '2022', name: 'LockBit 3.0 launch', note: 'Introduced a ransomware bug-bounty program.' },
-    ],
-    iocs: ['ext: .lockbit', 'leak: lockbitsupp', 'sha256:7a3b…'],
-  },
-  {
-    id: 'blackcat',
-    name: 'BlackCat',
-    aliases: ['ALPHV', 'Noberus', 'Coffin'],
-    origin: 'Russia-affiliated', flag: '🇷🇺',
-    type: 'Cybercrime',
-    motivations: ['Financial'],
-    sophistication: 4,
-    threatLevel: 'high',
-    sectors: ['Healthcare', 'Finance', 'Energy', 'Manufacturing'],
-    campaignCount: 95,
-    firstSeen: '2021',
-    malware: ['ALPHV/BlackCat (Rust)', 'Exmatter', 'Munchkin'],
-    ttps: ['T1486', 'T1567.002', 'T1490', 'T1059.001', 'T1078'],
-    recentActivity: 'Exit-scam allegations after the Change Healthcare attack; affiliates migrating to other RaaS brands.',
-    description: 'Sophisticated Rust-based RaaS, one of the first to use a cross-platform encryptor. Behind the 2024 Change Healthcare attack that disrupted US healthcare payments nationwide.',
-    campaigns: [
-      { year: '2024', name: 'Change Healthcare', note: '$22M ransom; nationwide healthcare disruption.' },
-      { year: '2023', name: 'MGM (via Scattered Spider)', note: 'Encrypted hundreds of hypervisors.' },
-    ],
-    iocs: ['ext: random 7-char', 'leak: alphv-tor', 'sha256:3d1a…'],
-  },
-  {
-    id: 'kimsuky',
-    name: 'Kimsuky',
-    aliases: ['Velvet Chollima', 'Thallium', 'APT43', 'Emerald Sleet'],
-    origin: 'North Korea (RGB)', flag: '🇰🇵',
-    type: 'Nation-State',
-    motivations: ['Espionage'],
-    sophistication: 3,
-    threatLevel: 'high',
-    sectors: ['Government', 'Think Tanks', 'Academia', 'Defense', 'Media'],
-    campaignCount: 47,
-    firstSeen: '2012',
-    malware: ['BabyShark', 'AppleSeed', 'FlowerPower', 'ReconShark'],
-    ttps: ['T1566.001', 'T1598', 'T1056.001', 'T1114', 'T1059.001'],
-    recentActivity: 'Spear-phishing of Korea-policy experts and journalists, often impersonating reporters or academics.',
-    description: 'North Korean espionage group focused on intelligence collection regarding foreign policy and nuclear matters. Specializes in highly targeted spear-phishing and credential harvesting.',
-    campaigns: [
-      { year: '2023', name: 'ReconShark', note: 'Modular recon tool against policy experts.' },
-      { year: '2020', name: 'COVID research targeting', note: 'Phishing pharma and research bodies.' },
-    ],
-    iocs: ['domain: nid-security[.]com', 'sha256:5c8e…', 'phish: KISA notice'],
-  },
-  {
-    id: 'cl0p',
-    name: 'Cl0p',
-    aliases: ['TA505', 'FIN11', 'Lace Tempest'],
-    origin: 'Russia-affiliated', flag: '🇷🇺',
-    type: 'Cybercrime',
-    motivations: ['Financial'],
-    sophistication: 4,
-    threatLevel: 'critical',
-    sectors: ['Finance', 'Healthcare', 'Government', 'Education', 'Energy'],
-    campaignCount: 70,
-    firstSeen: '2019',
-    malware: ['Cl0p Ransomware', 'GET2', 'SDBOT', 'TrueBot', 'DEWMODE webshell'],
-    ttps: ['T1190', 'T1567.002', 'T1486', 'T1505.003', 'T1059'],
-    recentActivity: 'Mass exploitation of managed-file-transfer zero-days for data-theft extortion at scale.',
-    description: 'Russia-affiliated extortion group that pioneered mass zero-day exploitation of file-transfer appliances. Behind the 2023 MOVEit campaign affecting 2,700+ organizations and tens of millions of individuals.',
-    campaigns: [
-      { year: '2023', name: 'MOVEit Transfer (CVE-2023-34362)', note: '2,700+ orgs breached via SQLi zero-day.' },
-      { year: '2021', name: 'Accellion FTA', note: 'Mass exploitation of legacy file-transfer appliances.' },
-    ],
-    iocs: ['webshell: human2.aspx', 'domain: cl0p-leaks', 'sha256:1f4d…'],
-  },
-]
 
 /* --- Config / lookups ------------------------------------------------ */
 const MOTIVATION_CFG: Record<Motivation, { color: string; icon: React.ComponentType<any> }> = {
@@ -676,46 +404,49 @@ export default function ActorProfilesPage() {
   const [filterSector, setFilterSector] = useState<string>('all')
   const [filterSoph, setFilterSoph] = useState<string>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  // Empty until the API answers. The curated actor library is backend-seeded in
-  // both demo and live mode, so real data always comes back; ACTORS is used only
-  // as an offline fallback and to enrich display fields the API omits.
+  // Empty until the API answers, and it stays empty if the API does not. The
+  // actor library is a backend record: whatever it holds is what this
+  // deployment knows, including the gaps.
   const [actors, setActors] = useState<ThreatActor[]>([])
   const [summary, setSummary] = useState<CtiSummary | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     fetchCtiSummary().then(setSummary).catch(() => {})
     fetchActors().then((data: ApiActor[]) => {
-      {
-        const mapped: ThreatActor[] = data.map((a) => {
-          const seed = ACTORS.find((s) => s.id === a.id || s.name === a.name)
-          return {
-            id: a.id,
-            name: a.name,
-            aliases: Array.isArray(a.aliases) ? a.aliases : [],
-            origin: a.origin,
-            flag: a.flag ?? seed?.flag ?? '🌐',
-            type: ((t) => t === 'nation-state' ? 'Nation-State' : t === 'cybercrime' ? 'Cybercrime' : 'Hacktivist')((a.type ?? '').toLowerCase()) as ActorType,
-            motivations: (Array.isArray(a.motivations) ? a.motivations : [])
-              .filter((m): m is string => typeof m === 'string')
-              .map((m) => (m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())) as Motivation[],
-            sophistication: a.sophistication,
-            threatLevel: (a.threatLevel as 'critical' | 'high' | 'elevated') ?? 'high',
-            sectors: Array.isArray(a.sectors) ? a.sectors : [],
-            campaignCount: a.campaignCount ?? (Array.isArray(a.campaigns) ? a.campaigns.length : 0),
-            firstSeen: a.firstSeen?.split('-')[0] ?? 'Unknown',
-            lastSeen: a.lastSeen?.split('-')[0],
-            active: !!a.active,
-            malware: seed?.malware ?? (Array.isArray(a.malware) ? a.malware : []),
-            ttps: Array.isArray(a.ttps) ? a.ttps : [],
-            recentActivity: seed?.recentActivity ?? a.description,
-            description: a.description,
-            campaigns: seed?.campaigns ?? (Array.isArray(a.campaigns) ? a.campaigns : []).map((c) => ({ year: '', name: c, note: '' })),
-            iocs: seed?.iocs ?? [],
-          }
-        })
-        setActors(mapped)
-      }
-    }).catch(() => setActors(ACTORS))   // offline preview only
+      // Straight through from the API. This used to merge a hardcoded frontend
+      // seed over the live record - and the seed WON, so a real deployment
+      // showed compiled-in malware names, campaign lists and "recent activity"
+      // prose in place of its own data, with undated claims about what an actor
+      // is doing NOW that nobody was maintaining. Where the record is empty, the
+      // UI says so; that is a prompt to record something, not a gap to fill in.
+      const mapped: ThreatActor[] = data.map((a) => ({
+        id: a.id,
+        name: a.name,
+        aliases: Array.isArray(a.aliases) ? a.aliases : [],
+        origin: a.origin,
+        flag: a.flag ?? '🌐',
+        type: ((t) => t === 'nation-state' ? 'Nation-State' : t === 'cybercrime' ? 'Cybercrime' : 'Hacktivist')((a.type ?? '').toLowerCase()) as ActorType,
+        motivations: (Array.isArray(a.motivations) ? a.motivations : [])
+          .filter((m): m is string => typeof m === 'string')
+          .map((m) => (m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())) as Motivation[],
+        sophistication: a.sophistication,
+        threatLevel: (a.threatLevel as 'critical' | 'high' | 'elevated') ?? 'high',
+        sectors: Array.isArray(a.sectors) ? a.sectors : [],
+        campaignCount: a.campaignCount ?? (Array.isArray(a.campaigns) ? a.campaigns.length : 0),
+        firstSeen: a.firstSeen?.split('-')[0] ?? 'Unknown',
+        lastSeen: a.lastSeen?.split('-')[0],
+        active: !!a.active,
+        malware: Array.isArray(a.malware) ? a.malware : [],
+        ttps: Array.isArray(a.ttps) ? a.ttps : [],
+        recentActivity: a.description,
+        description: a.description,
+        campaigns: (Array.isArray(a.campaigns) ? a.campaigns : [])
+          .map((c) => ({ year: '', name: c, note: '' })),
+        iocs: [],
+      }))
+      setActors(mapped)
+    }).catch(() => setFailed(true))
   }, [])
 
   const selected = actors.find((a) => a.id === selectedId) ?? null
@@ -872,7 +603,11 @@ export default function ActorProfilesPage() {
 
       {/* Grid */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {filtered.length === 0 ? (
+        {failed ? (
+          // Never a demo library. An empty screen that says why is honest; a
+          // screen of compiled-in actors is a claim this deployment tracks them.
+          <ApiUnavailable what="the threat actor library" />
+        ) : filtered.length === 0 ? (
           <div className="py-20 text-center text-ink-600 text-sm">No actors match current filters</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

@@ -12,6 +12,7 @@ import {
   Activity, Clock, Terminal, Pause, Play, RefreshCw, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 
 /* -- Types --------------------------------------------------------- */
 type Scope = 'read' | 'write' | 'admin'
@@ -40,21 +41,7 @@ interface WebhookEndpoint {
 }
 
 /* -- Seed data ----------------------------------------------------- */
-const API_KEYS: ApiKey[] = [
-  { id: 'k1', label: 'Production Backend',  masked: 'to_sk_live_••••4f2a', scopes: ['read', 'write'],        created: 'Jan 12, 2026', lastUsed: '8s ago',  requestsToday: 1204, requestsTotal: 84213, status: 'active'  },
-  { id: 'k2', label: 'SIEM Integration',    masked: 'to_sk_live_••••9b71', scopes: ['read'],                 created: 'Nov 03, 2025', lastUsed: '2m ago',  requestsToday: 655, requestsTotal: 41902, status: 'active'  },
-  { id: 'k3', label: 'CI/CD Pipeline',      masked: 'to_sk_live_••••1c08', scopes: ['read', 'write'],        created: 'Feb 28, 2026', lastUsed: '1h ago',  requestsToday: 132, requestsTotal: 8841,  status: 'active'  },
-  { id: 'k4', label: 'Mobile App',          masked: 'to_sk_live_••••7e34', scopes: ['read'],                 created: 'Mar 15, 2026', lastUsed: '40m ago', requestsToday: 89, requestsTotal: 6210,  status: 'active'  },
-  { id: 'k5', label: 'Partner: Acme Corp',  masked: 'to_sk_live_••••a55d', scopes: ['read', 'write', 'admin'], created: 'Dec 01, 2025', lastUsed: '5h ago', requestsToday: 12, requestsTotal: 1024,  status: 'active'  },
-  { id: 'k6', label: 'Dev Sandbox',         masked: 'to_sk_test_••••0f9e', scopes: ['read', 'write'],        created: 'Apr 02, 2026', lastUsed: '3d ago',  requestsToday: 0, requestsTotal: 312,   status: 'revoked' },
-]
 
-const WEBHOOKS: WebhookEndpoint[] = [
-  { id: 'w1', url: 'https://hooks.acme.io/threatorbit/alerts',   events: ['alert.created'],                       status: 'active',  lastDelivery: '12s ago' },
-  { id: 'w2', url: 'https://soar.acme.io/api/incidents/resolve', events: ['incident.resolved'],                   status: 'active',  lastDelivery: '4m ago'  },
-  { id: 'w3', url: 'https://intel.acme.io/ingest/ioc',           events: ['ioc.confirmed', 'alert.created'],      status: 'failing', lastDelivery: '1h ago'  },
-  { id: 'w4', url: 'https://slack.acme.io/webhooks/sec-ops',     events: ['alert.created', 'incident.resolved'],  status: 'paused',  lastDelivery: '2d ago'  },
-]
 
 const SCOPE_CFG: Record<Scope, string> = {
   read:  'text-safe border-safe/20 bg-safe/10',
@@ -239,6 +226,8 @@ export default function ApiKeysPage() {
   // a credentials page. The seed constants are an offline-only fallback (catch).
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([])
+  const [keysFailed, setKeysFailed] = useState(false)
+  const [webhooksFailed, setWebhooksFailed] = useState(false)
   const [webhooksLive, setWebhooksLive] = useState(false)
   const [newHookUrl, setNewHookUrl] = useState('')
   const [newHookEvent, setNewHookEvent] = useState('alert.created')
@@ -247,11 +236,11 @@ export default function ApiKeysPage() {
   const [newSecret, setNewSecret] = useState<{ url: string; secret: string } | null>(null)
 
   useEffect(() => {
-    fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => setKeys(API_KEYS))
+    fetchApiKeys().then((data) => setKeys(data.map(remoteToRow))).catch(() => setKeysFailed(true))
     fetchWebhooks().then((data) => {
       setWebhooks(data.map(remoteWebhookToRow))
       setWebhooksLive(true)
-    }).catch(() => setWebhooks(WEBHOOKS))
+    }).catch(() => setWebhooksFailed(true))
   }, [])
 
   function addWebhook() {
@@ -369,7 +358,10 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {keys.length === 0 && (
+                {keys.length === 0 && keysFailed && (
+                  <ApiUnavailable what="your API keys" compact />
+                )}
+                {keys.length === 0 && !keysFailed && (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-xs text-ink-600">
                       No API keys yet - generate one to integrate with the ThreatOrbit API.
@@ -495,7 +487,10 @@ export default function ApiKeysPage() {
           )}
 
           <div className="space-y-2">
-            {webhooks.length === 0 && (
+            {webhooks.length === 0 && webhooksFailed && (
+              <ApiUnavailable what="your webhooks" compact />
+            )}
+            {webhooks.length === 0 && !webhooksFailed && (
               <p className="text-xs text-ink-600 py-4 text-center rounded-xl border border-white/8 bg-surface">
                 No webhooks configured - add one above to push events to your stack.
               </p>

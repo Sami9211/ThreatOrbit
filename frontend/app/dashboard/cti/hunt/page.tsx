@@ -9,6 +9,7 @@ import {
   ExternalLink, User, Calendar, Lightbulb, XCircle, Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 import { tk } from '@/lib/colors'
 
 /* --- Types ----------------------------------------------------------- */
@@ -43,197 +44,6 @@ interface Hunt {
 }
 
 /* --- Seed data -------------------------------------------------------- */
-const HUNTS: Hunt[] = [
-  {
-    id: 'hunt-volt',
-    name: 'Volt Typhoon LOTL Detection',
-    description:
-      'Hypothesis-driven hunt for living-off-the-land (LOTL) tradecraft attributed to Volt Typhoon within OT/ICS network segments. Focus on native binary abuse and log clearing that evades signature-based detection.',
-    status: 'active',
-    analyst: 'j.chen',
-    techniques: [
-      { id: 'T1059', name: 'Command and Scripting Interpreter', tactic: 'Execution' },
-      { id: 'T1218', name: 'System Binary Proxy Execution', tactic: 'Defense Evasion' },
-      { id: 'T1070', name: 'Indicator Removal', tactic: 'Defense Evasion' },
-    ],
-    progress: 64,
-    started: '2026-05-21',
-    hypotheses: [
-      {
-        id: 'h-volt-1',
-        statement: 'Adversary uses wmic.exe and netsh for discovery on OT jump hosts without dropping binaries.',
-        status: 'confirmed',
-        dataSources: ['EDR Process Telemetry', 'Windows Event Log 4688', 'OT Network Flow'],
-        findings: 'Confirmed 3 OT jump hosts executing wmic process enumeration outside maintenance windows. Parent process was a renamed cmd.exe.',
-        relatedIOCs: ['host: OT-JMP-04', 'sha256:9f2c…a1', 'cmd: wmic /node:'],
-      },
-      {
-        id: 'h-volt-2',
-        statement: 'Security event logs are selectively cleared after reconnaissance activity.',
-        status: 'investigating',
-        dataSources: ['Windows Event Log 1102', 'SIEM Audit Trail'],
-        findings: 'Two 1102 (audit log cleared) events correlate temporally with discovery activity. Pivoting on operator accounts.',
-        relatedIOCs: ['evt:1102', 'acct: svc-otmaint'],
-      },
-      {
-        id: 'h-volt-3',
-        statement: 'Persistence achieved via scheduled tasks masquerading as vendor maintenance jobs.',
-        status: 'refuted',
-        dataSources: ['EDR Persistence Module', 'Task Scheduler Operational Log'],
-        findings: 'All scheduled tasks reconciled to legitimate vendor SOWs. No rogue persistence located in this segment.',
-        relatedIOCs: [],
-      },
-    ],
-  },
-  {
-    id: 'hunt-lazarus',
-    name: 'Lazarus Supply Chain Indicators',
-    description:
-      'Intelligence-led hunt for npm and PyPI typosquatting packages with install-time payloads consistent with Lazarus Group supply-chain campaigns targeting developer endpoints.',
-    status: 'active',
-    analyst: 'a.patel',
-    techniques: [
-      { id: 'T1195.001', name: 'Compromise Software Dependencies and Development Tools', tactic: 'Initial Access' },
-    ],
-    progress: 48,
-    started: '2026-05-28',
-    hypotheses: [
-      {
-        id: 'h-laz-1',
-        statement: 'Developer endpoints have resolved typosquatted package names within the last 30 days.',
-        status: 'confirmed',
-        dataSources: ['Package Proxy Logs', 'EDR File Creation', 'DNS Logs'],
-        findings: 'Identified one install of "colorsama" (typosquat of colorama) on a CI build agent. Post-install script reached out to a staging domain.',
-        relatedIOCs: ['pkg: colorsama@1.2.9', 'domain: cdn-pkgs[.]live', 'ip: 185.225.x.x'],
-      },
-      {
-        id: 'h-laz-2',
-        statement: 'Install scripts exfiltrate environment variables and SSH keys.',
-        status: 'investigating',
-        dataSources: ['EDR Network Module', 'Process Args Telemetry'],
-        findings: 'Outbound POST observed from build agent immediately after install. Payload capture pending forensic acquisition.',
-        relatedIOCs: ['proc: node post-install', 'domain: cdn-pkgs[.]live'],
-      },
-    ],
-  },
-  {
-    id: 'hunt-cobalt',
-    name: 'Cobalt Strike Beacon Sweep',
-    description:
-      'C2 infrastructure mapping hunt to surface Cobalt Strike beacon traffic by profiling jitter, named-pipe artifacts, and malleable C2 HTTP header anomalies across the enterprise.',
-    status: 'active',
-    analyst: 'r.osei',
-    techniques: [
-      { id: 'T1071.001', name: 'Application Layer Protocol: Web Protocols', tactic: 'Command and Control' },
-      { id: 'T1090', name: 'Proxy', tactic: 'Command and Control' },
-    ],
-    progress: 71,
-    started: '2026-05-12',
-    hypotheses: [
-      {
-        id: 'h-cs-1',
-        statement: 'Beacon traffic exhibits regular interval callbacks with default malleable profile headers.',
-        status: 'confirmed',
-        dataSources: ['Proxy Logs', 'Zeek HTTP Logs', 'Network Flow'],
-        findings: 'Two hosts beaconing every 60s ±10% jitter to a single VPS with a non-standard User-Agent. Matches a known CS profile.',
-        relatedIOCs: ['ip: 45.137.x.x', 'ua: Mozilla/5.0 (compatible; MSIE 9)', 'uri: /jquery-3.3.1.min.js'],
-      },
-      {
-        id: 'h-cs-2',
-        statement: 'Named-pipe lateral movement artifacts exist on internal hosts.',
-        status: 'confirmed',
-        dataSources: ['EDR Named Pipe Telemetry', 'Sysmon Event 17/18'],
-        findings: 'Detected msagent_* named pipes on two endpoints adjacent to confirmed beacon hosts.',
-        relatedIOCs: ['pipe: \\\\.\\pipe\\msagent_4f', 'host: FIN-WKS-22'],
-      },
-    ],
-  },
-  {
-    id: 'hunt-kerb',
-    name: 'Kerberoasting Campaign',
-    description:
-      'Active Directory ticket-abuse hunt looking for anomalous TGS requests with weak encryption types indicative of Kerberoasting against service accounts.',
-    status: 'paused',
-    analyst: 'j.chen',
-    techniques: [
-      { id: 'T1558.003', name: 'Steal or Forge Kerberos Tickets: Kerberoasting', tactic: 'Credential Access' },
-    ],
-    progress: 33,
-    started: '2026-04-30',
-    hypotheses: [
-      {
-        id: 'h-kerb-1',
-        statement: 'A single principal requests TGS tickets for many SPNs in a short window using RC4.',
-        status: 'investigating',
-        dataSources: ['Domain Controller Event 4769', 'Identity Graph'],
-        findings: 'One workstation requested 40+ RC4 service tickets in 8 minutes. Hunt paused pending IR scoping decision.',
-        relatedIOCs: ['evt:4769 enc:0x17', 'acct: dev-intern'],
-      },
-    ],
-  },
-  {
-    id: 'hunt-cloud',
-    name: 'Cloud IAM Persistence',
-    description:
-      'Completed hunt for backdoor IAM accounts and access keys in AWS and Azure that grant standing administrative access outside the change-management pipeline.',
-    status: 'completed',
-    analyst: 'a.patel',
-    techniques: [
-      { id: 'T1078.004', name: 'Valid Accounts: Cloud Accounts', tactic: 'Persistence' },
-    ],
-    progress: 100,
-    started: '2026-04-08',
-    hypotheses: [
-      {
-        id: 'h-cloud-1',
-        statement: 'IAM users exist with active access keys but no console login in 90+ days.',
-        status: 'confirmed',
-        dataSources: ['AWS CloudTrail', 'IAM Credential Report'],
-        findings: 'Found two orphaned IAM users with admin-equivalent policies and recently used keys. Remediated and rotated.',
-        relatedIOCs: ['iam: svc-legacy-deploy', 'key: AKIA…ZX'],
-      },
-      {
-        id: 'h-cloud-2',
-        statement: 'Azure service principals were granted Owner role outside PIM.',
-        status: 'refuted',
-        dataSources: ['Azure Activity Log', 'Entra ID Audit'],
-        findings: 'All Owner grants reconciled to approved PIM activations. No rogue principal found.',
-        relatedIOCs: [],
-      },
-    ],
-  },
-  {
-    id: 'hunt-dns',
-    name: 'Exfil over DNS',
-    description:
-      'Covert-channel detection hunt targeting low-and-slow data exfiltration tunnelled through DNS queries with high subdomain entropy and abnormal record-type distribution.',
-    status: 'active',
-    analyst: 'r.osei',
-    techniques: [
-      { id: 'T1048.003', name: 'Exfiltration Over Unencrypted Non-C2 Protocol', tactic: 'Exfiltration' },
-    ],
-    progress: 55,
-    started: '2026-05-25',
-    hypotheses: [
-      {
-        id: 'h-dns-1',
-        statement: 'A host issues high volumes of unique high-entropy subdomains to a single apex domain.',
-        status: 'investigating',
-        dataSources: ['DNS Resolver Logs', 'Network Flow', 'Threat Intel Feed'],
-        findings: 'One finance host queried 300+ unique TXT subdomains for a newly registered domain over 6 hours.',
-        relatedIOCs: ['domain: tnl[.]exfilzone[.]xyz', 'host: FIN-LAP-09', 'qtype: TXT'],
-      },
-      {
-        id: 'h-dns-2',
-        statement: 'The apex domain is newly registered and low-reputation.',
-        status: 'confirmed',
-        dataSources: ['Passive DNS', 'WHOIS Enrichment', 'TI Feed'],
-        findings: 'Apex domain registered 9 days ago via a privacy registrar; flagged by two TI feeds as suspected tunneling infra.',
-        relatedIOCs: ['domain: exfilzone[.]xyz', 'registrar: PrivacyGuard'],
-      },
-    ],
-  },
-]
 
 /* --- Status config ---------------------------------------------------- */
 const HUNT_STATUS: Record<HuntStatus, { label: string; color: string; icon: React.ComponentType<any> }> = {
@@ -528,6 +338,7 @@ export default function ThreatHuntPage() {
   // list is honest on a real deployment. HUNTS is an offline-only fallback.
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [hunts, setHunts] = useState<Hunt[]>([])
+  const [huntsFailed, setHuntsFailed] = useState(false)
   const [coverage, setCoverage] = useState<number | null>(null)
 
   // Execute a hunt against the live IOC store; mark it running while the
@@ -549,25 +360,24 @@ export default function ThreatHuntPage() {
   useEffect(() => {
     fetchCtiHunts().then((data: ApiSavedHunt[]) => {
       // Applied even when empty - a real deployment with no hunts shows none.
-      const merged: Hunt[] = data.map((h) => {
-        const seed = HUNTS.find((s) => s.id === h.id || s.name === h.name)
-        return seed
-          ? { ...seed, progress: h.progress, analyst: h.analyst }
-          : {
-              id: h.id,
-              name: h.name,
-              description: h.hypothesis,
-              status: (h.status === 'active' ? 'active' : h.status === 'completed' ? 'completed' : 'paused') as HuntStatus,
-              analyst: h.analyst,
-              techniques: [],
-              progress: h.progress,
-              started: h.created,
-              hypotheses: [],
-            }
-      })
+      // Straight through. This used to look the record up in a hardcoded seed
+      // library by id OR NAME and, on a match, return the seed - so a real hunt
+      // that happened to share a name with a demo one was replaced wholesale by
+      // fiction, techniques and hypotheses included.
+      const merged: Hunt[] = data.map((h) => ({
+        id: h.id,
+        name: h.name,
+        description: h.hypothesis,
+        status: (h.status === 'active' ? 'active' : h.status === 'completed' ? 'completed' : 'paused') as HuntStatus,
+        analyst: h.analyst,
+        techniques: [],
+        progress: h.progress,
+        started: h.created,
+        hypotheses: [],
+      }))
       setHunts(merged)
       if (merged.length > 0) setExpandedId(merged[0].id)
-    }).catch(() => { setHunts(HUNTS); setExpandedId(HUNTS[0].id) })   // offline preview only
+    }).catch(() => setHuntsFailed(true))
     fetchAttackCoverage().then((c) => setCoverage(c.summary.coveragePct)).catch(() => {})
   }, [])
 
@@ -634,7 +444,10 @@ export default function ThreatHuntPage() {
             <span className="text-[10px] text-ink-600">{hunts.length} total</span>
           </div>
           <div className="space-y-3">
-            {hunts.length === 0 && (
+            {hunts.length === 0 && huntsFailed && (
+              <ApiUnavailable what="your hunts" compact />
+            )}
+            {hunts.length === 0 && !huntsFailed && (
               <p className="text-[11px] text-ink-600 py-6 text-center">
                 No hunt campaigns yet - start one to track a hypothesis here.
               </p>

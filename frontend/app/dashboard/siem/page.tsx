@@ -16,6 +16,7 @@ import ReportButton from '@/components/dashboard/ReportButton'
 import AnimatedNumber from '@/components/dashboard/AnimatedNumber'
 import { Skeleton, SkeletonRows } from '@/components/dashboard/Skeleton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 import EntityHoverCard from '@/components/dashboard/EntityHoverCard'
 import { useWindowedRows } from '@/lib/useWindowedRows'
 import { useExperienceMode } from '@/lib/useExperienceMode'
@@ -77,248 +78,6 @@ type SiemAlert = {
 }
 
 /* -- Static alert dataset ------------------------------------------- */
-const ALERTS: SiemAlert[] = [
-  {
-    id: 'a001', ts: '2024-11-12T14:22:00Z',
-    title: 'Ransomware file encryption pattern detected - mass rename activity',
-    severity: 'critical', status: 'in-progress', disposition: 'true-positive', owner: 'j.chen',
-    riskScore: 98,
-    ruleId: 'EDR-9001', ruleName: 'Ransomware File Encryption Indicator',
-    mitreTactic: 'Impact', mitreTacticId: 'TA0040',
-    mitreTech: 'Data Encrypted for Impact', mitreTechId: 'T1486',
-    srcIp: '10.44.0.87', srcCountry: 'Internal', srcPort: 0, srcHostname: 'DESKTOP-FIN-087', srcAsn: 'Internal',
-    destIp: '10.44.0.87', destPort: 0, destService: 'Local FileSystem',
-    username: 'msmith', hostname: 'DESKTOP-FIN-087', hostCriticality: 'high',
-    processName: 'svchost.exe', cmdLine: 'C:\\Windows\\Temp\\svchost.exe --encrypt --ext .locked',
-    description: 'EDR detected mass file renaming consistent with ransomware encryption. 1,247 files renamed with .locked extension in under 60 seconds. Process spawned from user context without elevation.',
-    rawLog: 'Nov 12 14:22:01 DESKTOP-FIN-087 EDR[4421]: ALERT type=ransomware_indicator host=DESKTOP-FIN-087 user=msmith process=svchost.exe(pid=9823) parent=explorer.exe(pid=3401) cmdline="C:\\Windows\\Temp\\svchost.exe --encrypt --ext .locked" files_renamed=1247 path=C:\\Users\\msmith\\Documents\\ rule=EDR-9001 severity=CRITICAL',
-    eventCount: 1247, tiHits: 3, bytesOut: 0,
-  },
-  {
-    id: 'a002', ts: '2024-11-12T14:18:00Z',
-    title: 'Root SSH login from untrusted external IP - Lazarus Group C2 IOC match',
-    severity: 'critical', status: 'assigned', disposition: 'true-positive', owner: 'a.patel',
-    riskScore: 96,
-    ruleId: 'SIEM-1042', ruleName: 'External SSH Root Login',
-    mitreTactic: 'Initial Access', mitreTacticId: 'TA0001',
-    mitreTech: 'External Remote Services', mitreTechId: 'T1133',
-    srcIp: '45.95.147.236', srcCountry: 'Russia', srcPort: 52847, srcHostname: 'unknown', srcAsn: 'AS9009 M247 Ltd',
-    destIp: '192.168.10.44', destPort: 22, destService: 'SSH',
-    username: 'root', hostname: 'PROD-API-04', hostCriticality: 'critical',
-    processName: 'sshd', cmdLine: null,
-    description: 'Successful root authentication via SSH from IP matching Lazarus Group infrastructure (AS9009). Target host is a production API server. IP has 3 TI feed hits: Recorded Future, Crowdstrike Intel, MISP.',
-    rawLog: 'Nov 12 14:18:34 PROD-API-04 sshd[1842]: Accepted publickey for root from 45.95.147.236 port 52847 ssh2: RSA SHA256:xyz... Nov 12 14:18:34 PROD-API-04 sshd[1842]: pam_unix(sshd:session): session opened for user root by (uid=0)',
-    eventCount: 1, tiHits: 3, bytesOut: 142000,
-  },
-  {
-    id: 'a003', ts: '2024-11-12T14:15:00Z',
-    title: 'PowerShell AMSI bypass + encoded payload - living-off-the-land execution',
-    severity: 'critical', status: 'new', disposition: 'undetermined', owner: null,
-    riskScore: 91,
-    ruleId: 'EDR-4421', ruleName: 'PowerShell AMSI Bypass Detected',
-    mitreTactic: 'Defense Evasion', mitreTacticId: 'TA0005',
-    mitreTech: 'Impair Defenses: AMSI Bypass', mitreTechId: 'T1562.001',
-    srcIp: '10.8.1.45', srcCountry: 'Internal', srcPort: 0, srcHostname: 'WS-HR-045', srcAsn: 'Internal',
-    destIp: '185.220.101.1', destPort: 443, destService: 'HTTPS',
-    username: 'jdoe', hostname: 'WS-HR-045', hostCriticality: 'medium',
-    processName: 'powershell.exe', cmdLine: 'powershell.exe -EncodedCommand JABhAD0AJABlAG4AdgA6AEMAbwBtAHAAdQB0AGUAcgBOAGEAbQBlAA==',
-    description: 'PowerShell executed with Base64-encoded payload immediately after AMSI bypass string detected in memory. Subsequent outbound HTTPS connection to known C2 infrastructure. User has no legitimate reason to run encoded PowerShell.',
-    rawLog: 'Nov 12 14:15:22 WS-HR-045 EDR: ALERT rule=EDR-4421 process=powershell.exe pid=7742 user=jdoe cmdline="-EncodedCommand JABhAD0AJABlAG4A..." amsi_bypass=detected connection=185.220.101.1:443',
-    eventCount: 4, tiHits: 2, bytesOut: 48200,
-  },
-  {
-    id: 'a004', ts: '2024-11-12T14:10:00Z',
-    title: 'IAM privilege escalation: Lambda service account granted AdministratorAccess',
-    severity: 'high', status: 'in-progress', disposition: 'true-positive', owner: 'j.chen',
-    riskScore: 85,
-    ruleId: 'AWS-3421', ruleName: 'IAM Policy Escalation to Admin',
-    mitreTactic: 'Privilege Escalation', mitreTacticId: 'TA0004',
-    mitreTech: 'Valid Accounts: Cloud Accounts', mitreTechId: 'T1078.004',
-    srcIp: '54.239.28.85', srcCountry: 'United States', srcPort: 443, srcHostname: 'lambda.amazonaws.com', srcAsn: 'AS16509 Amazon',
-    destIp: '10.0.1.1', destPort: 443, destService: 'AWS IAM',
-    username: 'lambda-svc', hostname: null, hostCriticality: 'high',
-    processName: null, cmdLine: null,
-    description: 'AWS CloudTrail detected AttachUserPolicy granting AdministratorAccess to lambda-svc service account. This action was performed outside normal business hours by the account itself (self-escalation via assumed role).',
-    rawLog: '{"eventTime":"2024-11-12T14:10:01Z","eventName":"AttachUserPolicy","userIdentity":{"type":"AssumedRole","arn":"arn:aws:sts::123456789:assumed-role/lambda-exec/lambda-svc"},"requestParameters":{"userName":"lambda-svc","policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}',
-    eventCount: 1, tiHits: 0, bytesOut: 0,
-  },
-  {
-    id: 'a005', ts: '2024-11-12T14:04:00Z',
-    title: 'Bulk data exfiltration query: 500K records from customer DB',
-    severity: 'critical', status: 'new', disposition: 'undetermined', owner: null,
-    riskScore: 93,
-    ruleId: 'DB-8801', ruleName: 'Bulk Database Exfiltration Pattern',
-    mitreTactic: 'Exfiltration', mitreTacticId: 'TA0010',
-    mitreTech: 'Exfiltration Over Alternative Protocol', mitreTechId: 'T1048',
-    srcIp: '10.0.5.22', srcCountry: 'Internal', srcPort: 49200, srcHostname: 'APP-SVC-02', srcAsn: 'Internal',
-    destIp: '104.26.10.32', destPort: 443, destService: 'HTTPS',
-    username: 'app_user', hostname: 'APP-SVC-02', hostCriticality: 'critical',
-    processName: 'mysqldump', cmdLine: 'mysqldump -u app_user -p customers --all-databases > /tmp/dump.sql',
-    description: 'Application server executed mysqldump for entire customers database (500K+ records). Data subsequently transferred via HTTPS to unrecognized external IP. Total egress: 4.2 GB in 8 minutes.',
-    rawLog: 'Nov 12 14:04:11 APP-SVC-02 auditd: syscall=execve exe=/usr/bin/mysqldump user=app_user cmd="mysqldump -u app_user customers --all-databases" Nov 12 14:04:44 APP-SVC-02 net: 4396MB transferred to 104.26.10.32:443',
-    eventCount: 2, tiHits: 1, bytesOut: 4200000000,
-  },
-  {
-    id: 'a006', ts: '2024-11-12T13:55:00Z',
-    title: 'Multiple failed MFA attempts - push fatigue attack on alice@corp.com',
-    severity: 'high', status: 'assigned', disposition: 'undetermined', owner: 'r.osei',
-    riskScore: 72,
-    ruleId: 'AUTH-6621', ruleName: 'MFA Push Fatigue Detection',
-    mitreTactic: 'Credential Access', mitreTacticId: 'TA0006',
-    mitreTech: 'Multi-Factor Authentication Request Generation', mitreTechId: 'T1621',
-    srcIp: '91.108.56.0', srcCountry: 'Russia', srcPort: 0, srcHostname: 'unknown', srcAsn: 'AS62041 Telegram',
-    destIp: '10.0.0.1', destPort: 443, destService: 'Azure AD',
-    username: 'alice', hostname: null, hostCriticality: 'medium',
-    processName: null, cmdLine: null,
-    description: 'Okta detected 23 MFA push requests sent to alice@corp.com within 5 minutes from Russian IP. Valid password used (credential stuffing). User has not approved any push. Attack pattern consistent with MFA fatigue/push bombing.',
-    rawLog: 'Nov 12 13:55:01 okta: event=user.authentication.auth_via_mfa actor=alice@corp.com outcome=FAILURE reason=PUSH_REJECTED ip=91.108.56.0 [repeated 23 times in 5 minutes]',
-    eventCount: 23, tiHits: 0, bytesOut: 0,
-  },
-  {
-    id: 'a007', ts: '2024-11-12T13:40:00Z',
-    title: 'DNS request to known malware C2 domain - CobaltStrike beacon pattern',
-    severity: 'high', status: 'resolved', disposition: 'true-positive', owner: 'j.chen',
-    riskScore: 78,
-    ruleId: 'DNS-2201', ruleName: 'DNS C2 Beacon Domain Match',
-    mitreTactic: 'Command and Control', mitreTacticId: 'TA0011',
-    mitreTech: 'Application Layer Protocol: DNS', mitreTechId: 'T1071.004',
-    srcIp: '10.50.3.12', srcCountry: 'Internal', srcPort: 53, srcHostname: 'WS-SALES-112', srcAsn: 'Internal',
-    destIp: '8.8.8.8', destPort: 53, destService: 'DNS',
-    username: 'bwilson', hostname: 'WS-SALES-112', hostCriticality: 'medium',
-    processName: 'chrome.exe', cmdLine: null,
-    description: 'Workstation issued DNS query for s3cr3t-update[.]kz (Recorded Future: CobaltStrike team server). 847-byte A record response. Beacon heartbeat pattern detected: query every 58 seconds. Host remediated.',
-    rawLog: 'Nov 12 13:40:02 dns-fw: BLOCKED qname=s3cr3t-update.kz qtype=A client=10.50.3.12 policy=threat-intel-block feed=RecordedFuture category=c2 confidence=97',
-    eventCount: 14, tiHits: 4, bytesOut: 12800,
-  },
-  {
-    id: 'a008', ts: '2024-11-12T13:22:00Z',
-    title: 'Admin account creation outside business hours by svc-deploy',
-    severity: 'high', status: 'closed', disposition: 'benign', owner: 'a.patel',
-    riskScore: 61,
-    ruleId: 'AD-5510', ruleName: 'Privileged Account Created After Hours',
-    mitreTactic: 'Persistence', mitreTacticId: 'TA0003',
-    mitreTech: 'Create Account: Domain Account', mitreTechId: 'T1136.002',
-    srcIp: '10.1.0.50', srcCountry: 'Internal', srcPort: 0, srcHostname: 'DEPLOY-SRV-01', srcAsn: 'Internal',
-    destIp: '10.1.0.5', destPort: 389, destService: 'LDAP/AD',
-    username: 'svc-deploy', hostname: 'DEPLOY-SRV-01', hostCriticality: 'high',
-    processName: null, cmdLine: null,
-    description: 'Service account svc-deploy created new domain account backup-admin-2024 at 23:44 UTC. Confirmed benign: authorized deployment pipeline action. Change request CR-2024-8841 on record.',
-    rawLog: 'Nov 12 23:44:12 DC-01 Security[4720]: Account created: backup-admin-2024 by svc-deploy from 10.1.0.50 groups=[Domain Admins]',
-    eventCount: 1, tiHits: 0, bytesOut: 0,
-  },
-  {
-    id: 'a009', ts: '2024-11-12T13:10:00Z',
-    title: 'SQL injection attempt: 847 payloads on /api/v2/users - WAF partially blocked',
-    severity: 'high', status: 'new', disposition: 'undetermined', owner: null,
-    riskScore: 67,
-    ruleId: 'WAF-2231', ruleName: 'SQL Injection Attack Pattern',
-    mitreTactic: 'Initial Access', mitreTacticId: 'TA0001',
-    mitreTech: 'Exploit Public-Facing Application', mitreTechId: 'T1190',
-    srcIp: '91.92.251.103', srcCountry: 'Iran', srcPort: 39847, srcHostname: 'unknown', srcAsn: 'AS44477 STARK INDUSTRIES',
-    destIp: '198.51.100.44', destPort: 443, destService: 'HTTPS/API',
-    username: null, hostname: 'api-gateway-01', hostCriticality: 'critical',
-    processName: null, cmdLine: null,
-    description: "847 SQL injection payloads targeting /api/v2/users endpoint. WAF blocked 832/847. 15 requests bypassed WAF and reached application server. Application logs show 2 queries returning 200 OK responses.",
-    rawLog: "Nov 12 13:10:01 waf-01: BLOCKED src=91.92.251.103 dst=198.51.100.44 method=POST uri=/api/v2/users payload=\"' OR 1=1--\" rule=SQLI-001 [847 events in 4 minutes, 15 bypass]",
-    eventCount: 847, tiHits: 1, bytesOut: 4400,
-  },
-  {
-    id: 'a010', ts: '2024-11-12T12:55:00Z',
-    title: 'Large outbound transfer 4.2 GB to Azure Blob Storage - unusual destination',
-    severity: 'medium', status: 'new', disposition: 'undetermined', owner: null,
-    riskScore: 54,
-    ruleId: 'NET-3312', ruleName: 'Large Outbound Data Transfer',
-    mitreTactic: 'Exfiltration', mitreTacticId: 'TA0010',
-    mitreTech: 'Transfer Data to Cloud Account', mitreTechId: 'T1537',
-    srcIp: '10.22.0.10', srcCountry: 'Internal', srcPort: 58234, srcHostname: 'FILE-SRV-01', srcAsn: 'Internal',
-    destIp: '52.239.210.180', destPort: 443, destService: 'Azure Blob Storage',
-    username: null, hostname: 'FILE-SRV-01', hostCriticality: 'high',
-    processName: 'azcopy.exe', cmdLine: 'azcopy copy C:\\Shares\\Finance\\ https://unknown-tenant.blob.core.windows.net/backup/',
-    description: 'File server transferred 4.2 GB to an Azure Blob Storage account in an unrecognized tenant. azcopy.exe was executed interactively (not via scheduled task). Investigation pending to confirm if authorized backup.',
-    rawLog: 'Nov 12 12:55:03 FILE-SRV-01 sysmon[1]: ProcessCreate process=azcopy.exe cmdline="azcopy copy C:\\Shares\\Finance\\ https://unknown-tenant.blob.core.windows.net/backup/" user=NT AUTHORITY\\SYSTEM',
-    eventCount: 1, tiHits: 0, bytesOut: 4200000000,
-  },
-  {
-    id: 'a011', ts: '2024-11-12T12:40:00Z',
-    title: 'VPN login from Singapore - impossible travel (last login: New York 47 min ago)',
-    severity: 'medium', status: 'pending', disposition: 'undetermined', owner: 'r.osei',
-    riskScore: 48,
-    ruleId: 'VPN-0012', ruleName: 'Impossible Travel - VPN Authentication',
-    mitreTactic: 'Initial Access', mitreTacticId: 'TA0001',
-    mitreTech: 'Valid Accounts', mitreTechId: 'T1078',
-    srcIp: '103.245.12.44', srcCountry: 'Singapore', srcPort: 0, srcHostname: 'unknown', srcAsn: 'AS132203 Tencent Cloud',
-    destIp: '10.0.0.1', destPort: 1194, destService: 'OpenVPN',
-    username: 'alice', hostname: null, hostCriticality: 'low',
-    processName: null, cmdLine: null,
-    description: 'User alice authenticated to VPN from Singapore (103.245.12.44) 47 minutes after successful login from New York (98.245.200.11). Physical travel is impossible. Either credential compromise or split-tunneling anomaly.',
-    rawLog: 'Nov 12 12:40:18 vpn-gw: AUTH_SUCCESS user=alice src=103.245.12.44 country=SG device=unknown Nov 12 11:53:02 vpn-gw: AUTH_SUCCESS user=alice src=98.245.200.11 country=US device=MacBook-Alice',
-    eventCount: 1, tiHits: 0, bytesOut: 0,
-  },
-  {
-    id: 'a012', ts: '2024-11-12T12:30:00Z',
-    title: 'Phishing email with macro-laced attachment delivered to 14 executives',
-    severity: 'high', status: 'in-progress', disposition: 'true-positive', owner: 'a.patel',
-    riskScore: 76,
-    ruleId: 'MAIL-8812', ruleName: 'Phishing Attachment Delivered',
-    mitreTactic: 'Initial Access', mitreTacticId: 'TA0001',
-    mitreTech: 'Phishing: Spearphishing Attachment', mitreTechId: 'T1566.001',
-    srcIp: '185.220.101.42', srcCountry: 'North Korea', srcPort: 25, srcHostname: 'mail-srv[.]kz', srcAsn: 'AS60068 CDC Online',
-    destIp: '10.0.0.25', destPort: 25, destService: 'SMTP',
-    username: null, hostname: 'mail-gw-01', hostCriticality: 'high',
-    processName: null, cmdLine: null,
-    description: 'Spearphishing campaign targeting C-suite executives. 14 emails with Q4_Budget_Final.xlsm attachment delivered before quarantine rule activated. File contains VBA macro that downloads Cobalt Strike stager. 3 recipients opened the file.',
-    rawLog: 'Nov 12 12:30:02 mail-gw: DELIVERED from=noreply@m1crosoft-reports.kz to=ceo@corp.com,cfo@corp.com,[+12] subject="Q4 Budget Review" attachment=Q4_Budget_Final.xlsm(SHA256:abc123def) verdict=ALLOWED policy=bypass_exec',
-    eventCount: 14, tiHits: 5, bytesOut: 0,
-  },
-  {
-    id: 'a013', ts: '2024-11-12T12:15:00Z',
-    title: 'Brute-force SSH - 4,219 attempts from 14 IPs in 8 minutes',
-    severity: 'medium', status: 'resolved', disposition: 'true-positive', owner: 'j.chen',
-    riskScore: 42,
-    ruleId: 'FW-9821', ruleName: 'SSH Brute Force from Multiple Sources',
-    mitreTactic: 'Credential Access', mitreTacticId: 'TA0006',
-    mitreTech: 'Brute Force: Password Spraying', mitreTechId: 'T1110.003',
-    srcIp: '192.241.0.0/16', srcCountry: 'China', srcPort: 0, srcHostname: 'Multiple', srcAsn: 'Multiple',
-    destIp: '198.51.100.22', destPort: 22, destService: 'SSH',
-    username: null, hostname: 'DMZ-JUMP-01', hostCriticality: 'high',
-    processName: 'sshd', cmdLine: null,
-    description: '14 source IPs across 3 Chinese ASNs coordinated SSH brute-force against jump host. 4,219 attempts in 8 minutes, all rejected. IPs blocked at perimeter firewall. No successful authentication. Coordinated timing suggests automated tooling.',
-    rawLog: 'Nov 12 12:15:00 fw-01: BLOCK-COUNTRY src=103.83.128.0 dst=198.51.100.22 dport=22 reason=brute-force-threshold hits=300/min [14 source IPs]',
-    eventCount: 4219, tiHits: 0, bytesOut: 0,
-  },
-  {
-    id: 'a014', ts: '2024-11-12T11:55:00Z',
-    title: 'Network reconnaissance: Nmap OS fingerprint + port scan from internal workstation',
-    severity: 'medium', status: 'new', disposition: 'undetermined', owner: null,
-    riskScore: 38,
-    ruleId: 'NET-4401', ruleName: 'Internal Network Reconnaissance',
-    mitreTactic: 'Discovery', mitreTacticId: 'TA0007',
-    mitreTech: 'Network Service Discovery', mitreTechId: 'T1046',
-    srcIp: '10.5.0.88', srcCountry: 'Internal', srcPort: 0, srcHostname: 'WS-DEV-088', srcAsn: 'Internal',
-    destIp: '10.0.0.0/8', destPort: 0, destService: 'Multiple',
-    username: 'dev_user3', hostname: 'WS-DEV-088', hostCriticality: 'low',
-    processName: 'nmap', cmdLine: 'nmap -A -sV -O -p 1-65535 10.0.0.0/8',
-    description: 'Developer workstation ran full-range Nmap scan with OS detection and service version enumeration across the entire 10.0.0.0/8 internal subnet. Atypical behavior for this account - may indicate lateral movement reconnaissance.',
-    rawLog: 'Nov 12 11:55:12 ids-01: SCAN_DETECTED src=10.5.0.88 dst=10.0.0.0/8 type=NMAP_OS_FINGERPRINT packets=127422 scan_duration=120s',
-    eventCount: 127422, tiHits: 0, bytesOut: 0,
-  },
-  {
-    id: 'a015', ts: '2024-11-12T11:40:00Z',
-    title: 'Security patch application failed: CVE-2024-6387 on 23 servers',
-    severity: 'low', status: 'closed', disposition: 'benign', owner: 'a.patel',
-    riskScore: 21,
-    ruleId: 'PATCH-0040', ruleName: 'Critical Patch Application Failure',
-    mitreTactic: 'Initial Access', mitreTacticId: 'TA0001',
-    mitreTech: 'Exploit Public-Facing Application', mitreTechId: 'T1190',
-    srcIp: '10.0.0.1', srcCountry: 'Internal', srcPort: 0, srcHostname: 'PATCH-SRV', srcAsn: 'Internal',
-    destIp: 'Multiple', destPort: 0, destService: 'Patch Management',
-    username: 'svc-patch', hostname: 'PATCH-SRV', hostCriticality: 'medium',
-    processName: null, cmdLine: null,
-    description: 'WSUS/SCCM patch deployment for CVE-2024-6387 (OpenSSH RCE) failed on 23 servers due to dependency conflict with libssl. Manual remediation completed; all servers now patched.',
-    rawLog: 'Nov 12 11:40:01 patch-mgr: DEPLOYMENT_FAILED kb=CVE-2024-6387 target_count=23 failed_reason=libssl_conflict status=MANUAL_REMEDIATION_REQUIRED',
-    eventCount: 23, tiHits: 0, bytesOut: 0,
-  },
-]
 
 /* -- Correlation rules ---------------------------------------------- */
 type CorrelationRule = {
@@ -404,16 +163,6 @@ const SPARKLINE_DATA = {
 }
 
 // MITRE tactic distribution
-const MITRE_DIST = [
-  { tactic: 'Initial Access',     count: 847, color: tk('magenta')  },
-  { tactic: 'Credential Access',  count: 412, color: tk('threat')  },
-  { tactic: 'Exfiltration',       count: 298, color: tk('amber')  },
-  { tactic: 'Defense Evasion',    count: 387, color: tk('violet')  },
-  { tactic: 'Command & Control',  count: 523, color: tk('safe')  },
-  { tactic: 'Discovery',          count: 189, color: tk('teal')  },
-  { tactic: 'Privilege Escalation', count: 142, color: '#FF9B2E'},
-  { tactic: 'Persistence',        count: 49,  color: '#A78BFA'  },
-]
 
 /* -- ATT&CK coverage matrix data ----------------------------------- */
 const COVERED_TECH_IDS = new Set(RULES.map((r) => r.mitreTechId))
@@ -1292,9 +1041,11 @@ export default function SIEMPage() {
   const isNormal = mode === 'normal'
   const [tab, setTab] = useState<'queue' | 'analytics' | 'rules' | 'sources' | 'hunt' | 'fp-triage'>('queue')
   // Empty until the API answers - the alert queue is the API's to fill. An empty
-  // queue on a real deployment is honest ("nothing detected yet"), not a cue to
-  // show demo alerts. ALERTS is a first-load-offline fallback only (see loadSiem).
+  // queue on a real deployment is honest ("nothing detected yet"); an
+  // unreachable API is a THIRD state, and conflating it with either of the other
+  // two is how a console lies to the person reading it.
   const [alerts, setAlerts] = useState<SiemAlert[]>([])
+  const [alertsFailed, setAlertsFailed] = useState(false)
   // Server-side queue size. The list is a capped page; several summaries used to
   // present its length as the total.
   const [alertTotal, setAlertTotal] = useState(0)
@@ -1311,7 +1062,10 @@ export default function SIEMPage() {
 
   const [apiKpis, setApiKpis] = useState<SiemKpis | null>(null)
   const [correlations, setCorrelations] = useState<Correlation[]>([])
-  const [mitreDist, setMitreDist] = useState<typeof MITRE_DIST>([])
+  // Typed from the API's shape rather than from a demo constant's - the constant
+  // is gone, and deriving a type from fabricated data was always backwards.
+  const [mitreDist, setMitreDist] =
+    useState<Array<{ tactic: string; count: number; color: string }>>([])
   // null = first answer still pending (analytics shows skeletons, never the
   // demo numbers); real data replaces it; SPARKLINE_DATA only ever appears
   // via the first-load-offline fallback below (same policy as ALERTS).
@@ -1365,15 +1119,19 @@ export default function SIEMPage() {
       .then(({ items, total }) => {
         setAlerts(items as unknown as SiemAlert[]); setAlertTotal(total); loadedRef.current = true
       })
-      // Only a FIRST-load failure (genuinely offline) falls back to the demo
-      // set; a transient poll failure after a good load must not fabricate.
-      .catch(() => { if (!loadedRef.current) setAlerts(ALERTS) })
+      // A failure is a failure. This used to fall back to a hardcoded demo set
+      // on first load - so on a live deployment an expired token or a
+      // restarting backend produced a queue of fabricated critical alerts,
+      // rendered exactly like real ones, with nothing marking them as fiction.
+      // An analyst cannot tell, and a SOC console has no business making them
+      // guess.
+      .catch(() => { if (!loadedRef.current) setAlertsFailed(true) })
       .finally(() => setAlertsPending(false))
     fetchSiemKpis().then(setApiKpis).catch(() => {})
     fetchCorrelations(2).then(setCorrelations).catch(() => {})
     fetchMitreDistribution()
       .then((rows) => setMitreDist(rows))
-      .catch(() => { if (!loadedRef.current) setMitreDist(MITRE_DIST) })
+      .catch(() => {})    // an empty chart, never an invented distribution
     fetchSiemTrends()
       .then(({ days }) => { setTrends(days); trendsLoadedRef.current = true })
       // First-load-offline only: keep real data through transient poll failures
@@ -1725,8 +1483,11 @@ export default function SIEMPage() {
                 <MiniFilter label="Status" value={filterStatus}
                   options={['all', 'new', 'assigned', 'in-progress', 'pending', 'resolved', 'closed']}
                   onChange={(v) => setFilterStatus(v as AlertStatus | 'all')} />
+                {/* Derived from the queue in front of you. These options came
+                    from the demo array, so the filter offered tactics from
+                    fiction and omitted tactics actually present. */}
                 <MiniFilter label="Tactic" value={filterTactic}
-                  options={['All', ...Array.from(new Set(ALERTS.map((a) => a.mitreTactic)))]}
+                  options={['All', ...Array.from(new Set(alerts.map((a) => a.mitreTactic).filter(Boolean)))]}
                   onChange={setFilterTactic} />
                 <span className="text-[10px] text-ink-600 ml-auto">
                   {filteredAlerts.length} alerts
@@ -1767,6 +1528,10 @@ export default function SIEMPage() {
                 {filteredAlerts.length === 0 ? (
                   alertsPending ? (
                     <SkeletonRows rows={10} />
+                  ) : alertsFailed ? (
+                    // The third state. "We could not reach the queue" is not
+                    // "the queue is empty", and it is certainly not a queue.
+                    <ApiUnavailable what="the alert queue" onRetry={loadSiem} />
                   ) : (
                     <div className="flex flex-col items-center justify-center h-32 text-xs text-ink-600">
                       No alerts match the current filters

@@ -8,6 +8,7 @@ later wires _seed_integrations (or any demo seeder) into bootstrap_live, or the
 engine-off gate stops pausing, these fail.
 """
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -333,3 +334,101 @@ def test_existing_indicators_get_their_own_source_recorded():
             c.execute("DELETE FROM observable_sources WHERE value=?", (val,))
             c.execute("DELETE FROM iocs WHERE value=?", (val,))
             c.commit()
+
+
+# ---------------------------------------------------------------------------
+# The frontend half of the same promise.
+#
+# The backend guards above prove a live boot seeds nothing. They said nothing
+# about the browser, and six live pages fell back to a hardcoded demo dataset
+# when their first API call failed - rendered exactly like real records, with
+# nothing on screen marking them as fiction. On a live deployment an expired
+# token or a restarting backend produced a SIEM queue of fabricated critical
+# alerts, a demo estate of healthy collectors, a rule list claiming detections
+# that were not running, and a scanner verdict carrying invented judgements
+# attributed by name to Google, Kaspersky and CrowdStrike about a value they
+# were never asked about.
+#
+# These are text checks over the source rather than a rendering test, because
+# what has to be guaranteed is a property of the CODE: the fabricated datasets
+# must not exist to be rendered.
+# ---------------------------------------------------------------------------
+_FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
+
+# (file, identifier) pairs that were the actual fabrication vectors.
+_BANNED = [
+    ("app/dashboard/siem/page.tsx", "const ALERTS"),
+    ("app/dashboard/siem/page.tsx", "const MITRE_DIST"),
+    ("app/dashboard/siem/sources/page.tsx", "const SOURCES"),
+    ("app/dashboard/siem/rules/page.tsx", "const RULES_DATA"),
+    ("app/dashboard/siem/hunt/page.tsx", "const SAVED_HUNTS"),
+    ("app/dashboard/siem/hunt/page.tsx", "const TIME_RANGE_EVENTS"),
+    ("app/dashboard/cti/actors/page.tsx", "const ACTORS"),
+    ("app/dashboard/scanner/page.tsx", "const DEMO_RESULTS"),
+    ("app/dashboard/assets/page.tsx", "const SEED"),
+    ("app/dashboard/assets/vulns/page.tsx", "const SEED"),
+    ("app/dashboard/config/api/page.tsx", "const API_KEYS"),
+    ("app/dashboard/config/api/page.tsx", "const WEBHOOKS"),
+    ("app/dashboard/config/users/page.tsx", "const USERS"),
+    ("app/dashboard/cti/page.tsx", "const ACTORS"),
+    ("app/dashboard/cti/page.tsx", "const HUNTS"),
+    ("app/dashboard/cti/hunt/page.tsx", "const HUNTS"),
+    ("app/dashboard/soar/page.tsx", "const CASES"),
+    ("app/dashboard/soar/page.tsx", "const PLAYBOOKS"),
+    ("app/dashboard/soar/playbooks/page.tsx", "const PLAYBOOKS"),
+    # The feeds page went furthest: on an API failure it showed seeded threats
+    # AND ran a simulator that invented a new one every 8-14 seconds, animated
+    # and pulsing, so an analyst watched fiction arrive live during an outage.
+    ("app/dashboard/feeds/page.tsx", "const CONFIRMED_SEED"),
+    ("app/dashboard/feeds/page.tsx", "const UNCONFIRMED_SEED"),
+    ("app/dashboard/feeds/page.tsx", "const SOURCES_FALLBACK"),
+    ("app/dashboard/feeds/page.tsx", "function makeLiveEntry"),
+]
+
+
+def test_no_live_page_carries_a_fabricated_dataset():
+    """Each of these rendered invented security findings to a real analyst when
+    an API call failed. Removing the fallback is not enough on its own - while
+    the data is still in the bundle it is one conditional away from coming
+    back, which is exactly how it got there."""
+    if not _FRONTEND.is_dir():                       # backend-only checkout
+        return
+    offenders = []
+    for rel, ident in _BANNED:
+        p = _FRONTEND / rel
+        # Whole identifier, anchored to the start of a line. A substring check
+        # flags `SOURCES_ACTIVE`; dropping the anchor flags the INDENTED local
+        # alias `const CASES = casesData`. Both are live code, and a guard that
+        # cries wolf gets deleted, which would cost more than it saves. The
+        # fabricated datasets were all module-level declarations.
+        rx = re.compile(rf"^{re.escape(ident)}\b", re.MULTILINE)
+        if p.is_file() and rx.search(p.read_text(encoding="utf-8")):
+            offenders.append(f"{rel}: {ident}")
+    assert not offenders, (
+        "fabricated dataset(s) back in a live page - render an honest "
+        "'could not load' state instead:\n  " + "\n  ".join(offenders))
+
+
+def test_no_live_page_falls_back_to_demo_data_when_the_api_fails():
+    """The pattern itself, not just today's instances. `catch(() => setX(SOME_
+    CONSTANT))` is the shape that turns an outage into fiction, and it reads as
+    defensive coding, which is why it kept being written."""
+    if not _FRONTEND.is_dir():
+        return
+    # A catch handler assigning a SCREAMING_CASE constant - i.e. a module-level
+    # literal rather than anything the API returned. Checked per line: a
+    # single regex over the whole handler cannot be written reliably, because
+    # `.catch(() => ...)` closes a paren before the interesting part and every
+    # attempt to allow that swallows half the file. This does not catch a
+    # multi-line catch block, which is why the explicit list above exists too -
+    # between them they cover the shape and the known instances.
+    setter = re.compile(r"set[A-Z]\w*\(\s*[A-Z][A-Z_0-9]{3,}\s*\)")
+    offenders = []
+    for p in sorted((_FRONTEND / "app").rglob("*.tsx")) + \
+            sorted((_FRONTEND / "components").rglob("*.tsx")):
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            if ".catch(" in line and setter.search(line):
+                offenders.append(f"{p.relative_to(_FRONTEND)}:{n}: {line.strip()[:70]}")
+    assert not offenders, (
+        "an API failure must never be answered with compiled-in data:\n  "
+        + "\n  ".join(offenders))

@@ -56,160 +56,6 @@ type ThreatEntry = {
   tags: string[]
 }
 
-/* -- Seed data ------------------------------------------------------ */
-const CONFIRMED_SEED: ThreatEntry[] = [
-  {
-    id: 'c001', ts: '2024-11-12T14:22:00Z', cve: 'CVE-2024-6387',
-    title: 'OpenSSH glibc RCE - unauthenticated remote code execution',
-    attackType: 'RCE', source: '45.95.147.236', sourceCountry: 'Russia',
-    severity: 'critical', sectors: ['Healthcare', 'Finance', 'Government'],
-    summary: 'Signal handler race condition in OpenSSH before 9.8p1 allows unauthenticated RCE as root. 700k+ internet-exposed instances. Mass exploitation confirmed.',
-    feedSources: ['NVD', 'MISP', 'RecordedFuture', 'CrowdStrike'],
-    aiConfidence: 99, iocs: ['45.95.147.236', '185.220.101.1', 'CVE-2024-6387'],
-    mitre: ['T1190', 'T1133'], status: 'confirmed', correlated: 14, tags: ['openssh', 'regresshion', 'linux', 'rce'],
-  },
-  {
-    id: 'c002', ts: '2024-11-12T14:18:00Z', cve: 'CVE-2024-3094',
-    title: 'XZ Utils backdoor - malicious supply chain compromise',
-    attackType: 'Supply Chain', source: '185.220.101.1', sourceCountry: 'North Korea',
-    severity: 'critical', sectors: ['Technology', 'Government', 'Defense'],
-    summary: 'Malicious code injected into XZ Utils 5.6.0-5.6.1 via social engineering. SSH authentication bypass via backdoor. CISA Emergency Directive issued.',
-    feedSources: ['CISA', 'NVD', 'MISP', 'GreyNoise', 'AlienVault'],
-    aiConfidence: 100, iocs: ['185.220.101.1', 'CVE-2024-3094', 'liblzma.so'],
-    mitre: ['T1195.001', 'T1078'], status: 'confirmed', correlated: 22, tags: ['xz', 'supply-chain', 'ssh'],
-  },
-  {
-    id: 'c003', ts: '2024-11-12T14:11:00Z', cve: null,
-    title: 'Lazarus Group deploys BLINDINGCAN RAT against defense sector',
-    attackType: 'APT', source: '165.22.120.1', sourceCountry: 'North Korea',
-    severity: 'critical', sectors: ['Defense', 'Aerospace'],
-    summary: 'FBI and CISA joint advisory confirms Lazarus Group (UNC4736) deploying BLINDINGCAN RAT via weaponized job offer PDFs targeting defense contractors.',
-    feedSources: ['FBI', 'CISA', 'RecordedFuture', 'Mandiant'],
-    aiConfidence: 97, iocs: ['165.22.120.1', '103.248.12.3', 'resume_final.pdf.exe'],
-    mitre: ['T1566.001', 'T1105'], status: 'confirmed', correlated: 8, tags: ['lazarus', 'apt', 'rat', 'dprk'],
-  },
-  {
-    id: 'c004', ts: '2024-11-12T14:04:00Z', cve: 'CVE-2024-21762',
-    title: 'FortiOS SSL VPN out-of-bounds write - actively exploited',
-    attackType: 'Authentication Bypass', source: '91.92.251.103', sourceCountry: 'Iran',
-    severity: 'critical', sectors: ['Government', 'Finance', 'Critical Infrastructure'],
-    summary: 'Critical out-of-bounds write in FortiOS SSL VPN allows unauthenticated RCE. Actively exploited by Iranian threat actors targeting government networks in Middle East.',
-    feedSources: ['Fortinet', 'CISA', 'NVD', 'Shodan'],
-    aiConfidence: 99, iocs: ['91.92.251.103', '194.165.16.51', 'CVE-2024-21762'],
-    mitre: ['T1190', 'T1078.001'], status: 'confirmed', correlated: 11, tags: ['fortios', 'vpn', 'authentication-bypass'],
-  },
-  {
-    id: 'c005', ts: '2024-11-12T13:58:00Z', cve: null,
-    title: 'Volt Typhoon pre-positioning in US critical infrastructure',
-    attackType: 'APT', source: '103.148.20.3', sourceCountry: 'China',
-    severity: 'critical', sectors: ['Critical Infrastructure', 'Energy', 'Water'],
-    summary: 'CISA advisory: Chinese Volt Typhoon living-off-the-land in US critical infrastructure. Pre-positioning for potential destructive attacks, not espionage.',
-    feedSources: ['CISA', 'NSA', 'FBI', 'Mandiant'],
-    aiConfidence: 98, iocs: ['103.148.20.3', 'netstat.exe', 'ipconfig /all'],
-    mitre: ['T1078', 'T1218'], status: 'confirmed', correlated: 19, tags: ['volt-typhoon', 'china', 'ics', 'lotl'],
-  },
-  {
-    id: 'c006', ts: '2024-11-12T13:45:00Z', cve: 'CVE-2024-23897',
-    title: 'Jenkins arbitrary file read leading to RCE',
-    attackType: 'RCE', source: '185.199.108.1', sourceCountry: 'Romania',
-    severity: 'high', sectors: ['Technology', 'Software Development'],
-    summary: 'Jenkins CLI path traversal allows unauthenticated users to read arbitrary files on the controller filesystem, enabling RCE through multiple attack chains.',
-    feedSources: ['NVD', 'MISP', 'GreyNoise'],
-    aiConfidence: 96, iocs: ['185.199.108.1', '/var/jenkins/secrets/initialAdminPassword'],
-    mitre: ['T1190', 'T1083'], status: 'confirmed', correlated: 7, tags: ['jenkins', 'ci-cd', 'rce'],
-  },
-  {
-    id: 'c007', ts: '2024-11-12T13:38:00Z', cve: null,
-    title: 'BlackBasta ransomware expanding healthcare sector targeting',
-    attackType: 'Ransomware', source: '23.184.48.200', sourceCountry: 'Russia',
-    severity: 'critical', sectors: ['Healthcare'],
-    summary: 'HHS warns Black Basta has attacked 500+ healthcare orgs. Initial access via QakBot phishing → Cobalt Strike → data exfil → encryption. Average ransom: $1.5M.',
-    feedSources: ['HHS', 'MISP', 'SentinelOne', 'CrowdStrike'],
-    aiConfidence: 99, iocs: ['23.184.48.200', '104.149.168.0', 'qakbot.dll'],
-    mitre: ['T1566', 'T1486'], status: 'confirmed', correlated: 16, tags: ['blackbasta', 'ransomware', 'healthcare'],
-  },
-  {
-    id: 'c008', ts: '2024-11-12T13:22:00Z', cve: 'CVE-2024-21413',
-    title: 'Microsoft Outlook Moniker Link RCE - NTLM hash leak',
-    attackType: 'NTLM Relay', source: '94.102.61.14', sourceCountry: 'Russia',
-    severity: 'high', sectors: ['Finance', 'Government', 'Enterprise'],
-    summary: 'MonikerLink bug in Outlook forces NTLM credential leak via email preview panel. Actively exploited in spear-phishing campaigns against financial sector.',
-    feedSources: ['Microsoft', 'NVD', 'Proofpoint', 'MISP'],
-    aiConfidence: 98, iocs: ['94.102.61.14', 'CVE-2024-21413', '185.220.101.0/24'],
-    mitre: ['T1187', 'T1566.001'], status: 'confirmed', correlated: 9, tags: ['outlook', 'ntlm', 'email'],
-  },
-]
-
-const UNCONFIRMED_SEED: ThreatEntry[] = [
-  {
-    id: 'u001', ts: '2024-11-12T14:45:00Z', cve: null,
-    title: 'Suspicious Cobalt Strike beacon activity from 185.220.101.88',
-    attackType: 'C2 Beacon', source: '185.220.101.88', sourceCountry: 'Russia',
-    severity: 'high', sectors: ['Enterprise'],
-    summary: 'GreyNoise flagged IP with C2 communication pattern. Timing analysis suggests Cobalt Strike default profile. No MISP match. Awaiting correlation with SIEM logs.',
-    feedSources: ['GreyNoise', 'AbuseIPDB'],
-    aiConfidence: 78, iocs: ['185.220.101.88', 'beacon.min.js'],
-    mitre: ['T1071.001'], status: 'unconfirmed', correlated: 2, tags: ['cobalt-strike', 'c2'],
-  },
-  {
-    id: 'u002', ts: '2024-11-12T14:52:00Z', cve: null,
-    title: 'Potential credential stuffing - 1,400 login failures against /api/auth in 5min',
-    attackType: 'Credential Stuffing', source: '45.227.254.100', sourceCountry: 'Brazil',
-    severity: 'medium', sectors: ['Finance', 'SaaS'],
-    summary: 'AbuseIPDB score 89/100. Bot-like pattern: sequential usernames, consistent User-Agent, 5ms inter-request interval. No successful logins confirmed yet.',
-    feedSources: ['AbuseIPDB', 'InternalSIEM'],
-    aiConfidence: 72, iocs: ['45.227.254.100', '/api/auth'],
-    mitre: ['T1110.004'], status: 'unconfirmed', correlated: 1, tags: ['brute-force', 'credential-stuffing'],
-  },
-  {
-    id: 'u003', ts: '2024-11-12T14:38:00Z', cve: 'CVE-2024-49113',
-    title: 'LDAP Nightmare scanner detected - CVE-2024-49113 probe',
-    attackType: 'Reconnaissance', source: '198.98.62.55', sourceCountry: 'Germany',
-    severity: 'medium', sectors: ['Enterprise', 'Active Directory'],
-    summary: 'Shodan scanner IP probing for LDAP Nightmare vulnerability. Legitimate research or pre-attack reconnaissance unclear. IP belongs to known security scanner vendor.',
-    feedSources: ['Shodan', 'GreyNoise'],
-    aiConfidence: 55, iocs: ['198.98.62.55', 'LDAP/636'],
-    mitre: ['T1595.001'], status: 'unconfirmed', correlated: 0, tags: ['ldap', 'reconnaissance'],
-  },
-  {
-    id: 'u004', ts: '2024-11-12T14:31:00Z', cve: null,
-    title: 'Large-scale DNS TXT record queries from internal host WS-DEV-012',
-    attackType: 'Potential Exfiltration', source: '10.20.0.12', sourceCountry: 'Internal',
-    severity: 'high', sectors: ['Internal'],
-    summary: '12,000 DNS TXT queries in 20 minutes from developer workstation. Unusual domains with high-entropy subdomains. Pattern matches DNS tunneling toolkits. No C2 IOC match yet.',
-    feedSources: ['InternalSIEM', 'DNS Analytics'],
-    aiConfidence: 84, iocs: ['10.20.0.12', 'x3kp7.malicious-tunnel.io'],
-    mitre: ['T1048.003'], status: 'unconfirmed', correlated: 3, tags: ['dns-tunnel', 'exfil', 'internal'],
-  },
-  {
-    id: 'u005', ts: '2024-11-12T14:20:00Z', cve: null,
-    title: 'Typosquatted npm package "lodash-secure" detected in CI pipeline',
-    attackType: 'Supply Chain', source: 'npm registry', sourceCountry: 'Unknown',
-    severity: 'critical', sectors: ['Technology', 'DevOps'],
-    summary: 'Unknown package "lodash-secure" (not official lodash team) installed in 3 CI containers. Contains base64-encoded eval() in postinstall. Package age: 2 days. Downloads: 41.',
-    feedSources: ['npm Audit', 'Sonatype'],
-    aiConfidence: 91, iocs: ['lodash-secure@1.0.2', 'npm-postinstall.js'],
-    mitre: ['T1195.001', 'T1059.007'], status: 'unconfirmed', correlated: 0, tags: ['npm', 'supply-chain', 'typosquatting'],
-  },
-  {
-    id: 'u006', ts: '2024-11-12T14:15:00Z', cve: null,
-    title: 'Tor exit node traffic to PROD-DB-01 on port 5432',
-    attackType: 'Suspicious Traffic', source: '192.42.116.202', sourceCountry: 'Anonymous',
-    severity: 'high', sectors: ['Finance', 'Healthcare'],
-    summary: 'Danbooru Tor exit node attempting TCP connection to production database. Connection blocked by firewall. Source is on known Tor exit node list. Purpose unknown.',
-    feedSources: ['TorProject', 'Firewall Logs'],
-    aiConfidence: 68, iocs: ['192.42.116.202', 'postgres/5432'],
-    mitre: ['T1090.003'], status: 'unconfirmed', correlated: 1, tags: ['tor', 'database', 'suspicious'],
-  },
-]
-
-const LIVE_UNCONFIRMED: Partial<ThreatEntry>[] = [
-  { title: 'Brute force SSH - 2,400 attempts/min from 45.152.67.88', attackType: 'Brute Force', severity: 'medium', sourceCountry: 'China', aiConfidence: 67, feedSources: ['AbuseIPDB'], iocs: ['45.152.67.88'] },
-  { title: 'Suspicious PowerShell encoded command on WORKSTATION-044', attackType: 'Defense Evasion', severity: 'high', sourceCountry: 'Internal', aiConfidence: 82, feedSources: ['InternalSIEM'], iocs: ['WS-044', 'powershell.exe'] },
-  { title: 'Reconnaissance scan: 14 ports probed on API gateway', attackType: 'Reconnaissance', severity: 'low', sourceCountry: 'Netherlands', aiConfidence: 45, feedSources: ['GreyNoise'], iocs: ['52.212.100.41'] },
-  { title: 'Unrecognized outbound HTTPS to high-entropy domain', attackType: 'C2 Beacon', severity: 'medium', sourceCountry: 'Internal', aiConfidence: 73, feedSources: ['DNS Analytics'], iocs: ['xm4k9p.cloudflare-ntp.org'] },
-  { title: 'Mass email relay attempt - 80K messages queued in 3 min', attackType: 'Spam/Relay', severity: 'high', sourceCountry: 'Russia', aiConfidence: 88, feedSources: ['SpamHaus'], iocs: ['91.108.56.88'] },
-]
 
 const SEV_COLOR: Record<Severity, string> = {
   critical: 'bg-magenta/15 text-magenta border-magenta/20',
@@ -225,32 +71,6 @@ const SEV_DOT: Record<Severity, string> = {
   medium:   tk('amber'),
   low:      tk('safe'),
   info:     tk('violet'),
-}
-
-let liveCounter = 0
-function makeLiveEntry(): ThreatEntry {
-  const pool = LIVE_UNCONFIRMED[liveCounter % LIVE_UNCONFIRMED.length]
-  liveCounter++
-  const now = new Date()
-  return {
-    id: `live-${Date.now()}-${liveCounter}`,
-    ts: now.toISOString(),
-    cve: null,
-    source: `${Math.floor(Math.random() * 180 + 60)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}`,
-    sourceCountry: pool.sourceCountry ?? 'Unknown',
-    attackType: pool.attackType ?? 'Unknown',
-    severity: pool.severity ?? 'medium',
-    sectors: ['Enterprise'],
-    summary: `Live detection: ${pool.title?.toLowerCase()}. Awaiting analyst review.`,
-    feedSources: pool.feedSources ?? ['Automated'],
-    aiConfidence: pool.aiConfidence ?? 60,
-    iocs: pool.iocs ?? [],
-    mitre: [],
-    status: 'unconfirmed',
-    correlated: 0,
-    tags: ['live'],
-    title: pool.title ?? 'Unknown threat',
-  }
 }
 
 function timeAgo(ts: string) {
@@ -568,34 +388,27 @@ function ThreatCard({
 }
 
 /* -- Source Health Pills ------------------------------------------- */
-const SOURCES_FALLBACK = [
-  { name: 'MISP', status: 'live', rate: '847/h' },
-  { name: 'RecordedFuture', status: 'live', rate: '234/h' },
-  { name: 'GreyNoise', status: 'live', rate: '1.2k/h' },
-  { name: 'AbuseIPDB', status: 'live', rate: '509/h' },
-  { name: 'Shodan', status: 'live', rate: '88/h' },
-  { name: 'CISA', status: 'live', rate: '12/h' },
-  { name: 'AlienVault', status: 'degraded', rate: '43/h' },
-  { name: 'NVD', status: 'live', rate: '6/h' },
-]
 
 /* -- Main Page ----------------------------------------------------- */
 export default function FeedsPage() {
-  // Start EMPTY, not seeded. On a real deployment the IOC store is the source of
-  // truth - an empty store is an honest "no threats yet", never a cue to show
-  // fabricated demo threats. The hardcoded seeds + random simulator are an
-  // OFFLINE-only fallback (API unreachable), gated on `demoMode` below.
+  // Start EMPTY, not seeded. The IOC store is the source of truth - an empty
+  // store is an honest "no threats yet". An unreachable store is a third thing
+  // again, and it used to be answered with hardcoded threats PLUS a simulator
+  // that streamed newly-invented ones in every 8-14 seconds, animated and
+  // pulsing. During an outage a SOC analyst watched fiction arrive live.
   const [confirmed, setConfirmed] = useState<ThreatEntry[]>([])
   const [unconfirmed, setUnconfirmed] = useState<ThreatEntry[]>([])
   const [apiFeeds, setApiFeeds] = useState<ApiFeed[]>([])
   const [feedsSummary, setFeedsSummary] = useState<FeedsSummary | null>(null)
-  const [newIds, setNewIds] = useState<Set<string>>(new Set())
+  // Written only by the removed offline simulator; the highlight-on-arrival
+  // affordance now has nothing to announce, because nothing arrives unasked.
+  const [newIds] = useState<Set<string>>(new Set())
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all') // all|high|medium|low
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [liveCount, setLiveCount] = useState(0)
-  const [pulse, setPulse] = useState(false)
+  const [pulse] = useState(false)
   // Dismiss is reversible: the just-dismissed card is stashed and an undo toast
   // offers to restore it into the exact list it came from. Auto-clears (the
   // dismissal becomes permanent) after the toast window elapses.
@@ -603,11 +416,9 @@ export default function FeedsPage() {
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // liveMode: the API answered (we show its data, even if empty).
-  // demoMode: the API was unreachable → show the seed + simulator as an offline
-  // preview. Both start false so nothing renders until the fetch resolves -
-  // a real deployment therefore NEVER flashes demo data.
+  // feedsFailed: it did not answer, which is neither data nor emptiness.
   const [liveMode, setLiveMode] = useState(false)
-  const [demoMode, setDemoMode] = useState(false)
+  const [feedsFailed, setFeedsFailed] = useState(false)
 
   // Map a real IOC into the rich threat-feed card shape (faithfully, no fabrication).
   const iocToEntry = useCallback((i: Ioc): ThreatEntry => ({
@@ -643,37 +454,8 @@ export default function FeedsPage() {
       setUnconfirmed(entries.filter(e => e.status === 'unconfirmed'))
       setLiveCount(items.length)
       setLiveMode(true)
-    }).catch(() => {
-      // API unreachable (e.g. the static marketing preview) → offline demo.
-      setConfirmed(CONFIRMED_SEED)
-      setUnconfirmed(UNCONFIRMED_SEED)
-      setDemoMode(true)
-    })
+    }).catch(() => setFeedsFailed(true))
   }, [iocToEntry])
-
-  // Offline-only simulator: fabricate incoming threats. Runs ONLY in the
-  // API-unreachable demo preview - never on a real deployment.
-  useEffect(() => {
-    if (!demoMode) return
-    const jitter = () => 8000 + Math.random() * 6000
-    let timer: ReturnType<typeof setTimeout>
-    const schedule = () => {
-      timer = setTimeout(() => {
-        const entry = makeLiveEntry()
-        setUnconfirmed(prev => [entry, ...prev].slice(0, 30))
-        setNewIds(prev => new Set(Array.from(prev).concat(entry.id)))
-        setLiveCount(c => c + 1)
-        setPulse(true)
-        setTimeout(() => {
-          setNewIds(prev => { const n = new Set(prev); n.delete(entry.id); return n })
-          setPulse(false)
-        }, 8000)
-        schedule()
-      }, jitter())
-    }
-    schedule()
-    return () => clearTimeout(timer)
-  }, [demoMode])
 
   function handleConfirm(id: string) {
     const entry = unconfirmed.find(e => e.id === id)
@@ -806,7 +588,7 @@ export default function FeedsPage() {
             </span>
           </div>
           <p className="text-xs text-ink-500 mt-0.5">
-            Real-time threat intelligence from {demoMode ? SOURCES_FALLBACK.length : apiFeeds.length} sources · {liveCount} new today
+            Real-time threat intelligence from {apiFeeds.length} sources · {liveCount} new today
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -829,7 +611,7 @@ export default function FeedsPage() {
           <span className="text-[10px] text-ink-600 uppercase tracking-widest mr-1">Sources</span>
           {(apiFeeds.length > 0
             ? apiFeeds.map(f => ({ name: f.name, status: f.status === 'active' ? 'live' : 'degraded', rate: `${f.indicators}` }))
-            : demoMode ? SOURCES_FALLBACK : []
+            : []
           ).map(src => (
             <div key={src.name} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/8">
               <span className={cn(
@@ -840,7 +622,7 @@ export default function FeedsPage() {
               <span className="text-[10px] text-ink-600">{src.rate}</span>
             </div>
           ))}
-          {apiFeeds.length === 0 && !demoMode && (
+          {apiFeeds.length === 0 && !feedsFailed && (
             <span className="text-[10px] text-ink-600">No sources configured yet - add one under <span className="text-violet">Sources</span>.</span>
           )}
         </div>
@@ -945,7 +727,7 @@ export default function FeedsPage() {
                 />
               ))}
               {filteredConfirmed.length === 0 && (
-                !liveMode && !demoMode
+                !liveMode && !feedsFailed
                   ? <SkeletonRows rows={5} className="px-1" />
                   : (
                     <div className="flex flex-col items-center justify-center h-32 text-ink-600">
@@ -994,7 +776,7 @@ export default function FeedsPage() {
                 />
               ))}
               {filteredUnconfirmed.length === 0 && (
-                !liveMode && !demoMode
+                !liveMode && !feedsFailed
                   ? <SkeletonRows rows={5} className="px-1" />
                   : (
                     <div className="flex flex-col items-center justify-center h-32 text-ink-600">

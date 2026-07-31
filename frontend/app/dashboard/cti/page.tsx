@@ -9,6 +9,7 @@ import {
   Search, Play, Pause, CheckCircle, Crosshair, Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 import ReportButton from '@/components/dashboard/ReportButton'
 import IocLifecyclePanel from '@/components/dashboard/IocLifecyclePanel'
 import StoreCompositionPanel from '@/components/dashboard/StoreCompositionPanel'
@@ -39,83 +40,6 @@ type Actor = {
   description: string
 }
 
-const ACTORS: Actor[] = [
-  {
-    id: 'apt38',
-    name: 'Lazarus Group',
-    aliases: ['APT38', 'UNC4736', 'Hidden Cobra', 'ZINC'],
-    origin: 'North Korea', flag: '🇰🇵',
-    type: 'Nation-State APT',
-    motivation: ['Financial', 'Espionage', 'Disruption'],
-    active: true,
-    firstSeen: '2009', lastSeen: '2024-11-12',
-    sophistication: 'Advanced',
-    sectors: ['Finance', 'Defense', 'Cryptocurrency', 'Software'],
-    ttps: ['T1566', 'T1059', 'T1486', 'T1078', 'T1027', 'T1105'],
-    iocCount: 4821, campaigns: 47,
-    description: 'North Korean state-sponsored group responsible for the 2016 Bangladesh bank heist ($81M), WannaCry ransomware, Sony Pictures breach, and ongoing crypto theft campaigns.',
-  },
-  {
-    id: 'apt29',
-    name: 'APT29 / Cozy Bear',
-    aliases: ['The Dukes', 'Midnight Blizzard', 'NOBELIUM', 'UNC2452'],
-    origin: 'Russia', flag: '🇷🇺',
-    type: 'Nation-State APT',
-    motivation: ['Espionage', 'Intelligence Collection'],
-    active: true,
-    firstSeen: '2008', lastSeen: '2024-11-11',
-    sophistication: 'Expert',
-    sectors: ['Government', 'Defense', 'NGO', 'Technology', 'Healthcare'],
-    ttps: ['T1566', 'T1078', 'T1195', 'T1021', 'T1059.001'],
-    iocCount: 6234, campaigns: 89,
-    description: 'Russian SVR intelligence service APT responsible for the 2020 SolarWinds supply chain attack, 2016 DNC hack, and ongoing campaigns against NATO members and government entities.',
-  },
-  {
-    id: 'volt',
-    name: 'Volt Typhoon',
-    aliases: ['Bronze Silhouette', 'VANGUARD PANDA', 'DEV-0391'],
-    origin: 'China', flag: '🇨🇳',
-    type: 'Nation-State APT',
-    motivation: ['Pre-positioning', 'Espionage'],
-    active: true,
-    firstSeen: '2021', lastSeen: '2024-11-12',
-    sophistication: 'Expert',
-    sectors: ['Critical Infrastructure', 'Energy', 'Water', 'Communications'],
-    ttps: ['T1078', 'T1021', 'T1070', 'T1590', 'T1591'],
-    iocCount: 2847, campaigns: 23,
-    description: 'Chinese MSS-linked APT focused on living-off-the-land techniques to pre-position in US critical infrastructure for potential destructive attacks. CISA-designated as "most dangerous."',
-  },
-  {
-    id: 'scattered',
-    name: 'Scattered Spider',
-    aliases: ['UNC3944', 'Muddled Libra', 'Oktapus', 'Star Fraud'],
-    origin: 'United States / UK', flag: '🇺🇸',
-    type: 'Cybercriminal',
-    motivation: ['Financial', 'Ransomware'],
-    active: true,
-    firstSeen: '2022', lastSeen: '2024-11-10',
-    sophistication: 'High',
-    sectors: ['Hospitality', 'Gaming', 'Retail', 'Telecommunications'],
-    ttps: ['T1598', 'T1621', 'T1078', 'T1566.004'],
-    iocCount: 892, campaigns: 18,
-    description: 'Western-based cybercriminal group using social engineering (SIM swapping, vishing) to breach major enterprises. Responsible for MGM Resorts and Caesars attacks (2023).',
-  },
-  {
-    id: 'fin7',
-    name: 'FIN7',
-    aliases: ['Carbon Spider', 'Carbanak', 'Sangria Tempest'],
-    origin: 'Russia', flag: '🇷🇺',
-    type: 'Cybercriminal',
-    motivation: ['Financial'],
-    active: true,
-    firstSeen: '2015', lastSeen: '2024-11-08',
-    sophistication: 'Advanced',
-    sectors: ['Finance', 'Retail', 'Restaurant', 'Hospitality'],
-    ttps: ['T1566', 'T1059.001', 'T1055', 'T1041'],
-    iocCount: 3421, campaigns: 112,
-    description: 'Russian cybercriminal APT responsible for over $1 billion in financial theft. Uses spear-phishing with sophisticated lures to install CARBANAK/BATELEUR backdoors at POS systems.',
-  },
-]
 
 /* -- MITRE ATT&CK mini matrix -------------------------------------- */
 const MITRE_TACTICS = [
@@ -150,12 +74,6 @@ function heatColor(level: number) {
 }
 
 /* -- IOC counts ---------------------------------------------------- */
-const IOC_TYPES = [
-  { type: 'IP Addresses',   count: 4821,  icon: Globe,  color: tk('magenta') },
-  { type: 'Domains',        count: 3247,  icon: Network, color: tk('violet') },
-  { type: 'File Hashes',    count: 8914,  icon: Hash,   color: tk('amber') },
-  { type: 'URLs',           count: 2103,  icon: Target,  color: tk('teal') },
-]
 
 /* -- Actor card ---------------------------------------------------- */
 function ActorCard({ actor, selected, onSelect }: { actor: Actor; selected: boolean; onSelect: () => void }) {
@@ -329,17 +247,16 @@ function buildGraph(actor: Actor): GraphData {
 
 /* -- Threat Hunt Panel --------------------------------------------- */
 type HuntStatus = 'active' | 'completed' | 'paused'
-const HUNTS = [
-  { id: 'h1', name: 'Lazarus BLINDINGCAN Sweep', hypothesis: 'Undetected BLINDINGCAN RAT samples in endpoint telemetry', status: 'active' as HuntStatus, artifacts: 3, analyst: 'Alice', progress: 62, created: '2d ago' },
-  { id: 'h2', name: 'Living-off-the-land in OT',  hypothesis: 'LOLBins used as beachhead in OT/ICS network segments',     status: 'active' as HuntStatus, artifacts: 7, analyst: 'Bob',   progress: 45, created: '3d ago' },
-  { id: 'h3', name: 'MFA fatigue campaign',        hypothesis: 'Systematic MFA prompt bombing against Azure AD accounts',   status: 'completed' as HuntStatus, artifacts: 12, analyst: 'auto',  progress: 100, created: '5d ago' },
-  { id: 'h4', name: 'C2 via DNS tunneling',        hypothesis: 'DNS-based C2 beaconing masked in legitimate DNS traffic',   status: 'paused' as HuntStatus, artifacts: 1, analyst: 'Charlie', progress: 28, created: '6d ago' },
-]
 
 const HUNT_COLOR: Record<HuntStatus, string> = { active: tk('safe'), completed: tk('violet'), paused: tk('amber') }
 const HUNT_ICON: Record<HuntStatus, React.ComponentType<any>> = { active: Play, completed: CheckCircle, paused: Pause }
 
-type PanelHunt = typeof HUNTS[number]
+// Typed from the shape the page renders, not from a demo constant - deriving a
+// type from fabricated data is how the fabrication became load-bearing.
+type PanelHunt = {
+  id: string; name: string; hypothesis: string; status: HuntStatus
+  artifacts: number; analyst: string; progress: number; created: string
+}
 
 const apiHuntToPanel = (h: ApiSavedHunt & { created?: string }): PanelHunt => ({
   id: h.id,
@@ -357,12 +274,13 @@ function ThreatHuntPanel() {
   // Empty until the API answers (hunts aren't seeded in live mode); HUNTS is an
   // offline-only fallback.
   const [hunts, setHunts] = useState<PanelHunt[]>([])
+  const [huntsFailed, setHuntsFailed] = useState(false)
   const [showNew, setShowNew] = useState(false)
 
   useEffect(() => {
     fetchCtiHunts()
       .then((data) => setHunts(data.map(apiHuntToPanel)))   // applied even when empty
-      .catch(() => setHunts(HUNTS))                          // offline preview only
+      .catch(() => setHuntsFailed(true))
   }, [])
 
   async function handleCreate(values: Record<string, string>) {
@@ -406,7 +324,10 @@ function ThreatHuntPanel() {
         )}
       </AnimatePresence>
       <div className="divide-y divide-white/4">
-        {hunts.length === 0 && (
+        {hunts.length === 0 && huntsFailed && (
+          <ApiUnavailable what="your hunts" compact />
+        )}
+        {hunts.length === 0 && !huntsFailed && (
           <p className="text-[11px] text-ink-600 px-5 py-6 text-center">No active hunts yet.</p>
         )}
         {hunts.map((hunt) => {
@@ -720,10 +641,15 @@ export default function CTIPage() {
   // empty store. `null` selection renders an honest empty state.
   const [actors, setActors] = useState<Actor[]>([])
   const [selectedActor, setSelectedActor] = useState<Actor | null>(null)
+  const [actorsFailed, setActorsFailed] = useState(false)
   const [actorsLoaded, setActorsLoaded] = useState(false)
-  // Empty until the API answers - the per-type counts are the store's, never
-  // the demo constants. IOC_TYPES shows only if the fetch fails (offline).
-  const [iocTypes, setIocTypes] = useState<typeof IOC_TYPES>([])
+  // Empty until the API answers - the per-type counts are the store's. There is
+  // no demo set to fall back to; an empty breakdown is the honest answer.
+  const [iocTypes, setIocTypes] = useState<Array<{
+    type: string; count: number
+    icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+    color: string
+  }>>([])
   // Store totals. The header used to sum the per-actor iocCount and label the
   // result "IOCs", so a 315k-indicator store read as "0 IOCs" directly above a
   // panel saying 315,185 - the number was right, the word for it was wrong.
@@ -739,7 +665,7 @@ export default function CTIPage() {
         setActors(mapped)
         setSelectedActor(mapped[0] ?? null)
       })
-      .catch(() => { setActors(ACTORS); setSelectedActor(ACTORS[0] ?? null) })  // offline fallback only
+      .catch(() => setActorsFailed(true))
       .finally(() => setActorsLoaded(true))
     fetchCtiSummary().then(setStoreSummary).catch(() => {})
     // Live IOC counts per indicator type, keeping the static strip as fallback.
@@ -758,7 +684,7 @@ export default function CTIPage() {
           return { type: d.label, count: r.count, icon: d.icon, color: d.color }
         }))
       })
-      .catch(() => setIocTypes(IOC_TYPES))   // offline preview only
+      .catch(() => {})   // an empty breakdown, never an invented one
   }, [])
 
   if (!isPower) return <NormalCTI />
@@ -822,7 +748,10 @@ export default function CTIPage() {
         {/* Actor list */}
         <div className="space-y-3 min-w-0">
           <h2 className="text-sm font-semibold text-white">Threat Actors</h2>
-          {actorsLoaded && actors.length === 0 && (
+          {actorsLoaded && actors.length === 0 && actorsFailed && (
+            <ApiUnavailable what="the threat actor library" compact />
+          )}
+          {actorsLoaded && actors.length === 0 && !actorsFailed && (
             <p className="text-xs text-ink-600 py-8 text-center">No threat actors tracked yet - they populate from your intel feeds and imports.</p>
           )}
           {actors.map((actor) => (

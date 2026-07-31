@@ -19,6 +19,7 @@ import { Toggle as Switch } from '@/components/dashboard/Toggle'
 import SigmaImportButton from '@/components/dashboard/SigmaImportButton'
 import StarterPackButton from '@/components/dashboard/StarterPackButton'
 import { tk } from '@/lib/colors'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 
 /* --- Types ----------------------------------------------------------- */
 type Severity   = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -52,303 +53,6 @@ interface DetectionRule {
 }
 
 /* --- Seed data -------------------------------------------------------- */
-const RULES_DATA: DetectionRule[] = [
-  {
-    id: 'EDR-9001',
-    name: 'Ransomware File Encryption Indicator',
-    category: 'Endpoint',
-    severity: 'critical',
-    mitreTactic: 'Impact',
-    mitreTechId: 'T1486',
-    mitreTech: 'Data Encrypted for Impact',
-    hits24h: 3,
-    fpRate: 5,
-    status: 'enabled',
-    source: 'EDR',
-    lastFired: '2h ago',
-    created: '2024-03-14',
-    updatedBy: 'j.chen',
-    description: 'Detects mass file renaming or encryption activity consistent with ransomware behaviour. Triggers when more than 500 files are renamed or overwritten within 60 seconds by a single process, or when extensions associated with known ransomware families are detected.',
-    kql: `process where event.type == "start"
-  and process.name : ("svchost.exe","explorer.exe")
-  and process.args_count > 3
-| where file.extension in~ (".locked",".encrypted",".crypt",".crypted",".zzzzz")
-| stats renamed_files = count() by process.pid, process.name, host.name
-| where renamed_files > 500`,
-    suppressionWindow: '24h per host',
-    severityOverride: null,
-    tags: ['ransomware', 'file-activity', 'impact'],
-  },
-  {
-    id: 'SIEM-1042',
-    name: 'External SSH Root Login',
-    category: 'Network',
-    severity: 'critical',
-    mitreTactic: 'Initial Access',
-    mitreTechId: 'T1133',
-    mitreTech: 'External Remote Services',
-    hits24h: 1,
-    fpRate: 8,
-    status: 'enabled',
-    source: 'Syslog/SSH',
-    lastFired: '4h ago',
-    created: '2023-11-02',
-    updatedBy: 'a.patel',
-    description: 'Fires when a successful SSH authentication as root (or any UID 0 account) is recorded from a non-RFC1918 source IP address. Covers password, pubkey, and GSSAPI auth methods. Jump-host egress IPs are allowlisted via the TO_JUMP_HOSTS lookup table.',
-    kql: `event.dataset: "system.auth"
-  AND system.auth.ssh.method: ("password","publickey","keyboard-interactive")
-  AND system.auth.ssh.event: "Accepted"
-  AND user.name: "root"
-  AND NOT source.ip: ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16")
-  AND NOT source.ip: (lookup TO_JUMP_HOSTS ip)`,
-    suppressionWindow: '1h per source IP',
-    severityOverride: null,
-    tags: ['ssh', 'external-access', 'root'],
-  },
-  {
-    id: 'EDR-4421',
-    name: 'PowerShell AMSI Bypass',
-    category: 'Endpoint',
-    severity: 'high',
-    mitreTactic: 'Defense Evasion',
-    mitreTechId: 'T1562.001',
-    mitreTech: 'Impair Defenses: Disable or Modify Tools',
-    hits24h: 7,
-    fpRate: 12,
-    status: 'enabled',
-    source: 'EDR',
-    lastFired: '45m ago',
-    created: '2024-01-08',
-    updatedBy: 'j.chen',
-    description: 'Detects known AMSI bypass strings and patterns in PowerShell memory or command-line arguments. Triggers on base64-encoded payloads that follow an AMSI patch attempt, or direct patching of amsi.dll export AmsiScanBuffer. Correlated with subsequent outbound network connections to flag follow-on payload staging.',
-    kql: `process where process.name: "powershell.exe"
-  and (
-    process.args: ("*amsiutils*","*amsicontext*","*amsiscanbuffe*")
-    or process.args: "*[Ref].Assembly.GetType*"
-    or process.args: "*System.Management.Automation.AmsiUtils*"
-    or (process.args_count > 1 and process.args: "*-EncodedCommand*" and length(process.args) > 200)
-  )`,
-    suppressionWindow: 'None (alert every occurrence)',
-    severityOverride: null,
-    tags: ['powershell', 'amsi', 'defense-evasion', 'lolbas'],
-  },
-  {
-    id: 'EDR-5510',
-    name: 'Lateral Movement via WMI',
-    category: 'Endpoint',
-    severity: 'high',
-    mitreTactic: 'Lateral Movement',
-    mitreTechId: 'T1047',
-    mitreTech: 'Windows Management Instrumentation',
-    hits24h: 12,
-    fpRate: 18,
-    status: 'enabled',
-    source: 'EDR',
-    lastFired: '12m ago',
-    created: '2023-09-22',
-    updatedBy: 'r.osei',
-    description: 'Detects remote WMI process creation targeting hosts other than the originating system. Covers wmic.exe, Invoke-WmiMethod, and native Win32_Process::Create via COM. Remote execution from non-admin subnets or service accounts running interactively elevates the risk score automatically.',
-    kql: `process where process.name: ("wmic.exe","wmiprvse.exe")
-  and process.args: ("process","call","create")
-  and network.direction: "outbound"
-  and not source.ip == destination.ip
-| join (
-    process where process.parent.name: "wmiprvse.exe"
-  ) on host.name
-| where not user.name in~ ("svc-mgmt","deploy-bot")`,
-    suppressionWindow: '30m per source/dest pair',
-    severityOverride: null,
-    tags: ['wmi', 'lateral-movement', 'remote-execution'],
-  },
-  {
-    id: 'AWS-3421',
-    name: 'IAM Privilege Escalation',
-    category: 'Cloud',
-    severity: 'high',
-    mitreTactic: 'Privilege Escalation',
-    mitreTechId: 'T1078.004',
-    mitreTech: 'Valid Accounts: Cloud Accounts',
-    hits24h: 2,
-    fpRate: 20,
-    status: 'enabled',
-    source: 'AWS CloudTrail',
-    lastFired: '8h ago',
-    created: '2024-02-18',
-    updatedBy: 'a.patel',
-    description: 'Detects IAM operations that grant AdministratorAccess or equivalent permissions to a user, role, or group. Covers AttachUserPolicy, AttachRolePolicy, PutUserPolicy, CreatePolicyVersion (SetAsDefault=true), and AddUserToGroup where the group holds admin-equivalent managed policies. Flags self-escalation (identity operating on itself) at critical severity.',
-    kql: `event.dataset: "aws.cloudtrail"
-  AND event.action: (
-    "AttachUserPolicy" OR "AttachRolePolicy" OR "PutUserPolicy" OR
-    "CreatePolicyVersion" OR "AddUserToGroup"
-  )
-  AND requestParameters.policyArn: "*AdministratorAccess*"
-  AND NOT userIdentity.sessionContext.sessionIssuer.userName: "break-glass-*"`,
-    suppressionWindow: '6h per principal',
-    severityOverride: null,
-    tags: ['aws', 'iam', 'privilege-escalation', 'cloud'],
-  },
-  {
-    id: 'NET-2201',
-    name: 'DNS Exfiltration Pattern',
-    category: 'Network',
-    severity: 'medium',
-    mitreTactic: 'Exfiltration',
-    mitreTechId: 'T1048.003',
-    mitreTech: 'Exfiltration Over Unencrypted Non-C2 Protocol',
-    hits24h: 0,
-    fpRate: 9,
-    status: 'enabled',
-    source: 'DNS/Network',
-    lastFired: '3d ago',
-    created: '2024-04-01',
-    updatedBy: 'j.chen',
-    description: 'Identifies DNS exfiltration by analysing query volume, subdomain entropy, and query label length. Triggers when a host issues more than 200 unique subdomain queries to a single apex domain within 5 minutes AND average label entropy exceeds 3.8 bits - characteristic of base64-encoded data tunnelled over DNS.',
-    kql: `dns where dns.question.type: "A"
-| stats
-    unique_subs = dcount(dns.question.subdomain),
-    avg_entropy = avg(entropy(dns.question.subdomain)),
-    total_bytes = sum(dns.question.size)
-  by source.ip, dns.question.registered_domain, bucket(@timestamp, 5m)
-| where unique_subs > 200 and avg_entropy > 3.8
-| where not dns.question.registered_domain: (lookup ALLOWED_DNS_TUNNELS domain)`,
-    suppressionWindow: '1h per host/domain pair',
-    severityOverride: null,
-    tags: ['dns', 'exfiltration', 'covert-channel'],
-  },
-  {
-    id: 'NET-9903',
-    name: 'Tor Exit Node Traffic',
-    category: 'Network',
-    severity: 'high',
-    mitreTactic: 'Command and Control',
-    mitreTechId: 'T1090.003',
-    mitreTech: 'Proxy: Multi-hop Proxy',
-    hits24h: 5,
-    fpRate: 3,
-    status: 'enabled',
-    source: 'Firewall/Proxy',
-    lastFired: '1h ago',
-    created: '2023-07-12',
-    updatedBy: 'a.patel',
-    description: 'Detects inbound or outbound connections to known Tor exit node IP addresses. The Tor exit node list is refreshed every 4 hours from the official Tor Project consensus endpoint and stored in the TOR_EXIT_NODES threat intelligence lookup. Matches on firewall allow AND block events to capture bypass attempts.',
-    kql: `network where (source.ip: (lookup TOR_EXIT_NODES ip) OR destination.ip: (lookup TOR_EXIT_NODES ip))
-  AND event.outcome: ("allowed","blocked")
-| stats
-    connection_count = count(),
-    total_bytes      = sum(network.bytes),
-    unique_ports     = dcount(destination.port)
-  by source.ip, destination.ip, host.name`,
-    suppressionWindow: '2h per source IP',
-    severityOverride: null,
-    tags: ['tor', 'anonymiser', 'proxy', 'c2'],
-  },
-  {
-    id: 'EDR-3001',
-    name: 'Mimikatz Credential Dump',
-    category: 'Endpoint',
-    severity: 'critical',
-    mitreTactic: 'Credential Access',
-    mitreTechId: 'T1003.001',
-    mitreTech: 'OS Credential Dumping: LSASS Memory',
-    hits24h: 0,
-    fpRate: 2,
-    status: 'enabled',
-    source: 'EDR',
-    lastFired: '6d ago',
-    created: '2023-05-30',
-    updatedBy: 'j.chen',
-    description: 'Multi-method detection for Mimikatz and similar LSASS credential dumping tools. Covers: (1) process handle open to lsass.exe with PROCESS_VM_READ access mask; (2) known Mimikatz strings in process memory or command line; (3) creation of lsass memory dump files (minidump/createdump pattern); (4) seDebugPrivilege acquisition by non-system processes.',
-    kql: `process where event.type: "start"
-  and (
-    /* Direct memory read from lsass */
-    (target.process.name: "lsass.exe" and process.granted_access: (0x1010, 0x1410, 0x1FFFFF))
-    /* Known Mimikatz CLI strings */
-    or process.args: ("sekurlsa::","lsadump::","privilege::debug","coffee")
-    /* LSASS minidump creation */
-    or (file.path: ("*\\lsass*.dmp","*\\lsass*.mdmp") and file.Ext.header_bytes: "4d444d50*")
-  )`,
-    suppressionWindow: 'None - page immediately',
-    severityOverride: null,
-    tags: ['mimikatz', 'credential-access', 'lsass', 'privilege'],
-  },
-  {
-    id: 'ID-7701',
-    name: 'MFA Push Fatigue Attack',
-    category: 'Identity',
-    severity: 'high',
-    mitreTactic: 'Credential Access',
-    mitreTechId: 'T1621',
-    mitreTech: 'Multi-Factor Authentication Request Generation',
-    hits24h: 4,
-    fpRate: 15,
-    status: 'enabled',
-    source: 'Okta / Azure AD',
-    lastFired: '3h ago',
-    created: '2024-06-01',
-    updatedBy: 'r.osei',
-    description: 'Detects MFA push bombing / fatigue attacks by counting the number of MFA push requests sent to a single user within a 5-minute window from an external IP. Threshold of 10 pushes triggers a high-severity alert; 20+ pushes in the same window auto-escalates to critical and disables the account via SOAR playbook.',
-    kql: `event.dataset: "okta.system"
-  AND event.action: "user.mfa.attempt_bypass"
-  AND event.outcome: "failure"
-  AND NOT source.ip: ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16")
-| stats push_count = count() by user.email, source.ip, bucket(@timestamp, 5m)
-| where push_count >= 10`,
-    suppressionWindow: 'None (alert every 5m window)',
-    severityOverride: null,
-    tags: ['mfa', 'push-fatigue', 'identity', 'okta'],
-  },
-  {
-    id: 'TI-0042',
-    name: 'Known Malware C2 Beacon Match',
-    category: 'Threat Intel',
-    severity: 'high',
-    mitreTactic: 'Command and Control',
-    mitreTechId: 'T1071.001',
-    mitreTech: 'Application Layer Protocol: Web Protocols',
-    hits24h: 9,
-    fpRate: 4,
-    status: 'enabled',
-    source: 'TI Feed / DNS / Proxy',
-    lastFired: '22m ago',
-    created: '2024-01-15',
-    updatedBy: 'a.patel',
-    description: 'Matches DNS queries and HTTP/HTTPS connections against aggregated C2 IOC lists from Recorded Future, CrowdStrike Falcon Intelligence, MISP (TLP:WHITE), and Abuse.ch URLhaus. IOCs are deduplicated and confidence-weighted; only indicators with confidence ≥ 70% and age ≤ 30 days are included.',
-    kql: `(dns.question.name: (lookup C2_DOMAINS domain) OR
- url.domain:          (lookup C2_DOMAINS domain) OR
- destination.ip:      (lookup C2_IPS ip))
-AND NOT source.ip: (lookup TI_ALLOWLIST ip)
-| eval confidence = lookup_value(C2_DOMAINS, dns.question.name, "confidence")
-| where confidence >= 70`,
-    suppressionWindow: '4h per source host + IOC pair',
-    severityOverride: null,
-    tags: ['c2', 'threat-intel', 'beaconing', 'ioc'],
-  },
-  {
-    id: 'CLO-8812',
-    name: 'S3 Public Bucket Exposure',
-    category: 'Cloud',
-    severity: 'medium',
-    mitreTactic: 'Exfiltration',
-    mitreTechId: 'T1530',
-    mitreTech: 'Data from Cloud Storage',
-    hits24h: 1,
-    fpRate: 30,
-    status: 'suppressed',
-    source: 'AWS CloudTrail',
-    lastFired: '1d ago',
-    created: '2024-05-10',
-    updatedBy: 'j.chen',
-    description: 'Detects S3 bucket ACL or bucket policy modifications that grant public read or public read-write access (Principal: "*"). Also fires on PutBucketAcl with "public-read" canned ACL. SUPPRESSED: Engineering team has a scheduled review cadence; false-positive rate is high during sandbox environment provisioning windows (Tue/Thu 09:00-11:00 UTC).',
-    kql: `event.dataset: "aws.cloudtrail"
-  AND event.action: ("PutBucketAcl","PutBucketPolicy")
-  AND requestParameters.accessControlList.x-amz-grant-read: "*"
-  OR (requestParameters.bucketPolicy.Statement{}.Principal: "*"
-      AND requestParameters.bucketPolicy.Statement{}.Effect: "Allow")`,
-    suppressionWindow: 'Tue/Thu 09:00-11:00 UTC (recurring)',
-    severityOverride: 'low',
-    tags: ['s3', 'public-exposure', 'cloud', 'data-leak'],
-  },
-]
 
 /* --- API → display-row normalizer -----------------------------------
    The `/siem/rules` payload doesn't line up 1:1 with the display shape:
@@ -761,15 +465,18 @@ export default function RulesEnginePage() {
   const canWrite = can('siem.write')
 
   // Start empty; the live rule set is authoritative EVEN WHEN EMPTY (a fresh
-  // deployment has no rules and must say so, never show the seed as if real).
-  // RULES_DATA is an offline-only fallback, shown only if the API is unreachable.
-  const [rulesData, setRulesData] = useState<typeof RULES_DATA>([])
+  // deployment has no rules and must say so). An unreachable API says THAT,
+  // rather than listing detections that are not running - a page claiming
+  // twelve enabled rules while the backend is unreachable tells an analyst
+  // they are covered when nothing is watching.
+  const [rulesData, setRulesData] = useState<DetectionRule[]>([])
+  const [failed, setFailed] = useState(false)
   const [showNewRule, setShowNewRule] = useState(false)
 
   useEffect(() => {
     fetchRules()
       .then((data) => setRulesData((data as unknown as Record<string, unknown>[]).map(normalizeRule)))
-      .catch(() => setRulesData(RULES_DATA))
+      .catch(() => setFailed(true))
   }, [])
 
   /* filter state */
@@ -1008,9 +715,15 @@ export default function RulesEnginePage() {
         <div className="divide-y divide-white/4">
           <AnimatePresence>
             {rows.length === 0 ? (
-              <div className="py-14 text-center text-ink-600 text-sm">
-                No rules match current filters
-              </div>
+              failed ? (
+                // "Twelve enabled rules" while the backend is unreachable tells
+                // an analyst they are covered when nothing is watching.
+                <ApiUnavailable what="the detection rules" />
+              ) : (
+                <div className="py-14 text-center text-ink-600 text-sm">
+                  No rules match current filters
+                </div>
+              )
             ) : (
               rows.map((rule, i) => {
                 const live   = mergedRule(rule)

@@ -10,6 +10,7 @@ import {
   Eye, 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 import ReportButton from '@/components/dashboard/ReportButton'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
 import AttackSurfacePanel from '@/components/dashboard/AttackSurfacePanel'
@@ -64,56 +65,6 @@ const CRIT_COLOR: Record<Criticality, string> = {
 }
 
 /* -- Seed data ---------------------------------------------------- */
-const SEED: Asset[] = [
-  {
-    id: 'a1', name: 'Corporate Website', type: 'domain', value: 'acme-corp.com',
-    criticality: 'high', status: 'critical', riskScore: 82, lastScan: '4m ago', alerts: 3,
-    cves: { critical: 2, high: 5, medium: 11, low: 4 }, openPorts: [80, 443, 8080],
-    os: 'Nginx 1.24', owner: 'j.chen', patchAge: 28, tags: ['production', 'public'], uptime: 99.7,
-  },
-  {
-    id: 'a2', name: 'API Gateway', type: 'server', value: 'api.acme-corp.com',
-    criticality: 'critical', status: 'at-risk', riskScore: 54, lastScan: '12m ago', alerts: 1,
-    cves: { critical: 0, high: 3, medium: 8, low: 6 }, openPorts: [443, 8443, 9090],
-    os: 'Ubuntu 22.04', owner: 'a.patel', patchAge: 7, tags: ['production', 'api'], uptime: 99.9,
-  },
-  {
-    id: 'a3', name: 'Primary DB', type: 'database', value: '10.0.4.12:5432',
-    criticality: 'critical', status: 'clean', riskScore: 12, lastScan: '8m ago', alerts: 0,
-    cves: { critical: 0, high: 0, medium: 2, low: 3 }, openPorts: [5432],
-    os: 'PostgreSQL 15', owner: 'r.osei', patchAge: 3, tags: ['internal', 'postgres'], uptime: 99.99,
-  },
-  {
-    id: 'a4', name: 'AWS Prod Account', type: 'cloud', value: 'aws:944xxxx21027',
-    criticality: 'critical', status: 'at-risk', riskScore: 47, lastScan: '1h ago', alerts: 2,
-    cves: { critical: 1, high: 2, medium: 6, low: 9 }, openPorts: [],
-    os: 'AWS IAM', owner: 'j.chen', patchAge: 0, tags: ['cloud', 'iam'], uptime: 100,
-  },
-  {
-    id: 'a5', name: 'Edge Node EU-W', type: 'ip', value: '185.12.44.9',
-    criticality: 'medium', status: 'clean', riskScore: 9, lastScan: '15m ago', alerts: 0,
-    cves: { critical: 0, high: 0, medium: 1, low: 2 }, openPorts: [80, 443],
-    os: 'Debian 12', owner: undefined, patchAge: 1, tags: ['cdn', 'edge'], uptime: 99.95,
-  },
-  {
-    id: 'a6', name: 'CFO Laptop', type: 'endpoint', value: 'WIN-CFO-04',
-    criticality: 'high', status: 'clean', riskScore: 18, lastScan: '30m ago', alerts: 0,
-    cves: { critical: 0, high: 1, medium: 3, low: 7 }, openPorts: [],
-    os: 'Windows 11 22H2', owner: 'alice', patchAge: 14, tags: ['exec', 'managed'], uptime: 97.2,
-  },
-  {
-    id: 'a7', name: 'CI/CD Pipeline', type: 'server', value: 'jenkins.acme-corp.internal',
-    criticality: 'high', status: 'at-risk', riskScore: 61, lastScan: '2h ago', alerts: 1,
-    cves: { critical: 1, high: 4, medium: 9, low: 5 }, openPorts: [8080, 50000, 22],
-    os: 'Jenkins 2.426', owner: 'a.patel', patchAge: 45, tags: ['internal', 'devops'], uptime: 98.1,
-  },
-  {
-    id: 'a8', name: 'Redis Cache', type: 'database', value: '10.0.4.22:6379',
-    criticality: 'medium', status: 'clean', riskScore: 22, lastScan: '20m ago', alerts: 0,
-    cves: { critical: 0, high: 0, medium: 3, low: 4 }, openPorts: [6379],
-    os: 'Redis 7.2', owner: 'r.osei', patchAge: 5, tags: ['cache', 'internal'], uptime: 99.98,
-  },
-]
 
 let nextId = 200
 
@@ -185,6 +136,7 @@ export default function AssetsPage() {
   const [assetTotal, setAssetTotal] = useState(0)
   // First answer pending → skeleton rows, not "No assets match your filters"
   const [assetsPending, setAssetsPending] = useState(true)
+  const [assetsFailed, setAssetsFailed] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<AssetType | 'all'>('all')
@@ -198,8 +150,8 @@ export default function AssetsPage() {
     fetchAssets({ limit: String(ASSET_PAGE) })
       // The API answered → show its inventory, even when empty (real deployment).
       .then(({ items, total }) => { setAssets(items as unknown as Asset[]); setAssetTotal(total) })
-      // Unreachable → offline preview with the demo inventory.
-      .catch(() => setAssets(SEED))
+      // Unreachable is not an inventory. A demo estate hides the real one.
+      .catch(() => setAssetsFailed(true))
       .finally(() => setAssetsPending(false))
   }
   useEffect(() => { loadAssets() }, [])
@@ -553,7 +505,10 @@ export default function AssetsPage() {
                 })}
               </AnimatePresence>
               {filtered.length === 0 && assetsPending && <SkeletonRows rows={8} />}
-              {filtered.length === 0 && !assetsPending && (
+              {filtered.length === 0 && !assetsPending && assetsFailed && (
+                <ApiUnavailable what="your asset inventory" />
+              )}
+              {filtered.length === 0 && !assetsPending && !assetsFailed && (
                 <div className="py-14 text-center">
                   <Server className="w-7 h-7 text-ink-700 mx-auto mb-2" />
                   <p className="text-sm text-ink-500">No assets match your filters</p>

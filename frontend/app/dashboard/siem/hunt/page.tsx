@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useExperienceMode } from '@/lib/useExperienceMode'
 import EventSearchPanel from '@/components/dashboard/EventSearchPanel'
 import { tk } from '@/lib/colors'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 
 /* --- Types ----------------------------------------------------------- */
 type TimeRange = '1h' | '6h' | '24h' | '7d'
@@ -48,116 +49,14 @@ interface HuntRun {
   results:  HuntResult[]
 }
 
-/* --- Seed: Saved hunts ------------------------------------------------ */
-const SAVED_HUNTS: SavedHunt[] = [
-  {
-    id: 'sh-001',
-    name: 'Beaconing: Low & Slow C2',
-    description: 'Detect endpoints making periodic outbound connections at regular intervals - consistent with C2 beacon heartbeat traffic.',
-    query: `network where event.type == "connection"
-  and network.direction == "outbound"
-  and not destination.ip: ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16")
-  and destination.port in (80, 443, 8080, 8443)
-| stats
-    conn_count   = count(),
-    avg_interval = avg(diff(@timestamp)) by source.ip, destination.ip, destination.port, host.name
-    window       = 6h
-| where conn_count between 10 and 200
-  and avg_interval between 30 and 300          -- 30s-5min beacon window
-  and stddev(diff(@timestamp)) < avg_interval * 0.15   -- low jitter`,
-    technique: 'T1071.001',
-    lastRun: '14m ago',
-    hitCount: 7,
-    author: 'j.chen',
-  },
-  {
-    id: 'sh-002',
-    name: 'Pass-the-Hash Indicators',
-    description: 'Look for NTLM authentication from non-domain controllers - typical of credential relay / pass-the-hash lateral movement.',
-    query: `event.dataset: "windows.security"
-  AND event.code: "4624"
-  AND winlog.event_data.LogonType: "3"
-  AND winlog.event_data.AuthenticationPackageName: "NTLM"
-  AND NOT source.ip: (lookup DOMAIN_CONTROLLERS ip)
-  AND NOT source.ip: ("10.0.0.0/8" AND user.name: "svc-*")
-| where winlog.event_data.TargetUserName NOT LIKE "%$"
-| stats
-    ntlm_logons = count(),
-    unique_targets = dcount(destination.ip)
-  by source.ip, user.name, host.name
-| where ntlm_logons > 3 and unique_targets > 1`,
-    technique: 'T1550.002',
-    lastRun: '2h ago',
-    hitCount: 2,
-    author: 'a.patel',
-  },
-  {
-    id: 'sh-003',
-    name: 'Kerberoasting Attempt',
-    description: 'Service ticket requests for accounts with SPNs - attackers request TGS tickets offline to crack service account passwords.',
-    query: `event.dataset: "windows.security"
-  AND event.code: "4769"
-  AND winlog.event_data.TicketEncryptionType: "0x17"   -- RC4 = weak, preferred by kerberoasting tools
-  AND NOT user.name: "*$"                               -- Exclude machine accounts
-  AND NOT winlog.event_data.ServiceName: ("krbtgt","*$")
-| stats
-    tgs_requests = count(),
-    unique_spns  = dcount(winlog.event_data.ServiceName)
-  by user.name, source.ip, host.name, bucket(@timestamp, 5m)
-| where tgs_requests > 5 or unique_spns > 3`,
-    technique: 'T1558.003',
-    lastRun: '6h ago',
-    hitCount: 0,
-    author: 'j.chen',
-  },
-  {
-    id: 'sh-004',
-    name: 'LOLBAS Execution Chain',
-    description: 'Living-off-the-land binaries spawning suspicious child processes - abuse of trusted Windows binaries to evade detection.',
-    query: `process where event.type == "start"
-  and process.parent.name: (
-    "mshta.exe","wscript.exe","cscript.exe","regsvr32.exe",
-    "rundll32.exe","certutil.exe","bitsadmin.exe","msiexec.exe",
-    "installutil.exe","regasm.exe","regsvcs.exe"
-  )
-  and process.name: (
-    "powershell.exe","cmd.exe","wmic.exe","net.exe",
-    "net1.exe","nltest.exe","whoami.exe","ipconfig.exe"
-  )
-  and not (process.parent.name == "msiexec.exe" and process.name == "cmd.exe"
-           and process.working_directory: "C:\\\\Windows\\\\Installer\\\\*")`,
-    technique: 'T1218',
-    lastRun: '1d ago',
-    hitCount: 14,
-    author: 'r.osei',
-  },
-  {
-    id: 'sh-005',
-    name: 'Cloud API Abuse',
-    description: 'High-rate API calls from service accounts outside business hours - may indicate compromised credentials or automated exfiltration.',
-    query: `event.dataset: "aws.cloudtrail"
-  AND user.name: "svc-*" OR user.name: "*-service" OR user.name: "*-bot"
-  AND NOT event.action: ("AssumeRole","GetCallerIdentity","Describe*","List*","Get*")
-| stats
-    api_calls   = count(),
-    unique_apis = dcount(event.action),
-    write_calls = countif(event.action: ("Put*","Create*","Delete*","Update*","Attach*"))
-  by user.name, source.ip, bucket(@timestamp, 1h)
-| where (
-    @timestamp.hour < 7 OR @timestamp.hour > 21   -- outside 07:00-21:00 UTC
-  )
-  AND api_calls > 200
-  AND write_calls > 50`,
-    technique: 'T1078.004',
-    lastRun: '3h ago',
-    hitCount: 1,
-    author: 'a.patel',
-  },
-]
-
-/* --- Seed: Beaconing hunt results ------------------------------------- */
-/* --- Default query (beaconing hunt pre-loaded) ----------------------- */
-const DEFAULT_QUERY = SAVED_HUNTS[0].query
+/* --- Starter template ------------------------------------------------
+   A template, not data: it names real event fields and returns whatever this
+   deployment actually holds. The editor used to open on a saved hunt from a
+   hardcoded library, which read as "somebody here wrote this" and produced
+   results for a dataset that does not exist. */
+const DEFAULT_QUERY = `// Outbound connections to a known-bad destination.
+// dest_host is the name the traffic was aimed at (DNS query, HTTP Host, SNI).
+category = "network" AND dest_host != ""`
 
 /* --- Helpers ---------------------------------------------------------- */
 function fmtBytes(b: number): string {
@@ -181,9 +80,11 @@ const TIME_RANGE_LABELS: Record<TimeRange, string> = {
   '1h': 'Last 1h', '6h': 'Last 6h', '24h': 'Last 24h', '7d': 'Last 7d',
 }
 
-const TIME_RANGE_EVENTS: Record<TimeRange, string> = {
-  '1h': '6.1M', '6h': '36.8M', '24h': '147.4M', '7d': '1.03B',
-}
+// How many events a range actually holds is a question only the backend can
+// answer, and it answers it: a completed run reports `scanned`. This used to be
+// a hardcoded table - "147.4M events" on a deployment holding four thousand -
+// which flattered the product and told an analyst nothing true about the search
+// they were about to run.
 
 /* Download a hunt run as CSV. */
 function exportResults(run: HuntRun) {
@@ -240,9 +141,11 @@ export default function ThreatHuntPage() {
   // shows until the analyst actually runs a hunt (never fabricated beacon hits).
   const [runResult, setRunResult] = useState<HuntRun | null>(null)
   const [runError, setRunError] = useState(false)
-  // Saved hunts are NOT seeded in live mode → start empty; SAVED_HUNTS is an
-  // offline-only fallback (see the fetch below).
+  // Saved hunts are NOT seeded in live mode → start empty, and stay empty if
+  // the API cannot be reached. A demo hunt list invites an analyst to run a
+  // query somebody else wrote for a dataset that does not exist here.
   const [savedHunts, setSavedHunts] = useState<SavedHunt[]>([])
+  const [huntsFailed, setHuntsFailed] = useState(false)
   const [selectedHuntId, setSelectedHuntId] = useState<string>('')
 
   const mapApiHunt = (h: ApiSavedHunt & { query?: string; technique?: string }): SavedHunt => ({
@@ -259,7 +162,7 @@ export default function ThreatHuntPage() {
   useEffect(() => {
     fetchSiemHunts()
       .then((data) => setSavedHunts(data.map(mapApiHunt)))   // applied even when empty
-      .catch(() => setSavedHunts(SAVED_HUNTS))               // offline preview only
+      .catch(() => setHuntsFailed(true))
   }, [])
 
   /* Saved panel visibility (mobile) */
@@ -270,8 +173,9 @@ export default function ThreatHuntPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  /* Run the query against the live alert store; fall back to the bundled
-   * demo result set when the dashboard API is unreachable. */
+  /* Run the query against the live alert store. A failure surfaces as a failure
+   * - there is no bundled result set to fall back to, and a hunt that invents
+   * hits is worse than one that reports it could not run. */
   const runQuery = useCallback(() => {
     if (running) return
     setRunning(true)
@@ -439,9 +343,13 @@ export default function ThreatHuntPage() {
               >
                 <div className="space-y-2">
                   {savedHunts.length === 0 && (
-                    <p className="text-[11px] text-ink-600 px-1 py-2">
-                      No saved hunts yet - write a query and Save Hunt to keep it here.
-                    </p>
+                    huntsFailed ? (
+                      <ApiUnavailable what="your saved hunts" compact />
+                    ) : (
+                      <p className="text-[11px] text-ink-600 px-1 py-2">
+                        No saved hunts yet - write a query and Save Hunt to keep it here.
+                      </p>
+                    )
                   )}
                   {savedHunts.map((hunt) => {
                     const isActive = selectedHuntId === hunt.id
@@ -588,7 +496,12 @@ export default function ThreatHuntPage() {
                 <span className="text-violet">Ctrl+Enter to run</span>
               </div>
               <div className="flex items-center gap-3">
-                <span>Index: logs-* · {TIME_RANGE_EVENTS[timeRange]} events</span>
+                {/* The real figure, and only once there is one: a completed run
+                    reports what it actually scanned. */}
+                <span>
+                  Index: logs-*
+                  {runResult ? ` · scanned ${runResult.scanned}` : ''}
+                </span>
                 <span className={cn(running ? 'text-amber' : 'text-safe')}>
                   {running ? '● Executing' : '● Ready'}
                 </span>
@@ -639,7 +552,7 @@ export default function ThreatHuntPage() {
                     <div className="w-10 h-10 rounded-full border-2 border-violet/20 border-t-violet animate-spin" />
                     <Terminal className="w-4 h-4 text-violet absolute inset-0 m-auto" />
                   </div>
-                  <p className="text-xs text-ink-500">Scanning {TIME_RANGE_EVENTS[timeRange]} events…</p>
+                  <p className="text-xs text-ink-500">Scanning…</p>
                   <p className="text-[10px] text-ink-700 font-mono">logs-* · {TIME_RANGE_LABELS[timeRange]}</p>
                 </motion.div>
               )}

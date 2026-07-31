@@ -8,11 +8,12 @@ import { lookupIoc, recordScan, fetchScans, importIocs, fetchScanEnrich, fetchEn
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Upload, Shield, AlertTriangle, CheckCircle,
-  Globe, Hash, Link, File, ChevronDown, ExternalLink, Loader,
+  Globe, Hash, Link, File, ExternalLink, Loader,
   Clock, Database, Zap, Bookmark, BookmarkCheck, Layers, Network, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tk, withAlpha } from '@/lib/colors'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 
 /* -- Recent-scan history row (populated live from /scans; empty on a fresh
    install rather than showing invented history) -------------------- */
@@ -25,117 +26,6 @@ type ScanRow = {
   time: string
 }
 
-/* -- Sample results for demo --------------------------------------- */
-const DEMO_RESULTS: Record<string, ScanResult> = {
-  url: {
-    target: 'http://malicious-phishing-site.xyz/login',
-    type: 'url',
-    verdict: 'malicious',
-    detectionRatio: '62/90',
-    score: 0.93,
-    firstSeen: '2024-11-10',
-    lastSeen: '2024-11-12',
-    categories: ['Phishing', 'Malware Distribution', 'Credential Harvesting'],
-    community: { votes: 47, malicious: 43, clean: 4 },
-    network: { asn: 'AS13335 Cloudflare', ip: '104.21.55.198', country: 'United States', registrar: 'Namecheap Inc.' },
-    engines: [
-      { name: 'Google Safe Browsing', verdict: 'malicious', category: 'Phishing' },
-      { name: 'ESET', verdict: 'malicious', category: 'Phishing' },
-      { name: 'Kaspersky', verdict: 'malicious', category: 'Phishing' },
-      { name: 'Symantec', verdict: 'malicious', category: 'Malicious URL' },
-      { name: 'Fortinet', verdict: 'malicious', category: 'Phishing' },
-      { name: 'Avira', verdict: 'malicious', category: 'Phishing' },
-      { name: 'CrowdStrike', verdict: 'malicious', category: 'Suspicious' },
-      { name: 'Palo Alto', verdict: 'malicious', category: 'Phishing' },
-      { name: 'BitDefender', verdict: 'clean',     category: null },
-      { name: 'McAfee', verdict: 'malicious', category: 'Phishing' },
-      { name: 'Sophos', verdict: 'malicious', category: 'Phishing' },
-      { name: 'Trend Micro', verdict: 'malicious', category: 'Phishing' },
-      { name: 'Cisco Talos', verdict: 'malicious', category: 'Malicious' },
-      { name: 'Webroot', verdict: 'clean', category: null },
-      { name: 'Barracuda', verdict: 'malicious', category: 'Phishing' },
-    ],
-    iocs: ['104.21.55.198', 'malicious-phishing-site.xyz', 'a3f8e92b1d47c61e'],
-    mitre: ['T1566.002 - Spearphishing Link', 'T1056 - Input Capture'],
-  },
-  ip: {
-    target: '45.95.147.236',
-    type: 'ip',
-    verdict: 'malicious',
-    detectionRatio: '41/90',
-    score: 0.81,
-    firstSeen: '2024-09-01',
-    lastSeen: '2024-11-12',
-    categories: ['Command & Control', 'Botnet', 'Scanning Activity'],
-    community: { votes: 31, malicious: 29, clean: 2 },
-    network: { asn: 'AS59253 LLC Baxet', ip: '45.95.147.236', country: 'Russia', registrar: 'OOO Network of data-centers Selectel' },
-    engines: [
-      { name: 'AbuseIPDB', verdict: 'malicious', category: 'Scanning/Hacking' },
-      { name: 'Cisco Talos', verdict: 'malicious', category: 'Malicious' },
-      { name: 'Kaspersky', verdict: 'malicious', category: 'Botnet' },
-      { name: 'Shodan', verdict: 'malicious', category: 'Open ports: 22, 80, 443, 3389' },
-      { name: 'AlienVault', verdict: 'malicious', category: 'Scanning' },
-      { name: 'GreyNoise', verdict: 'malicious', category: 'Mass Scanner' },
-      { name: 'Proofpoint', verdict: 'malicious', category: 'C2' },
-      { name: 'Symantec', verdict: 'clean', category: null },
-      { name: 'ThreatFox', verdict: 'malicious', category: 'SSH Brute Force' },
-      { name: 'ESET', verdict: 'clean', category: null },
-    ],
-    iocs: ['45.95.147.236', 'CVE-2024-6387'],
-    mitre: ['T1110.001 - Brute Force: Password Guessing', 'T1078 - Valid Accounts'],
-  },
-  hash: {
-    target: 'a3f8e92b1d47c61e83dd2a9f7c4b5e01',
-    type: 'hash',
-    verdict: 'malicious',
-    detectionRatio: '69/72',
-    score: 0.98,
-    firstSeen: '2024-10-15',
-    lastSeen: '2024-11-12',
-    categories: ['Trojan', 'Ransomware', 'RAT'],
-    community: { votes: 82, malicious: 80, clean: 2 },
-    network: { asn: 'N/A', ip: 'N/A', country: 'N/A', registrar: 'N/A' },
-    engines: [
-      { name: 'Kaspersky', verdict: 'malicious', category: 'Trojan.Win32.Agent' },
-      { name: 'ESET', verdict: 'malicious', category: 'Win32/Filecoder.Ryuk' },
-      { name: 'Microsoft Defender', verdict: 'malicious', category: 'Ransom:Win32/Ryuk.A' },
-      { name: 'Symantec', verdict: 'malicious', category: 'Ransom.Ryuk' },
-      { name: 'CrowdStrike', verdict: 'malicious', category: 'Win.Ransomware.Ryuk' },
-      { name: 'Palo Alto', verdict: 'malicious', category: 'Ransomware' },
-      { name: 'Sophos', verdict: 'malicious', category: 'Troj/Ryuk-A' },
-      { name: 'BitDefender', verdict: 'malicious', category: 'Trojan.GenericKD' },
-      { name: 'Avast', verdict: 'malicious', category: 'Win32:Malware-gen' },
-      { name: 'AVG', verdict: 'malicious', category: 'Win32:Malware-gen' },
-      { name: 'McAfee', verdict: 'malicious', category: 'Ransom-Ryuk!A' },
-      { name: 'Trend Micro', verdict: 'malicious', category: 'RANSOM_RYUK.SM' },
-    ],
-    iocs: ['a3f8e92b1d47c61e83dd2a9f7c4b5e01', 'ryuk_loader.exe', 'BLACKBASTA'],
-    mitre: ['T1486 - Data Encrypted for Impact', 'T1490 - Inhibit System Recovery', 'T1059 - Command and Scripting Interpreter'],
-    fileInfo: { name: 'invoice_Q4.exe', size: '182 KB', type: 'PE32 executable', compiler: 'Microsoft Visual C++', signature: 'Not signed' },
-  },
-  clean: {
-    target: '8.8.8.8',
-    type: 'ip',
-    verdict: 'clean',
-    detectionRatio: '0/90',
-    score: 0.0,
-    firstSeen: '2009-01-01',
-    lastSeen: '2024-11-12',
-    categories: ['Public DNS', 'Google'],
-    community: { votes: 120, malicious: 3, clean: 117 },
-    network: { asn: 'AS15169 Google LLC', ip: '8.8.8.8', country: 'United States', registrar: 'Google LLC' },
-    engines: [
-      { name: 'Kaspersky',   verdict: 'clean', category: null },
-      { name: 'ESET',        verdict: 'clean', category: null },
-      { name: 'Cisco Talos', verdict: 'clean', category: null },
-      { name: 'Symantec',    verdict: 'clean', category: null },
-      { name: 'AlienVault',  verdict: 'clean', category: null },
-    ],
-    iocs: [],
-    mitre: [],
-  },
-}
-
 type ScanResult = {
   target: string
   type: 'url' | 'ip' | 'hash' | 'file' | 'domain'
@@ -145,18 +35,14 @@ type ScanResult = {
   firstSeen: string
   lastSeen: string
   categories: string[]
-  community: { votes: number; malicious: number; clean: number }
-  network: { asn: string; ip: string; country: string; registrar: string }
-  engines: { name: string; verdict: 'malicious' | 'suspicious' | 'clean'; category: string | null }[]
   iocs: string[]
   mitre: string[]
   fileInfo?: { name: string; size: string; type: string; compiler: string; signature: string }
-  /** Live results carry real provenance instead of the demo blocks. */
+  /** Every field below comes from a real record or a real provider call. */
   source?: string | null            // which feed knew the indicator
   providers?: EnrichProvider[]      // real enrichment pipeline rows
   lookup?: IocLookup | null         // the raw TI-store record (Details tab)
   context?: ScanContext | null      // real relations from our own stores
-  demo?: boolean                    // API unreachable - sample result, labeled
 }
 
 type ResultTab = 'details' | 'relations' | 'community' | 'sources'
@@ -353,50 +239,6 @@ function ProviderResults({ providers, unknown }: { providers: EnrichProvider[]; 
   )
 }
 
-/* -- Engine table (demo results only - clearly labeled sample data) -- */
-function EngineResults({ engines }: { engines: ScanResult['engines'] }) {
-  const [showAll, setShowAll] = useState(false)
-  const visible = showAll ? engines : engines.slice(0, 8)
-  const malicious = engines.filter((e) => e.verdict === 'malicious').length
-  const total     = engines.length
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-white">Detection Results</h3>
-        <span className="text-xs text-ink-500">{malicious}/{total} engines</span>
-      </div>
-      <div className="space-y-1">
-        {visible.map((e) => (
-          <div key={e.name} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-white/3 transition-colors">
-            <span className="text-xs text-ink-300">{e.name}</span>
-            <div className="flex items-center gap-3">
-              {e.category && <span className="text-[10px] text-ink-500">{e.category}</span>}
-              <span className={cn(
-                'flex items-center gap-1 text-[10px] font-semibold',
-                e.verdict === 'malicious' ? 'text-threat' : e.verdict === 'suspicious' ? 'text-amber' : 'text-safe',
-              )}>
-                {e.verdict === 'malicious' ? <AlertTriangle className="w-3 h-3" /> :
-                 e.verdict === 'suspicious' ? <AlertTriangle className="w-3 h-3" /> :
-                 <CheckCircle className="w-3 h-3" />}
-                {e.verdict}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-      {engines.length > 8 && (
-        <button
-          onClick={() => setShowAll((s) => !s)}
-          className="flex items-center gap-1 mt-2 text-xs text-magenta hover:underline"
-        >
-          {showAll ? 'Show less' : `Show all ${engines.length} engines`}
-          <ChevronDown className={cn('w-3 h-3 transition-transform', showAll && 'rotate-180')} />
-        </button>
-      )}
-    </div>
-  )
-}
 
 /* -- Shared result-tab primitives ----------------------------------- */
 
@@ -561,8 +403,6 @@ function DetailsTab({ result }: { result: ScanResult }) {
               </div>
             )}
           </div>
-        ) : result.demo ? (
-          <EmptyNote text="Demo result - the live TI store was not consulted." />
         ) : (
           <EmptyNote text="Not present in the ThreatOrbit intelligence store. No feed this deployment ingests has published this indicator." />
         )}
@@ -814,26 +654,6 @@ function DetailsTab({ result }: { result: ScanResult }) {
         </Card>
       )}
 
-      {result.demo && (
-        <Card title="Network Info (sample)">
-          {Object.entries(result.network).map(([k, v]) => (
-            <KV key={k} k={k.toUpperCase()} v={v} />
-          ))}
-        </Card>
-      )}
-
-      {result.demo && result.mitre.length > 0 && (
-        <Card title="MITRE ATT&CK (sample)">
-          <div className="space-y-2">
-            {result.mitre.map((t) => (
-              <div key={t} className="flex items-center gap-2 text-xs">
-                <span className="px-1.5 py-0.5 rounded-sm bg-violet/15 text-violet font-mono text-[9px]">{t.split(' - ')[0]}</span>
-                <span className="text-ink-300">{t.split(' - ')[1]}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   )
 }
@@ -846,7 +666,7 @@ function RelationsTab({ result, onOpenAlert, onOpenCase, onPivot }: {
   onPivot: (value: string, type: string) => void
 }) {
   const cx = result.context
-  if (result.demo || !cx) {
+  if (!cx) {
     return <EmptyNote text="Live relations are unavailable - the dashboard API could not be reached. Relations always come from this deployment's own alert, case, dark-web and asset stores; they are never invented." />
   }
   const entityGroups: Array<{ label: string; values: string[]; pivotType?: string }> = [
@@ -1000,23 +820,6 @@ function CommunityTab({ result }: { result: ScanResult }) {
   const cx = result.context
   const lu = result.lookup
   const vt = providerOf(result, 'virustotal')
-  if (result.demo) {
-    return (
-      <Card title="Community (sample)">
-        <div className="flex items-end gap-6">
-          <div>
-            <p className="font-display text-2xl font-bold text-threat">{result.community.malicious}</p>
-            <p className="text-[10px] text-ink-500">malicious votes</p>
-          </div>
-          <div>
-            <p className="font-display text-2xl font-bold text-safe">{result.community.clean}</p>
-            <p className="text-[10px] text-ink-500">clean votes</p>
-          </div>
-        </div>
-        <p className="text-[10px] text-amber mt-3">Sample data - the dashboard API is unreachable.</p>
-      </Card>
-    )
-  }
   const tally = cx?.analystActivity
   return (
     <div className="grid md:grid-cols-2 gap-4">
@@ -1067,6 +870,9 @@ export default function ScannerPage() {
   const [query, setQuery] = useState('')
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
+  // A lookup that could not be performed is its own outcome, distinct from
+  // "clean" and from "not in the store".
+  const [lookupFailed, setLookupFailed] = useState(false)
   const [activeTab, setActiveTab] = useState<ResultTab>('details')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1115,6 +921,7 @@ export default function ScannerPage() {
     if (!pivotValue && validateScanInput(typ, target)) return
     setScanning(true)
     setResult(null)
+    setLookupFailed(false)
     setSaved(false)
     setActiveTab('details')
 
@@ -1129,12 +936,7 @@ export default function ScannerPage() {
       }
     }, 900)
 
-    const demoOf = () => {
-      const d = typ === 'ip' ? DEMO_RESULTS.ip
-        : typ === 'hash' ? DEMO_RESULTS.hash : DEMO_RESULTS.url
-      return { ...d, demo: true }
-    }
-    if (!target) { finish(demoOf(), false); return }
+    if (!target) { setScanning(false); return }
 
     // Three real sources, in parallel: our TI store (verdict + feed
     // provenance), the enrichment pipeline (per-provider results with honest
@@ -1144,8 +946,14 @@ export default function ScannerPage() {
       fetchScanContext(target)])
       .then(([lu, en, cx]) => {
         if (lu.status === 'rejected') {
-          // API unreachable → clearly-labeled sample result, never persisted.
-          finish(demoOf(), false)
+          // API unreachable. This used to render a labelled sample result -
+          // but the sample was a DIFFERENT indicator from the one typed, and
+          // it carried invented verdicts attributed to named vendors ("Google
+          // Safe Browsing: malicious", "CrowdStrike: Suspicious"). A banner
+          // does not make it safe to put words in a third party's mouth about
+          // a value they were never asked about.
+          setLookupFailed(true)
+          setScanning(false)
           return
         }
         const hit = lu.value
@@ -1170,9 +978,7 @@ export default function ScannerPage() {
             ? ([hit.threatType, hit.actor ? `Attributed: ${hit.actor}` : null, ...hit.tags]
                 .filter(Boolean) as string[])
             : [],
-          community: { votes: 0, malicious: 0, clean: 0 },
-          network: { asn: '-', ip: '-', country: '-', registrar: '-' },
-          engines: [], iocs: [], mitre: [],
+          iocs: [], mitre: [],
           source: hit.found ? hit.source : null,
           providers,
           lookup: hit,
@@ -1222,9 +1028,7 @@ export default function ScannerPage() {
       const base: ScanResult = {
         target: hash, type: 'file', verdict: 'unverified', detectionRatio: '0/1', score: 0,
         firstSeen: '-', lastSeen: '-', categories: [],
-        community: { votes: 0, malicious: 0, clean: 0 },
-        network: { asn: '-', ip: '-', country: '-', registrar: '-' },
-        engines: [], iocs: [hash], mitre: [], fileInfo,
+        iocs: [hash], mitre: [], fileInfo,
       }
       let scanResult = base
       try {
@@ -1524,6 +1328,12 @@ export default function ScannerPage() {
         )}
       </AnimatePresence>
 
+      {/* A lookup nobody could perform. Never a verdict. */}
+      {lookupFailed && !scanning && (
+        <ApiUnavailable what={`a verdict for ${query.trim() || 'that value'}`}
+          onRetry={() => { setLookupFailed(false); handleScan() }} />
+      )}
+
       {/* Results */}
       <AnimatePresence>
         {result && (
@@ -1533,17 +1343,6 @@ export default function ScannerPage() {
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            {result.demo && (
-              <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-amber/30 bg-amber/10">
-                <AlertTriangle className="w-4 h-4 text-amber shrink-0" />
-                <p className="text-xs text-amber">
-                  <span className="font-bold">Demo result.</span> The dashboard API is
-                  unreachable, so this is illustrative sample data - nothing below is
-                  live intelligence, and it is not saved to history.
-                </p>
-              </div>
-            )}
-
             {/* Overview row */}
             <div className="glass border border-white/8 rounded-2xl p-6 grid md:grid-cols-[auto_1fr_auto] gap-8 items-center relative overflow-hidden">
               <div className="absolute inset-0 pointer-events-none"
@@ -1557,15 +1356,7 @@ export default function ScannerPage() {
                   <div><span className="text-ink-500">First seen:</span> <span className="text-ink-200 ml-1">{result.firstSeen}</span></div>
                   <div><span className="text-ink-500">Last seen:</span> <span className="text-ink-200 ml-1">{result.lastSeen}</span></div>
                   <div><span className="text-ink-500">Detections:</span> <span className={cn('font-semibold ml-1', result.detectionRatio.startsWith('0/') ? 'text-ink-200' : 'text-threat')}>{result.detectionRatio}</span></div>
-                  {!result.demo && (
-                    <div><span className="text-ink-500">Feed source:</span> <span className="text-ink-200 ml-1">{result.source ?? 'none'}</span></div>
-                  )}
-                  {result.demo && (
-                    <>
-                      <div><span className="text-ink-500">ASN:</span> <span className="text-ink-200 ml-1">{result.network.asn}</span></div>
-                      <div><span className="text-ink-500">Country:</span> <span className="text-ink-200 ml-1">{result.network.country}</span></div>
-                    </>
-                  )}
+                  <div><span className="text-ink-500">Feed source:</span> <span className="text-ink-200 ml-1">{result.source ?? 'none'}</span></div>
                 </div>
                 {result.verdict === 'unverified' && (
                   <p className="text-[11px] text-ink-500 mt-3 leading-snug max-w-md">
@@ -1581,14 +1372,6 @@ export default function ScannerPage() {
                 </div>
               </div>
               <div className="text-center space-y-4">
-                {result.demo && (
-                  <div>
-                    <div className="text-xs text-ink-500 mb-2">Community</div>
-                    <div className="text-2xl font-display font-bold text-threat">{result.community.malicious}</div>
-                    <div className="text-[10px] text-ink-500">malicious votes</div>
-                    <div className="text-sm text-safe mt-1">{result.community.clean} clean</div>
-                  </div>
-                )}
                 <button
                   onClick={handleSaveIoc}
                   disabled={saved || saving}
@@ -1657,13 +1440,11 @@ export default function ScannerPage() {
             {activeTab === 'sources' && (
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="glass border border-white/8 rounded-xl p-5">
-                  {result.demo
-                    ? <EngineResults engines={result.engines} />
-                    : <ProviderResults providers={result.providers ?? []}
-                        unknown={result.source == null} />}
+                  <ProviderResults providers={result.providers ?? []}
+                    unknown={result.source == null} />
                 </div>
                 {result.iocs.length > 0 && (
-                  <Card title={result.demo ? 'Extracted IOCs (sample)' : 'Scanned Indicator'}>
+                  <Card title="Scanned Indicator">
                     <div className="space-y-1">
                       {result.iocs.map((ioc) => (
                         <div key={ioc} className="font-mono text-xs text-ink-300 bg-surface-3 px-3 py-1.5 rounded-lg break-all">

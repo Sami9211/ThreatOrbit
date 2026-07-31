@@ -1,5 +1,6 @@
 'use client'
 import { tk } from '@/lib/colors'
+import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -54,18 +55,6 @@ interface Role {
 }
 
 /* -- Seed data ----------------------------------------------------- */
-const USERS: TeamUser[] = [
-  { id: 'u01', name: 'Priya Nair',        email: 'priya.nair@acme.io',     role: 'Admin',          lastActive: '2m ago',   mfa: true,  status: 'active'    },
-  { id: 'u02', name: 'Marcus Holloway',   email: 'marcus.h@acme.io',       role: 'SOC Manager',    lastActive: '14m ago',  mfa: true,  status: 'active'    },
-  { id: 'u03', name: 'Elena Vasquez',     email: 'elena.v@acme.io',        role: 'Senior Analyst', lastActive: '1h ago',   mfa: true,  status: 'active'    },
-  { id: 'u04', name: 'Daniel Okafor',     email: 'daniel.o@acme.io',       role: 'Senior Analyst', lastActive: '3h ago',   mfa: false, status: 'active'    },
-  { id: 'u05', name: 'Sophie Lindqvist',  email: 'sophie.l@acme.io',       role: 'Analyst',        lastActive: '20m ago',  mfa: true,  status: 'active'    },
-  { id: 'u06', name: 'Raj Patel',         email: 'raj.patel@acme.io',      role: 'Analyst',        lastActive: '5h ago',   mfa: true,  status: 'active'    },
-  { id: 'u07', name: 'Aisha Bello',       email: 'aisha.b@acme.io',        role: 'Analyst',        lastActive: '2d ago',   mfa: false, status: 'suspended' },
-  { id: 'u08', name: 'Thomas Reiner',     email: 'thomas.r@acme.io',       role: 'Read-Only',      lastActive: '1d ago',   mfa: true,  status: 'active'    },
-  { id: 'u09', name: 'Mei Tanaka',        email: 'mei.tanaka@acme.io',     role: 'Auditor',        lastActive: '4h ago',   mfa: true,  status: 'active'    },
-  { id: 'u10', name: 'Carlos Mendez',     email: 'carlos.m@acme.io',       role: 'Analyst',        lastActive: 'Never',    mfa: false, status: 'invited'   },
-]
 
 const ROLES: Role[] = [
   {
@@ -411,12 +400,14 @@ export default function UsersRolesPage() {
   // Live roster is authoritative even when empty; USERS is an offline-only
   // fallback shown solely if the API is unreachable.
   const [users, setUsers] = useState<TeamUser[]>([])
+  const [usersFailed, setUsersFailed] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
 
   useEffect(() => {
     fetchUsers()
       .then((data) => setUsers(data.map(apiToTeamUser)))
-      .catch(() => setUsers(USERS))
+      // Inventing accounts on an admin page is how somebody misses a real one.
+      .catch(() => setUsersFailed(true))
   }, [])
 
   const selectedUser = users.find((u) => u.id === selected) ?? null
@@ -516,6 +507,9 @@ export default function UsersRolesPage() {
                 </tr>
               </thead>
               <tbody>
+                {users.length === 0 && usersFailed && (
+                  <ApiUnavailable what="the user list" compact />
+                )}
                 {users.map((u) => (
                   <tr
                     key={u.id}
