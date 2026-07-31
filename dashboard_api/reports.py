@@ -74,8 +74,18 @@ def _sev_breakdown(rows, key="severity") -> list[dict]:
         s = (r[key] if isinstance(r, dict) else r[key])
         if s in counts:
             counts[s] += 1
-    return [{"severity": s, "count": counts[s], "color": _SEV_COLOR[s]}
-            for s in _SEV_ORDER if counts[s] or s in ("critical", "high", "medium", "low")]
+    return _sev_breakdown_counts(counts)
+
+
+def _sev_breakdown_counts(counts: dict) -> list[dict]:
+    """The same shape from an already-aggregated tally.
+
+    Separate so a caller with a `GROUP BY severity` result does not have to
+    expand it back into one dict per row just to be counted again - which is how
+    a report over 327,981 indicators reached 547 MB of resident memory."""
+    full = {s: int(counts.get(s) or 0) for s in _SEV_ORDER}
+    return [{"severity": s, "count": full[s], "color": _SEV_COLOR[s]}
+            for s in _SEV_ORDER if full[s] or s in ("critical", "high", "medium", "low")]
 
 
 def _daily_buckets(items: list, ts_key: str, since: str, until: str) -> list[dict]:
@@ -233,49 +243,131 @@ def _soar_report(conn, since, until, label) -> dict:
 
 
 def _cti_report(conn, since, until, label) -> dict:
-    iocs = [dict(r) for r in conn.execute(
-        "SELECT * FROM iocs WHERE last_seen >= ? AND last_seen <= ? ORDER BY confidence DESC",
-        (since, until)).fetchall()]
-    actors = [dict(r) for r in conn.execute("SELECT name, type, threat_level, ioc_count FROM threat_actors").fetchall()]
-    total = len(iocs)
+    """Counted in SQL, and about the things the platform actually knows.
+
+    This used to `SELECT *` every indicator in the window and count them in
+    Python: 3.6 seconds and 547 MB of resident memory for one weekly report over
+    327,981 rows, which report SCHEDULES run unattended. Every number below is an
+    aggregate now, and the whole thing is a handful of index-served queries.
+
+    It also described a store we no longer have. It ranked by `confidence` - the
+    raw number the first feed to write the row happened to claim, which the
+    composite score exists to replace - and counted "Sources" as the distinct
+    values of the denormalised `source` column, which is exactly one feed per
+    row and therefore cannot see corroboration at all. A report on a
+    multi-feed platform that cannot report agreement between feeds is reporting
+    the wrong thing.
+    """
+    # ONE pass over `iocs`, not four. A report window is usually most of the
+    # store - here 327,981 of 327,984 rows - so no index helps and every
+    # separate WHERE last_seen BETWEEN … is a full scan costing ~400 ms. Both
+    # marginals and all four totals come out of a single GROUP BY.
+    grid = conn.execute(
+        "SELECT type, severity, COUNT(*) AS n, "
+        "SUM(CASE WHEN intel_score>=75 THEN 1 ELSE 0 END) AS high, "
+        "SUM(CASE WHEN intel_score>=50 THEN 1 ELSE 0 END) AS actionable, "
+        "SUM(CASE WHEN sightings>1 THEN 1 ELSE 0 END) AS seen_here "
+        "FROM iocs WHERE last_seen >= ? AND last_seen <= ? "
+        "GROUP BY type, severity", (since, until)).fetchall()
+    total = high = actionable = seen_here = 0
     by_type: dict[str, int] = {}
-    for i in iocs:
-        by_type[i["type"]] = by_type.get(i["type"], 0) + 1
+    sev_counts: dict[str, int] = {}
+    for r in grid:
+        n = int(r["n"] or 0)
+        total += n
+        high += int(r["high"] or 0)
+        actionable += int(r["actionable"] or 0)
+        seen_here += int(r["seen_here"] or 0)
+        by_type[r["type"]] = by_type.get(r["type"], 0) + n
+        sev_counts[r["severity"]] = sev_counts.get(r["severity"], 0) + n
+    by_type = dict(sorted(by_type.items(), key=lambda kv: -kv[1]))
+    # Corroboration: the one signal a single public feed cannot give you, and the
+    # reason for running more than one. Counted over the assertion ledger, which
+    # is where the other feeds' opinions actually live.
+    corroborated = int(conn.execute(
+        "SELECT COUNT(*) AS n FROM (SELECT value FROM observable_sources "
+        "GROUP BY value HAVING COUNT(*) > 1)").fetchone()["n"] or 0)
+    contributing = int(conn.execute(
+        "SELECT COUNT(DISTINCT source_id) AS n FROM observable_sources").fetchone()["n"] or 0)
+    actors = int(conn.execute("SELECT COUNT(*) AS n FROM threat_actors").fetchone()["n"] or 0)
+    # What this deployment saw for itself, in this window.
+    ti_alerts = int(conn.execute(
+        "SELECT COUNT(*) AS n FROM alerts WHERE rule_id='R-TIMATCH' AND ts >= ? AND ts <= ?",
+        (since, until)).fetchone()["n"] or 0)
+
+    # Ranked by the composite score, so the top of the report is what an analyst
+    # should act on rather than whichever feed asserted the biggest number.
     findings = [{
-        "title": f"{i['type'].upper()} · {i['value']}", "severity": i.get("severity") or "medium",
-        "score": i.get("confidence") or 0, "ts": i.get("last_seen"),
-        "entity": i.get("actor") or "-", "rule": i.get("source"),
-        "detail": i.get("threat_type") or "", "status": "active",
-    } for i in iocs[:50]]
+        "title": f"{(r['type'] or '').upper()} · {r['value']}",
+        "severity": r["severity"] or "medium", "score": r["intel_score"] or 0,
+        "ts": r["last_seen"], "entity": r["actor"] or "-", "rule": r["source"],
+        "detail": r["threat_type"] or "", "status": "active",
+    } for r in conn.execute(
+        "SELECT type, value, severity, intel_score, last_seen, actor, source, threat_type "
+        "FROM iocs WHERE last_seen >= ? AND last_seen <= ? "
+        "ORDER BY intel_score DESC, last_seen DESC LIMIT 50", (since, until)).fetchall()]
+
+    share = round(100 * corroborated / total, 1) if total else 0.0
+    narrative = (
+        f"{total:,} indicators were observed or updated during {label.lower()}, "
+        f"across {len(by_type)} indicator types from {contributing} contributing "
+        f"source(s). "
+        + _trend_sentence(conn, "iocs", "last_seen", since, until, total, "indicators")
+        + (f"{actionable:,} score 50 or above"
+           + (f", of which {high:,} {'is' if high == 1 else 'are'} in the top band. "
+              if high else ", none of them in the top band. ")
+           if total else "")
+        # Stated whether it is good or bad. A low share is a real finding about
+        # public intel - the feeds largely do not overlap - and burying it would
+        # make the number that proves the platform's value invisible.
+        + (f"{corroborated:,} values ({share}%) are asserted by two or more "
+           f"independent sources; the remainder rest on a single feed's word. "
+           if total else "")
+        + (f"{seen_here:,} of them have been observed in this deployment's own "
+           f"telemetry, raising {ti_alerts:,} alert(s) in the window. "
+           if seen_here or ti_alerts else
+           "None of them have been observed in this deployment's own telemetry "
+           "during the window. ")
+    )
+
+    recs = []
+    if high:
+        recs.append(f"Push the {high:,} top-band indicator{'' if high == 1 else 's'} to "
+                    "blocking controls first - they combine source reliability, "
+                    "corroboration and recency.")
+    if share < 5 and total:
+        recs.append(f"Only {share}% of the store is multi-source. Add feeds that overlap "
+                    "the ones you have, or corroboration cannot rise however many you run.")
+    if ti_alerts:
+        recs.append(f"{ti_alerts:,} threat-intel match(es) fired on local telemetry - "
+                    "triage those before any indicator nobody here has seen.")
+    elif total:
+        recs.append("No indicator matched local telemetry this window. Confirm log "
+                    "sources are still delivering before reading that as good news.")
+    if actors == 0:
+        recs.append("No indicator carries actor attribution. The feeds that supply it "
+                    "(ThreatFox, URLhaus, Feodo Tracker) may be unreachable - check Sources.")
+
     return {
         "meta": _meta("cti", "Threat Intelligence Report", label, since, until),
         "summary": {
             "headline": [
                 {"label": "Indicators", "value": total},
-                {"label": "Tracked actors", "value": len(actors)},
-                {"label": "High-confidence", "value": sum(1 for i in iocs if (i.get("confidence") or 0) >= 80)},
-                {"label": "Sources", "value": len({i.get("source") for i in iocs})},
+                {"label": "Multi-source", "value": corroborated},
+                {"label": "Top band", "value": high},
+                {"label": "Seen here", "value": seen_here},
             ],
-            "narrative": (
-                f"{total} indicators were observed or updated during {label.lower()}, "
-                f"across {len(by_type)} indicator types and "
-                f"{len({i.get('source') for i in iocs})} sources. "
-                + _trend_sentence(conn, "iocs", "last_seen", since, until, total, "indicators")
-                + (f"The largest category was {max(by_type, key=by_type.get)} "
-                   f"({max(by_type.values())} indicators)." if by_type else "")
-            ),
+            "narrative": narrative,
         },
         "breakdowns": [
             {"heading": "Indicators by type", "type": "bars",
-             "data": [{"label": k, "count": v} for k, v in sorted(by_type.items(), key=lambda x: -x[1])]},
-            {"heading": "Indicators by severity", "type": "severity", "data": _sev_breakdown(iocs)},
+             "data": [{"label": k, "count": v} for k, v in by_type.items()]},
+            {"heading": "Indicators by severity", "type": "severity",
+             "data": _sev_breakdown_counts(sev_counts)},
         ],
         "findings": findings,
-        "recommendations": [
-            "Push high-confidence indicators to detection and blocking controls.",
-            "Review indicators attributed to active actors targeting your sectors.",
-            "Expire or down-weight stale low-confidence indicators.",
-        ],
+        "recommendations": recs or [
+            "No indicators were observed or updated in this window."],
     }
 
 

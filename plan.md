@@ -1426,7 +1426,29 @@ together: a case that closes with a status and no finding teaches nobody
 anything, and `inconclusive` is a first-class outcome because forcing a binary
 makes analysts pick whichever side is closest.
 
-Still open in this phase: narrative reporting. Scheduled hunts already exist.
+**The CTI report was describing a store we no longer have (fixed 2026-07-31).**
+It ranked findings by `confidence` - the raw number the first feed to write the
+row happened to claim, which the composite score exists to replace - and reported
+"Sources" as the distinct values of the denormalised `source` column, which holds
+exactly one feed per row. **A report on a multi-feed platform that cannot report
+agreement between feeds is reporting the wrong thing.** Its three
+recommendations were fixed sentences printed whatever the store looked like,
+which makes them decoration rather than advice.
+
+It now leads on corroboration, score band and local sightings; ranks findings by
+the composite score; and derives every recommendation from its own numbers (a
+store that is 1.9% multi-source is told to add overlapping feeds; a window with
+no local match is told to check the collectors before reading that as good news).
+
+It also **loaded every indicator in the window into Python to count them**:
+`SELECT *` over 327,981 rows, measured at **3.6 s and 547 MB of resident memory
+for one weekly report** - and report schedules run this unattended. Both
+marginals and all four totals now come from a single `GROUP BY type, severity`,
+because a report window is usually most of the store and no index helps when you
+are reading 99.99% of the rows: **977 ms and 21 MB**.
+
+Still open in this phase: narrative reporting for an outsider (the exec/customer
+document). Scheduled hunts already exist.
 
 ---
 
