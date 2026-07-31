@@ -14,18 +14,17 @@ from dashboard_api.tenancy import DEFAULT_ORG_ID
 
 
 def _put_ioc(value, ioc_type="url", severity="critical", confidence=95):
-    # Sets `host` exactly as every production insert path does. A helper that
-    # skipped it would make the domain-lookup tests pass against rows that could
-    # not exist in a real store, hiding the very breakage they exist to catch.
+    # Built through the SAME writer production uses, so these rows carry exactly
+    # the derived columns a real row does. A helper with its own INSERT makes the
+    # lookup tests pass against rows that could not exist in a live store, hiding
+    # the breakage they exist to catch - which is how `reg_domain` stayed NULL on
+    # every import for as long as it did.
+    from dashboard_api.ioc_store import insert_ioc
     with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-            "first_seen,last_seen,tags,org_id,host) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), ioc_type, value, "Phishing", confidence, severity,
-             "pytest-feed", "", "2026-01-01T00:00:00", "2026-07-01T00:00:00", "[]",
-             DEFAULT_ORG_ID, host_of(value, ioc_type)),
-        )
+        insert_ioc(conn, type=ioc_type, value=value, threat_type="Phishing",
+                   confidence=confidence, severity=severity, source="pytest-feed",
+                   first_seen="2026-01-01T00:00:00", last_seen="2026-07-01T00:00:00",
+                   org_id=DEFAULT_ORG_ID)
         conn.commit()
 
 
@@ -302,35 +301,60 @@ def test_bulk_lookup_requires_authentication(client):
     assert r.status_code in (401, 403), "the IOC store must not be readable anonymously"
 
 
-def test_every_ioc_insert_path_populates_host():
-    """`iocs.host` powers "is this domain known-bad?" as an indexed lookup. A row
-    written without it is invisible to that question - silently, with no error
-    and no failing request, just a quietly less accurate answer.
+def test_there_is_exactly_one_place_an_indicator_is_written():
+    """Eight call sites used to spell `INSERT INTO iocs (...)` out by hand, each
+    with its own column list, and every column added since was populated by some
+    of them and not others. The ones that went missing were always the DERIVED
+    columns, because those are the ones a caller has to remember to compute.
 
-    There are eight insert paths across the app. This is a static fence rather
-    than a behavioural one because the failure is a NEGATIVE: a ninth insert
-    added later would break domain lookups for whatever it writes, and no
-    existing test would notice."""
+    Grepping each statement for each column - which is what this test used to
+    do - scales with columns x call sites and only ever caught the column
+    somebody thought to check. One writer makes the property structural."""
     import pathlib
     import re
 
     root = pathlib.Path(__file__).resolve().parents[1]
     offenders = []
     for path in root.rglob("*.py"):
-        if "tests" in path.parts:
+        if "tests" in path.parts or path.name == "ioc_store.py":
             continue
-        text = path.read_text()
-        for m in re.finditer(r'"INSERT INTO iocs \(([^"]*)"(?:\s*"([^"]*)")*', text):
-            # Column list can be split across adjacent string literals; join the
-            # statement's leading run of literals before checking.
-            tail = text[m.start():m.start() + 400]
-            cols = " ".join(re.findall(r'"([^"]*)"', tail)[:4])
-            if "host" not in cols:
-                line = text[:m.start()].count("\n") + 1
-                offenders.append(f"{path.relative_to(root)}:{line}")
+        for m in re.finditer(r'"INSERT INTO iocs\b', path.read_text()):
+            offenders.append(f"{path.relative_to(root)}:"
+                             f"{path.read_text()[:m.start()].count(chr(10)) + 1}")
     assert not offenders, (
-        "these INSERT INTO iocs statements do not set `host`, so indicators they "
-        f"write will not be found by domain lookups: {offenders}")
+        "indicators must be written through ioc_store.ioc_row/insert_iocs, which "
+        f"owns the column list and derives host/ip_hex/reg_domain: {offenders}")
+
+
+def test_the_one_writer_populates_every_derived_column():
+    """The behavioural half. Each of these columns backs a lookup that fails
+    SILENTLY when it is NULL - no error, no failing request, just a quietly
+    worse answer:
+
+      host        "is this domain known-bad?" as an indexed lookup
+      ip_hex      the ASN range query and the `network` pivot
+      reg_domain  sibling clustering - the pivot that shows a phishing KIT
+                  rather than three unrelated domains
+      intel_score the default ranking; a zero sorts to the bottom of the list
+                  an analyst actually opens
+    """
+    from dashboard_api.ioc_store import COLUMNS, ioc_row
+
+    def col(row, name):
+        return row[COLUMNS.index(name)]
+
+    url = ioc_row(type="url", value="http://login.kit-example.test/a/b", confidence=80)
+    assert col(url, "host") == "login.kit-example.test"
+    assert col(url, "reg_domain") == "kit-example.test"
+    assert col(url, "intel_score") > 0
+
+    dom = ioc_row(type="domain", value="mail.kit-example.test", confidence=80)
+    assert col(dom, "reg_domain") == col(url, "reg_domain"), (
+        "a URL and a domain on the same site must cluster together")
+
+    ip = ioc_row(type="ip", value="198.51.100.7", confidence=80)
+    assert col(ip, "ip_hex") == "c6336407", "the ASN range key must be derivable"
+    assert col(ip, "reg_domain") is None and col(ip, "host") is None
 
 
 # -- Offset paging: the IOC library pages through the whole store ----------------
@@ -507,3 +531,42 @@ def test_an_indicator_with_no_recorded_assertions_reports_one_not_zero(client, a
 def test_an_unknown_value_claims_no_sources(client, auth):
     r = client.get("/cti/lookup?value=never-seen-anywhere.example", headers=auth).json()
     assert r["found"] is False and r["sourceCount"] == 0
+
+
+def test_a_freshly_imported_kit_clusters_without_a_restart(client, auth):
+    """The bug the single writer exists to prevent, stated end to end.
+
+    `reg_domain` was populated by NOTHING except the boot-time backfill, and
+    sibling clustering is an indexed equality on it. So three domains of one
+    phishing kit, imported normally, returned no pivot groups at all - and
+    started clustering the moment the process restarted, which is the worst
+    possible shape for a bug: it works on every developer's machine and on a
+    freshly-restarted deployment, and fails in production between restarts.
+    """
+    import uuid
+
+    from dashboard_api.connectors import import_indicators
+    from dashboard_api.db import get_conn
+    from dashboard_api.relations import related
+
+    base = f"kit{uuid.uuid4().hex[:8]}.test"
+    vals = [f"{s}.{base}" for s in ("login", "mail", "vpn")]
+    try:
+        out = import_indicators(
+            [{"type": "domain", "value": v, "threat_type": "phishing",
+              "confidence": 80} for v in vals], source="test-kit")
+        assert out["imported"] == 3, out
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM iocs WHERE value=?", (vals[0],)).fetchone()
+            assert row["reg_domain"] == base, (
+                "the import path must derive reg_domain, not wait for a restart")
+            assert row["intel_score"] > 0, "a new indicator must rank on arrival"
+            keys = [g["key"] for g in related(conn, dict(row))]
+            assert "sibling" in keys, (
+                f"the other two names of the same kit are invisible: {keys}")
+    finally:
+        with get_conn() as conn:
+            conn.executemany("DELETE FROM iocs WHERE value=?", [(v,) for v in vals])
+            conn.executemany("DELETE FROM observable_sources WHERE value=?",
+                             [(v,) for v in vals])
+            conn.commit()

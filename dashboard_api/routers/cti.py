@@ -15,6 +15,7 @@ from dashboard_api.webhooks import dispatch
 from dashboard_api.ioc_lifecycle import (
     decay_iocs, effective_confidence, lifecycle_of, record_sighting, set_known_good)
 from dashboard_api.intel_scoring import DEFAULT_RELIABILITY, score_indicator
+from dashboard_api.ioc_store import INSERT_IOC as _INSERT_IOC, ioc_row
 
 router = APIRouter(prefix="/cti", tags=["cti"], dependencies=[Depends(current_user)])
 
@@ -236,12 +237,11 @@ def import_iocs(body: IocImport, user: dict = Depends(require_perm("cti.write"))
         duplicates += len(candidates) - len(new)
         if new:
             conn.executemany(
-                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,org_id,host,ip_hex) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                [(str(uuid.uuid4()), t, v, body.threat_type, conf, body.severity,
-                  body.source, body.actor, now, now, tags_json, org, host_of(v, t),
-                  ip_hex_of(v, t))
+                _INSERT_IOC,
+                [ioc_row(type=t, value=v, threat_type=body.threat_type,
+                         confidence=conf, severity=body.severity, source=body.source,
+                         actor=body.actor, first_seen=now, last_seen=now,
+                         tags=tags_json, org_id=org)
                  for v, t in new],
             )
             imported = len(new)
@@ -872,13 +872,12 @@ def import_misp(body: MispImport, user: dict = Depends(require_perm("cti.write")
                 continue
             sev = "high" if a.get("to_ids") else "medium"
             conn.execute(
-                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,org_id,host,ip_hex) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (str(uuid.uuid4()), a["type"], val, a.get("comment") or "misp-import",
-                 70 if a.get("to_ids") else 50, sev, "MISP import", "", now, now,
-                 dumps([f"tlp:{tlp}", "misp"]), tenancy.org_of(user),
-                 host_of(val, a["type"]), ip_hex_of(val, a["type"])))
+                _INSERT_IOC,
+                ioc_row(type=a["type"], value=val,
+                        threat_type=a.get("comment") or "misp-import",
+                        confidence=70 if a.get("to_ids") else 50, severity=sev,
+                        source="MISP import", first_seen=now, last_seen=now,
+                        tags=[f"tlp:{tlp}", "misp"], org_id=tenancy.org_of(user)))
             imported += 1
         _record_import(conn, f"MISP event ({body.event.get('Event', {}).get('info', 'import')})"[:100],
                        "misp", imported, duplicates, skipped, user["email"])

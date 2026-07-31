@@ -18,6 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from dashboard_api.auth import decode_token
 from dashboard_api.db import get_conn, host_of, rows_to_dicts
 from dashboard_api import stix
+from dashboard_api.ioc_store import INSERT_IOC as _INSERT_IOC, ioc_row
 
 TAXII_MEDIA = "application/taxii+json;version=2.1"
 STIX_MEDIA = "application/stix+json;version=2.1"
@@ -187,13 +188,12 @@ def add_objects(collection_id: str, principal: dict = Depends(taxii_principal),
                 conn.execute("UPDATE iocs SET last_seen=? WHERE value=?", (now, ioc["value"]))
             else:
                 conn.execute(
-                    "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                    "first_seen,last_seen,tags,host,status,sightings) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'active',1)",
-                    (str(uuid.uuid4()), ioc["type"], ioc["value"], ioc["threat_type"],
-                     ioc["confidence"], ioc["severity"], "TAXII push", "", now, now,
-                     dumps(ioc.get("tags", []) + ["taxii"]),
-                     host_of(ioc["value"], ioc["type"])))
+                    _INSERT_IOC,
+                    ioc_row(type=ioc["type"], value=ioc["value"],
+                            threat_type=ioc["threat_type"], confidence=ioc["confidence"],
+                            severity=ioc["severity"], source="TAXII push",
+                            first_seen=now, last_seen=now,
+                            tags=list(ioc.get("tags", [])) + ["taxii"]))
             statuses.append({"id": obj.get("id", "?"), "status": "complete"})
             success += 1
         audit(conn, actor, "taxii.push", collection_id, f"success={success} failure={failure}")

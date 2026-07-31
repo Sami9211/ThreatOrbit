@@ -1442,7 +1442,26 @@ Removal is half the work and usually skipped. Each of these actively costs us:
 - [x] **`_severity_from_confidence`** - conflated two unrelated axes. Removed
       2026-07-29; `connectors.severity_for()` classifies the asserted activity
       instead, and a one-time migration rebuilt the column. (Phase 3)
-- [ ] **Eight hand-written `INSERT INTO iocs`** - one ingest function. (Phase 1)
+- [x] **Eight hand-written `INSERT INTO iocs`** - DONE (2026-07-31), and it had
+      already cost us. Each site carried its own column list, so every column
+      added since was populated by some and not others - always the DERIVED ones,
+      since those are what a caller must remember to compute. Measured:
+      **`reg_domain` was written by NOTHING but the boot-time backfill**, and
+      sibling clustering is an indexed equality on it, so three domains of one
+      phishing kit imported normally returned no pivot groups at all and started
+      clustering only after a restart. `intel_score` was set by the connector
+      import alone, so an indicator added by an analyst, by TAXII or by a
+      playbook sorted at the bottom of the DEFAULT list until the next
+      maintenance pass. `ip_hex` was set by two of the eight, leaving IPs from
+      the others invisible to the ASN range lookup and the `network` pivot.
+      `dashboard_api/ioc_store.py` is now the only writer: it owns the column
+      list and derives `host`/`ip_hex`/`reg_domain` itself - they are not
+      parameters, so they cannot be forgotten. The old static guard grepped each
+      statement for the word `host`, which scales with columns x call sites and
+      only ever caught the column somebody thought to check; it is replaced by
+      one structural assertion (nothing outside `ioc_store` may write the table)
+      plus a behavioural one, and an end-to-end test that imports a kit and
+      demands its siblings with no restart in between.
 - [x] **Frontend seed/demo arrays** - DONE (2026-07-30), and the diagnosis was
       too kind. They were not "one bad conditional away": **the conditional was
       already there**, in fourteen places across eleven live pages, and it fired

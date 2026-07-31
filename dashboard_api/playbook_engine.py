@@ -28,6 +28,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from dashboard_api.db import audit, dumps, host_of
+from dashboard_api.ioc_store import INSERT_IOC as _INSERT_IOC, ioc_row
 
 # kind → display type for the playbook canvas (check|action|decision|notify|human)
 STEP_KINDS = {
@@ -259,11 +260,10 @@ def _step_block_ip(conn, ctx, params, dry_run):
         conn.execute("UPDATE iocs SET severity='critical', last_seen=? WHERE value=?", (_now(), ip))
     else:
         conn.execute(
-            "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-            "first_seen,last_seen,tags,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), "ip", ip, "soar-blocked", 95, "critical",
-             "SOAR playbook", "", _now(), _now(), dumps(["blocked", "soar"]),
-             host_of(ip, "ip")))
+            _INSERT_IOC,
+            ioc_row(type="ip", value=ip, threat_type="soar-blocked", confidence=95,
+                    severity="critical", source="SOAR playbook",
+                    tags=["blocked", "soar"]))
     return "success", f"{ip} pushed to blocklist{where}"
 
 

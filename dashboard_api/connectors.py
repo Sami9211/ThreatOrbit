@@ -32,6 +32,7 @@ import httpx
 from dashboard_api.config import THREAT_API_URL, SERVICES_API_KEY
 from dashboard_api.db import (audit, dumps, get_conn, host_of, ip_hex_of,
                               record_ioc_import, record_job)
+from dashboard_api.ioc_store import insert_iocs, ioc_row
 
 _TIMEOUT = 20.0
 # Cap the response body a feed may return (DoS guard). httpx reads the whole
@@ -644,14 +645,6 @@ def import_indicators(indicators: list[dict], source: str,
     return totals
 
 
-def _initial_score(itype: str, conf: int, ind: dict, now: str) -> int:
-    from dashboard_api.intel_scoring import score_indicator
-    return score_indicator(
-        {"type": itype, "confidence": conf, "last_seen": now,
-         "report_id": ind.get("report_id"), "actor": ind.get("actor")},
-        source_count=1)["score"]
-
-
 def record_source_assertions(conn, candidates: list[dict], now: str) -> None:
     """Upsert one (value, source) row per candidate, and keep intel_sources fresh.
 
@@ -732,24 +725,19 @@ def _import(indicators: list[dict], source: str,
             "threat_type": ind.get("threat_type") or "",
             "actor": ind.get("actor") or "",
             "source": ind.get("source") or source,
-            "row": (str(uuid.uuid4()), itype, value,
-                    ind.get("threat_type") or "malicious-activity", conf, severity,
-                    ind.get("source") or source, ind.get("actor") or "",
-                    ind.get("first_seen") or now, ind.get("last_seen") or now,
-                    dumps(list(ind.get("tags") or [])),
-                    # Provenance: the pulse/report this indicator belongs to.
-                    ind.get("report_id"),
-                    # Indexed host, so "is this domain known-bad?" is a lookup
-                    # rather than a wildcard scan of every URL in the store.
-                    host_of(value, itype),
-                    # Indexed network key, so "what else do we hold in this AS's
-                    # range?" is a BETWEEN rather than decoding every address.
-                    ip_hex_of(value, itype)),
-            # Scored at insert so a new indicator ranks immediately instead of
-            # sitting at zero until the next maintenance pass. Corroboration is
-            # not yet known for THIS import, so the score starts from the feed's
-            # claim and is raised by the decay pass once other sources agree.
-            "score": _initial_score(itype, conf, ind, now),
+            # Built by ioc_store, which owns the column list and derives host,
+            # ip_hex and reg_domain. This site used to spell the INSERT out and
+            # supplied two of the three - reg_domain was left NULL on every
+            # import, so sibling clustering found nothing until a restart ran
+            # the backfill.
+            "row": ioc_row(
+                type=itype, value=value,
+                threat_type=ind.get("threat_type") or "malicious-activity",
+                confidence=conf, severity=severity,
+                source=ind.get("source") or source, actor=ind.get("actor") or "",
+                first_seen=ind.get("first_seen") or now,
+                last_seen=ind.get("last_seen") or now,
+                tags=ind.get("tags") or [], report_id=ind.get("report_id")),
         })
 
     if not candidates:
@@ -781,13 +769,7 @@ def _import(indicators: list[dict], source: str,
         new = [c for c in candidates if c["value"] not in existing]
         duplicates += len(candidates) - len(new)
         if new:
-            conn.executemany(
-                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,report_id,host,ip_hex,intel_score) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                [c["row"] + (c["score"],) for c in new],
-            )
-            imported = len(new)
+            imported = insert_iocs(conn, [c["row"] for c in new])
             # Raise capped critical-intel alerts for the newly inserted rows only.
             for c in new:
                 if alerts >= alert_budget:

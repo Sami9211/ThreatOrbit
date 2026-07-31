@@ -18,6 +18,7 @@ from dashboard_api.config import (
     LOG_API_URL, SERVICES_ADMIN_KEY, SERVICES_API_KEY, THREAT_API_URL,
 )
 from dashboard_api.db import audit, dumps, get_conn, host_of, record_job
+from dashboard_api.ioc_store import INSERT_IOC as _INSERT_IOC, ioc_row
 
 router = APIRouter(prefix="/services", tags=["services"], dependencies=[Depends(current_user)])
 
@@ -132,13 +133,15 @@ def sync_threat_iocs(limit: int = Query(500, le=10000), user: dict = Depends(req
             severity = "critical" if confidence >= 85 else "high" if confidence >= 70 \
                 else "medium" if confidence >= 40 else "low"
             conn.execute(
-                "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-                "first_seen,last_seen,tags,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (str(uuid.uuid4()), itype, value,
-                 item.get("threat_type") or "malicious-activity", confidence, severity,
-                 f"threat-api:{item.get('source') or 'osint'}", item.get("malware_family") or "",
-                 item.get("first_seen") or now, item.get("last_seen") or now,
-                 dumps(list(item.get("tags") or [])), host_of(value, itype)),
+                _INSERT_IOC,
+                ioc_row(type=itype, value=value,
+                        threat_type=item.get("threat_type") or "malicious-activity",
+                        confidence=confidence, severity=severity,
+                        source=f"threat-api:{item.get('source') or 'osint'}",
+                        actor=item.get("malware_family") or "",
+                        first_seen=item.get("first_seen") or now,
+                        last_seen=item.get("last_seen") or now,
+                        tags=item.get("tags") or []),
             )
             imported += 1
         audit(conn, user["email"], "services.sync_iocs", None,

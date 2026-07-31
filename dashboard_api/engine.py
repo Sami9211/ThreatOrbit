@@ -47,6 +47,7 @@ _COUNTRIES = ["Russia", "China", "North Korea", "Iran", "United States", "Brazil
 # Attribution names come from the curated reference library, so every
 # indicator the engine attributes lands on a real actor row (no drift).
 from dashboard_api.threat_actor_library import ACTOR_NAMES as _ACTORS
+from dashboard_api.ioc_store import INSERT_IOC as _INSERT_IOC, ioc_row
 _MALWARE = ["Cobalt Strike", "Emotet", "QakBot", "AgentTesla", "Ryuk", "BumbleBee",
             "IcedID", "RedLine Stealer"]
 _BAD_DOMAINS = ["m1crosoft-update.com", "secure-login-portal.net", "cdn-analytics.xyz",
@@ -545,12 +546,12 @@ def _write_ioc(conn, ioc: dict, source: str):
         return False
     conf = int(ioc.get("confidence", 50))
     conn.execute(
-        "INSERT INTO iocs (id,type,value,threat_type,confidence,severity,source,actor,"
-        "first_seen,last_seen,tags,host) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        (str(uuid.uuid4()), ioc["type"], value, ioc.get("threat_type", "malicious-activity"),
-         conf, ioc.get("severity") or _SEV_FROM_CONF(conf), source, ioc.get("actor", ""),
-         _now(), _now(), dumps(ioc.get("tags", ["engine-detected"])),
-         host_of(value, ioc["type"])),
+        _INSERT_IOC,
+        ioc_row(type=ioc["type"], value=value,
+                threat_type=ioc.get("threat_type", "malicious-activity"),
+                confidence=conf, severity=ioc.get("severity") or _SEV_FROM_CONF(conf),
+                source=source, actor=ioc.get("actor", ""),
+                tags=ioc.get("tags", ["engine-detected"])),
     )
     return True
 
