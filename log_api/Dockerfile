@@ -1,5 +1,5 @@
 # Digest-pinned base image (see dashboard_api/Dockerfile); Dependabot keeps it current.
-FROM python:3.11-slim@sha256:ae52c5bef62a6bdd42cd1e8dffef86b9cd284bde9427da79839de7a4b983e7ca
+FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 # Install from the hash-pinned lockfile (reproducible, tamper-evident builds).
