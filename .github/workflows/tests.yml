@@ -9,6 +9,18 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Nightly, because a push is not a reliable signal that main got tested.
+  # Dependabot auto-merge runs `gh pr merge --auto`, which waits only on
+  # *required* status checks, and the merge it performs is made with
+  # GITHUB_TOKEN - a push by that token does not start another workflow run.
+  # Six dependency bumps therefore landed on main with no run of this workflow
+  # at all, and one of them broke the frontend build for a fortnight: a minor
+  # bump of @react-three/postprocessing moved `postprocessing` from
+  # dependencies to peerDependencies, so `npm ci` stopped installing it.
+  # This does not stop a bad merge - only branch protection can, by making
+  # these jobs required - but it caps how long main can sit broken unnoticed.
+  schedule:
+    - cron: '17 5 * * *'
 
 jobs:
   backend-sqlite:
