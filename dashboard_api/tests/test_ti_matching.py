@@ -286,3 +286,131 @@ def test_one_standing_alert_per_value_however_many_events_match(client, auth):
         with get_conn() as conn:
             _cleanup(conn, iid, value)
             conn.commit()
+
+
+# -- An alert nobody is told about ------------------------------------------
+
+
+def test_a_detected_alert_reaches_the_notification_bell(client, auth):
+    """The platform detected a real threat-intel match on this deployment's own
+    traffic, raised a high-severity alert, and told nobody.
+
+    The only thing that put an alert in the bell was
+    `engine._emit_notifications`, which is called from `process_tick` - the
+    SYNTHETIC engine loop - and that returns immediately in live mode, correctly,
+    because it fabricates telemetry. The notifications went out with the
+    generator. What remained was the manual `POST /siem/alerts` endpoint, so the
+    platform announced what a human had just typed in and stayed silent about
+    what it had found itself.
+    """
+    value = f"bell.match-notify-test.invalid"
+    with get_conn() as conn:
+        iid = _ioc(conn, "domain", value, severity="high")
+        before = conn.execute("SELECT COUNT(*) AS n FROM notifications").fetchone()["n"]
+        conn.commit()
+    try:
+        out = ingest_lines([f'{{"src_ip":"10.9.9.4","query":"{value}"}}'], "json")
+        assert out["tiMatches"] == 1, out
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM alerts WHERE rule_id='R-TIMATCH' AND ti_value=?",
+                (value,)).fetchone()
+            assert row, "no alert was raised"
+            note = conn.execute(
+                "SELECT type, severity, link FROM notifications WHERE detail=?",
+                (row["id"],)).fetchone()
+            assert note, (
+                "the alert raised no notification - the bell stays empty while "
+                "the platform is detecting real matches")
+            assert note["type"] == "alert" and note["severity"] == "high"
+            assert row["id"] in (note["link"] or ""), (
+                "the notification must link to the alert it is about")
+            after = conn.execute("SELECT COUNT(*) AS n FROM notifications").fetchone()["n"]
+            assert after == before + 1, "exactly one notification per alert"
+    finally:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM notifications WHERE detail IN "
+                         "(SELECT id FROM alerts WHERE ti_value=?)", (value,))
+            _cleanup(conn, iid, value)
+            conn.commit()
+
+
+def test_a_detected_alert_is_published_to_the_live_stream(client, auth):
+    """A SOC console advertising real-time push has to push the thing that
+    matters most. `alert.created` was dispatched only by the manual endpoint."""
+    published = []
+    import dashboard_api.webhooks as wh
+    from dashboard_api.detections import _insert_alert
+
+    real = wh.dispatch
+    wh.dispatch = lambda event, payload, org=None: published.append((event, payload))
+    try:
+        with get_conn() as conn:
+            aid = _insert_alert(conn, title="detected beacon", severity="critical",
+                                risk=95, rule_name="test", org_id="org-default")
+            conn.execute("DELETE FROM alerts WHERE id=?", (aid,))
+            conn.execute("DELETE FROM notifications WHERE detail=?", (aid,))
+            conn.commit()
+    finally:
+        wh.dispatch = real
+    assert any(e == "alert.created" for e, _ in published), (
+        f"a detected alert published nothing: {published}")
+    payload = next(p for e, p in published if e == "alert.created")
+    assert payload["id"] == aid and payload["severity"] == "critical"
+
+
+def test_an_ordinary_alert_reaches_the_stream_without_a_webhook_lookup(client, auth):
+    """The volume case has to stay cheap. This runs inside the detection
+    worker's transaction once per alert, and one pass over a busy batch raises
+    dozens; routing all of them through `dispatch` cost a subscriber query each
+    and slowed a batch past its queue lease, so another worker re-claimed the
+    events and processed them twice. Measured: 80 alerts from one worker, 132
+    from six, and the Postgres suite from 5m18s to 13m37s.
+
+    A live console must still see the alert - just via the in-process publish,
+    with no query and no socket."""
+    import dashboard_api.events_stream as es
+    import dashboard_api.webhooks as wh
+    from dashboard_api.detections import _insert_alert
+
+    streamed, dispatched = [], []
+    real_pub, real_disp = es.publish, wh.dispatch
+    es.publish = lambda t, d=None, org=None: streamed.append((t, d))
+    wh.dispatch = lambda e, p, org=None: dispatched.append(e)
+    try:
+        with get_conn() as conn:
+            aid = _insert_alert(conn, title="routine rule hit", severity="medium",
+                                risk=50, rule_name="test")
+            conn.execute("DELETE FROM alerts WHERE id=?", (aid,))
+            conn.commit()
+    finally:
+        es.publish, wh.dispatch = real_pub, real_disp
+    assert ("alert.created", {"id": aid, "title": "routine rule hit",
+                              "severity": "medium", "raisedBy": "detection"}) in streamed, streamed
+    assert not dispatched, (
+        f"an ordinary alert must not pay for a webhook subscriber lookup: {dispatched}")
+
+
+def test_announcing_an_alert_can_never_fail_creating_one(client, auth):
+    """Best-effort by construction: a broken webhook subscriber, an unreachable
+    Slack route or a full notifications table must not stop the platform from
+    recording that it detected something."""
+    import dashboard_api.webhooks as wh
+    from dashboard_api.detections import _insert_alert
+
+    real = wh.dispatch
+    def boom(*a, **k):
+        raise RuntimeError("subscriber storage is down")
+    wh.dispatch = boom
+    try:
+        with get_conn() as conn:
+            aid = _insert_alert(conn, title="detected despite the outage",
+                                severity="critical", risk=95, rule_name="test")
+            conn.commit()
+            assert conn.execute("SELECT 1 FROM alerts WHERE id=?", (aid,)).fetchone(), (
+                "the alert was lost because announcing it failed")
+            conn.execute("DELETE FROM alerts WHERE id=?", (aid,))
+            conn.execute("DELETE FROM notifications WHERE detail=?", (aid,))
+            conn.commit()
+    finally:
+        wh.dispatch = real

@@ -13,10 +13,13 @@ This is what makes the SIEM live with REAL data instead of demo seed:
 Every alert written here is indistinguishable from any other SIEM alert, so
 triage, correlation, KPIs, and SOAR case creation all work on it.
 """
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from dashboard_api.db import audit, get_conn
+
+logger = logging.getLogger("dashboard_api.detections")
 
 # Log API severity (UPPER) → SIEM severity + a representative risk score.
 _SEV_MAP = {
@@ -56,7 +59,101 @@ def _insert_alert(conn, *, title, severity, risk, rule_name, src_ip=None, userna
          username, hostname, description, raw_log, event_count, ti_hits, ti_value,
          max(0, 60), org_id),
     )
+    _announce(conn, aid, title=title, severity=severity, org_id=org_id,
+              ti_value=ti_value)
     return aid
+
+
+def _worth_interrupting(severity: str, ti_value) -> bool:
+    """Whether an alert belongs in the notification bell.
+
+    The bell is a digest, not a mirror of the alert queue. One detection pass
+    over a busy batch raises dozens of alerts - the run that exposed this made
+    80 from 20 events - and a bell that mirrors them is a bell nobody reads.
+    It also is not free: the notification is written inside the detection
+    worker's own transaction, and per-alert writes slowed a batch enough to
+    outlive its queue lease, so another worker re-claimed the events and
+    processed them twice.
+
+    So: `critical`, always. Plus any threat-intel match whatever its severity -
+    those are one-per-value by construction (see ingest.match_threat_intel), so
+    they cannot storm, and "something on YOUR network touched a value we can
+    name" is the highest-signal thing this platform produces. A high-severity
+    rule firing is not in the bell; it is in the queue and on the live stream,
+    which is where a volume signal belongs.
+    """
+    return severity == "critical" or bool(ti_value)
+
+
+def _announce(conn, aid: str, *, title: str, severity: str, org_id: str,
+              ti_value=None) -> None:
+    """Tell somebody an alert exists.
+
+    Every alert this function writes is one the PLATFORM found - a detection
+    rule firing, a log anomaly, a threat-intel match on the deployment's own
+    traffic. Those were announced to nobody. The only thing that put an alert
+    in the notification bell was `engine._emit_notifications`, which is called
+    from `process_tick` - the SYNTHETIC engine loop - and that returns
+    immediately in live mode, correctly, because it fabricates telemetry. So
+    the notifications went out with the generator when live mode stopped
+    refusing it, and the one alert path that reached the bell was the manual
+    `POST /siem/alerts` endpoint: the platform announced what a human had just
+    typed in and stayed silent about what it had detected itself.
+
+    Measured on a live deployment: a real threat-intel match on a real feed
+    indicator raised a high-severity alert, and produced zero notifications and
+    zero live-stream events.
+
+    Best-effort throughout - announcing an alert must never be able to fail
+    creating one.
+    """
+    payload = {"id": aid, "title": title, "severity": severity,
+               "raisedBy": "detection"}
+    signal = _worth_interrupting(severity, ti_value)
+    try:
+        if signal:
+            # `dispatch` = publish to the live stream AND fan out to webhook
+            # subscribers. Reserved for the signal, because it costs a DB
+            # subscriber lookup and outbound HTTP per call.
+            from dashboard_api.webhooks import dispatch
+            dispatch("alert.created", payload, org=org_id)
+        else:
+            # The common case, and it must stay cheap: this runs inside the
+            # detection worker's transaction, once per alert, and one pass over
+            # a busy batch raises dozens. Calling `dispatch` here instead cost a
+            # subscriber query each time and slowed a batch past its queue
+            # lease - another worker re-claimed the events and processed them
+            # twice (measured: 80 alerts from one worker, 132 from six, and the
+            # Postgres suite went from 5m18s to 13m37s).
+            #
+            # `publish` is in-process only: no query, no socket. A live console
+            # still sees every alert the moment it is raised.
+            from dashboard_api.events_stream import publish
+            publish("alert.created", payload, org=org_id)
+    except Exception:
+        logger.debug("alert.created announce failed for %s", aid, exc_info=True)
+    if not signal:
+        return
+    from dashboard_api.routers.platform import notify
+    # Deliberately NOT wrapped in try/except, unlike the dispatch above.
+    #
+    # `notify` writes on the CALLER'S connection, inside the caller's
+    # transaction. On Postgres a failed statement aborts the whole transaction,
+    # so swallowing the error here would leave the caller committing something
+    # the server has already poisoned - and the alert row it just inserted would
+    # go with it, silently. "Best effort" is only safe for work that touches no
+    # shared transaction; for a statement in one, failing loudly is the safe
+    # behaviour. `notify` already swallows its own SSE and Slack failures
+    # internally, which are the parts that genuinely cannot affect the write.
+    #
+    # Being in the same transaction is also correct on its own terms: if the
+    # alert rolls back the notification must go with it, or the bell points at
+    # an alert that does not exist.
+    #
+    # `detail=aid` matches what engine._emit_notifications writes, so the two
+    # cannot double-notify the same alert if both ever run (demo mode).
+    notify(conn, type="alert", severity=severity, title=title, detail=aid,
+           link=f"/dashboard/siem?alert={aid}")
 
 
 def alerts_from_log_findings(findings: list[dict], source_file: str, actor: str) -> int:
