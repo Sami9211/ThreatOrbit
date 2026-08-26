@@ -44,7 +44,8 @@ def _now() -> str:
 def _insert_alert(conn, *, title, severity, risk, rule_name, src_ip=None, username=None,
                   hostname=None, mitre_tech_id=None, mitre_tech=None, mitre_tactic=None,
                   mitre_tactic_id=None, description=None, raw_log=None, event_count=1,
-                  ti_hits=0, ti_value=None, src_country=None, org_id="org-default") -> str:
+                  ti_hits=0, ti_value=None, observed=False, src_country=None,
+                  org_id="org-default") -> str:
     aid = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO alerts (id,ts,title,severity,status,disposition,owner,risk_score,rule_id,"
@@ -60,11 +61,11 @@ def _insert_alert(conn, *, title, severity, risk, rule_name, src_ip=None, userna
          max(0, 60), org_id),
     )
     _announce(conn, aid, title=title, severity=severity, org_id=org_id,
-              ti_value=ti_value)
+              ti_value=ti_value, observed=observed)
     return aid
 
 
-def _worth_interrupting(severity: str, ti_value) -> bool:
+def _worth_interrupting(severity: str, ti_value, observed: bool) -> bool:
     """Whether an alert belongs in the notification bell.
 
     The bell is a digest, not a mirror of the alert queue. One detection pass
@@ -75,18 +76,34 @@ def _worth_interrupting(severity: str, ti_value) -> bool:
     outlive its queue lease, so another worker re-claimed the events and
     processed them twice.
 
-    So: `critical`, always. Plus any threat-intel match whatever its severity -
-    those are one-per-value by construction (see ingest.match_threat_intel), so
-    they cannot storm, and "something on YOUR network touched a value we can
-    name" is the highest-signal thing this platform produces. A high-severity
-    rule firing is not in the bell; it is in the queue and on the live stream,
-    which is where a volume signal belongs.
+    Threat-intel alerts split into two things that look identical in the row and
+    mean opposite amounts, which is why `observed` exists:
+
+      observed=True   traffic on THIS deployment touched a value we hold. One
+                      per value ever (ingest.match_threat_intel dedups on
+                      `ti_value`), and the highest-signal thing this platform
+                      produces. Always interrupts, whatever its severity.
+      observed=False  a feed we subscribe to listed something as critical.
+                      That is inventory, not an event - nothing happened here.
+                      A single import may raise up to _MAX_INTEL_ALERTS_PER_RUN
+                      of them, and a scheduled connector does it again every
+                      cycle. It belongs in the queue and the CTI store; it is
+                      not a reason to interrupt anyone.
+
+    Getting that distinction wrong is measurable: a full run with both treated
+    alike filled all thirty rows of the bell with feed-import alerts, so the
+    playbook that had just completed was not on the page at all.
+
+    Everything else - rule hits, log anomalies - interrupts at `critical`, and
+    is grouped by `_announce` so a burst reads as one line.
     """
-    return severity == "critical" or bool(ti_value)
+    if ti_value:
+        return bool(observed)
+    return severity == "critical"
 
 
 def _announce(conn, aid: str, *, title: str, severity: str, org_id: str,
-              ti_value=None) -> None:
+              ti_value=None, observed: bool = False) -> None:
     """Tell somebody an alert exists.
 
     Every alert this function writes is one the PLATFORM found - a detection
@@ -109,7 +126,7 @@ def _announce(conn, aid: str, *, title: str, severity: str, org_id: str,
     """
     payload = {"id": aid, "title": title, "severity": severity,
                "raisedBy": "detection"}
-    signal = _worth_interrupting(severity, ti_value)
+    signal = _worth_interrupting(severity, ti_value, observed)
     try:
         if signal:
             # `dispatch` = publish to the live stream AND fan out to webhook
@@ -152,8 +169,22 @@ def _announce(conn, aid: str, *, title: str, severity: str, org_id: str,
     #
     # `detail=aid` matches what engine._emit_notifications writes, so the two
     # cannot double-notify the same alert if both ever run (demo mode).
+    if ti_value:
+        # One per value, ever. Naming the value IS the notification - rolling
+        # these up would throw away the only part a human needs to read.
+        notify(conn, type="alert", severity=severity, title=title, detail=aid,
+               link=f"/dashboard/siem?alert={aid}", org_id=org_id)
+        return
+    # Detection alerts arrive in bursts, so they share a bucket per severity.
+    # One critical reads as itself and links to the record; the tenth reads
+    # "10 critical alerts" and links to the queue filtered to them, because
+    # ten separate rows saying the same thing is nine rows of noise and no
+    # extra information.
     notify(conn, type="alert", severity=severity, title=title, detail=aid,
-           link=f"/dashboard/siem?alert={aid}")
+           link=f"/dashboard/siem?alert={aid}", org_id=org_id,
+           group_key=f"alert:{severity}",
+           rollup_title="{n} " + f"{severity} alerts",
+           rollup_link=f"/dashboard/siem?severity={severity}")
 
 
 def alerts_from_log_findings(findings: list[dict], source_file: str, actor: str) -> int:
@@ -198,8 +229,14 @@ def alerts_from_log_findings(findings: list[dict], source_file: str, actor: str)
 
 def alert_from_intel(conn, *, value: str, ioc_type: str, severity: str, confidence: int,
                      threat_type: str, actor_name: str, source: str,
-                     org_id: str = "org-default") -> str:
-    """Raise a 'threat intel match' SIEM alert for a high-confidence indicator."""
+                     observed: bool = False, org_id: str = "org-default") -> str:
+    """Raise a 'threat intel match' SIEM alert for a high-confidence indicator.
+
+    `observed` says whether this deployment's own telemetry touched the value
+    (`ingest.match_threat_intel`) or a feed merely listed it
+    (`connectors._import`). Both are worth a row in the queue; only the first is
+    worth interrupting a human for. See `_worth_interrupting`.
+    """
     risk = {"critical": 90, "high": 74, "medium": 50, "low": 26, "info": 12}.get(severity, 50)
     return _insert_alert(
         conn,
@@ -213,5 +250,5 @@ def alert_from_intel(conn, *, value: str, ioc_type: str, severity: str, confiden
         # Recorded whatever the type. `src_ip` above only carries it for IP
         # indicators, so a domain or URL match had no field identifying what it
         # matched - which is why duplicate suppression could not see one.
-        ti_hits=1, ti_value=value, org_id=org_id,
+        ti_hits=1, ti_value=value, observed=observed, org_id=org_id,
     )

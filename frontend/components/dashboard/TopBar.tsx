@@ -269,7 +269,17 @@ export default function TopBar() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-ink-200 truncate">{n.title}</p>
-                            <p className="text-[10px] text-ink-600 font-mono mt-0.5 capitalize">{n.type} · {relTime(n.ts)}</p>
+                            <p className="text-[10px] text-ink-600 font-mono mt-0.5 capitalize">
+                              {n.type} · {relTime(n.ts)}
+                              {/* A rolled-up row stands for several events. Say
+                                  how many, so "3 critical alerts" is visibly a
+                                  bucket and not one oddly-worded alert. */}
+                              {(n.rollupCount ?? 1) > 1 && (
+                                <span className="ml-1.5 px-1 py-px rounded bg-white/8 text-ink-300 normal-case">
+                                  ×{n.rollupCount}
+                                </span>
+                              )}
+                            </p>
                           </div>
                           {!n.read && <span className="mt-1 w-1.5 h-1.5 rounded-full bg-magenta shrink-0" />}
                         </motion.button>

@@ -1976,7 +1976,10 @@ def test_playbook_real_execution(client, auth):
     assert any(x["id"] == run["id"] for x in client.get("/soar/runs?limit=100", headers=auth).json()["items"])
     # a playbook notification was raised
     notes = client.get("/notifications", headers=auth).json()["items"]
-    assert any(n["type"] == "playbook" for n in notes)
+    assert any(n["type"] == "playbook" for n in notes), (
+        f"no playbook notification in the first page of the bell; "
+        f"page holds {len(notes)} of type "
+        f"{sorted({n['type'] for n in notes})}, newest ts {notes[0]['ts'] if notes else None}")
 
 
 def test_case_evidence_linking_merge_split(client, auth):

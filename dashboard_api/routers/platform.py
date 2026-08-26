@@ -54,14 +54,30 @@ def about():
 
 # -- Notifications centre ---------------------------------------------------------
 
-def notify(conn, *, type: str, title: str, severity: str = "info",
-           detail: str | None = None, link: str | None = None):
-    """Insert a notification (caller commits). Used by the engine + detections.
-    Also pushes it to any live SSE subscribers so the bell updates in realtime."""
-    conn.execute(
-        "INSERT INTO notifications (id,ts,type,severity,title,detail,link,read) VALUES (?,?,?,?,?,?,?,0)",
-        (str(uuid.uuid4()), _now(), type, severity, title, detail, link),
-    )
+def _notif_now() -> str:
+    """Notification timestamps keep microseconds, unlike the rest of this module.
+
+    The bell is read as a list in time order and written in bursts: a detection
+    pass commits several notifications inside the same second. Truncated to the
+    second they are all equal, and `ORDER BY ts DESC` on equal keys has no
+    defined order - the bell showed a burst in whatever order the index happened
+    to walk, and paging through it could repeat or skip rows. Microseconds make
+    the order real; `id DESC` in the query below settles the remaining tie.
+
+    Rows written before this change sort correctly against these: compared as
+    text, `...:51+00:00` orders below `...:51.000001+00:00`, which is the same
+    second and no later - exactly right.
+    """
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _push(*, type: str, severity: str, title: str, detail: str | None,
+          link: str | None) -> None:
+    """Fan a notification out to the live bell and to per-user Slack routing.
+
+    Both are best-effort by design: neither touches the caller's transaction, so
+    a failure here can only cost a real-time nicety, never the written row.
+    """
     try:
         from dashboard_api.events_stream import publish
         publish("notification", {"type": type, "severity": severity, "title": title, "link": link})
@@ -72,6 +88,65 @@ def notify(conn, *, type: str, title: str, severity: str = "info",
         notify_slack_users(severity=severity, title=title, detail=detail, link=link)
     except Exception:
         pass
+
+
+def notify(conn, *, type: str, title: str, severity: str = "info",
+           detail: str | None = None, link: str | None = None,
+           group_key: str | None = None, group_window_sec: int = 300,
+           rollup_title: str | None = None, rollup_link: str | None = None,
+           org_id: str = "org-default") -> str:
+    """Insert a notification (caller commits). Used by the engine + detections.
+    Also pushes it to any live SSE subscribers so the bell updates in realtime.
+    Returns the id of the row that now represents this notification.
+
+    Pass `group_key` for anything that can arrive in a burst. The first one in a
+    window writes a row; the rest fold into it, incrementing `rollup_count`,
+    refreshing `ts`, and marking it unread again. `rollup_title` is the text once
+    there is more than one - `{n}` in it is replaced by the count - and
+    `rollup_link` the place to send someone who clicks a bucket rather than a
+    single item (a filtered queue, not one record).
+
+    Grouping matters because the bell holds thirty rows. A detection pass over a
+    busy batch raises dozens of alerts; ungrouped, they took every row and the
+    playbook that finished, the connector that failed, and the case that opened
+    were all pushed off the page. That is not a full bell, it is an empty one.
+
+    `org_id` is written through because the listing filters on it once
+    multi-tenancy is enforced. Every caller used to leave it at the column
+    default, so a tenant that was not the bootstrap workspace had a bell that
+    could only ever be empty - including for alerts raised on its own traffic.
+    """
+    if group_key:
+        cutoff = (datetime.now(timezone.utc).replace(microsecond=0)
+                  - timedelta(seconds=group_window_sec)).isoformat()
+        # Scoped to the org as well: two tenants must never share a bucket, or
+        # one workspace's burst silently absorbs another's notification.
+        open_bucket = conn.execute(
+            "SELECT id, rollup_count FROM notifications "
+            "WHERE group_key=? AND org_id=? AND ts>=? ORDER BY ts DESC LIMIT 1",
+            (group_key, org_id, cutoff)).fetchone()
+        if open_bucket:
+            n = (open_bucket["rollup_count"] or 1) + 1
+            # `.replace` rather than `.format`: an alert title is arbitrary text
+            # and may legitimately contain braces.
+            title = (rollup_title or "{n} \u00d7 " + title).replace("{n}", str(n))
+            link = rollup_link or link
+            conn.execute(
+                "UPDATE notifications SET rollup_count=?, ts=?, read=0, title=?, "
+                "severity=?, detail=?, link=? WHERE id=?",
+                (n, _notif_now(), title, severity, detail, link, open_bucket["id"]),
+            )
+            _push(type=type, severity=severity, title=title, detail=detail, link=link)
+            return open_bucket["id"]
+
+    nid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO notifications (id,ts,type,severity,title,detail,link,read,group_key,"
+        "rollup_count,org_id) VALUES (?,?,?,?,?,?,?,0,?,1,?)",
+        (nid, _notif_now(), type, severity, title, detail, link, group_key, org_id),
+    )
+    _push(type=type, severity=severity, title=title, detail=detail, link=link)
+    return nid
 
 
 @router.get("/notifications")
@@ -87,7 +162,11 @@ def list_notifications(limit: int = Query(30, le=100), unread_only: bool = False
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_conn() as conn:
         rows = conn.execute(
-            f"SELECT * FROM notifications {where} ORDER BY ts DESC LIMIT ?", params + [limit]
+            # `id DESC` is the tie-break. Timestamps carry microseconds now, but
+            # two rows can still collide, and an ORDER BY with an undefined tail
+            # is a list that reorders itself between pages.
+            f"SELECT * FROM notifications {where} ORDER BY ts DESC, id DESC LIMIT ?",
+            params + [limit]
         ).fetchall()
         unread = conn.execute("SELECT COUNT(*) AS n FROM notifications WHERE read=0").fetchone()["n"]
     return {"items": rows_to_dicts(rows), "unread": unread}

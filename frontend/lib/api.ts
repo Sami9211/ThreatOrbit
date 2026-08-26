@@ -290,7 +290,7 @@ export interface Case {
   /** What the investigation found, and when it was closed. */
   outcome?: string | null
   conclusion?: string | null
-  closed_at?: string | null
+  closedAt?: string | null
 }
 
 /** One tier hand-off. The `note` is the part that saves the receiving analyst's
@@ -1096,6 +1096,12 @@ export const fetchEntityDetail = (type: string, value: string) =>
 export interface Notification {
   id: string; ts: string; type: string; severity: string | null
   title: string; detail: string | null; link: string | null; read: number
+  // How many notifications folded into this row. 1 = a single event; higher
+  // means the server rolled a burst up so one detection pass cannot take over
+  // the whole bell. `groupKey` names the bucket (null when ungrouped).
+  // camelCase because api() runs every response through toCamel() - the server
+  // sends group_key/rollup_count and they arrive renamed.
+  groupKey?: string | null; rollupCount?: number
 }
 export const fetchNotifications = (unreadOnly = false) =>
   api<{ items: Notification[]; unread: number }>(`/notifications${unreadOnly ? '?unread_only=true' : ''}`)

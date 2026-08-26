@@ -1289,6 +1289,10 @@ def match_threat_intel(conn, *, limit: int = _TI_BATCH) -> int:
                                severity=ioc["severity"], confidence=ioc["confidence"] or 70,
                                threat_type=ioc["threat_type"] or "", actor_name=ioc["actor"] or "",
                                source=ioc["source"] or "CTI",
+                               # This is the path where the value was SEEN here,
+                               # on an event of ours - not merely listed by a
+                               # feed. That is what makes it bell-worthy.
+                               observed=True,
                                org_id=e["org_id"] or "org-default")
         conn.execute("UPDATE alerts SET rule_id='R-TIMATCH' WHERE id=?", (aid,))
         raised += 1

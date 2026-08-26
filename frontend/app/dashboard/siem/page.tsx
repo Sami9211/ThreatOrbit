@@ -1262,6 +1262,16 @@ export default function SIEMPage() {
     return () => clearTimeout(t)
   }, [flashId])
   const [filterSev, setFilterSev] = useState<Severity | 'all'>('all')
+  // Deep-link: ?severity=<sev> pre-filters the queue. The notification bell
+  // rolls a burst of alerts into one row ("7 critical alerts"); that row has to
+  // land somewhere that shows the seven, and no single alert id represents
+  // them. Unknown values are ignored rather than filtering to nothing.
+  useEffect(() => {
+    const sev = new URLSearchParams(window.location.search).get('severity')
+    if (sev && (['critical', 'high', 'medium', 'low', 'info'] as const).includes(sev as Severity)) {
+      setFilterSev(sev as Severity)
+    }
+  }, [])
   const [filterStatus, setFilterStatus] = useState<AlertStatus | 'all'>('all')
   const [filterTactic, setFilterTactic] = useState('All')
   const [ruleSearch, setRuleSearch] = useState('')

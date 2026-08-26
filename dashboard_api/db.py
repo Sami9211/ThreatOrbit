@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 class SchemaVersionError(RuntimeError):
@@ -732,6 +732,10 @@ CREATE TABLE IF NOT EXISTS notifications (
     read      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_notif_ts ON notifications(ts DESC);
+-- Roll-up lookup: every grouped notification asks "is there an open bucket for
+-- this key inside the window?" before writing, so that question must not be a
+-- table scan. Added by migration, so it is created on the second schema pass.
+CREATE INDEX IF NOT EXISTS idx_notif_group ON notifications(group_key, ts DESC);
 
 CREATE TABLE IF NOT EXISTS report_schedules (
     id          TEXT PRIMARY KEY,
@@ -1216,6 +1220,17 @@ _MIGRATIONS = [
     ("scans", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("suppressions", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("notifications", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
+    # Notification roll-up. The bell is a DIGEST, not a mirror of the alert
+    # queue: one detection pass over a busy batch raises dozens of alerts, and a
+    # run that wrote one notification each filled all thirty rows of the bell
+    # with alerts and pushed everything else - a playbook completing, a
+    # connector failing - off the page entirely. `group_key` names the bucket a
+    # notification belongs to and `rollup_count` how many landed in it, so a
+    # burst reads "7 critical alerts" on one row instead of burying the bell.
+    # NULL group_key = ungrouped, which is every notification that existed
+    # before this and every one-off since.
+    ("notifications", "group_key", "TEXT"),
+    ("notifications", "rollup_count", "INTEGER NOT NULL DEFAULT 1"),
     ("saved_views", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("report_schedules", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     # Org-scoped API keys: a service principal authenticating with this key acts
