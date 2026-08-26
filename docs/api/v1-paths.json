@@ -114,6 +114,8 @@
     "/cti/iocs/{ioc_id}/verdicts",
     "/cti/lookup",
     "/cti/lookup/bulk",
+    "/cti/malware",
+    "/cti/malware/{name}",
     "/cti/misp/export",
     "/cti/misp/import",
     "/cti/reports",

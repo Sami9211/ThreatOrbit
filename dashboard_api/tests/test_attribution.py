@@ -228,15 +228,19 @@ def test_the_list_filters_by_family(client, auth):
     assert all(i["malware_family"] == fam for i in body["items"])
 
 
-def test_the_family_chips_link_somewhere_that_filters():
-    """The store panel links each family it can name into the library. If the
-    library ignores the parameter the chip is a link that appears to do
-    something and does not - the same dead end a bell roll-up would have been
+def test_a_named_family_leads_somewhere_that_uses_the_name():
+    """Naming a family is only worth doing if the name is a route into
+    something. The chip opens the family's page (what IS this, and can anyone
+    honestly say who runs it), and that page offers the filtered library. A link
+    the destination ignores is the same dead end a bell roll-up would have been
     without ?severity=."""
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[2] / "frontend"
     panel = (root / "components/dashboard/StoreCompositionPanel.tsx").read_text()
-    assert "/dashboard/feeds?family=" in panel, "the family chips link nowhere"
+    assert "/dashboard/cti/malware/" in panel, "the family chips link nowhere"
+    entity = (root / "app/dashboard/cti/malware/[family]/page.tsx").read_text()
+    assert "/dashboard/feeds?family=" in entity, \
+        "the family page must offer the indicators it is counting"
     library = (root / "app/dashboard/feeds/page.tsx").read_text()
     assert "get('family')" in library, "the library must honour ?family="
     assert "{ family }" in library, "the parameter must reach the API query"

@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 
 class SchemaVersionError(RuntimeError):
@@ -43,6 +43,10 @@ JSON_COLUMNS = {
     "motivation", "sectors", "ttps", "malware", "campaigns", "iocs", "entities",
     "war_room", "tasks", "evidence", "data_sources", "techniques", "related_iocs",
     "hypotheses", "meta", "config", "scopes", "events", "field_map", "definition", "filters",
+    # Without this the aliases came back as a JSON STRING while `aliases` beside
+    # it came back as a list, so the client would have rendered one of them as
+    # `["Mummy Spider","Gold Crestwood"]` in quotes.
+    "operator_aliases",
     "context", "trigger_match", "data", "actors", "software", "linked_cases",
 }
 
@@ -719,6 +723,28 @@ CREATE TABLE IF NOT EXISTS suppressions (
     hits       INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS malware_families (
+    name             TEXT PRIMARY KEY,          -- normalised, matches iocs.malware_family
+    label            TEXT NOT NULL,             -- display name ("AsyncRAT")
+    role             TEXT NOT NULL,             -- what it DOES: loader, stealer, RAT...
+    aliases          TEXT NOT NULL DEFAULT '[]',
+    description      TEXT,
+    -- Set on three of thirty-five. A family is what a source published; an
+    -- operator is a claim somebody has to defend, and most of this catalogue is
+    -- commodity - sold, leaked, open-source or cracked. `operator_reason` is
+    -- filled either way: why we name one, or why we will not.
+    operator         TEXT,
+    operator_aliases TEXT NOT NULL DEFAULT '[]',
+    operator_reason  TEXT,
+    commodity        INTEGER NOT NULL DEFAULT 1,
+    since            TEXT,
+    -- Set when an operator rewrites an entry. The boot-time refresh skips those,
+    -- so a corrected default reaches every install without overwriting anyone's
+    -- own words. Same contract as the Admiralty grades.
+    edited_by        TEXT,
+    edited_at        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -1644,6 +1670,12 @@ def _backfill_source_assertions(conn) -> int:
     return len(payload)
 
 
+def _seed_malware_catalogue(conn) -> int:
+    """Ship what we know about each malware family, without overwriting edits."""
+    from dashboard_api.malware import seed
+    return seed(conn)
+
+
 def _apply_feed_reliability_defaults(conn) -> int:
     """Grade the feeds we ship, without ever overwriting an operator's judgement.
 
@@ -1841,6 +1873,15 @@ def init_db():
         except Exception:
             import logging
             logging.getLogger("dashboard_api.db").exception("ip_hex backfill failed")
+        try:
+            named = _seed_malware_catalogue(conn)
+            if named:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Refreshed %d malware-family entries (operator edits untouched)", named)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("malware catalogue seed failed")
         try:
             from dashboard_api.decay import seed_builtin_rules
             made = seed_builtin_rules(conn)

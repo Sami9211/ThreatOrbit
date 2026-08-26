@@ -428,6 +428,10 @@ export interface Ioc {
   value: string
   severity: string
   actor: string
+  /** The malware family a source NAMED for this value. Separate from `actor`:
+   *  a family is a fact the feed published, an operator is a claim somebody has
+   *  to defend, and most families are commodity. */
+  malwareFamily?: string | null
   source: string
   firstSeen: string
   lastSeen: string
@@ -498,7 +502,7 @@ export interface RelatedGroup {
   // Kept in step with dashboard_api/relations.py. `resolution` (passive-DNS)
   // and `subnet` were both missing here after they shipped - the response
   // arrives untyped, so nothing complained.
-  key: 'report' | 'actor' | 'host' | 'sibling' | 'network' | 'resolution' | 'subnet'
+  key: 'report' | 'actor' | 'host' | 'sibling' | 'network' | 'resolution' | 'subnet' | 'malware'
   label: string
   why: string
   total: number
@@ -575,6 +579,51 @@ export interface StoreSummary {
   attributedShare: number
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
+
+/** A malware family: what it is, and - only where a single group is genuinely
+ *  and publicly named as running it - who runs it. `operatorReason` is filled
+ *  either way: why we name one, or why we will not. Most of this catalogue is
+ *  commodity (sold, leaked, open-source or cracked), so most have no operator
+ *  and that absence is the finding, not a gap. */
+export interface MalwareFamily {
+  name: string
+  label: string
+  role: string
+  aliases: string[]
+  description: string
+  operator: string | null
+  operatorAliases: string[]
+  operatorReason: string
+  commodity: boolean
+  since: string
+  indicators: number
+  /** False once an operator has rewritten the shipped entry; their words are
+   *  then never overwritten by an upgraded default. */
+  isDefault: boolean
+  /** A family a feed named that the shipped catalogue does not describe. */
+  uncatalogued?: boolean
+  editedBy?: string | null
+}
+export interface MalwareFamilyDetail extends MalwareFamily {
+  byType: Record<string, number>
+  bySeverity: Record<string, number>
+  sources: Array<{ source: string; values: number }>
+  seenLocally: number
+  topIndicators: Array<{
+    id: string; type: string; value: string; severity: string; confidence: number
+    intelScore: number; source: string; firstSeen: string; lastSeen: string
+    status: string; sightings: number
+  }>
+}
+export const fetchMalwareFamilies = () => api<MalwareFamily[]>('/cti/malware')
+export const fetchMalwareFamily = (name: string) =>
+  api<MalwareFamilyDetail>(`/cti/malware/${encodeURIComponent(name)}`)
+export const updateMalwareFamily = (
+  name: string,
+  body: { label?: string; role?: string; description?: string; operator?: string; operator_reason?: string },
+) => api<MalwareFamily>(`/cti/malware/${encodeURIComponent(name)}`, {
+  method: 'PATCH', body: JSON.stringify(body),
+})
 
 /** A feed as a first-class record, with the Admiralty grade that multiplies
  *  every score it contributes. */

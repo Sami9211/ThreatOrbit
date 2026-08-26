@@ -195,7 +195,7 @@ export default function StoreCompositionPanel() {
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {s.families.slice(0, 8).map((f) => (
                   <a key={f.family}
-                    href={`/dashboard/feeds?family=${encodeURIComponent(f.family)}`}
+                    href={`/dashboard/cti/malware/${encodeURIComponent(f.family)}`}
                     className="px-1.5 py-0.5 rounded border border-white/10 bg-white/4 text-[10px] text-ink-300 hover:text-white hover:border-magenta/40 transition-colors">
                     <span className="capitalize">{f.family}</span>{' '}
                     <span className="text-ink-600 tabular-nums">{f.count.toLocaleString()}</span>

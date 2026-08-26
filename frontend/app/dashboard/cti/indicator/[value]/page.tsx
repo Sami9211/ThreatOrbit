@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Loader2, Share2, Layers, Activity, Sparkles, ShieldCheck,
-  AlertTriangle, Radio, Eye, Gavel, UserCog, Bell,
+  AlertTriangle, Radio, Eye, Gavel, UserCog, Bell, Bug,
 } from 'lucide-react'
 import { tk } from '@/lib/colors'
 import { cn } from '@/lib/utils'
@@ -178,6 +178,16 @@ export default function IndicatorPage({ params }: { params: Promise<{ value: str
                   </span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full uppercase font-semibold"
                     style={{ color: st.color, background: `${st.color}15` }}>{st.label}</span>
+                  {/* The family belongs in the header, beside the type: it is
+                      the first thing that makes this value a THING rather than
+                      a string somebody blocked. */}
+                  {detail.malwareFamily && (
+                    <Link href={`/dashboard/cti/malware/${encodeURIComponent(detail.malwareFamily)}`}
+                      className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border border-magenta/30 bg-magenta/10 text-magenta hover:bg-magenta/20 transition-colors">
+                      <Bug className="w-2.5 h-2.5" />
+                      <span className="capitalize">{detail.malwareFamily}</span>
+                    </Link>
+                  )}
                   <span className="text-[10px] text-ink-500">
                     {detail.threatType || 'indicator'} · {detail.sourceCount ?? 1} source
                     {(detail.sourceCount ?? 1) === 1 ? '' : 's'} · last asserted {rel(detail.lastSeen)}
@@ -333,6 +343,15 @@ export default function IndicatorPage({ params }: { params: Promise<{ value: str
               )}
               {groups.map((g) => (
                 <Card key={g.key} title={`${g.label} · ${g.total}`} hint={g.why}>
+                  {/* A family is the one pivot that has somewhere better to go
+                      than a list of siblings: a page saying what the thing IS,
+                      and whether anyone can honestly name who runs it. */}
+                  {g.key === 'malware' && (
+                    <Link href={`/dashboard/cti/malware/${encodeURIComponent(g.pivot.value)}`}
+                      className="inline-flex items-center gap-1.5 mb-2 text-[10px] text-magenta hover:underline">
+                      <Bug className="w-3 h-3" /> What is {g.pivot.value}?
+                    </Link>
+                  )}
                   <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
                     {g.items.map((i) => (
                       <Link key={i.id} href={`/dashboard/cti/indicator/${encodeURIComponent(i.value)}`}

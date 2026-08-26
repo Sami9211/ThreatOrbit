@@ -1239,6 +1239,31 @@ unable to fire on it. 77,920 indicators landed that way on the first import.
 `strip_port` now normalises at `_import`, which every connector funnels through,
 and one address on three ports is one indicator instead of three.
 
+**The family became an entity (2026-08-26).** Naming 178,873 indicators is only
+worth having if the platform can then say what the name MEANS, and the honest
+answer differs sharply per family. `malware_families` ships a catalogue of all
+thirty-five - role, aliases, first reported, a short summary of public
+reporting - behind `GET /cti/malware`, `GET /cti/malware/{name}` and an entity
+page at `/dashboard/cti/malware/[family]`.
+
+**Three of thirty-five carry an operator.** Emotet (TA542), TrickBot (Wizard
+Spider) and Dridex (Evil Corp, named in a US indictment and an OFAC
+designation). The other thirty-two do not, and the page says why in each case:
+sold (Remcos, Agent Tesla), open source (AsyncRAT, QuasarRAT), leaked (njRAT,
+Zeus) or cracked (Cobalt Strike, which is licensed software a vendor sells to
+red teams, so a beacon can belong to a legitimate engagement). The empty
+operator is rendered as the finding it is, not hidden as a gap: an analyst who
+reads "AsyncRAT · open source, anyone can build it" knows something useful, and
+one told "AsyncRAT · APT-something" has been misled.
+
+Every entry is operator-editable, with the same contract as the Admiralty
+grades: the shipped catalogue is re-applied on boot so a corrected default
+reaches existing installs, and an entry somebody has rewritten is skipped for
+ever after. Naming an operator through the API requires a reason in the SAME
+change - every unattributed family already carries one, and it is a reason not
+to attribute, so inheriting it would leave the record explaining the opposite of
+what it now claims.
+
 Still open in this phase: TLS certificate observation (the other half of (4)),
 (6) keyed enrichers, and reports - **0% of the store is linked to an intel
 report**, which the family trails do not fix because a trail is a list, not a

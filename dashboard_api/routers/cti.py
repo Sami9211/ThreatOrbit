@@ -1212,6 +1212,150 @@ def store_summary(user: dict = Depends(current_user)):
     }
 
 
+# -- Malware families: what the store can name ------------------------------------
+
+def _family_row(conn, name: str):
+    return conn.execute(
+        "SELECT * FROM malware_families WHERE name=?", (name.strip().lower(),)).fetchone()
+
+
+def _family_public(row) -> dict:
+    d = row_to_dict(row)
+    d["commodity"] = bool(d.get("commodity"))
+    d["isDefault"] = not d.get("edited_by")
+    return d
+
+
+@router.get("/malware")
+def list_malware_families(user: dict = Depends(current_user)):
+    """Every malware family this deployment can name, and how much it holds.
+
+    Ordered by how much of the store carries each one, because that is the
+    question an operator has: not "what families exist" but "what am I actually
+    looking at". A family in the catalogue with nothing behind it is still
+    listed, at zero - the absence is information (that feed has not run, or this
+    deployment does not see that threat).
+    """
+    with get_conn() as conn:
+        counts = {r["malware_family"]: r["n"] for r in conn.execute(
+            "SELECT malware_family, COUNT(*) AS n FROM iocs "
+            "WHERE malware_family IS NOT NULL AND malware_family <> '' "
+            "GROUP BY malware_family").fetchall()}
+        rows = conn.execute("SELECT * FROM malware_families").fetchall()
+    out = []
+    for r in rows:
+        d = _family_public(r)
+        d["indicators"] = counts.get(d["name"], 0)
+        out.append(d)
+    # Families the store holds but the catalogue has never heard of - a feed
+    # naming something we do not describe. Listed rather than dropped, because
+    # silently hiding them is how a store ends up with names nobody can explain.
+    for name, n in counts.items():
+        if not any(d["name"] == name for d in out):
+            out.append({"name": name, "label": name.title(), "role": "",
+                        "aliases": [], "description": "", "operator": None,
+                        "operator_aliases": [], "operator_reason": "",
+                        "commodity": True, "since": "", "isDefault": True,
+                        "uncatalogued": True, "indicators": n})
+    out.sort(key=lambda d: (-d["indicators"], d["name"]))
+    return out
+
+
+@router.get("/malware/{name}")
+def malware_family(name: str, user: dict = Depends(current_user)):
+    """One family: what it is, who runs it if anyone can honestly say, and what
+    this deployment holds of it."""
+    key = name.strip().lower()
+    with get_conn() as conn:
+        row = _family_row(conn, key)
+        counts = conn.execute(
+            "SELECT COUNT(*) AS n FROM iocs WHERE malware_family=?", (key,)).fetchone()["n"]
+        if row is None and not counts:
+            raise HTTPException(status_code=404, detail=f"Unknown malware family '{name}'")
+        by_type = {r["type"]: r["n"] for r in conn.execute(
+            "SELECT type, COUNT(*) AS n FROM iocs WHERE malware_family=? GROUP BY type",
+            (key,)).fetchall()}
+        by_severity = {r["severity"]: r["n"] for r in conn.execute(
+            "SELECT severity, COUNT(*) AS n FROM iocs WHERE malware_family=? GROUP BY severity",
+            (key,)).fetchall()}
+        sources = [{"source": r["source"], "values": r["n"]} for r in conn.execute(
+            "SELECT source, COUNT(*) AS n FROM iocs WHERE malware_family=? "
+            "GROUP BY source ORDER BY n DESC LIMIT 6", (key,)).fetchall()]
+        # Best-first: the ones worth opening, not whichever arrived last.
+        top = rows_to_dicts(conn.execute(
+            "SELECT id,type,value,severity,confidence,intel_score,source,first_seen,last_seen,"
+            "status,sightings FROM iocs WHERE malware_family=? "
+            "ORDER BY intel_score DESC, last_seen DESC, id DESC LIMIT 25", (key,)).fetchall())
+        # The one figure a public library cannot produce: has any of this been
+        # seen HERE?
+        seen = conn.execute(
+            "SELECT COUNT(DISTINCT s.ioc_id) AS n FROM ioc_sightings s "
+            "JOIN iocs i ON i.id = s.ioc_id WHERE i.malware_family=?", (key,)).fetchone()["n"]
+    d = _family_public(row) if row is not None else {
+        "name": key, "label": key.title(), "role": "", "aliases": [],
+        "description": "", "operator": None, "operator_aliases": [],
+        "operator_reason": "", "commodity": True, "since": "",
+        "isDefault": True, "uncatalogued": True}
+    d.update({"indicators": counts, "byType": by_type, "bySeverity": by_severity,
+              "sources": sources, "topIndicators": top, "seenLocally": seen})
+    return d
+
+
+class MalwareFamilyUpdate(BaseModel):
+    label: str | None = None
+    role: str | None = None
+    description: str | None = None
+    operator: str | None = None
+    operator_reason: str | None = None
+
+
+@router.patch("/malware/{name}")
+def update_malware_family(name: str, body: MalwareFamilyUpdate,
+                          user: dict = Depends(require_perm("cti.write"))):
+    """Correct what we ship about a family.
+
+    An analyst who has read the reporting knows more about a family than a
+    shipped one-liner does, and attribution in particular is a judgement that
+    should belong to the people who have to defend it. Editing marks the entry
+    as theirs, and the boot-time refresh stops touching it from then on - a
+    default we improve later must never overwrite somebody's own words.
+
+    Setting an operator without saying why is refused. An attribution nobody can
+    interrogate is one they are right to distrust, and this catalogue's whole
+    argument is that most families do not have a defensible one.
+    """
+    key = name.strip().lower()
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not fields:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    with get_conn() as conn:
+        row = _family_row(conn, key)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Unknown malware family '{name}'")
+        # The reason has to arrive WITH the attribution, not be inherited. Every
+        # unattributed family already carries a reason - and it is a reason not
+        # to attribute ("Open source - anyone can build and modify it"). Letting
+        # a new operator keep that text would leave the record explaining the
+        # opposite of what it now claims.
+        new_operator = (fields.get("operator") or "").strip()
+        if new_operator and new_operator != (row["operator"] or "").strip():
+            if not (fields.get("operator_reason") or "").strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Naming an operator requires a reason in the same "
+                           "change - an attribution nobody can interrogate is "
+                           "one they are right to distrust.")
+        sets = ", ".join(f"{k}=?" for k in fields)
+        conn.execute(
+            f"UPDATE malware_families SET {sets}, edited_by=?, edited_at=? WHERE name=?",
+            (*fields.values(), user["email"],
+             datetime.now(timezone.utc).replace(microsecond=0).isoformat(), key))
+        audit(conn, user["email"], "cti.malware_family_edit", key,
+              ", ".join(sorted(fields)))
+        conn.commit()
+        return _family_public(_family_row(conn, key))
+
+
 @router.get("/decay-rules")
 def list_decay_rules():
     """The decay policy governing every indicator type.
