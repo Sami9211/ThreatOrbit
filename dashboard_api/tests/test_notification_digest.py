@@ -219,3 +219,38 @@ def test_severity_deep_link_target_exists():
     page = pathlib.Path("frontend/app/dashboard/siem/page.tsx").read_text()
     assert "get('severity')" in page, \
         "the SIEM page must honour ?severity= or the roll-up link goes nowhere useful"
+
+
+# -- the unread badge --------------------------------------------------------------
+
+def test_unread_badge_counts_events_not_rows(client, auth):
+    """"1" over a row reading "40 critical alerts" is a badge contradicting the
+    list underneath it. The badge answers "how many notifications are waiting",
+    and a bucket of forty is forty."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM notifications")
+        for i in range(40):
+            _insert_alert(conn, title=f"Badge storm {i}", severity="critical", risk=91,
+                          rule_name="PyTest · badge")
+        conn.commit()
+    body = client.get("/notifications", headers=auth).json()
+    assert len(body["items"]) == 1
+    assert body["unread"] == 40
+
+
+def test_unread_badge_is_scoped_to_the_workspace(client, auth, monkeypatch):
+    """It was not scoped at all: a workspace whose own bell was empty still saw
+    another workspace's count on the badge."""
+    from dashboard_api import tenancy
+    with get_conn() as conn:
+        conn.execute("DELETE FROM notifications")
+        notify(conn, type="system", title="someone else's workspace",
+               org_id="org-somebody-else")
+        conn.commit()
+    monkeypatch.setattr(tenancy, "MULTI_TENANT", True)
+    try:
+        body = client.get("/notifications", headers=auth).json()
+    finally:
+        monkeypatch.setattr(tenancy, "MULTI_TENANT", False)
+    assert body["items"] == []
+    assert body["unread"] == 0, "another tenant's notification was counted here"

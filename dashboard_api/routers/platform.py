@@ -111,6 +111,15 @@ def notify(conn, *, type: str, title: str, severity: str = "info",
     playbook that finished, the connector that failed, and the case that opened
     were all pushed off the page. That is not a full bell, it is an empty one.
 
+    The window is measured from the bucket's LAST event, not its first, so a
+    sustained storm keeps one bucket alive and climbing rather than opening a
+    fresh row every five minutes. That is deliberate: a storm rendered as one
+    line that says how big it is and when it last grew is the honest shape of a
+    storm, and the alternative - twelve rows an hour, each saying "40 critical
+    alerts" - is the same flood with extra steps. The cost is that the bucket
+    cannot be dismissed for good while the storm continues, which is a fair
+    description of a storm.
+
     `org_id` is written through because the listing filters on it once
     multi-tenancy is enforced. Every caller used to leave it at the column
     default, so a tenant that was not the bootstrap workspace had a bell that
@@ -152,14 +161,22 @@ def notify(conn, *, type: str, title: str, severity: str = "info",
 @router.get("/notifications")
 def list_notifications(limit: int = Query(30, le=100), unread_only: bool = False,
                        user: dict = Depends(current_user)):
-    clauses, params = [], []
     # Tenant isolation (same pattern as alerts): active only when flipped on.
     from dashboard_api import tenancy
+    scope, scope_params = "", []
     if tenancy.enforced():
-        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
+        scope, scope_params = "org_id=?", [tenancy.org_of(user)]
+
+    clauses = [scope] if scope else []
+    params = list(scope_params)
     if unread_only:
         clauses.append("read=0")
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    # The badge counts EVENTS, not rows. A bucket holding sixty alerts is sixty
+    # unread notifications however few rows it occupies, and "1" over a row that
+    # reads "60 critical alerts" is a badge contradicting the list under it.
+    unread_clauses = ["read=0"] + ([scope] if scope else [])
     with get_conn() as conn:
         rows = conn.execute(
             # `id DESC` is the tie-break. Timestamps carry microseconds now, but
@@ -168,8 +185,12 @@ def list_notifications(limit: int = Query(30, le=100), unread_only: bool = False
             f"SELECT * FROM notifications {where} ORDER BY ts DESC, id DESC LIMIT ?",
             params + [limit]
         ).fetchall()
-        unread = conn.execute("SELECT COUNT(*) AS n FROM notifications WHERE read=0").fetchone()["n"]
-    return {"items": rows_to_dicts(rows), "unread": unread}
+        unread = conn.execute(
+            # Scoped to the tenant, like the listing. It was not, so a workspace
+            # whose own bell was empty still saw another workspace's count.
+            "SELECT COALESCE(SUM(rollup_count),0) AS n FROM notifications "
+            f"WHERE {' AND '.join(unread_clauses)}", scope_params).fetchone()["n"]
+    return {"items": rows_to_dicts(rows), "unread": int(unread or 0)}
 
 
 class MarkRead(BaseModel):
