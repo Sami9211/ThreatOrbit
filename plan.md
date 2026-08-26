@@ -1194,13 +1194,55 @@ that the DENSITY is the real finding: 5,147 /24s in this store hold more than on
 listed address, and the densest hold 253-255 of 256. That is not a set of hosts
 to block, it is a subnet.
 
+**Attribution landed (2026-08-26): 0% -> 35.8% of the store now carries a named
+malware family.**
+
+The survey above recorded 0% attributed and treated it as an access problem -
+ThreatFox, URLhaus and Feodo do publish a family, and all three are unreachable
+from this sandbox. That was true and it was also the wrong conclusion, because it
+stopped the search at the feeds already in the catalogue. Maltrail publishes its
+static trails **one file per malware family**, on the one host this environment
+can reach, and the file an entry sits in IS its attribution.
+
+Thirty-five families are now imported that way, replacing the aggregated
+`maltrail-malware-domains.txt` convenience file (same project, more indicators -
+IPs and URLs too - and every one of them named). Measured on the live store:
+322,421 indicators and 0 attributed before; **499,501 and 178,873 attributed
+(35.8%)** after, in a 46-second sync. asyncrat 18,352, formbook 14,109,
+remcos 14,024, cobaltstrike 11,268, njrat 10,658, vidar 10,531, redline 9,727,
+emotet 7,997.
+
+Three decisions carry the design:
+
+- **A family is not an actor.** Every RAT and stealer here is commodity - sold,
+  leaked or cracked - and Cobalt Strike is licensed software, so the family is a
+  fact the source published and the operator is an assessment somebody has to be
+  able to defend. `iocs.malware_family` is its own column; `actor` is left empty.
+  Two paths were already conflating the two (the ThreatFox parser and the
+  companion-service bridge both wrote the family into `actor`), so the store was
+  reporting adversaries it had never identified.
+- **Thirty-five files from one project are ONE source.** Corroboration counts
+  independent sources; giving each family its own source_id would have
+  manufactured thirty-five-fold agreement out of a single opinion - the same
+  error this store made in the other direction when sixteen feeds produced one
+  opinion because duplicates were dropped instead of recorded.
+- **A value already held gains its family.** `_import` inserts new rows and
+  counts the rest as duplicates, so without this the 50,192 Maltrail domains
+  imported before attribution existed would have stayed bare for ever. 1,754
+  gained one on the first run.
+
+It also surfaced a defect the trails made visible at scale: they list C2s as
+`66.210.228.178:443`, and stored verbatim that is not an address. No `ip_hex`,
+so no subnet and no BGP pivot - and, the part that matters, it can never equal
+the `src_ip` or `dest_ip` of an event, so threat-intel matching is structurally
+unable to fire on it. 77,920 indicators landed that way on the first import.
+`strip_port` now normalises at `_import`, which every connector funnels through,
+and one address on three ports is one indicator instead of three.
+
 Still open in this phase: TLS certificate observation (the other half of (4)),
-(6) keyed enrichers. Also outstanding, and visible in the same survey: **0% of
-the store is attributed to an actor and 0% is linked to a report** - not a code
-gap, since ThreatFox/URLhaus/Feodo do carry malware family and the importer does
-capture it, but those three feeds are among the seven unreachable from this
-sandbox. The store-summary panel already reports the coverage ratio that explains
-it.
+(6) keyed enrichers, and reports - **0% of the store is linked to an intel
+report**, which the family trails do not fix because a trail is a list, not a
+write-up.
 
 ---
 

@@ -38,7 +38,7 @@ from dashboard_api.db import dumps, host_of, ip_hex_of, reg_domain_of
 # and `insert_iocs` is the only thing that names them in SQL.
 COLUMNS = (
     "id", "type", "value", "threat_type", "confidence", "severity",
-    "source", "actor", "first_seen", "last_seen", "tags", "status",
+    "source", "actor", "malware_family", "first_seen", "last_seen", "tags", "status",
     "sightings", "report_id", "org_id",
     # Derived from `value` + `type` - never passed in, so they cannot be forgotten.
     "host", "ip_hex", "reg_domain",
@@ -67,7 +67,7 @@ def initial_score(*, type: str, confidence: int, last_seen: str,
 
 def ioc_row(*, type: str, value: str, threat_type: str = "malicious-activity",
             confidence: int = 50, severity: str = "medium", source: str = "",
-            actor: str = "", first_seen: str | None = None,
+            actor: str = "", malware_family: str = "", first_seen: str | None = None,
             last_seen: str | None = None, tags=None, status: str = "active",
             sightings: int = 1, report_id=None, org_id: str = "org-default",
             id: str | None = None, intel_score: int | None = None) -> tuple:
@@ -84,7 +84,11 @@ def ioc_row(*, type: str, value: str, threat_type: str = "malicious-activity",
         report_id=report_id, actor=actor)
     return (
         id or str(uuid.uuid4()), type, value, threat_type, confidence, severity,
-        source, actor, fs, ls,
+        # `actor` and `malware_family` are separate on purpose. A family is what
+        # the source said; an operator is an assessment. Several call sites used
+        # to write the family into `actor`, which made an assessment out of a
+        # fact and put commodity malware's buyers in the attribution column.
+        source, actor, (malware_family or "").strip().lower() or None, fs, ls,
         tags if isinstance(tags, str) else dumps(list(tags or [])),
         status, sightings, report_id, org_id,
         host_of(value, type), ip_hex_of(value, type), reg_domain_of(value, type),

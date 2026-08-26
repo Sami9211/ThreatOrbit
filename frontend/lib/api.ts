@@ -567,6 +567,12 @@ export interface StoreSummary {
    *  produce: everything else describes what someone else published. */
   seenLocally: number
   localObservations: number
+  /** How much of the store can be NAMED, not just blocked. A blocklist says a
+   *  value is bad; a malware-family trail says what it IS. Measured at 0 of
+   *  322,421 before the family trails were imported. */
+  families: Array<{ family: string; count: number }>
+  attributedToFamily: number
+  attributedShare: number
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
 
@@ -618,6 +624,11 @@ export interface CtiSummary {
   activeIocs: number
   expiredIocs: number
   knownGoodIocs: number
+  /** How much of the store carries the malware family a source named for it.
+   *  Actors and campaigns are a different claim and blocklists publish neither;
+   *  a family they do. */
+  attributedToFamily: number
+  topFamilies: Array<{ family: string; count: number }>
 }
 
 export interface IocLookup {

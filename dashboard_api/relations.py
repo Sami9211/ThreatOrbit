@@ -111,6 +111,33 @@ def related(conn, ioc: dict, *, limit: int = GROUP_LIMIT) -> list[dict]:
                 "pivot": {"kind": "actor", "value": actor},
             })
 
+    # The strongest link a bulk feed can give us, and until the family trails
+    # landed no indicator in this store had one. A shared family says the two
+    # values belong to the SAME named thing - the same loader, the same stealer,
+    # the same C2 framework - which is what turns a domain into a piece of
+    # infrastructure with a write-up behind it rather than a line on a blocklist.
+    #
+    # Placed above `host` because it is a claim about what the value IS, not
+    # about where it happens to live: two names on one server can be unrelated
+    # tenants, two Emotet C2s cannot.
+    family = (ioc.get("malware_family") or "").strip().lower()
+    if family:
+        where = "malware_family = ? AND id != ?"
+        params = (family, ioc_id)
+        items = _rows(conn, _SELECT + where + _ORDER, params + (fetch,), ioc_id)
+        if items:
+            total = _count(conn, where, params)
+            groups.append({
+                "key": "malware", "label": f"{family.title()} infrastructure",
+                # The count is the point. "One of 15,034 values this source
+                # attributes to Emotet" is a different statement from "another
+                # bad domain", and an analyst can act on the first.
+                "why": f"the source lists both under the same malware family "
+                       f"({family}) - {total + 1:,} values in this store carry it",
+                "total": total, "items": items[:limit],
+                "pivot": {"kind": "malware", "value": family},
+            })
+
     host = _host_of_row(ioc)
     if host:
         # Both directions in one group: the URLs hosted on this domain, and - if

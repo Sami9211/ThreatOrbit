@@ -161,6 +161,50 @@ export default function StoreCompositionPanel() {
             </p>
           </div>
 
+          {/* What the store can NAME. A blocklist says a value is bad; a
+              malware-family trail says what it IS, and that is the difference
+              between an indicator you can investigate and one you can only
+              block. Shown even at zero, because "we cannot name any of this"
+              is the finding on a store of 300,000. */}
+          <div className="rounded-lg border border-white/8 bg-surface-2/40 p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] text-ink-500">Attributed to a named malware family</span>
+              <span className="text-sm font-semibold tabular-nums"
+                style={{ color: s.attributedShare >= 10 ? tk('safe') : tk('amber') }}>
+                {s.attributedShare}%
+              </span>
+            </div>
+            <p className="text-[10px] text-ink-600 mt-1 leading-snug">
+              {s.attributedToFamily > 0 ? (
+                <>
+                  {s.attributedToFamily.toLocaleString()} of {s.total.toLocaleString()}{' '}
+                  values carry the malware family a source named for them — so the
+                  indicator has something to pivot on and a write-up behind it,
+                  rather than only a verdict.
+                </>
+              ) : (
+                <>
+                  None of these values carry a malware family. Bulk blocklists
+                  publish a value and the claim that it is bad, and nothing else;
+                  attribution arrives with the per-family trails and the feeds
+                  that ship a family per entry.
+                </>
+              )}
+            </p>
+            {s.families.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {s.families.slice(0, 8).map((f) => (
+                  <a key={f.family}
+                    href={`/dashboard/feeds?family=${encodeURIComponent(f.family)}`}
+                    className="px-1.5 py-0.5 rounded border border-white/10 bg-white/4 text-[10px] text-ink-300 hover:text-white hover:border-magenta/40 transition-colors">
+                    <span className="capitalize">{f.family}</span>{' '}
+                    <span className="text-ink-600 tabular-nums">{f.count.toLocaleString()}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid sm:grid-cols-2 gap-4">
             {/* What kind of activity */}
             <div>

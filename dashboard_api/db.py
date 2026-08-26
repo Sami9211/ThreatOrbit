@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 class SchemaVersionError(RuntimeError):
@@ -952,6 +952,11 @@ CREATE INDEX IF NOT EXISTS idx_iocs_sev_conf ON iocs(severity, confidence);
 CREATE INDEX IF NOT EXISTS idx_iocs_score_recent
     ON iocs(intel_score DESC, last_seen DESC, id DESC);
 DROP INDEX IF EXISTS idx_iocs_score;
+-- "What else belongs to this family?" turns one domain into a piece of named
+-- infrastructure, and it is the pivot an analyst reaches for first once an
+-- indicator has a family at all. Added by migration, so the second schema pass
+-- creates it.
+CREATE INDEX IF NOT EXISTS idx_iocs_family ON iocs(malware_family);
 CREATE INDEX IF NOT EXISTS idx_iocs_host ON iocs(host);
 -- Pivots from one indicator to everything that shares its provenance. Without
 -- this, "what else came from this report?" scans the whole table, and the
@@ -1229,6 +1234,18 @@ _MIGRATIONS = [
     # burst reads "7 critical alerts" on one row instead of burying the bell.
     # NULL group_key = ungrouped, which is every notification that existed
     # before this and every one-off since.
+    # The malware family a source ASSERTED for this indicator. Distinct from
+    # `actor`, which several call sites were quietly using for it - a family is
+    # not a group. AsyncRAT is sold to anyone who wants it; naming the family is
+    # a fact the feed states, naming the operator is an assessment somebody has
+    # to be able to defend. Keeping them in one column made the second look like
+    # the first.
+    #
+    # Measured before this existed: of 322,421 indicators in a live store, 0%
+    # carried an actor and 0% carried a report. Not a code gap - the nine feeds
+    # reachable from that deployment are bulk blocklists that genuinely publish
+    # neither. The families do publish one, per file.
+    ("iocs", "malware_family", "TEXT"),
     ("notifications", "group_key", "TEXT"),
     ("notifications", "rollup_count", "INTEGER NOT NULL DEFAULT 1"),
     ("saved_views", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),

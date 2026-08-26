@@ -100,7 +100,7 @@ _IOC_SORTS = {
 @router.get("/iocs")
 def list_iocs(type: str | None = None, severity: str | None = None,
               actor: str | None = None, source: str | None = None,
-              status: str | None = None,
+              status: str | None = None, family: str | None = None,
               min_confidence: int | None = Query(None, ge=0, le=100),
               q: str | None = None,
               sort: str = Query("last_seen", description=f"one of {sorted(_IOC_SORTS)}"),
@@ -120,6 +120,10 @@ def list_iocs(type: str | None = None, severity: str | None = None,
                      ("source", source), ("status", status)):
         if val:
             clauses.append(f"{col}=?"); params.append(val)
+    # Stored lower-cased (ioc_store normalises it), so "Emotet" and "emotet" are
+    # the same family rather than two.
+    if family:
+        clauses.append("malware_family=?"); params.append(family.strip().lower())
     if min_confidence is not None:
         clauses.append("confidence>=?"); params.append(min_confidence)
     if q:
@@ -302,6 +306,19 @@ def cti_summary(user: dict = Depends(current_user)):
         total_iocs = conn.execute(f"SELECT COUNT(*) FROM iocs WHERE 1=1 {sc}", sp).fetchone()[0]
         life = {r["status"]: r["n"] for r in conn.execute(
             f"SELECT status, COUNT(*) AS n FROM iocs WHERE 1=1 {sc} GROUP BY status", sp).fetchall()}
+        # What the store can NAME. The Normal-mode brief is about ACTORS, and
+        # blocklists genuinely name none - but saying "no attribution comes with
+        # this data" is no longer true once a third of it carries a malware
+        # family, and telling an analyst there is nothing to work with when
+        # there is is worse than saying nothing.
+        attributed = conn.execute(
+            f"SELECT COUNT(*) AS n FROM iocs WHERE malware_family IS NOT NULL "
+            f"AND malware_family <> '' {sc}", sp).fetchone()["n"]
+        top_families = [{"family": r["malware_family"], "count": r["n"]}
+                        for r in conn.execute(
+                            f"SELECT malware_family, COUNT(*) AS n FROM iocs "
+                            f"WHERE malware_family IS NOT NULL AND malware_family <> '' {sc} "
+                            f"GROUP BY malware_family ORDER BY n DESC LIMIT 4", sp).fetchall()]
     by_type: dict[str, int] = {}
     active = active_campaigns = 0
     for a in actors:
@@ -322,6 +339,8 @@ def cti_summary(user: dict = Depends(current_user)):
         "activeIocs": life.get("active", 0),
         "expiredIocs": life.get("expired", 0),
         "knownGoodIocs": life.get("known-good", 0),
+        "attributedToFamily": attributed,
+        "topFamilies": top_families,
     }
 
 
@@ -1116,6 +1135,18 @@ def store_summary(user: dict = Depends(current_user)):
                       for r in conn.execute(
                           "SELECT threat_type, COUNT(*) AS n FROM iocs "
                           "GROUP BY threat_type ORDER BY n DESC LIMIT 8").fetchall()]
+        # What the store can NAME. A blocklist says a value is bad; a family
+        # trail says WHAT it is, and that is the difference between an indicator
+        # you can act on and one you can only block. Measured before the family
+        # trails were imported: 0 of 322,421.
+        families = [{"family": r["malware_family"], "count": r["n"]}
+                    for r in conn.execute(
+                        "SELECT malware_family, COUNT(*) AS n FROM iocs "
+                        "WHERE malware_family IS NOT NULL AND malware_family <> '' "
+                        "GROUP BY malware_family ORDER BY n DESC LIMIT 12").fetchall()]
+        attributed = conn.execute(
+            "SELECT COUNT(*) AS n FROM iocs WHERE malware_family IS NOT NULL "
+            "AND malware_family <> ''").fetchone()["n"]
         sources_all = conn.execute(
             "SELECT source_id, COUNT(*) AS n FROM observable_sources "
             "GROUP BY source_id ORDER BY n DESC").fetchall()
@@ -1162,6 +1193,12 @@ def store_summary(user: dict = Depends(current_user)):
         # out of 6,000.
         "corroboratedShare": round(100 * (corr["2"] + corr["3+"]) / total, 1) if total else 0.0,
         "activities": activities,
+        # Top families plus the total that carry one, so the panel can say "X of
+        # Y indicators are attributed to a named malware family" rather than
+        # leaving the reader to add up a truncated list.
+        "families": families,
+        "attributedToFamily": attributed,
+        "attributedShare": round(100 * attributed / total, 1) if total else 0.0,
         "sources": sources,
         "expiringWithin7Days": expiring,
         "verdicts": verdicts,

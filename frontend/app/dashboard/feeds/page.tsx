@@ -7,7 +7,7 @@ import {
   Radio, CheckCircle2, HelpCircle, X,
   Shield, Zap, ChevronDown,
   Activity, Download,
-  Flame, ExternalLink, RotateCcw,
+  Flame, ExternalLink, RotateCcw, Crosshair,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SavedViewsButton from '@/components/dashboard/SavedViewsButton'
@@ -442,11 +442,28 @@ export default function FeedsPage() {
     tags: Array.isArray(i.tags) ? i.tags : [],
   }), [])
 
+  // Deep-link: ?family=<name> narrows the library to one malware family. The
+  // store-composition panel links here from each family it can name, and a link
+  // that landed on an unfiltered list would be a link that does nothing.
+  const [family, setFamily] = useState<string | null>(null)
+  const [familyTotal, setFamilyTotal] = useState(0)
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('family')
+    if (f) setFamily(f.toLowerCase())
+  }, [])
+
   // Load feed sources, summary, and real indicators from the API.
   useEffect(() => {
     fetchFeeds().then(setApiFeeds).catch(() => {})
     fetchFeedsSummary().then(setFeedsSummary).catch(() => {})
-    fetchIocs({ limit: '60', sort: 'last_seen', order: 'desc' }).then(({ items }) => {
+    fetchIocs({
+      limit: '60',
+      // Sorted by relevance within a family: "show me Emotet" wants the values
+      // most worth looking at, not the ones that happened to arrive last.
+      sort: family ? 'score' : 'last_seen', order: 'desc',
+      ...(family ? { family } : {}),
+    }).then(({ items, total }) => {
+      setFamilyTotal(total)
       // The API answered - we are LIVE, even when the store is empty (fresh
       // real-feeds install). Render its real indicators; never fall back to seeds.
       const entries = items.map(iocToEntry)
@@ -455,7 +472,7 @@ export default function FeedsPage() {
       setLiveCount(items.length)
       setLiveMode(true)
     }).catch(() => setFeedsFailed(true))
-  }, [iocToEntry])
+  }, [iocToEntry, family])
 
   function handleConfirm(id: string) {
     const entry = unconfirmed.find(e => e.id === id)
@@ -627,6 +644,24 @@ export default function FeedsPage() {
           )}
         </div>
       </div>
+
+      {/* Scoped to one malware family. Says what is being shown, how many there
+          are in all, and how to leave - a filter you cannot see is a filter that
+          makes the rest of the library look empty. */}
+      {family && (
+        <div className="flex items-center gap-2 px-6 py-2 border-b border-white/5 bg-violet/8 shrink-0 text-[11px]">
+          <Crosshair className="w-3.5 h-3.5 text-violet shrink-0" />
+          <span className="text-ink-200">
+            Showing <span className="capitalize font-semibold text-white">{family}</span>{' '}
+            infrastructure — <span className="tabular-nums">{familyTotal.toLocaleString()}</span>{' '}
+            {familyTotal === 1 ? 'indicator' : 'indicators'} in this store carry that family,
+            ranked by relevance.
+          </span>
+          <a href="/dashboard/feeds" className="ml-auto text-violet hover:underline shrink-0">
+            Show everything
+          </a>
+        </div>
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-4 divide-x divide-white/5 border-b border-white/5 shrink-0">

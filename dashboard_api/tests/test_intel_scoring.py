@@ -253,9 +253,19 @@ def test_the_feed_coverage_denominator_matches_what_the_importer_writes(client, 
     from dashboard_api.connectors import _BULK_FEEDS, _fetch_bulk_osint, bulk_feed_source_ids
     import inspect
 
+    from dashboard_api.connectors import _MALTRAIL_SOURCE, family_feeds
+
     ids = bulk_feed_source_ids()
-    assert len(ids) == len(_BULK_FEEDS), "two feeds share a source_id"
+    # One id per blocklist, plus exactly ONE for the whole set of malware-family
+    # trails. Thirty-five files published by one project are one opinion, and
+    # giving each its own id would manufacture thirty-five-fold corroboration
+    # out of a single source - which is the error this store has already made
+    # once, in the other direction, when sixteen feeds produced one opinion.
+    assert len(ids) == len(_BULK_FEEDS) + 1, "two feeds share a source_id"
+    assert len(family_feeds()) > 1, "the family trails are meant to be many files"
     src = inspect.getsource(_fetch_bulk_osint)
     assert '"source": _bulk_source_id(name)' in src, (
         "the importer must build its source through the same helper the "
         "coverage ratio reads, or the two drift apart unnoticed")
+    assert '"source": _bulk_source_id(_MALTRAIL_SOURCE)' in src, (
+        "the family trails must build their source through the same helper too")

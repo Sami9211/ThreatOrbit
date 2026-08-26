@@ -230,6 +230,41 @@ _CVE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.I)
 _HASH = re.compile(r"^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$", re.I)
 
 
+def strip_port(value: str) -> str:
+    """`host:port` names the same host. Return the host.
+
+    Maltrail's family trails list C2s as `66.210.228.178:443`, and several list
+    the same address on two or three ports. Stored verbatim that is not an IP
+    address: `ip_hex` cannot be derived from it, so it gets no subnet and no BGP
+    pivot, and - the part that actually matters - it can never equal the
+    `src_ip` or `dest_ip` of an event, so the whole threat-intel matching path
+    is structurally unable to fire on it. Measured on one real import: 77,920
+    indicators typed `ip`, every one of them with a null `ip_hex`.
+
+    It also triples the store. One address on three ports was three indicators
+    of the same thing.
+
+    IPv6 is why the rule is "exactly one colon, digits after it" rather than
+    "split on the first colon": an IPv6 address IS colons. A URL is exempt for
+    the same reason in reverse - its colon belongs to the scheme.
+    """
+    v = (value or "").strip()
+    if not v or "://" in v or v.startswith(("http", "/")):
+        return v
+    head, sep, tail = v.partition(":")
+    if not sep or not head:
+        return v
+    if tail.isdigit():                       # host:port - the common case
+        return head
+    # `1.2.3.4:33:1099` - three of these are in the Cobalt Strike trail, an
+    # address with two ports on it. More than one colon usually means IPv6, so
+    # the extra condition is that the head is ITSELF a complete address and
+    # everything after it is only ports.
+    if _IPV4.match(head) and all(part.isdigit() for part in tail.split(":") if part != ""):
+        return head
+    return v
+
+
 def guess_type(value: str) -> str | None:
     """Infer an IOC type from the raw value; None if not importable."""
     v = value.strip()
@@ -701,13 +736,13 @@ def import_indicators(indicators: list[dict], source: str,
     lock hold, while preserving exact counts and the *per-run* critical-alert cap
     (the alert budget is shared across sub-batches, not reset each chunk)."""
     totals = {"imported": 0, "duplicates": 0, "skipped": 0,
-              "total": len(indicators), "alertsRaised": 0}
+              "total": len(indicators), "alertsRaised": 0, "attributed": 0}
     budget = _MAX_INTEL_ALERTS_PER_RUN
     for i in range(0, len(indicators), _IMPORT_BATCH):
         chunk = indicators[i:i + _IMPORT_BATCH]
         r = _import(chunk, source, alert_budget=budget)
-        for k in ("imported", "duplicates", "skipped", "alertsRaised"):
-            totals[k] += r[k]
+        for k in ("imported", "duplicates", "skipped", "alertsRaised", "attributed"):
+            totals[k] += r.get(k, 0)
         budget -= r["alertsRaised"]
         # Publish progress after every sub-batch so the UI sees counts climb
         # during a large sync instead of one lump at the end.
@@ -778,7 +813,10 @@ def _import(indicators: list[dict], source: str,
     candidates: list[dict] = []
     seen: set[str] = set()
     for ind in indicators:
-        value = (ind.get("value") or "").strip()
+        # Normalise BEFORE the type is inferred, so both the type and the stored
+        # value come from the same clean string. Every connector import funnels
+        # through here, which is why it is the one place worth doing it.
+        value = strip_port(ind.get("value") or "")
         itype = (ind.get("type") or "").strip().lower() or (guess_type(value) or "")
         if not value or itype not in _IOC_TYPES:
             skipped += 1
@@ -796,6 +834,7 @@ def _import(indicators: list[dict], source: str,
             "value": value, "itype": itype, "conf": conf, "severity": severity,
             "threat_type": ind.get("threat_type") or "",
             "actor": ind.get("actor") or "",
+            "malware_family": ind.get("malware_family") or "",
             "source": ind.get("source") or source,
             # Built by ioc_store, which owns the column list and derives host,
             # ip_hex and reg_domain. This site used to spell the INSERT out and
@@ -807,6 +846,7 @@ def _import(indicators: list[dict], source: str,
                 threat_type=ind.get("threat_type") or "malicious-activity",
                 confidence=conf, severity=severity,
                 source=ind.get("source") or source, actor=ind.get("actor") or "",
+                malware_family=ind.get("malware_family") or "",
                 first_seen=ind.get("first_seen") or now,
                 last_seen=ind.get("last_seen") or now,
                 tags=ind.get("tags") or [], report_id=ind.get("report_id")),
@@ -814,21 +854,28 @@ def _import(indicators: list[dict], source: str,
 
     if not candidates:
         return {"imported": 0, "duplicates": duplicates, "skipped": skipped,
-                "total": len(indicators), "alertsRaised": 0}
+                "total": len(indicators), "alertsRaised": 0, "attributed": 0}
 
     with get_conn() as conn:
         # 2. Bulk existence check - chunked so each query stays within the bound
         #    variable ceiling. `row["value"]` reads on both sqlite3.Row and the
         #    Postgres row wrapper.
         existing: set[str] = set()
+        # Values already in the store that nobody has attributed yet. Read in the
+        # SAME round trips as the existence probe, because it is the same rows -
+        # asking twice would double the only part of an import that is not bulk.
+        unattributed: set[str] = set()
         values = [c["value"] for c in candidates]
         for i in range(0, len(values), _EXISTS_CHUNK):
             part = values[i:i + _EXISTS_CHUNK]
             placeholders = ",".join("?" * len(part))
             rows = conn.execute(
-                f"SELECT value FROM iocs WHERE value IN ({placeholders})", tuple(part)
-            ).fetchall()
-            existing.update(r["value"] for r in rows)
+                f"SELECT value, malware_family FROM iocs WHERE value IN ({placeholders})",
+                tuple(part)).fetchall()
+            for r in rows:
+                existing.add(r["value"])
+                if not (r["malware_family"] or ""):
+                    unattributed.add(r["value"])
 
         # 3. Record WHICH source asserted each value - for every candidate, not
         #    just the new ones. A value already in the store because feed A
@@ -837,7 +884,32 @@ def _import(indicators: list[dict], source: str,
         #    produced one opinion. This is the only place that fact exists.
         record_source_assertions(conn, candidates, now)
 
-        # 4. Everything not already present is new - bulk INSERT it in one call.
+        # 4. A value we already hold, that we now know the family of, gets it.
+        #    Without this the whole point of the family trails is lost on any
+        #    store that already holds the value: `_import` inserts new rows and
+        #    counts everything else as a duplicate, so the 50,192 Maltrail
+        #    domains imported before attribution existed would have stayed bare
+        #    for ever - the feed would keep re-asserting a family the store kept
+        #    throwing away. Grouped by family so this is a handful of statements,
+        #    not one per indicator, and it only ever fills a blank: a family
+        #    already recorded is never overwritten by another source's guess.
+        attributed = 0
+        by_family: dict[str, list[str]] = {}
+        for c in candidates:
+            fam = (c.get("malware_family") or "").strip().lower()
+            if fam and c["value"] in unattributed:
+                by_family.setdefault(fam, []).append(c["value"])
+        for fam, vals in by_family.items():
+            for i in range(0, len(vals), _EXISTS_CHUNK):
+                part = vals[i:i + _EXISTS_CHUNK]
+                marks = ",".join("?" * len(part))
+                cur = conn.execute(
+                    f"UPDATE iocs SET malware_family=? WHERE value IN ({marks}) "
+                    "AND (malware_family IS NULL OR malware_family='')",
+                    (fam, *part))
+                attributed += getattr(cur, "rowcount", 0) or 0
+
+        # 5. Everything not already present is new - bulk INSERT it in one call.
         new = [c for c in candidates if c["value"] not in existing]
         duplicates += len(candidates) - len(new)
         if new:
@@ -861,7 +933,8 @@ def _import(indicators: list[dict], source: str,
         conn.commit()
 
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped,
-            "total": len(indicators), "alertsRaised": alerts}
+            "total": len(indicators), "alertsRaised": alerts,
+            "attributed": attributed}
 
 
 # -- Per-kind fetchers (return normalised indicator dicts) -----------------------
@@ -930,7 +1003,10 @@ def _fetch_threat_api(c: dict) -> list[dict]:
             "type": t, "value": it.get("value"),
             "threat_type": it.get("threat_type") or "malicious-activity",
             "confidence": _to_confidence(it.get("confidence")),
-            "actor": it.get("malware_family") or "",
+            # The companion calls this field what it is; this side used to store
+            # it as the actor.
+            "malware_family": it.get("malware_family") or "",
+            "actor": it.get("actor") or "",
             "source": f"threatorbit:{it.get('source') or 'osint'}",
             "tags": list(it.get("tags") or []),
             "first_seen": it.get("first_seen"), "last_seen": it.get("last_seen"),
@@ -1421,9 +1497,6 @@ _BULK_FEEDS = [
     ("Phishing.Database (active links)",
      "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-links-ACTIVE.txt",
      "iplist", "url", 80, "phishing"),
-    ("Maltrail malware domains",
-     "https://raw.githubusercontent.com/stamparm/aux/master/maltrail-malware-domains.txt",
-     "iplist", None, 75, "malware-distribution"),
     ("Blocklist Project (ransomware)",
      "https://raw.githubusercontent.com/blocklistproject/Lists/master/ransomware.txt",
      "hosts", None, 80, "ransomware"),
@@ -1445,6 +1518,101 @@ _BULK_FEEDS = [
 ]
 
 
+# -- Attribution: the same source, one file per malware family -------------------
+#
+# Everything above is a blocklist: a value, and the claim that it is bad. A live
+# store built from those nine reachable feeds measured 0% attributed to a malware
+# family, 0% to an actor and 0% to a report - which is exactly the complaint that
+# a public CTI library holds more than this engine imports. It does, if all we
+# import is values.
+#
+# Maltrail publishes its static trails one file PER FAMILY, so the file an entry
+# appears in is its attribution, straight from the source. That turns "this
+# domain is bad" into "this domain is Emotet infrastructure", which is a
+# different product: it gives an indicator a name to pivot on, a page worth
+# opening, and a reason an analyst can put in a case.
+#
+# This REPLACES the aggregated `maltrail-malware-domains.txt` convenience file
+# that used to be in the list above. Same upstream project, more indicators
+# (IPs and URLs too, not only domains), and every one of them attributed.
+#
+# One `source_id` for all of them, deliberately. Corroboration counts INDEPENDENT
+# sources, and thirty-six files published by one project are one opinion. Giving
+# each family its own id would have manufactured thirty-six-fold agreement out of
+# a single source - the precise error this store already fixed once, when sixteen
+# feeds were producing one opinion because duplicates were dropped instead of
+# recorded.
+_MALTRAIL_SOURCE = "Maltrail malware trails"
+_MALTRAIL_FAMILY_URL = (
+    "https://raw.githubusercontent.com/stamparm/maltrail/master/trails/static/malware/{}.txt")
+
+# family -> (what it DOES, the threat_type that follows from it). The role is
+# public, uncontroversial classification - the kind of thing every vendor write-up
+# of the family agrees on - not a judgement about any individual entry. Families
+# below a few hundred entries are left out: the request costs the same and buys
+# almost nothing.
+_MALWARE_FAMILIES: dict[str, tuple[str, str]] = {
+    # Loaders and botnets - the delivery layer. A hit here usually means an
+    # infection that is about to fetch something worse.
+    "emotet":       ("loader/botnet", "malware-c2"),
+    "trickbot":     ("banking trojan/loader", "malware-c2"),
+    "qakbot":       ("banking trojan/loader", "malware-c2"),
+    "icedid":       ("loader/banking trojan", "malware-c2"),
+    "bazarloader":  ("loader", "malware-c2"),
+    "smokeloader":  ("loader", "malware-c2"),
+    "amadey":       ("loader/botnet", "malware-c2"),
+    "guloader":     ("shellcode loader", "malware-distribution"),
+    "matanbuchus":  ("loader", "malware-c2"),
+    "latrodectus":  ("loader", "malware-c2"),
+    "andromeda":    ("loader/botnet", "malware-c2"),
+    "zloader":      ("loader/banking trojan", "malware-c2"),
+    # Bankers.
+    "dridex":       ("banking trojan", "malware-c2"),
+    "ursnif":       ("banking trojan", "malware-c2"),
+    "gootkit":      ("banking trojan/loader", "malware-c2"),
+    "zeus":         ("banking trojan", "malware-c2"),
+    "danabot":      ("banking trojan/stealer", "malware-c2"),
+    # Remote access trojans - commodity, sold openly, used by everyone from
+    # commodity crews to state actors. Naming the family is useful; naming an
+    # operator from the family alone would be invention.
+    "asyncrat":     ("remote access trojan", "malware-c2"),
+    "remcos":       ("remote access trojan", "malware-c2"),
+    "njrat":        ("remote access trojan", "malware-c2"),
+    "nanocore":     ("remote access trojan", "malware-c2"),
+    "quasarrat":    ("remote access trojan", "malware-c2"),
+    "xworm":        ("remote access trojan", "malware-c2"),
+    # Information stealers.
+    "redline":      ("information stealer", "malware-c2"),
+    "raccoon":      ("information stealer", "malware-c2"),
+    "vidar":        ("information stealer", "malware-c2"),
+    "azorult":      ("information stealer", "malware-c2"),
+    "lokibot":      ("information stealer", "malware-c2"),
+    "formbook":     ("information stealer", "malware-c2"),
+    "agenttesla":   ("information stealer/keylogger", "malware-c2"),
+    "arkei":        ("information stealer", "malware-c2"),
+    # Post-exploitation framework. Commercial software, licensed legitimately by
+    # red teams and cracked by nearly every intrusion set there is - which is why
+    # it is the clearest case for keeping family and actor apart.
+    "cobaltstrike": ("post-exploitation framework", "malware-c2"),
+    # Spam and worm botnets.
+    "tofsee":       ("spam botnet", "botnet-c2"),
+    "necurs":       ("spam botnet", "botnet-c2"),
+    "ramnit":       ("worm/botnet", "malware-c2"),
+}
+
+# Confidence for a family trail. Below the abuse.ch feeds (which carry a
+# reporter and an expiry per entry) and above the undifferentiated aggregations,
+# because the file an entry sits in is a real, specific claim and the project
+# curates them - but no evidence travels with the individual line.
+_FAMILY_CONFIDENCE = 72
+
+
+def family_feeds() -> list[tuple[str, str, str, str]]:
+    """(family, url, role, threat_type) for every tracked family."""
+    return [(f, _MALTRAIL_FAMILY_URL.format(f), role, threat)
+            for f, (role, threat) in _MALWARE_FAMILIES.items()]
+
+
 def _bulk_source_id(name: str) -> str:
     """The `source` (and so `observable_sources.source_id`) a bulk feed writes.
 
@@ -1455,8 +1623,12 @@ def _bulk_source_id(name: str) -> str:
 
 
 def bulk_feed_source_ids() -> set[str]:
-    """Every configured bulk feed's source_id, for coverage questions."""
-    return {_bulk_source_id(f[0]) for f in _BULK_FEEDS}
+    """Every configured bulk feed's source_id, for coverage questions.
+
+    The family trails contribute ONE id however many files they span - see
+    _MALTRAIL_SOURCE - so "how many sources actually contributed?" counts one
+    project once."""
+    return {_bulk_source_id(f[0]) for f in _BULK_FEEDS} | {_bulk_source_id(_MALTRAIL_SOURCE)}
 
 
 # Admiralty reliability, per feed. The score treats this as a MULTIPLIER on
@@ -1508,6 +1680,11 @@ _FEED_RELIABILITY: dict[str, tuple[str, str]] = {
               "criteria and a stated false-positive policy."),
     "Blocklist Project (ransomware)":
         ("C", "Narrow and specific enough that inclusion is itself informative."),
+    "Maltrail malware trails":
+        ("C", "Curated one file per malware family, so the file an entry appears "
+              "in IS its attribution - a specific claim rather than a general "
+              "one. No evidence or expiry travels with the individual line, "
+              "which is what keeps it below the abuse.ch feeds."),
     # -- D, not usually reliable: bulk aggregation with no per-entry provenance.
     #    Useful in volume; a single entry is a weak claim on its own. ---------
     "Phishing.Database (active domains)":
@@ -1515,9 +1692,6 @@ _FEED_RELIABILITY: dict[str, tuple[str, str]] = {
               "'active' is a periodic re-check, not evidence for the entry."),
     "Phishing.Database (active links)":
         ("D", "Same aggregation and the same re-check, at URL granularity."),
-    "Maltrail malware domains":
-        ("D", "A static aggregated list bundled with the tool, without "
-              "per-entry attribution or an expiry."),
     "Marcoux malicious IPs":
         ("D", "A bulk dump compiled from other lists; no provenance survives "
               "the aggregation."),
@@ -1609,19 +1783,81 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
             rows.append({
                 "type": t, "value": value,
                 "threat_type": f"{threat}{f' ({note})' if note else ''}",
-                "confidence": conf, "actor": note or "",
+                "confidence": conf,
+                # Only ThreatFox produces a note here, and what it produces is a
+                # malware family. It used to be written into `actor`, so the
+                # attribution column filled up with the names of commodity tools
+                # and the store reported an adversary it had never identified.
+                "malware_family": note or "",
+                "actor": "",
                 "source": _bulk_source_id(name),
-                "tags": ["osint", "public-feed"],
+                "tags": ["osint", "public-feed"] + ([f"malware:{note.lower()}"] if note else []),
+            })
+        return rows
+
+    def one_family(feed):
+        """One malware-family trail. Same conditional-GET contract as `one`;
+        what differs is that every row comes out ATTRIBUTED - the file is the
+        family, straight from the source, rather than a label we inferred."""
+        family, url, role, threat = feed
+        prev = state.get(url) or {}
+        cond = {}
+        if prev.get("etag"):
+            cond["If-None-Match"] = prev["etag"]
+        if prev.get("last_modified"):
+            cond["If-Modified-Since"] = prev["last_modified"]
+        try:
+            resp = _http_get(url, headers=cond or None, truncate_at=_BULK_FEED_MAX_BYTES)
+            if getattr(resp, "not_modified", False):
+                new_state[url] = prev
+                unchanged.append(family)
+                return []
+            h = getattr(resp, "headers", {}) or {}
+            if h.get("etag") or h.get("last-modified"):
+                new_state[url] = {"etag": h.get("etag"),
+                                  "last_modified": h.get("last-modified")}
+            pairs = _p_iplist(resp.text)
+        except Exception as e:
+            # A family that 404s (renamed or retired upstream) must not cost the
+            # other thirty-five, and must not look like a failed sync.
+            logging.warning("malware family trail %s failed: %s", family, e)
+            new_state[url] = prev
+            return []
+        rows = []
+        for value, _ in pairs:
+            t = guess_type(value)
+            if not t or t not in _IOC_TYPES:
+                continue
+            rows.append({
+                "type": t, "value": value,
+                "threat_type": f"{threat} ({family})",
+                "confidence": _FAMILY_CONFIDENCE,
+                # The family goes in its own field. It is NOT the actor: every
+                # RAT and stealer in this catalogue is sold to whoever pays, and
+                # Cobalt Strike is licensed software. Writing the family into
+                # `actor` - which is what the ThreatFox path used to do - turns a
+                # fact the source published into an attribution nobody can
+                # defend.
+                "malware_family": family,
+                "actor": "",
+                "source": _bulk_source_id(_MALTRAIL_SOURCE),
+                "tags": ["osint", "public-feed", f"malware:{family}", role],
             })
         return rows
 
     out: list[dict] = []
+    families = family_feeds()
     with ThreadPoolExecutor(max_workers=_BULK_WORKERS) as pool:
-        for rows in pool.map(one, _BULK_FEEDS):
+        blocklists = pool.map(one, _BULK_FEEDS)
+        attributed = pool.map(one_family, families)
+        for rows in blocklists:
             out.extend(rows)
+        for rows in attributed:
+            out.extend(rows)
+    total_feeds = len(_BULK_FEEDS) + len(families)
     if unchanged:
         logging.info("bulk OSINT: %d/%d feeds unchanged since last sync (%s)",
-                     len(unchanged), len(_BULK_FEEDS), ", ".join(unchanged))
+                     len(unchanged), total_feeds, ", ".join(unchanged))
     # Hand the refreshed validators back so run_connector can persist them.
     _fetch_bulk_osint.last_state = new_state
     return out

@@ -321,7 +321,12 @@ def test_import_uses_bounded_round_trips_not_per_row(monkeypatch):
             s = " ".join(sql.split()).upper()
             if s.startswith("INSERT INTO IOCS"):
                 calls["execute_insert"] += 1        # per-row insert = the regression
-            elif s.startswith("SELECT VALUE FROM IOCS WHERE VALUE IN"):
+            elif s.startswith("SELECT VALUE") and "FROM IOCS WHERE VALUE IN" in s:
+                # The probe reads the malware family in the same trip now (a
+                # value already held, that a family trail names, has to be able
+                # to gain that family) - which is one more column, not one more
+                # round trip. Matching the prefix rather than the exact column
+                # list is what keeps this test about round trips.
                 calls["existence_probe"] += 1
             return self._inner.execute(sql, params)
 
@@ -754,7 +759,10 @@ def test_bulk_osint_is_parallel_and_survives_a_dead_feed(monkeypatch):
     monkeypatch.setattr(conn_mod, "_http_get", fake_get)
     out = conn_mod._fetch_bulk_osint({})
 
-    assert len(calls) == len(conn_mod._BULK_FEEDS), "every feed must be attempted"
+    # Blocklists AND the per-family attribution trails: both go through this
+    # aggregator, and a family that 404s upstream must cost only itself.
+    expected = len(conn_mod._BULK_FEEDS) + len(conn_mod.family_feeds())
+    assert len(calls) == expected, "every feed must be attempted"
     values = {o["value"] for o in out}
     assert "203.0.113.9" in values and "http://bad.test/x.exe" in values
     assert "198.51.100.7" in values
@@ -826,7 +834,8 @@ def test_bulk_osint_uses_conditional_fetch_and_skips_unchanged_feeds(monkeypatch
     assert first, "first sync must import"
     assert all(h in (None, {}) for h in seen_headers.values()), "no validators on a cold sync"
     state = conn_mod._fetch_bulk_osint.last_state
-    assert len(state) == len(conn_mod._BULK_FEEDS), "every feed must record its validator"
+    assert len(state) == len(conn_mod._BULK_FEEDS) + len(conn_mod.family_feeds()), \
+        "every feed must record its validator"
 
     # --- second sync: state present -> conditional request -> 304 -> no work ---
     conditional = {}
@@ -852,6 +861,9 @@ def test_bulk_osint_keeps_state_when_a_feed_errors(monkeypatch):
         def __init__(self): self.text = "203.0.113.5\n"; self.not_modified = False; self.headers = {}
 
     good = {u: {"etag": '"keep-me"'} for (_n, u, *_r) in conn_mod._BULK_FEEDS}
+    # The family trails carry validators too, and losing one of theirs means the
+    # next sync re-downloads a family for nothing.
+    good.update({u: {"etag": '"keep-me"'} for (_f, u, *_r) in conn_mod.family_feeds()})
 
     def flaky(url, headers=None, **kw):
         raise ValueError("temporary upstream failure")

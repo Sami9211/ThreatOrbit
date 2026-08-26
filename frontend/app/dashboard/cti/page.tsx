@@ -513,15 +513,39 @@ function NormalCTI() {
                 have been imported.
               </p>
               <p className="text-ink-600 leading-relaxed">
-                That is expected from blocklist sources: they publish indicator values without
-                attributing them, so no actor or campaign context comes with them. Attribution
-                arrives with report-shaped feeds — connect AlienVault OTX or a TAXII collection
-                under{' '}
+                A brief is about ADVERSARIES, and blocklists name none: they publish a value and
+                the claim that it is bad. Naming who is behind it needs report-shaped feeds —
+                connect AlienVault OTX or a TAXII collection under{' '}
                 <Link href="/dashboard/feeds/sources" className="text-magenta hover:underline">
                   Feeds → Sources
                 </Link>{' '}
                 and pulses will populate this brief.
               </p>
+              {/* "No attribution comes with this data" stopped being true the
+                  day the malware-family trails landed. Telling an analyst there
+                  is nothing to work with when a third of the store is named is
+                  worse than saying nothing at all. */}
+              {(sum?.attributedToFamily ?? 0) > 0 && (
+                <p className="text-ink-600 leading-relaxed">
+                  You are not empty-handed in the meantime:{' '}
+                  <b className="text-ink-300">{(sum?.attributedToFamily ?? 0).toLocaleString()}</b>{' '}
+                  of those indicators carry the malware family a source named for them, which is
+                  enough to pivot on and enough to put in a case.
+                  {(sum?.topFamilies ?? []).length > 0 && (
+                    <>
+                      {' '}Most of it is{' '}
+                      {(sum?.topFamilies ?? []).map((f, i, arr) => (
+                        <span key={f.family}>
+                          <Link href={`/dashboard/feeds?family=${encodeURIComponent(f.family)}`}
+                            className="text-magenta hover:underline capitalize">{f.family}</Link>
+                          {' '}({f.count.toLocaleString()})
+                          {i < arr.length - 2 ? ', ' : i === arr.length - 2 ? ' and ' : '.'}
+                        </span>
+                      ))}
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-xs text-ink-500">
