@@ -33,8 +33,18 @@ export function useLiveStream(onEvent?: (e: LiveEvent) => void) {
     }
 
     // Named events the server emits, plus the default (unnamed) channel.
+    // The server sends NAMED SSE events (`event: <type>`), and EventSource only
+    // delivers a named event to a listener registered for that exact name -
+    // onmessage never sees it. So a new server event is invisible to every page
+    // until its name is added here.
+    // Two of these were missing until a guard went looking: `playbook.failed`
+    // and `darkweb.takedown` were dispatched by the server, delivered to webhook
+    // subscribers, and dropped on the floor by every browser - a playbook
+    // failing is exactly the thing a live console should not learn about on its
+    // next poll. test_live_events.py now fails if a published name is absent.
     const NAMED = ['notification', 'tick', 'alert.created', 'case.created',
-      'incident.resolved', 'ioc.confirmed', 'playbook.completed', 'playbook.action']
+      'incident.resolved', 'ioc.confirmed', 'playbook.completed', 'playbook.action',
+      'playbook.failed', 'darkweb.takedown', 'connector.work']
 
     // Each connect mints a FRESH single-use ticket (so a reconnect can't reuse a
     // consumed one), then opens the EventSource with it.

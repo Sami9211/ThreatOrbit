@@ -269,8 +269,11 @@ export default function TopBar() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-ink-200 truncate">{n.title}</p>
-                            <p className="text-[10px] text-ink-600 font-mono mt-0.5 capitalize">
-                              {n.type} · {relTime(n.ts)}
+                            {/* `capitalize` on the whole line also capitalised
+                                the relative time - "3m Ago". Only the type is a
+                                label that wants a capital. */}
+                            <p className="text-[10px] text-ink-600 font-mono mt-0.5">
+                              <span className="capitalize">{n.type}</span> · {relTime(n.ts)}
                               {/* A rolled-up row stands for several events. Say
                                   how many, so "3 critical alerts" is visibly a
                                   bucket and not one oddly-worded alert. */}

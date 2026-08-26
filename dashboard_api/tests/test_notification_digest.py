@@ -24,6 +24,32 @@ from dashboard_api.detections import _insert_alert, _worth_interrupting, alert_f
 from dashboard_api.routers.platform import notify
 
 
+@pytest.fixture(autouse=True)
+def _no_residue():
+    """Undo every alert and notification these tests raise.
+
+    The suite shares one database for the whole session, so a test that leaves
+    rows behind is a test that can fail a different file. This one did: the
+    feed-listing test raises an alert on a random 198.51.100.x address, and one
+    run in a couple of hundred picks the exact address
+    `test_scan_context_surfaces_real_relations` asserts it can see exactly one
+    alert for. Cleaning up by name would not have caught that - it is the row
+    existing at all that does the damage - so this snapshots the ids and removes
+    whatever is new.
+    """
+    with get_conn() as conn:
+        alerts = {r["id"] for r in conn.execute("SELECT id FROM alerts").fetchall()}
+        notes = {r["id"] for r in conn.execute("SELECT id FROM notifications").fetchall()}
+    yield
+    with get_conn() as conn:
+        for table, before in (("alerts", alerts), ("notifications", notes)):
+            rows = conn.execute(f"SELECT id FROM {table}").fetchall()
+            for r in rows:
+                if r["id"] not in before:
+                    conn.execute(f"DELETE FROM {table} WHERE id=?", (r["id"],))
+        conn.commit()
+
+
 def _bell(client, auth, limit=30):
     return client.get(f"/notifications?limit={limit}", headers=auth).json()["items"]
 

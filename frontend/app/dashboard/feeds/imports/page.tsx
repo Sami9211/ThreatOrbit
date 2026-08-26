@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   Download, RefreshCw, Loader2, Database, Activity, CheckCircle,
@@ -9,6 +9,7 @@ import {
 import { cn, isSimulatedSource } from '@/lib/utils'
 import { SEVERITY_COLOR as SEV_COLOR } from '@/lib/colors'
 import { usePermissions } from '@/lib/usePermissions'
+import { useLiveStream } from '@/lib/useLiveStream'
 import {
   fetchConnectors, runConnector, patchConnector, fetchEngineStatus, fetchJobs, fetchIocs,
   fetchConnectorWorks,
@@ -190,7 +191,16 @@ export default function ImportsPage() {
   const [recent, setRecent] = useState<Ioc[] | null>(null)
   const [works, setWorks] = useState<ConnectorWork[] | null>(null)
 
+  // Refs, not state: a push arriving every few milliseconds during a large sync
+  // must not re-create the reconcile timer on every event, which would leave a
+  // timer that is always restarted and therefore never fires.
+  const lastPush = useRef<number | null>(null)
+  const worksRef = useRef<ConnectorWork[]>([])
+  const lastLoad = useRef<number>(0)
+  const refetch = useRef<number | null>(null)
+
   const load = useCallback(() => {
+    lastLoad.current = Date.now()
     fetchConnectors().then(setConnectors).catch(() => setConnectors([]))
     fetchEngineStatus().then(setEngine).catch(() => setEngine(null))
     fetchJobs(15).then(setJobs).catch(() => setJobs([]))
@@ -202,14 +212,56 @@ export default function ImportsPage() {
   }, [])
 
   const importing = (works ?? []).some((w) => w.status === 'running')
+
+  // Live push. The server emits `connector.work` when a run opens, after every
+  // sub-batch, and when it closes, so a sync that moves thousands of indicators
+  // a second is rendered by the import itself rather than by a timer that
+  // happens to fire near it.
+  // The merge reads and writes `worksRef`, not the state value. A functional
+  // setState updater is not guaranteed to run synchronously, so anything decided
+  // inside one is not available to the line after it - and two events arriving
+  // in the same tick would both merge against the same stale list.
+  useEffect(() => { worksRef.current = works ?? [] }, [works])
+  useLiveStream((e) => {
+    if (e.type !== 'connector.work') return
+    const w = e.data as unknown as ConnectorWork
+    if (!w?.id) return
+    lastPush.current = Date.now()
+    const list = worksRef.current
+    const i = list.findIndex((x) => x.id === w.id)
+    const known = i >= 0 && list[i].status === w.status
+    const merged = (i >= 0 ? [...list.slice(0, i), w, ...list.slice(i + 1)] : [w, ...list])
+      // Running first, then newest - the order the REST listing returns.
+      .sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1)
+        || (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
+      .slice(0, 12)
+    worksRef.current = merged
+    setWorks(merged)
+    // A running row advancing is handled entirely by that merge: no request,
+    // however fast the counters move. A run APPEARING or CLOSING changes the
+    // shape of the list, and the server owns that shape - it folds consecutive
+    // no-change polls into one row and trims the history - so reconcile shortly
+    // after, debounced so a burst of closes costs one fetch.
+    if (known) return
+    if (refetch.current) window.clearTimeout(refetch.current)
+    refetch.current = window.setTimeout(load, 1500)
+  })
+
   useEffect(() => {
     load()
-    // A live import moves thousands of indicators a second; polling it every 15s
-    // renders as a frozen bar. Tighten the loop only while one is in flight, so
-    // an idle dashboard still costs one request per 15s.
-    const t = window.setInterval(load, importing ? 2000 : 15000)
+    // The safety net, not the mechanism. It ticks every second and only fetches
+    // when one is actually due: 30s while the stream is delivering (enough to
+    // catch anything a dropped event missed), and otherwise the old timer,
+    // because a page that works only when SSE is available is a page that
+    // sometimes does not work.
+    const t = window.setInterval(() => {
+      const streaming = lastPush.current !== null && Date.now() - lastPush.current < 30_000
+      const every = streaming ? 30_000 : importing ? 2000 : 15000
+      if (Date.now() - lastLoad.current >= every) load()
+    }, 1000)
     return () => window.clearInterval(t)
   }, [load, importing])
+  useEffect(() => () => { if (refetch.current) window.clearTimeout(refetch.current) }, [])
 
   const totalIndicators = (connectors ?? []).reduce((n, c) => n + c.indicatorCount, 0)
   // Import-centric health, all derived from real connector state.
@@ -238,6 +290,15 @@ export default function ImportsPage() {
     .filter((w) => w.status === 'running')
     .reduce((n, w) => n + (w.ratePerSec ?? 0), 0)
   const importedToday = (works ?? []).reduce((n, w) => n + (w.imported ?? 0), 0)
+  // Ingestion backlog: indicators fetched but not yet through the store, summed
+  // across everything currently running. This is the queue depth that belongs on
+  // an imports screen - the DETECTION queue was here once and read as broken
+  // ("Processing queue 0") while intel was arriving normally. Only meaningful
+  // for a run that told us how much it expected, so a feed of unknown size
+  // contributes nothing rather than a guess.
+  const queued = (works ?? [])
+    .filter((w) => w.status === 'running' && (w.expected ?? 0) > 0)
+    .reduce((n, w) => n + Math.max(0, (w.expected ?? 0) - (w.processed ?? 0)), 0)
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#0A0612]">
@@ -286,7 +347,10 @@ export default function ImportsPage() {
             // the useful fact at that moment.
             importing
               ? { label: 'Import rate', value: `${Math.round(liveRate).toLocaleString()}/s`,
-                  sub: 'across running syncs', icon: Gauge, color: 'text-violet' }
+                  sub: queued > 0
+                    ? `${queued.toLocaleString()} still queued`
+                    : 'across running syncs',
+                  icon: Gauge, color: 'text-violet' }
               : { label: 'Next sync in', value: nextSyncIn !== null ? `${nextSyncIn}s` : '—',
                   sub: 'soonest connector cadence', icon: Gauge, color: 'text-teal' },
             { label: 'Total indicators', value: totalIndicators.toLocaleString(),

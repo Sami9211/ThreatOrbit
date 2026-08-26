@@ -553,6 +553,75 @@ def _now_precise() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def work_view(w: dict) -> dict:
+    """Derive the fields an operator reads from a stored work row.
+
+    Lives here rather than in the router because the live stream publishes the
+    same shape the REST listing returns: a console that merges a pushed work
+    into its table must not have to compute percent and rate differently from
+    the way the server does, or the bar jumps every time the two disagree.
+    """
+    exp = w.get("expected") or 0
+    proc = w.get("processed") or 0
+    # 100% must mean "got through all of it". A failed sync that never fetched
+    # anything was reported as 100 (there was nothing expected, and it was not
+    # running), which the pipeline view drew as a FULL bar in red - reading as
+    # "finished" for a run that did nothing at all.
+    if exp:
+        w["percent"] = round(min(100, proc / exp * 100))
+    else:
+        w["percent"] = 100 if w.get("status") == "completed" else 0
+    # Live throughput, so a slow feed is visibly slow rather than just
+    # "running". Reported only when it is actually measurable: no processed
+    # indicators, or no elapsed time to divide by, means we have no rate - and
+    # null is honest where an invented number is not.
+    w["ratePerSec"] = None
+    try:
+        secs = (datetime.fromisoformat(w["updated_at"])
+                - datetime.fromisoformat(w["started_at"])).total_seconds()
+        if proc > 0 and secs > 0:
+            w["ratePerSec"] = round(proc / secs, 1)
+    except (ValueError, TypeError, KeyError):
+        pass
+    # A completed run that brought in nothing new is a poll, not an event.
+    w["noop"] = bool(w.get("status") == "completed" and not (w.get("imported") or 0))
+    return w
+
+
+def _publish_work(conn, work_id: str) -> None:
+    """Push a work's current state to every live console.
+
+    The imports screen had no push at all: it polled every two seconds while an
+    import was in flight and every fifteen otherwise, so "is it moving?" was
+    answered by a timer rather than by the import. A sync that finishes between
+    ticks reads as frozen and then jumps.
+
+    The payload is camelCase because SSE data reaches the browser as raw JSON -
+    only `api()` responses pass through toCamel() - so a pushed work and a
+    fetched one have to arrive already agreeing on their field names.
+
+    Best-effort: telling somebody about an import must never be able to fail one.
+    """
+    try:
+        row = conn.execute(
+            "SELECT * FROM connector_works WHERE id=?", (work_id,)).fetchone()
+        if row is None:
+            return
+        w = work_view(dict(row))
+        from dashboard_api.events_stream import publish
+        publish("connector.work", {
+            "id": w["id"], "connectorId": w.get("connector_id"),
+            "connector": w.get("connector"), "status": w.get("status"),
+            "expected": w.get("expected") or 0, "processed": w.get("processed") or 0,
+            "imported": w.get("imported") or 0, "duplicates": w.get("duplicates") or 0,
+            "skipped": w.get("skipped") or 0, "message": w.get("message"),
+            "startedAt": w.get("started_at"), "updatedAt": w.get("updated_at"),
+            "percent": w["percent"], "ratePerSec": w["ratePerSec"], "noop": w["noop"],
+        })
+    except Exception:
+        logging.debug("work publish failed for %s", work_id, exc_info=True)
+
+
 def start_work(connector: str, connector_id: str | None, expected: int) -> str:
     """Open an in-flight work record for a sync (OpenCTI's "work" concept).
 
@@ -568,6 +637,7 @@ def start_work(connector: str, connector_id: str | None, expected: int) -> str:
             "VALUES (?,?,?, 'running', ?,0,0,0,0,?,?)",
             (wid, connector_id, connector[:120], max(0, expected), now, now))
         conn.commit()
+        _publish_work(conn, wid)
     return wid
 
 
@@ -586,6 +656,7 @@ def update_work(work_id: str, **counts) -> None:
                 "WHERE id=?",
                 (*[int(counts[f]) for f in fields], _now_precise(), work_id))
             conn.commit()
+            _publish_work(conn, work_id)
     except Exception:
         logging.debug("work progress update failed", exc_info=True)
 
@@ -615,6 +686,7 @@ def finish_work(work_id: str, status: str, message: str | None = None, **counts)
             trim_history(conn, "connector_works", HISTORY_KEEP_WORKS, "started_at",
                          protect="status='running'")
             conn.commit()
+            _publish_work(conn, work_id)
     except Exception:
         logging.debug("work finalisation failed", exc_info=True)
 

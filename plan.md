@@ -1313,8 +1313,33 @@ remedy for a wrong stored ETag was deleting and recreating the connector.
 `running` status; **note that pause itself already existed in the UI via PATCH**,
 so what is new there is the audit trail and the stuck-status recovery.
 
-Still open in this phase: pushing updates over SSE instead of polling, and queue
-depth / promoted-vs-observed counters in the header.
+**Status (2026-08-26): SSE push is DONE; the promoted-vs-observed counter is
+not, and cannot be until Phase 1 lands.**
+`start_work`, `update_work` and `finish_work` now publish `connector.work` over
+the existing stream, carrying the same shape (and the same camelCase) the REST
+listing returns - derived through one shared `work_view`, so a pushed row and a
+fetched one cannot disagree about percent or rate. The imports screen merges a
+running row in place with no request at all, and reconciles with a debounced
+fetch only when a run APPEARS or CLOSES, because the server owns list shape (it
+folds consecutive no-change polls and trims history). The old timer remains as a
+safety net, not the mechanism: a page that works only when SSE is available is a
+page that sometimes does not work.
+
+Measured in a browser against a real 157,478-indicator sync: 36 pushed events,
+4 REST calls, live rate 11,426/s on screen.
+
+Registering the event name turned out to matter more than sending it -
+EventSource only delivers a NAMED event to a listener for that exact name, and
+`playbook.failed` and `darkweb.takedown` had been dispatched to webhook
+subscribers and dropped by every browser since they were added.
+`test_live_events.py` now fails if a published name has no client listener, or
+if the client listens for one nothing emits.
+
+Queue depth is on the header as the ingestion backlog (indicators fetched but
+not yet stored, across running runs); the DETECTION queue deliberately stays off
+this page, where it once read "Processing queue 0" while intel was arriving
+normally. Observables-vs-promoted needs the Phase 1 split, so it is not counted
+rather than guessed.
 
 ---
 

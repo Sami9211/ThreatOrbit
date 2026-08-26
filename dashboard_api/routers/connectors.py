@@ -110,32 +110,11 @@ def list_works(limit: int = 20, _: dict = Depends(current_user)):
             "SELECT * FROM connector_works "
             "ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, started_at DESC "
             "LIMIT ?", (max(1, min(limit, 100)),)).fetchall()
-    works = rows_to_dicts(rows)
-    for w in works:
-        exp = w.get("expected") or 0
-        proc = w.get("processed") or 0
-        # 100% must mean "got through all of it". A failed sync that never
-        # fetched anything was reported as 100 (there was nothing expected, and
-        # it was not running), which the pipeline view drew as a FULL bar in red
-        # - reading as "finished" for a run that did nothing at all.
-        if exp:
-            w["percent"] = round(min(100, proc / exp * 100))
-        else:
-            w["percent"] = 100 if w["status"] == "completed" else 0
-        # Live throughput, so a slow feed is visibly slow rather than just
-        # "running". Reported only when it is actually measurable: no processed
-        # indicators, or no elapsed time to divide by, means we have no rate -
-        # and null is honest where an invented number is not.
-        w["ratePerSec"] = None
-        try:
-            secs = (datetime.fromisoformat(w["updated_at"])
-                    - datetime.fromisoformat(w["started_at"])).total_seconds()
-            if proc > 0 and secs > 0:
-                w["ratePerSec"] = round(proc / secs, 1)
-        except (ValueError, TypeError):
-            pass
-        # A completed run that brought in nothing new is a poll, not an event.
-        w["noop"] = bool(w["status"] == "completed" and not (w.get("imported") or 0))
+    # Derived in connectors.work_view, which the live stream also uses: a console
+    # that merges a pushed work into this table must not compute percent and
+    # rate differently from the way the server does.
+    from dashboard_api.connectors import work_view
+    works = [work_view(w) for w in rows_to_dicts(rows)]
     return _collapse_noops(works)
 
 
