@@ -419,28 +419,29 @@ def _seed_iocs(conn, rng, actors):
         )
 
 
-def _seed_feeds(conn, rng):
-    feeds = [
-        ("AlienVault OTX", "AT&T", "opensource", "otx.alienvault.com/api/v1", "A"),
-        ("abuse.ch MalwareBazaar", "abuse.ch", "community", "mb-api.abuse.ch/api/v1", "A"),
-        ("MISP OSINT", "CIRCL", "opensource", "circl.lu/doc/misp/feed-osint", "B"),
-        ("Recorded Future", "Recorded Future", "commercial", "api.recordedfuture.com/v2", "A"),
-        ("Mandiant Threat Intel", "Google", "commercial", "api.intelligence.mandiant.com", "A"),
-        ("Shodan Stream", "Shodan", "commercial", "stream.shodan.io", "B"),
-        ("NVD CVE Feed", "NIST", "opensource", "nvd.nist.gov/feeds/json/cve/1.1", "A"),
-        ("Internal Honeypot", "ThreatOrbit", "internal", "internal://honeypot", "A"),
-    ]
-    for name, prov, typ, url, rel in feeds:
-        status = rng.choices(["active", "paused", "error"], weights=[0.78, 0.14, 0.08])[0]
-        conn.execute(
-            "INSERT INTO feeds (id,name,provider,type,status,enabled,indicators,last_sync,"
-            "sync_interval,reliability,url,format) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), name, prov, typ, status, 1 if status != "paused" else 0,
-             rng.randint(500, 250000), _ago(rng, 12), rng.choice([300, 900, 3600, 86400]),
-             rel, url, rng.choice(["STIX 2.1", "JSON", "CSV", "TAXII"])),
-        )
+def _seed_connectors(conn):
+    """The bundled connectors, in demo mode as well as live.
+
+    Demo used to get eight invented vendor rows in the `feeds` table instead -
+    Recorded Future, Mandiant, Shodan - with random indicator counts and random
+    statuses, for a table no fetcher ever read. Two real, keyless, idle
+    connectors are a better demo than eight commercial subscriptions this
+    deployment does not have: they are the same rows a live install gets, they
+    say "never synced" because they have not, and clicking Run actually works.
+    """
+    from dashboard_api.connectors import seed_builtin_connectors
+    # The caller's connection, because `seed` holds the write transaction: a
+    # second connection here waits on a lock the caller will not release until
+    # this returns.
+    seed_builtin_connectors(conn)
 
 
+# `_seed_feeds` is gone with the `feeds` table it wrote to. It invented eight
+# vendor names - Recorded Future, Mandiant, Shodan - with random indicator
+# counts and random statuses, for a table no fetcher ever read. That is a list
+# of premium subscriptions this deployment does not have, presented as
+# configured sources. Demo data may be illustrative; it must not claim
+# commercial relationships. Sources come from `connectors` now, in every mode.
 def _seed_settings(conn):
     defaults = {
         "platform_name": "ThreatOrbit Production",
@@ -492,7 +493,7 @@ def seed(force: bool = False):
         if force:
             for tbl in ("users", "assets", "alerts", "detection_rules", "log_sources",
                         "saved_hunts", "cases", "playbooks", "integrations", "threat_actors",
-                        "iocs", "feeds", "api_keys", "settings", "jobs", "audit_log"):
+                        "iocs", "api_keys", "settings", "jobs", "audit_log"):
                 conn.execute(f"DELETE FROM {tbl}")
 
         analyst_names = _seed_users(conn, rng)
@@ -510,7 +511,7 @@ def seed(force: bool = False):
         # so the Top Threat Actors ranking is real (not a random ioc_count).
         from dashboard_api.threat_actor_library import recompute_actor_activity
         recompute_actor_activity(conn)
-        _seed_feeds(conn, rng)
+        _seed_connectors(conn)
         _seed_hunts(conn, rng)
         _seed_settings(conn)
         # Now that alerts exist, align each asset's risk/status/alert-count with

@@ -634,20 +634,18 @@ CREATE TABLE IF NOT EXISTS ioc_enrichments (
     ts        TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS feeds (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    provider    TEXT,
-    type        TEXT,            -- commercial|opensource|community|internal
-    status      TEXT NOT NULL,   -- active|paused|error
-    enabled     INTEGER NOT NULL DEFAULT 1,
-    indicators  INTEGER NOT NULL DEFAULT 0,
-    last_sync   TEXT,
-    sync_interval INTEGER NOT NULL DEFAULT 3600,
-    reliability TEXT,            -- A|B|C
-    url         TEXT,
-    format      TEXT
-);
+-- The `feeds` table held the same idea as `connectors`, and it was the loser of
+-- the two: a row in it never imported anything. The scheduler reads
+-- `connectors`; nothing has ever read `feeds` to fetch an indicator. So a feed
+-- an operator added reported a reliability grade and a sync interval and did
+-- nothing at all, for ever - and because live mode seeded no rows, the Threat
+-- Feeds page read "from 0 sources · Total IOCs 0" over a store of 315,185.
+--
+-- Dropped rather than left in place. Rows in it were decoration: losing
+-- decoration costs nothing, and continuing to show it as a configured source
+-- costs the operator their trust in the page. /feeds is now a view over
+-- connectors (see routers/feeds.py).
+DROP TABLE IF EXISTS feeds;
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id         TEXT PRIMARY KEY,
@@ -1243,7 +1241,6 @@ _MIGRATIONS = [
     ("events", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("threat_actors", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("log_sources", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
-    ("feeds", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("connectors", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("playbooks", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),
     ("playbook_runs", "org_id", "TEXT NOT NULL DEFAULT 'org-default'"),

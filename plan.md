@@ -1059,9 +1059,9 @@ sightings          (exists) - wire it to the engine and to log ingest.
 **Remove**
 - The `source` free-text column as the source of truth (kept denormalised for
   display only).
-- The `feeds` table. It duplicates `connectors`, is empty in live mode by
-  design, and directly caused the "0 Sources Online" bug. Migrate any rows into
-  `sources` and delete it.
+- ~~The `feeds` table.~~ Removed 2026-08-30. Nothing needed migrating: a row in
+  it never imported anything, so what it held was decoration. See the removal
+  list at the end of this file.
 
 **Done when:** a value listed by 9 feeds shows all 9, the store reports
 observables and indicators separately, and promotion is explainable per indicator.
@@ -1654,15 +1654,32 @@ by more than one source.** A headline count hides that; this does not.
 
 Removal is half the work and usually skipped. Each of these actively costs us:
 
-- [ ] **The `feeds` table** - duplicates `connectors`, empty by design in live
-      mode, caused the "0 Sources Online" front-page bug. (Phase 1)
-      **2026-07-30: the SYMPTOM is fixed, the table is not gone.** `/feeds` and
-      `/feeds/summary` now fall back to `connectors` when the table is empty, and
-      `totalIndicators` is the store's own COUNT rather than a sum of per-source
-      tallies (which double-count anything two feeds both list). The Threat Feeds
-      page had been reading "from 0 sources · No sources configured yet · Total
-      IOCs 0" over a store holding 315,185. The duplicate table still needs
-      removing; this stops it lying in the meantime.
+- [x] **The `feeds` table** - DONE (2026-08-30). It duplicated `connectors` and
+      was the loser of the two: **a row in it never imported anything.** The
+      scheduler reads `connectors`; nothing has ever read `feeds` to fetch an
+      indicator, so a feed an operator added reported a reliability grade and a
+      sync interval and did nothing at all, for ever.
+
+      The 2026-07-30 patch fixed the symptom - `/feeds` fell back to
+      `connectors` when the table was empty, so the page stopped reading "from 0
+      sources · Total IOCs 0" over a store of 315,185 - and left a sharper bug
+      behind: the list then returned CONNECTOR ids while `PATCH /feeds/{id}`
+      still updated the `feeds` table, so **every toggle on the Sources page
+      404'd and the switch flicked back with no error.** Reproduced against a
+      live deployment before removing it: `GET /feeds` returned connector
+      `b687688b…`, `PATCH /feeds/b687688b…` returned 404.
+
+      The routes are a view now. `GET` and `/summary` read connectors, `PATCH`
+      toggles the connector, and `POST` creates one - so "add a feed" finally
+      produces something that fetches, with the declared format choosing the
+      reader and the same SSRF validation the connectors API applies.
+
+      The demo seeder went with it. It invented eight vendor rows - Recorded
+      Future, Mandiant, Shodan - with random indicator counts and random
+      statuses, for a table no fetcher read: a list of commercial subscriptions
+      this deployment does not have, presented as configured sources. Demo now
+      seeds the same two real, keyless connectors a live install gets. They say
+      "never synced" because they have not, and clicking Run actually works.
 - [x] **`_severity_from_confidence`** - conflated two unrelated axes. Removed
       2026-07-29; `connectors.severity_for()` classifies the asserted activity
       instead, and a one-time migration rebuilt the column. (Phase 3)

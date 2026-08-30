@@ -1,5 +1,24 @@
-"""Threat feed routes: list feeds/sources, create, toggle, and a summary."""
-import uuid
+"""Threat feed routes - a view over `connectors`, which is where feeds live.
+
+There used to be a `feeds` table beside `connectors`, holding the same idea
+twice. It was the loser of the two: **a row in it never imported anything.** The
+scheduler reads `connectors`; nothing has ever read `feeds` to fetch an
+indicator. So a "feed" an operator added here appeared in a list, reported a
+reliability grade and a sync interval, and did nothing at all.
+
+Live mode seeded no rows into it, which is how the Threat Feeds page came to
+read "from 0 sources · No sources configured yet · Total IOCs 0" over a store
+holding 315,185 indicators. That was patched by falling back to `connectors`
+when the table was empty - and the patch left a sharper bug behind: the list now
+returned CONNECTOR ids, while `PATCH /feeds/{id}` still updated the `feeds`
+table. Every toggle on that page 404'd and the switch flicked back with no
+error. Reproduced against a live deployment before this change: `GET /feeds`
+returned connector `b687688b…`, `PATCH /feeds/b687688b…` returned 404.
+
+So the table is gone and these routes are a view. `GET` and `/summary` read
+connectors; `PATCH` toggles the connector; `POST` creates one, which is the only
+way a new source has ever actually fetched anything.
+"""
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,11 +26,20 @@ from pydantic import BaseModel
 
 from dashboard_api import tenancy
 from dashboard_api.auth import current_user, require_perm
-from dashboard_api.db import audit, get_conn, row_to_dict, rows_to_dicts
+from dashboard_api.db import audit, get_conn
 
 router = APIRouter(prefix="/feeds", tags=["feeds"], dependencies=[Depends(current_user)])
 
 _FEED_TYPES = {"commercial", "opensource", "community", "internal"}
+
+# A feed's declared format decides which fetcher can actually read it. This is
+# the mapping that turns "add a feed" into a connector that pulls, rather than a
+# row that decorates a list.
+_FORMAT_KIND = {
+    "stix": "stix", "stix 2.1": "stix", "stix 2.0": "stix", "stix2": "stix",
+    "taxii": "taxii", "taxii 2.1": "taxii",
+    "csv": "csv", "json": "json", "misp json": "json", "native": "json",
+}
 
 
 class FeedToggle(BaseModel):
@@ -28,64 +56,40 @@ class FeedCreate(BaseModel):
     reliability: str = "B"
 
 
-@router.get("")
-def list_feeds(type: str | None = None, status: str | None = None,
-               user: dict = Depends(current_user)):
-    clauses, params = [], []
-    # Tenant isolation (same pattern as alerts): active only when flipped on.
-    from dashboard_api import tenancy
-    if tenancy.enforced():
-        clauses.append("org_id=?"); params.append(tenancy.org_of(user))
-    if type:
-        clauses.append("type=?"); params.append(type)
-    if status:
-        clauses.append("status=?"); params.append(status)
-    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    with get_conn() as conn:
-        rows = conn.execute(f"SELECT * FROM feeds {where} ORDER BY indicators DESC", params).fetchall()
-        out = rows_to_dicts(rows)
-        if not out:
-            # The `feeds` table is a vestigial duplicate of `connectors` and is
-            # empty by design in live mode - which is why the Threat Feeds page
-            # read "from 0 sources" and "No sources configured yet" while two
-            # connectors were actively importing 315,185 indicators. Until the
-            # table is removed (see the Phase 1 removal list), report the real
-            # sources rather than an empty list that is simply false.
-            out = _feeds_from_connectors(conn, type_filter=type, status_filter=status)
-    return out
+def _feed_view(r) -> dict:
+    """One connector in the shape this page reads."""
+    status = "active" if (r["enabled"] and r["status"] != "error") else (
+        "error" if r["status"] == "error" else "paused")
+    return {
+        "id": r["id"], "name": r["name"], "provider": r["kind"],
+        # Every connector this platform ships is an open-source feed, and a
+        # bespoke one an operator adds is too as far as this field is concerned.
+        "type": "opensource", "url": r["url"], "format": "native",
+        "enabled": r["enabled"], "status": status,
+        # The connector's own running total: what it HAS imported, not a nominal
+        # daily rate.
+        "indicators": r["indicator_count"] or 0,
+        "last_sync": r["last_run"], "reliability": "B",
+    }
 
 
 def _feeds_from_connectors(conn, *, type_filter=None, status_filter=None) -> list[dict]:
-    """Present configured connectors in the `feeds` response shape.
-
-    Same fields the page already reads, sourced from the table that actually
-    holds the truth. `indicators` is the connector's own running total, which is
-    what it has imported - not a nominal daily rate.
-    """
     rows = conn.execute(
         "SELECT id, name, kind, url, enabled, status, last_run, indicator_count "
         "FROM connectors ORDER BY indicator_count DESC").fetchall()
-    out = []
-    for r in rows:
-        status = "active" if (r["enabled"] and r["status"] != "error") else (
-            "error" if r["status"] == "error" else "paused")
-        if status_filter and status != status_filter:
-            continue
-        # Every connector this platform ships is an open-source feed; a bespoke
-        # one added by an operator is too, as far as this field is concerned.
-        if type_filter and type_filter != "opensource":
-            continue
-        out.append({
-            "id": r["id"], "name": r["name"], "provider": r["kind"],
-            "type": "opensource", "url": r["url"], "format": "native",
-            "enabled": r["enabled"], "status": status,
-            "indicators": r["indicator_count"] or 0,
-            "last_sync": r["last_run"], "reliability": "B",
-            # Flagged so a caller can tell this came from the connector table
-            # rather than from a configured `feeds` row.
-            "derived_from": "connector",
-        })
+    out = [_feed_view(r) for r in rows]
+    if status_filter:
+        out = [f for f in out if f["status"] == status_filter]
+    if type_filter and type_filter != "opensource":
+        out = []
     return out
+
+
+@router.get("")
+def list_feeds(type: str | None = None, status: str | None = None,
+               user: dict = Depends(current_user)):
+    with get_conn() as conn:
+        return _feeds_from_connectors(conn, type_filter=type, status_filter=status)
 
 
 @router.get("/summary")
@@ -95,14 +99,7 @@ def feeds_summary(user: dict = Depends(current_user)):
     midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0,
                                                   microsecond=0).isoformat()
     with get_conn() as conn:
-        rows = conn.execute(
-            f"SELECT status, enabled, indicators, type FROM feeds WHERE 1=1 {sc}", sp).fetchall()
-        derived = []
-        if not rows:
-            # Same reason as list_feeds: the `feeds` table is empty by design in
-            # live mode, so summing it reported "Total IOCs 0" over a store
-            # holding 315,185.
-            derived = _feeds_from_connectors(conn)
+        feeds = _feeds_from_connectors(conn)
         # Real "IOCs today" - indicators first seen since midnight UTC, not a sum
         # of per-feed nominal daily rates.
         new_today = conn.execute(
@@ -113,29 +110,32 @@ def feeds_summary(user: dict = Depends(current_user)):
         # corroboration work is a large and growing share of the store.
         total_indicators = conn.execute(
             f"SELECT COUNT(*) AS n FROM iocs WHERE 1=1 {sc}", sp).fetchone()["n"]
-    if derived:
-        return {
-            "totalFeeds": len(derived),
-            "active": sum(1 for r in derived if r["status"] == "active"),
-            "errored": sum(1 for r in derived if r["status"] == "error"),
-            "totalIndicators": total_indicators,
-            "newToday": new_today,
-            "byType": {"commercial": 0, "opensource": len(derived),
-                       "community": 0, "internal": 0},
-        }
     return {
-        "totalFeeds": len(rows),
-        "active": sum(1 for r in rows if r["status"] == "active"),
-        "errored": sum(1 for r in rows if r["status"] == "error"),
+        "totalFeeds": len(feeds),
+        "active": sum(1 for f in feeds if f["status"] == "active"),
+        "errored": sum(1 for f in feeds if f["status"] == "error"),
         "totalIndicators": total_indicators,
         "newToday": new_today,
-        "byType": {t: sum(1 for r in rows if r["type"] == t)
-                   for t in ("commercial", "opensource", "community", "internal")},
+        "byType": {"commercial": 0, "opensource": len(feeds),
+                   "community": 0, "internal": 0},
     }
 
 
 @router.post("", status_code=201)
 def create_feed(body: FeedCreate, user: dict = Depends(require_perm("connectors.manage"))):
+    """Add a source. Creates a CONNECTOR, because that is what fetches.
+
+    This used to write a `feeds` row, which no fetcher has ever read - so a feed
+    added here reported a reliability grade and a sync interval and imported
+    nothing, for ever. The declared format picks the fetcher; the same SSRF
+    validation the connectors API applies is applied here, because the URL is
+    equally user-supplied whichever door it arrives through.
+    """
+    import uuid
+
+    from dashboard_api.connectors import validate_feed_url
+    from dashboard_api.net_guard import UnsafeUrlError
+
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Feed name is required")
@@ -143,30 +143,59 @@ def create_feed(body: FeedCreate, user: dict = Depends(require_perm("connectors.
         raise HTTPException(status_code=400, detail=f"type must be one of {sorted(_FEED_TYPES)}")
     if body.reliability not in ("A", "B", "C"):
         raise HTTPException(status_code=400, detail="reliability must be A, B or C")
-    fid = str(uuid.uuid4())
+    url = (body.url or "").strip()
+    if not url:
+        raise HTTPException(
+            status_code=400,
+            detail="A feed needs a URL to fetch from - without one there is "
+                   "nothing to import, which is what the old feeds table let "
+                   "you create.")
+    kind = _FORMAT_KIND.get((body.format or "").strip().lower())
+    if not kind:
+        raise HTTPException(
+            status_code=400,
+            detail=f"format must be one of {sorted(set(_FORMAT_KIND))} - it "
+                   f"decides which reader can parse the feed.")
+    try:
+        validate_feed_url(url)
+    except UnsafeUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    cid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO feeds (id,name,provider,type,status,enabled,indicators,last_sync,"
-            "sync_interval,reliability,url,format,org_id) VALUES (?,?,?,?,'active',1,0,NULL,?,?,?,?,?)",
-            (fid, name, body.provider or name, body.type, body.sync_interval,
-             body.reliability, body.url, body.format, tenancy.org_of(user)),
-        )
-        audit(conn, user["email"], "feed.create", fid, f"name={name} type={body.type}")
+            "INSERT INTO connectors (id,name,kind,url,api_key,enabled,interval_minutes,"
+            "interval_seconds,status,indicator_count,created_at,created_by,org_id) "
+            "VALUES (?,?,?,?,'',1,?,?,'idle',0,?,?,?)",
+            (cid, name, kind, url, max(1, body.sync_interval // 60),
+             max(60, body.sync_interval), now, user["email"], tenancy.org_of(user)))
+        audit(conn, user["email"], "feed.create", cid,
+              f"name={name} kind={kind} url={url}")
         conn.commit()
-        row = conn.execute("SELECT * FROM feeds WHERE id=?", (fid,)).fetchone()
-    return row_to_dict(row)
+        row = conn.execute(
+            "SELECT id, name, kind, url, enabled, status, last_run, indicator_count "
+            "FROM connectors WHERE id=?", (cid,)).fetchone()
+    return _feed_view(row)
 
 
 @router.patch("/{feed_id}")
-def toggle_feed(feed_id: str, body: FeedToggle, user: dict = Depends(require_perm("connectors.manage"))):
+def toggle_feed(feed_id: str, body: FeedToggle,
+                user: dict = Depends(require_perm("connectors.manage"))):
+    """Enable or disable a source.
+
+    The id is a connector id, because that is what the list returns. It used to
+    update the `feeds` table, so every toggle on the Sources page 404'd against
+    a live deployment and the switch silently flicked back.
+    """
     with get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE feeds SET enabled=?, status=? WHERE id=?",
-            (1 if body.enabled else 0, "active" if body.enabled else "paused", feed_id),
-        )
-        if cur.rowcount == 0:
+        cur = conn.execute("UPDATE connectors SET enabled=? WHERE id=?",
+                           (1 if body.enabled else 0, feed_id))
+        if not (getattr(cur, "rowcount", 0) or 0):
             raise HTTPException(status_code=404, detail="Feed not found")
         audit(conn, user["email"], "feed.toggle", feed_id, f"enabled={body.enabled}")
         conn.commit()
-        row = conn.execute("SELECT * FROM feeds WHERE id=?", (feed_id,)).fetchone()
-    return row_to_dict(row)
+        row = conn.execute(
+            "SELECT id, name, kind, url, enabled, status, last_run, indicator_count "
+            "FROM connectors WHERE id=?", (feed_id,)).fetchone()
+    return _feed_view(row)

@@ -27,13 +27,11 @@ def kpis(user: dict = Depends(current_user)):
     sc, sp = _scope(user)
     with get_conn() as conn:
         iocs = conn.execute(f"SELECT COUNT(*) FROM iocs WHERE 1=1 {sc}", sp).fetchone()[0]
-        # "Sources online" means every live intel source, which is connectors as
-        # well as feeds - the tile has always said "feeds & connectors active".
-        # Counting only the `feeds` table made it structurally zero in live mode,
-        # which deliberately seeds no feed rows: a deployment pulling 310k
-        # indicators through two working connectors reported "0 Sources Online"
-        # on its front page.
-        feeds = conn.execute(f"SELECT COUNT(*) FROM feeds WHERE status='active' {sc}", sp).fetchone()[0]
+        # "Sources online" is the connectors that are enabled. It used to add a
+        # count from the `feeds` table, which held the same idea and imported
+        # nothing; live mode seeded no rows into it, so a deployment pulling
+        # 310k indicators through two working connectors reported "0 Sources
+        # Online" on its front page. That table is gone.
         connectors = conn.execute(
             f"SELECT COUNT(*) FROM connectors WHERE enabled=1 {sc}", sp).fetchone()[0]
         threats = conn.execute(
@@ -48,7 +46,7 @@ def kpis(user: dict = Depends(current_user)):
     # rendered as 100% prevention: a perfect posture asserted from no data at
     # all. Report how many assets the score is actually based on and let the UI
     # say "not assessed" rather than invent a pass.
-    return {"threats": threats, "iocs": iocs, "sources": feeds + connectors,
+    return {"threats": threats, "iocs": iocs, "sources": connectors,
             "score": org_risk(assets), "assetsAssessed": len(assets)}
 
 

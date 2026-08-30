@@ -46,7 +46,7 @@ MULTI_TENANT = os.environ.get("DASHBOARD_MULTI_TENANT", "false").lower() == "tru
 # column and its list endpoint filters by workspace when enforcement is on.
 TENANT_TABLES = (
     "alerts", "iocs", "cases", "assets", "detection_rules", "events",
-    "dark_web_findings", "threat_actors", "log_sources", "feeds", "connectors",
+    "dark_web_findings", "threat_actors", "log_sources", "connectors",
     "playbooks", "playbook_runs", "saved_hunts", "scans", "suppressions",
     "notifications", "saved_views", "report_schedules", "intel_reports",
 )

@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Tables that a real deployment MUST start empty (no fabricated data).
 _MUST_BE_EMPTY = ["alerts", "cases", "assets", "integrations", "iocs",
-                  "detection_rules", "playbooks", "feeds", "saved_hunts",
+                  "detection_rules", "playbooks", "saved_hunts",
                   "dark_web_findings", "events"]
 
 
@@ -152,7 +152,7 @@ def test_full_live_startup_primes_nothing_fabricated():
     _startup seeds them and should, they are shipped content (logic an analyst
     edits), not claims about what was observed on this network."""
     observed = ["alerts", "cases", "assets", "integrations", "iocs",
-                "feeds", "saved_hunts", "dark_web_findings", "events"]
+                "saved_hunts", "dark_web_findings", "events"]
     db = Path(tempfile.mkdtemp()) / "startup.db"
     script = f"""
 import os, json

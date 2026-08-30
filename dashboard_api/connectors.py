@@ -2086,8 +2086,14 @@ def run_connector(connector: dict, actor: str = "scheduler") -> dict:
         return {"error": msg}
 
 
-def seed_builtin_connectors():
-    """Ensure the bundled connectors exist (idempotent). Called on live boot."""
+def seed_builtin_connectors(conn=None):
+    """Ensure the bundled connectors exist (idempotent).
+
+    Called on live boot, and from the demo seeder - which already holds a write
+    transaction, so it passes its own connection. Opening a second one there
+    deadlocks SQLite ("database is locked"): the outer connection holds the
+    write lock and is itself waiting on this call to return.
+    """
     now = _now()
     builtins = [
         # Keyless + high-volume + no companion dependency: this is what makes a
@@ -2099,18 +2105,25 @@ def seed_builtin_connectors():
         ("ThreatOrbit OSINT Engine", "threatorbit", THREAT_API_URL, 30),
         ("NVD CVE Feed", "nvd", "https://services.nvd.nist.gov/rest/json/cves/2.0", 720),
     ]
-    with get_conn() as conn:
+    def _insert(c):
         for name, kind, url, interval in builtins:
-            exists = conn.execute("SELECT 1 FROM connectors WHERE kind=? AND builtin=1", (kind,)).fetchone()
+            exists = c.execute("SELECT 1 FROM connectors WHERE kind=? AND builtin=1",
+                               (kind,)).fetchone()
             if exists:
                 continue
-            conn.execute(
+            c.execute(
                 "INSERT INTO connectors (id,name,kind,url,api_key,auth_header,enabled,"
                 "interval_minutes,field_map,status,builtin,created_at,created_by) "
                 "VALUES (?,?,?,?,NULL,NULL,1,?, '{}', 'idle',1,?, 'system')",
                 (str(uuid.uuid4()), name, kind, url, interval, now),
             )
-        conn.commit()
+
+    if conn is not None:
+        _insert(conn)          # caller owns the transaction and the commit
+        return
+    with get_conn() as own:
+        _insert(own)
+        own.commit()
 
 
 # Floor on how often a connector may poll. Sub-minute cadence is supported, but
