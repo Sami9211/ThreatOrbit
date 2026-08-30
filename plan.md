@@ -1288,6 +1288,14 @@ used QakBot, and this store holds 7,611 QakBot indicators of which almost none
 are theirs, because several affiliates distributed it. Summing the second into
 the first is how an actor page acquires a large, confident, wrong number.
 
+And nothing was calling the counting. `recompute_actor_activity` was reached
+from exactly one place - the synthetic engine's `process_tick`, which returns
+immediately in live mode - so a live deployment could import 7,997 Emotet
+indicators and its actor pages would sit at zero for ever, reporting that
+nothing was attributed while the attribution was right there. It now runs on the
+live maintenance tick beside decay, which is what turned the Normal-mode threat
+brief from "no actor activity to brief on" into three real cards.
+
 Three empty headings went with it. The live actor library carries no campaign
 records and no pinned indicators, so "Known Campaigns" and "Associated IOCs"
 rendered as bare titles on every actor - and "Recent Activity" printed the

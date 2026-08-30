@@ -172,6 +172,17 @@ def _connector_scheduler():
                     logger.info("IOC lifecycle: %d expired, %d reactivated, %d rescored",
                                 res.get("expired", 0), res.get("reactivated", 0),
                                 res.get("rescored", 0))
+                # Actor activity is derived from the store, and the only thing
+                # that recomputed it was the SYNTHETIC engine's tick - which
+                # returns immediately in live mode. So a live deployment could
+                # import 7,997 Emotet indicators and its actor pages would sit
+                # at zero for ever, saying nothing was attributed while the
+                # attribution was right there. Same slow cadence as decay: it is
+                # thirteen indexed counts, and it is derived state, not an event.
+                from dashboard_api.threat_actor_library import recompute_actor_activity
+                with get_conn() as conn:
+                    recompute_actor_activity(conn)
+                    conn.commit()
             except Exception:
                 logger.exception("IOC lifecycle tick failed")
         # Threat-intel matching over any events nothing has examined yet. The

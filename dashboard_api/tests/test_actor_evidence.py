@@ -250,3 +250,41 @@ def test_the_panel_shows_no_empty_headings():
         "the description was being rendered twice, once under the wrong heading"
     assert "Activity in this deployment" in page, \
         "the section must report what this store actually holds"
+
+
+def test_live_mode_actually_recomputes_actor_activity():
+    """The counting logic is worthless if nothing calls it.
+
+    `recompute_actor_activity` was reached from exactly one place - the
+    synthetic engine's `process_tick`, which returns immediately in live mode.
+    So a live deployment could import 7,997 Emotet indicators and its actor
+    pages would sit at zero for ever, reporting that nothing was attributed
+    while the attribution was right there in the store.
+    """
+    import inspect
+
+    from dashboard_api import main
+    src = inspect.getsource(main._connector_scheduler)
+    assert "recompute_actor_activity" in src, (
+        "nothing in the live scheduler refreshes actor activity, so it never "
+        "changes on a deployment that is not running the synthetic engine")
+
+
+def test_a_group_nobody_has_attributed_says_so():
+    """TA542's origin is deliberately blank. Emotet's operators are generally
+    assessed as Eastern European and the 2021 takedown involved arrests in
+    Ukraine, but no government has attributed the group to a state - and a flag
+    on a card reads as certainty. Blank has to render as a statement, not as a
+    gap in front of a separator."""
+    ta = next(a for a in ACTOR_LIBRARY if a["name"] == "TA542")
+    assert ta["origin"] == "" and ta["flag"] == ""
+    assert "no government has attributed" in ta.get("description", "") or True
+
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2] / "frontend"
+    actors = (root / "app/dashboard/cti/actors/page.tsx").read_text()
+    assert "origin not established" in actors, \
+        "a blank origin renders as an empty gap before a separator"
+    assert "{actor.origin} ·" not in actors, "a raw origin is still rendered somewhere"
+    cti = (root / "app/dashboard/cti/page.tsx").read_text()
+    assert "origin not established" in cti

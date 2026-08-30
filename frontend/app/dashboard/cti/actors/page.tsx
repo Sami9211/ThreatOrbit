@@ -23,6 +23,17 @@ interface Campaign {
   note: string
 }
 
+/** Where a group is FROM, when anybody can say so.
+ *
+ *  Not every group has one. Emotet's operators are generally assessed as
+ *  Eastern European and the 2021 takedown involved arrests in Ukraine, but no
+ *  government has attributed the group to a state - and a flag on a card reads
+ *  as certainty. So the library leaves TA542's origin blank, and blank has to
+ *  render as a statement rather than as a gap before a separator.
+ */
+const originLabel = (origin: string) => origin?.trim() || 'origin not established'
+const originFlag = (flag: string) => flag?.trim() || '🌐'
+
 interface ThreatActor {
   id: string
   name: string
@@ -133,7 +144,7 @@ function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => vo
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-lg leading-none">{actor.flag}</span>
+            <span className="text-lg leading-none">{originFlag(actor.flag)}</span>
             <span className="text-sm font-semibold text-white truncate">{actor.name}</span>
           </div>
           <p className="text-[10px] text-ink-500 mt-1 truncate">{actor.aliases.slice(0, 2).join(' · ')}</p>
@@ -146,7 +157,7 @@ function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => vo
         </span>
       </div>
 
-      <p className="text-[10px] text-ink-500 mt-2">{actor.origin} · {actor.type}</p>
+      <p className="text-[10px] text-ink-500 mt-2">{originLabel(actor.origin)} · {actor.type}</p>
 
       <div className="flex items-center justify-between mt-3">
         <div className="flex flex-wrap gap-1">
@@ -196,7 +207,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
       {/* Header */}
       <div className="p-5 border-b border-white/8 shrink-0">
         <div className="flex items-start gap-3">
-          <span className="text-3xl leading-none">{actor.flag}</span>
+          <span className="text-3xl leading-none">{originFlag(actor.flag)}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-display text-lg font-bold text-white">{actor.name}</h2>
@@ -207,7 +218,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
                 {threat.label} Threat
               </span>
             </div>
-            <p className="text-[10px] text-ink-500 mt-1">{actor.origin} · {actor.type} · since {actor.firstSeen}</p>
+            <p className="text-[10px] text-ink-500 mt-1">{originLabel(actor.origin)} · {actor.type} · since {actor.firstSeen}</p>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {actor.aliases.map((a) => (
                 <span key={a} className="text-[10px] px-1.5 py-0.5 rounded-sm bg-surface-3 text-ink-500 font-mono">{a}</span>
@@ -558,7 +569,7 @@ export default function ActorProfilesPage() {
         name: a.name,
         aliases: Array.isArray(a.aliases) ? a.aliases : [],
         origin: a.origin,
-        flag: a.flag ?? '🌐',
+        flag: a.flag || '🌐',
         type: ((t) => t === 'nation-state' ? 'Nation-State' : t === 'cybercrime' ? 'Cybercrime' : 'Hacktivist')((a.type ?? '').toLowerCase()) as ActorType,
         motivations: (Array.isArray(a.motivations) ? a.motivations : [])
           .filter((m): m is string => typeof m === 'string')
@@ -600,7 +611,9 @@ export default function ActorProfilesPage() {
   }, [summary])
 
   const origins = useMemo(() => {
-    const set = new Set(actors.map((a) => a.origin))
+    // A blank is not a filterable origin - it is the absence of one, and an
+    // empty entry in the dropdown reads as a broken option.
+    const set = new Set(actors.map((a) => a.origin).filter((o) => o.trim()))
     return Array.from(set).sort()
   }, [actors])
   const sectors = useMemo(() => {

@@ -88,11 +88,13 @@ function ActorCard({ actor, selected, onSelect }: { actor: Actor; selected: bool
       <div className="flex items-start justify-between gap-2 mb-2">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-lg leading-none">{actor.flag}</span>
+            <span className="text-lg leading-none">{actor.flag?.trim() || '🌐'}</span>
             <span className="text-sm font-semibold text-white">{actor.name}</span>
             {actor.active && <span className="w-1.5 h-1.5 rounded-full bg-threat animate-pulse" />}
           </div>
-          <p className="text-[10px] text-ink-500 mt-0.5">{actor.type} · {actor.origin}</p>
+          <p className="text-[10px] text-ink-500 mt-0.5">
+            {actor.type} · {actor.origin?.trim() || 'origin not established'}
+          </p>
         </div>
         <ChevronRight className={cn('w-3.5 h-3.5 text-ink-600 transition-transform shrink-0', selected && 'rotate-90 text-magenta')} />
       </div>
@@ -576,9 +578,19 @@ function NormalCTI() {
                     style={{ background: `${SEV_COLOR[sev]}1a`, color: SEV_COLOR[sev] }}>
                     {sev}
                   </span>
-                  <span className="text-[10px] text-ink-600">{b.flag} {b.origin} · {b.type}</span>
+                  {/* An unattributed group renders a blank flag and a leading
+                      separator otherwise - see originLabel on the actors page. */}
+                  <span className="text-[10px] text-ink-600">
+                    {b.flag?.trim() || '🌐'} {b.origin?.trim() || 'origin not established'} · {b.type}
+                  </span>
                 </div>
-                <p className="text-[10px] text-ink-500 mt-0.5">{b.iocCount.toLocaleString()} tracked IOCs · {b.campaigns} campaigns</p>
+                {/* "· 0 campaigns" is true and reads as a deficiency. The live
+                    actor library carries no campaign records at all, so it was
+                    on every card, every time. Say it only when there is one. */}
+                <p className="text-[10px] text-ink-500 mt-0.5">
+                  {b.iocCount.toLocaleString()} tracked IOCs
+                  {b.campaigns > 0 && <> · {b.campaigns} campaigns</>}
+                </p>
               </div>
             </div>
 
