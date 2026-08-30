@@ -1588,8 +1588,35 @@ marginals and all four totals now come from a single `GROUP BY type, severity`,
 because a report window is usually most of the store and no index helps when you
 are reading 99.99% of the rows: **977 ms and 21 MB**.
 
-Still open in this phase: narrative reporting for an outsider (the exec/customer
-document). Scheduled hunts already exist.
+**Narrative reporting for an outsider is DONE (2026-08-30)** - the last item in
+this phase. The "executive" audience had been a truncation and a prefix: it cut
+the findings list to eight and glued "Executive summary -" onto the technical
+narrative, which is the same sentences about alert counts and CVE totals with a
+label on top. An executive or a customer is not reading to triage; they are
+reading to answer three questions - did anything happen to us, did the team
+handle it, and is there anything only I can decide.
+
+`outsider_narrative` answers those in one paragraph each, every clause bound to
+a number it just read, and drops a paragraph rather than padding it when the
+number is zero. It ends on what the reader must decide, or says plainly that
+nothing does.
+
+The first paragraph is the one such reports almost always get wrong: **a quiet
+week and a broken collector produce the same small numbers.** So coverage comes
+first. With no telemetry it says so before anything else, because everything
+after it is then a statement about what we KNOW rather than about what happened
+here. With alerts but no events - a real state, and the one the demo seed
+produces - it names that instead of contradicting itself a paragraph later:
+either retention trimmed the evidence, or alerts arrive from a source that does
+not keep its events here, and until that is settled the volume figures cannot be
+read as coverage.
+
+Attached to every audience so an API consumer can render it, promoted to THE
+narrative only for the executive one, and broken into paragraphs by the UI, the
+Markdown renderer and the HTML renderer - five arguments run together into one
+block is the wall of text an outsider skips.
+
+Scheduled hunts already exist.
 
 ---
 

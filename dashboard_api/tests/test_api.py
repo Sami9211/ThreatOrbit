@@ -1677,7 +1677,12 @@ def test_report_audiences_and_formats(client, auth):
     execr = client.get("/reports/siem?audience=executive", headers=auth).json()
     assert execr["meta"]["audience"] == "executive"
     assert len(execr["findings"]) <= 8
-    assert execr["summary"]["narrative"].startswith("Executive summary")
+    # The narrative is now WRITTEN for that reader rather than prefixed for
+    # them: "Executive summary - " glued onto the technical text was the same
+    # sentences about alert counts with a label on top.
+    assert not execr["summary"]["narrative"].startswith("Executive summary")
+    assert execr["plainNarrative"]
+    assert execr["summary"]["narrative"] == " ".join(execr["plainNarrative"])
 
     # Compliance = adds a control-mapping section.
     comp = client.get("/reports/assets?audience=compliance", headers=auth).json()

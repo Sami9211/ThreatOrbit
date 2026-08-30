@@ -1841,6 +1841,12 @@ export interface ReportData {
   recommendations: string[]
   sections?: string[]
   compliance?: Array<{ control: string; framework: string }>
+  /** The report written for somebody who does not work here, one paragraph per
+   *  question they are actually asking: did we look, did anything happen, did
+   *  the team handle it, what changed in what we know, and what needs YOU.
+   *  Present on every audience; the executive reshaping promotes it to the
+   *  narrative. */
+  plainNarrative?: string[]
 }
 export type ReportAudience = 'technical' | 'executive' | 'compliance'
 export type ReportFormat = 'json' | 'csv' | 'markdown' | 'html'

@@ -629,6 +629,175 @@ _COMPLIANCE_CONTROLS["executive"] = [c for cs in
     ("siem", "soar", "cti", "assets", "darkweb") for c in _COMPLIANCE_CONTROLS[cs]]
 
 
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return one if n == 1 else (many or one + "s")
+
+
+def _period_phrase(label: str) -> str:
+    """"Last 7 days" is a heading, not something you can put after "during".
+
+    A custom window is already a date range and reads fine on its own."""
+    low = label.lower()
+    return f"the {low}" if low.startswith("last ") else low
+
+
+def outsider_narrative(conn, since: str, until: str, label: str) -> list[str]:
+    """The report for somebody who does not work here.
+
+    An executive or a customer is not reading to triage; they are reading to
+    answer three questions - did anything happen to us, did the team handle it,
+    and is there anything only I can decide. The "executive" audience answered
+    none of them: it truncated the findings list and glued "Executive summary -"
+    onto the technical narrative, which is the same sentences about alert counts
+    and CVE totals with a label on top.
+
+    Every clause below is bound to a number this function just read. Nothing is
+    padded when a number is zero - a paragraph with nothing to say is dropped.
+
+    The first paragraph is the one that matters most and is the one such reports
+    almost always get wrong: **a quiet week and a broken collector produce the
+    same small numbers.** So coverage comes first, and if no telemetry arrived,
+    it says so before anything else - because everything after it is then a
+    statement about what we KNOW, not about what happened here.
+    """
+    def one(sql, params=()):
+        row = conn.execute(sql, params).fetchone()
+        return (row[0] if row else 0) or 0
+
+    window = (since, until)
+    paras: list[str] = []
+
+    # 1. Did we look?
+    events = one("SELECT COUNT(*) FROM events WHERE ts BETWEEN ? AND ?", window)
+    sources = one("SELECT COUNT(*) FROM log_sources")
+    quiet = one("SELECT COUNT(*) FROM log_sources WHERE last_event IS NULL OR last_event < ?",
+                (since,))
+    # Read here because it changes what the ABSENCE of events means, not only
+    # what the next paragraph says.
+    alerts = one("SELECT COUNT(*) FROM alerts WHERE ts BETWEEN ? AND ?", window)
+    period = _period_phrase(label)
+    if events:
+        line = (f"Over {period} the platform examined {events:,} "
+                f"{_plural(events, 'event')} from "
+                f"{'the one' if sources == 1 else sources} configured "
+                f"{_plural(sources, 'log source')}")
+        if quiet:
+            line += (f", though {quiet} of those {_plural(quiet, 'source has', 'sources have')} "
+                     f"sent nothing in this window - anything they cover is "
+                     f"outside what follows")
+        paras.append(line + ".")
+    elif alerts:
+        # Alerts without events is a real state and a specific one: something
+        # raised them, so the platform was not blind - but the evidence behind
+        # them is not in the event store for this window. Saying "no telemetry"
+        # here would contradict the next paragraph; saying nothing would hide a
+        # question an operator should be asked.
+        paras.append(
+            f"The event store holds nothing for {period}, although {alerts:,} "
+            f"{_plural(alerts, 'alert is', 'alerts are')} recorded in it. Either the "
+            f"events behind them have been trimmed by retention, or alerts are "
+            f"arriving from a source that does not keep its events here - worth "
+            f"settling, because until it is, the volume figures below cannot be "
+            f"read as coverage.")
+    else:
+        paras.append(
+            f"No telemetry reached the platform during {period}"
+            + (f", from the one configured log source." if sources == 1
+               else f", from any of the {sources} configured log sources." if sources
+               else " - no log sources are configured yet.")
+            + " That is the most important line in this report: it means the "
+              "sections below describe what we KNOW about threats, not what "
+              "happened on your network, and a quiet period cannot be told "
+              "apart from a collector that stopped.")
+
+    # 2. What happened.
+    crit = one("SELECT COUNT(*) FROM alerts WHERE severity='critical' AND ts BETWEEN ? AND ?",
+               window)
+    # The highest-signal number the platform produces: not "a rule fired" but
+    # "traffic of yours reached something we can name".
+    matched = one("SELECT COUNT(*) FROM alerts WHERE ti_value IS NOT NULL AND ti_value <> '' "
+                  "AND ts BETWEEN ? AND ?", window)
+    if alerts:
+        line = (f"{alerts:,} {_plural(alerts, 'alert was', 'alerts were')} raised"
+                + (f", {crit} of them critical" if crit else ", none of them critical"))
+        if matched:
+            line += (f". {matched} {_plural(matched, 'of those was', 'of those were')} raised "
+                     f"because traffic on your network reached an address or name "
+                     f"that threat intelligence already identifies as malicious - "
+                     f"the strongest signal this platform produces, and the only "
+                     f"kind that is about you rather than about the world")
+        else:
+            line += (". None were caused by your own traffic reaching a known-bad "
+                     "address or name; all came from detection rules on the logs "
+                     "themselves")
+        paras.append(line + ".")
+    elif events:
+        paras.append(
+            f"Nothing in those {events:,} {_plural(events, 'event')} matched a detection "
+            f"rule or a known-bad indicator. On this volume of telemetry that is a "
+            f"real quiet period rather than an absence of looking.")
+
+    # 3. What the team did.
+    opened = one("SELECT COUNT(*) FROM cases WHERE created BETWEEN ? AND ?", window)
+    closed = one("SELECT COUNT(*) FROM cases WHERE closed_at BETWEEN ? AND ?", window)
+    open_now = one("SELECT COUNT(*) FROM cases WHERE status NOT IN ('resolved','closed')")
+    runs = one("SELECT COUNT(*) FROM playbook_runs WHERE ts BETWEEN ? AND ?", window)
+    if opened or closed or runs:
+        bits = []
+        if opened:
+            bits.append(f"{opened} {_plural(opened, 'investigation was', 'investigations were')} opened")
+        if closed:
+            bits.append(f"{closed} {_plural(closed, 'was', 'were')} closed with a recorded finding")
+        if runs:
+            bits.append(f"{runs} automated {_plural(runs, 'response ran', 'responses ran')}")
+        line = "; ".join(bits).capitalize()
+        if open_now:
+            line += (f". {open_now} {_plural(open_now, 'case remains', 'cases remain')} open")
+        paras.append(line + ".")
+
+    # 4. What changed in what we know. This is the part a customer is paying
+    #    for even in a week when nothing happened to them.
+    added = one("SELECT COUNT(*) FROM iocs WHERE first_seen BETWEEN ? AND ?", window)
+    total = one("SELECT COUNT(*) FROM iocs")
+    named = one("SELECT COUNT(*) FROM iocs WHERE malware_family IS NOT NULL AND malware_family <> ''")
+    if added or total:
+        line = (f"The intelligence library now holds {total:,} "
+                f"{_plural(total, 'indicator')}")
+        if added and added >= total:
+            # Every row first recorded inside the window means the library was
+            # built or rebuilt here, not that a normal week added half a million.
+            line += ", all of them first recorded in this window"
+        elif added:
+            line += f", {added:,} of them added in this window"
+        if named and total:
+            line += (f". {named:,} ({round(100 * named / total)}%) carry the malware "
+                     f"family a source named for them, so they can be investigated "
+                     f"rather than only blocked")
+        paras.append(line + ".")
+
+    # 5. What only the reader can decide.
+    kev = one("SELECT COUNT(DISTINCT cve) FROM vuln_findings WHERE kev=1 AND status!='resolved'")
+    leaks = one("SELECT COUNT(*) FROM dark_web_findings WHERE category='credential-leak' "
+                "AND ts BETWEEN ? AND ?", window)
+    asks = []
+    if kev:
+        asks.append(f"{kev} {_plural(kev, 'vulnerability', 'vulnerabilities')} on your estate "
+                    f"{_plural(kev, 'is', 'are')} on the US CISA list of flaws known to be "
+                    f"exploited in the wild, and {_plural(kev, 'needs', 'need')} a patching "
+                    f"decision")
+    if leaks:
+        asks.append(f"{leaks} credential {_plural(leaks, 'leak')} affecting your domains "
+                    f"{_plural(leaks, 'was', 'were')} found, and those accounts need resetting")
+    if open_now:
+        asks.append(f"{open_now} open {_plural(open_now, 'investigation')} "
+                    f"{_plural(open_now, 'needs', 'need')} either a conclusion or more time")
+    if asks:
+        paras.append("Needing a decision from you: " + "; ".join(asks) + ".")
+    else:
+        paras.append("Nothing in this window needs a decision from you.")
+    return paras
+
+
 def apply_audience(report: dict, audience: str = "technical") -> dict:
     """Reshape a built report for its reader. Technical = full depth (default);
     Executive = compact (top findings, severity breakdowns, exec framing);
@@ -640,8 +809,14 @@ def apply_audience(report: dict, audience: str = "technical") -> dict:
     if audience == "executive":
         out["findings"] = (report.get("findings") or [])[:8]
         out["breakdowns"] = [b for b in (report.get("breakdowns") or []) if b.get("type") == "severity"][:2]
+        # `plain` is written by build_report, which has the connection this
+        # needs. When it is absent (a caller reshaping a report it built
+        # itself), fall back to the technical narrative rather than inventing
+        # one - a wrong summary for an outsider is worse than a dry one.
+        plain = report.get("plainNarrative")
         nar = report.get("summary", {}).get("narrative", "")
-        out["summary"] = {**report.get("summary", {}), "narrative": "Executive summary - " + nar}
+        out["summary"] = {**report.get("summary", {}),
+                          "narrative": " ".join(plain) if plain else nar}
     elif audience == "compliance":
         kind = report.get("meta", {}).get("kind", "")
         out["compliance"] = _COMPLIANCE_CONTROLS.get(kind, _COMPLIANCE_CONTROLS["executive"])
@@ -660,6 +835,11 @@ def build_report(kind: str, period: str = "weekly",
     since, until, label = _window(period, frm, to)
     with get_conn() as conn:
         report = _BUILDERS[kind](conn, since, until, label)
+        # Built here rather than in apply_audience because it reads the store,
+        # and apply_audience only ever sees a finished dict. Attached to every
+        # report so a caller can render it for any audience; only the executive
+        # reshaping promotes it to THE narrative.
+        report["plainNarrative"] = outsider_narrative(conn, since, until, label)
     return apply_audience(report, audience)
 
 

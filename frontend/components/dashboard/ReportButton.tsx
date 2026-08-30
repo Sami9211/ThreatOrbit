@@ -221,7 +221,19 @@ function ReportBody({ report }: { report: ReportData }) {
             </div>
           ))}
         </div>
-        <p className="text-xs text-ink-300 leading-relaxed">{report.summary.narrative}</p>
+        {/* One paragraph per question the reader is actually asking, rather
+            than five arguments run together - which is the wall of text an
+            outsider skips. Falls back to the single narrative for the audiences
+            that do not have a plain one. */}
+        {report.meta.audience === 'executive' && report.plainNarrative?.length ? (
+          <div className="space-y-2">
+            {report.plainNarrative.map((para, i) => (
+              <p key={i} className="text-xs text-ink-300 leading-relaxed">{para}</p>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-ink-300 leading-relaxed">{report.summary.narrative}</p>
+        )}
       </section>
 
       {/* Breakdowns */}

@@ -67,7 +67,14 @@ def to_markdown(report: dict) -> str:
         out.append("|---|---|")
         out += [f"| {_md_cell(h.get('label', ''))} | {_md_cell(h.get('value', ''))} |" for h in hl]
         out.append("")
-    if summary.get("narrative"):
+    # Paragraphs when we have them. The executive narrative is written for
+    # somebody who does not work here, and five arguments run together into one
+    # block is exactly the wall of text that reader skips.
+    paras = report.get("plainNarrative") if meta.get("audience") == "executive" else None
+    if paras:
+        out.append("## Summary")
+        out += [para + "\n" for para in paras]
+    elif summary.get("narrative"):
         out.append("## Summary")
         out.append(summary["narrative"] + "\n")
 
@@ -253,7 +260,10 @@ def to_html(report: dict) -> str:
             f"<div class='l'>{e(h.get('label', ''))}</div></div>" for h in hl)
         donut = _svg_donut(donut_rows)
         parts.append(f"<div class='viz'><div class='kpis'>{cards}</div>{donut}</div>")
-    if summary.get("narrative"):
+    paras = report.get("plainNarrative") if meta.get("audience") == "executive" else None
+    if paras:
+        parts.append("<h2>Summary</h2>" + "".join(f"<p>{e(x)}</p>" for x in paras))
+    elif summary.get("narrative"):
         parts.append(f"<h2>Summary</h2><p>{e(summary['narrative'])}</p>")
 
     # Time-series trend line (real per-day volume across the reporting window).
