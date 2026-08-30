@@ -1304,6 +1304,17 @@ are hidden when empty, Associated IOCs points at the family page that holds the
 thousands, and the third now reports what this deployment actually holds,
 including when the answer is nothing.
 
+Two of my own tests then failed on Postgres and not on SQLite, and both were the
+same mistake in different clothes. One drew a random address out of a
+documentation range that holds 256 of them, so a one-in-200 collision with the
+seed turned "three ports collapse into one indicator" into "the address was
+already there" - the exact class of residue bug this suite had already been
+bitten by, committed again by the test written to prove the fix. The other wrote
+`LIKE '203.0.113.251%'` as a literal, and psycopg parses `%` in query text as a
+placeholder marker: fine on SQLite, `only '%s', '%b', '%t' are allowed as
+placeholders` on Postgres. Production SQL was clean; the CI Postgres job is what
+caught both.
+
 Two time bombs fell out of the same work, neither caused by it. A lookup
 fixture carried `last_seen = 2026-07-01` as a literal; a URL decays on a 21-day
 half-life and is revoked below score 15, so on **2026-08-27 - with nothing in

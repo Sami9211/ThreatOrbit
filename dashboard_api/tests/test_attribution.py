@@ -282,6 +282,14 @@ def test_an_address_on_three_ports_is_one_indicator():
     src_ip or dest_ip of an event, so threat-intel matching is structurally
     unable to fire on it. It also stored the same host three times."""
     addr = f"203.0.113.{uuid.uuid4().int % 200 + 20}"
+    # The documentation ranges hold 256 addresses, so "random" is a one-in-200
+    # collision with whatever the seed or another test already put there - and a
+    # value already in the store comes back as a duplicate, which is a different
+    # assertion entirely. This failed exactly that way on Postgres. Clear the
+    # address first so the test is about the import path, not about the draw.
+    with get_conn() as conn:
+        conn.execute("DELETE FROM iocs WHERE value LIKE ?", (f"{addr}%",))
+        conn.commit()
     res = conn_mod._import(
         [{"value": f"{addr}:443", "malware_family": "emotet", "confidence": 72},
          {"value": f"{addr}:80", "malware_family": "emotet", "confidence": 72},
@@ -299,6 +307,13 @@ def test_an_address_on_three_ports_is_one_indicator():
 def test_no_import_path_can_store_a_port_on_an_ip():
     """The guard lives in `_import`, which every connector import funnels
     through, so a JSON, CSV or STIX feed publishing host:port is covered too."""
+    with get_conn() as conn:
+        # The pattern is a PARAMETER, not a literal: psycopg parses `%` in the
+        # query text as a placeholder marker, so a bare LIKE '...%' raises
+        # "only '%s', '%b', '%t' are allowed as placeholders" on Postgres while
+        # working fine on SQLite.
+        conn.execute("DELETE FROM iocs WHERE value LIKE ?", ("203.0.113.251%",))
+        conn.commit()
     res = conn_mod._import(
         [{"type": "ip", "value": "203.0.113.251:31337", "confidence": 60}],
         "some other feed")
