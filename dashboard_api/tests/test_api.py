@@ -3658,8 +3658,14 @@ def test_top_actors_from_real_attribution(client, auth):
         n = conn.execute("SELECT ioc_count FROM threat_actors WHERE name=?", (actor,)).fetchone()[0]
     assert n >= 3
 
-    top = client.get("/overview/top-actors?limit=10", headers=auth).json()
+    # Asked for more rows than the library holds. With a limit of 10 this
+    # assertion silently depended on the library being no larger than the page:
+    # the moment three more actors were added, the demo seeder spread its
+    # attributions across thirteen names, APT29 landed eleventh, and the test
+    # failed for a reason that had nothing to do with ranking.
+    top = client.get("/overview/top-actors?limit=100", headers=auth).json()
     assert top, "actor library is seeded, so this is never empty"
+    assert len(top) >= len(ACTOR_NAMES), "the page must be able to hold the library"
     me = next((a for a in top if a["name"] == actor), None)
     assert me and me["attacks"] >= 3
     # ranked by attributed activity descending

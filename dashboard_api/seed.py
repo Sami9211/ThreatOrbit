@@ -372,17 +372,22 @@ def _seed_actors(conn, rng):
     indicators after the IOC seed runs."""
     from dashboard_api.threat_actor_library import ACTOR_LIBRARY, seed_actor_library
     seed_actor_library(conn)
-    actor_names = [a[0] for a in ACTOR_LIBRARY]
+    actor_names = [a["name"] for a in ACTOR_LIBRARY]
     # Demo flavour: give each actor a couple of illustrative campaigns + a
     # plausible recent last-seen so the CTI page has texture before live data.
     for name in actor_names:
         campaigns = [{"year": 2024 - i,
                       "name": f"Operation {rng.choice(['Ghost','Tide','Echo','Cobalt','Frost'])} {rng.randint(1,9)}",
                       "note": "Targeted intrusion campaign."} for i in range(rng.randint(1, 3))]
+        # `first_seen` is deliberately NOT touched here. It is the year the
+        # group was first publicly reported - a fact, and the same fact in demo
+        # mode - and this used to overwrite it with a random year between 2008
+        # and 2020. Demo flavour may add texture; it must not replace something
+        # true with something invented.
         conn.execute(
-            "UPDATE threat_actors SET first_seen=?, last_seen=?, campaign_count=?, "
+            "UPDATE threat_actors SET last_seen=?, campaign_count=?, "
             "campaigns=?, iocs=? WHERE name=?",
-            (f"{2008 + rng.randint(0,12)}-01-01", _ago(rng, 720), len(campaigns),
+            (_ago(rng, 720), len(campaigns),
              dumps(campaigns), dumps([_rand_ip(rng) for _ in range(3)]), name))
     return actor_names
 

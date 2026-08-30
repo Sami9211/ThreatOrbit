@@ -404,6 +404,27 @@ export interface Actor {
   flag?: string
 }
 
+/** A malware family in the context of an actor. The two lists it appears in
+ *  mean different things and must never be added together - see ActorDetail. */
+export interface ActorMalware {
+  family: string
+  label: string
+  role: string
+  commodity: boolean
+  indicators: number
+  /** How the actor library spells it, when that differs from the family name. */
+  reportedAs?: string
+}
+export interface ActorDetail extends Actor {
+  /** Families whose SOLE named operator is this group, so the indicators ARE
+   *  their infrastructure. This is the only link that counts toward iocCount. */
+  operatedMalware: ActorMalware[]
+  /** Families they are publicly reported to USE and that this store holds.
+   *  Mostly commodity: Black Basta used QakBot, and almost none of the QakBot
+   *  indicators here are theirs, because several affiliates distributed it. */
+  reportedMalware: ActorMalware[]
+}
+
 /** One term of an intel score, and why it applied. The number on its own is a
  *  ranking an analyst has no reason to trust. */
 export interface ScoreComponent {
@@ -605,6 +626,9 @@ export interface MalwareFamily {
   editedBy?: string | null
 }
 export interface MalwareFamilyDetail extends MalwareFamily {
+  /** The actor record for `operator`, when the library tracks them - so the
+   *  name is a link rather than something to go and search for. */
+  operatorActorId: string | null
   byType: Record<string, number>
   bySeverity: Record<string, number>
   sources: Array<{ source: string; values: number }>
@@ -1459,6 +1483,7 @@ export const fetchSoarAnalysts = () => api<AnalystStat[]>('/soar/analysts')
 
 // -- CTI --------------------------------------------------------------
 export const fetchActors  = () => api<Actor[]>('/cti/actors')
+export const fetchActor   = (id: string) => api<ActorDetail>(`/cti/actors/${id}`)
 export const fetchIocs    = (params?: Record<string, string>) => {
   const q = params ? '?' + new URLSearchParams(params).toString() : ''
   return api<{ total: number; items: Ioc[] }>(`/cti/iocs${q}`)

@@ -76,11 +76,58 @@ def list_actors(active: bool | None = None, user: dict = Depends(current_user)):
 
 @router.get("/actors/{actor_id}")
 def get_actor(actor_id: str, user: dict = Depends(current_user)):
+    """One actor, plus the two DIFFERENT things malware can mean about them.
+
+    `operatedMalware` is a family whose sole named operator is this group, so
+    its indicators are this group's infrastructure - the only link that counts
+    toward `iocCount`. `reportedMalware` is a family they are publicly reported
+    to USE, which most of the time is commodity: Black Basta used QakBot, and
+    this store holds thousands of QakBot indicators of which almost none are
+    theirs, because QakBot was distributed by several affiliates.
+
+    Both are returned, labelled, and never added together. Presenting the second
+    as the first is how an actor page acquires a large, confident, wrong number.
+    """
+    from dashboard_api.threat_actor_library import operated_families
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM threat_actors WHERE id=?", (actor_id,)).fetchone()
-    if not row or tenancy.cross_org(row, user):
-        raise HTTPException(status_code=404, detail="Actor not found")
-    return row_to_dict(row)
+        if not row or tenancy.cross_org(row, user):
+            raise HTTPException(status_code=404, detail="Actor not found")
+        d = row_to_dict(row)
+
+        def _held(family: str) -> dict | None:
+            n = conn.execute(
+                "SELECT COUNT(*) AS n FROM iocs WHERE malware_family=?", (family,)).fetchone()["n"]
+            cat = conn.execute(
+                "SELECT label, role, commodity FROM malware_families WHERE name=?",
+                (family,)).fetchone()
+            if not n and cat is None:
+                return None
+            return {"family": family,
+                    "label": cat["label"] if cat else family.title(),
+                    "role": cat["role"] if cat else "",
+                    "commodity": bool(cat["commodity"]) if cat else True,
+                    "indicators": n}
+
+        operated = [x for x in
+                    (_held(f) for f in operated_families(conn).get(d["name"], []))
+                    if x is not None]
+        # `threat_actors.malware` is free text ("Black Basta", "QakBot"); the
+        # store's families are normalised. Match on the normalised form so a
+        # display name still finds its family, and drop anything we hold nothing
+        # of and cannot describe - a name with nothing behind it teaches nobody.
+        reported = []
+        for name in (d.get("malware") or []):
+            key = str(name).lower().replace(" ", "").replace("-", "")
+            if any(o["family"] == key for o in operated):
+                continue          # already stated as theirs; do not say it twice
+            held = _held(key)
+            if held and held["indicators"]:
+                held["reportedAs"] = name
+                reported.append(held)
+    d["operatedMalware"] = operated
+    d["reportedMalware"] = reported
+    return d
 
 
 # Whitelisted IOC sort columns; anything else is rejected (no SQL injection).
@@ -1286,6 +1333,11 @@ def malware_family(name: str, user: dict = Depends(current_user)):
             "SELECT id,type,value,severity,confidence,intel_score,source,first_seen,last_seen,"
             "status,sightings FROM iocs WHERE malware_family=? "
             "ORDER BY intel_score DESC, last_seen DESC, id DESC LIMIT 25", (key,)).fetchall())
+        # The actor row for the operator, so the page can link to it rather than
+        # printing a name the reader has to go and search for.
+        op_row = conn.execute(
+            "SELECT id FROM threat_actors WHERE name=?",
+            ((row["operator"] if row is not None else None) or "",)).fetchone()
         # The one figure a public library cannot produce: has any of this been
         # seen HERE?
         seen = conn.execute(
@@ -1297,7 +1349,8 @@ def malware_family(name: str, user: dict = Depends(current_user)):
         "operator_reason": "", "commodity": True, "since": "",
         "isDefault": True, "uncatalogued": True}
     d.update({"indicators": counts, "byType": by_type, "bySeverity": by_severity,
-              "sources": sources, "topIndicators": top, "seenLocally": seen})
+              "sources": sources, "topIndicators": top, "seenLocally": seen,
+              "operatorActorId": op_row["id"] if op_row else None})
     return d
 
 

@@ -19,11 +19,26 @@ def _put_ioc(value, ioc_type="url", severity="critical", confidence=95):
     # lookup tests pass against rows that could not exist in a live store, hiding
     # the breakage they exist to catch - which is how `reg_domain` stayed NULL on
     # every import for as long as it did.
+    from datetime import datetime, timedelta, timezone
+
     from dashboard_api.ioc_store import insert_ioc
+    # Dated RELATIVE to now, and that is the whole point. These used to be
+    # `first_seen 2026-01-01, last_seen 2026-07-01`, which was fine on the day
+    # they were written and became a time bomb: a URL decays on a 21-day
+    # half-life and is revoked below score 15, so on 2026-08-27 - fifty-seven
+    # days after that fixed last_seen, and with nothing in the code changed -
+    # the lookup started answering "expired" instead of "malicious" and the
+    # suite went red for calendar reasons. A test that fails on a date nobody
+    # can point at is a test people learn to ignore.
+    #
+    # These tests are about MATCHING, not decay, so the row is freshly asserted.
+    # Decay has its own tests, which set the age deliberately.
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     with get_conn() as conn:
         insert_ioc(conn, type=ioc_type, value=value, threat_type="Phishing",
                    confidence=confidence, severity=severity, source="pytest-feed",
-                   first_seen="2026-01-01T00:00:00", last_seen="2026-07-01T00:00:00",
+                   first_seen=(now - timedelta(days=180)).isoformat(),
+                   last_seen=now.isoformat(),
                    org_id=DEFAULT_ORG_ID)
         conn.commit()
 
@@ -458,9 +473,39 @@ def test_kpis_report_how_many_assets_the_risk_score_covers(client, auth):
         assert body["score"] == 0 and body["assetsAssessed"] == 0
 
 
+def test_the_lookup_fixtures_do_not_decay_out_from_under_the_tests():
+    """The invariant that broke, stated so it cannot break again quietly.
+
+    Every lookup test here asks "does this value match, and what does the
+    platform say about it". None of them are about decay. If the fixture row is
+    old enough to be revoked, they all start asserting against an `expired`
+    verdict - which is what happened when the dates were literals: fifty-seven
+    days after a hardcoded `last_seen`, with no code change at all, the suite
+    went red.
+    """
+    val = f"freshness-{uuid.uuid4().hex[:8]}.example"
+    _put_ioc(val, ioc_type="url")
+    try:
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT status, last_seen, intel_score FROM iocs WHERE value=?",
+                (val,)).fetchone()
+        assert row["status"] == "active", (
+            f"the fixture is already {row['status']} on insert - every lookup "
+            f"test in this file is now asserting against a decayed row")
+        assert row["intel_score"] > 0
+    finally:
+        _cleanup(val)
+
+
 # -- Corroboration: 16 feeds used to produce one opinion ------------------------
 
-def _assert_source(value, source_id, ts="2026-01-01T00:00:00"):
+def _assert_source(value, source_id, ts=None):
+    # Relative for the same reason `_put_ioc` is: these tests are about how many
+    # sources agree, not about how long ago they said so, and a fixed date is a
+    # bomb waiting for the scoring to start weighing recency.
+    from datetime import datetime, timezone
+    ts = ts or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO observable_sources (value,source_id,first_seen,last_seen,"

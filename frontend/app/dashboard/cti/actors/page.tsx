@@ -2,7 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fetchActors, fetchCtiSummary, type Actor as ApiActor, type CtiSummary } from '@/lib/api'
+import Link from 'next/link'
+import { fetchActors, fetchActor, fetchCtiSummary,
+  type Actor as ApiActor, type ActorDetail, type CtiSummary } from '@/lib/api'
 import {
   UserSearch, Search, X, ExternalLink, Shield,
   Crosshair, Bug, Clock, Activity, Building2, Filter,
@@ -39,6 +41,9 @@ interface ThreatActor {
   malware: string[]
   ttps: string[]
   recentActivity: string
+  /** Indicators in THIS store attributed to the group. Derived server-side and
+   *  zero until something real attributes - see recompute_actor_activity. */
+  iocCount: number
   description: string
   campaigns: Campaign[]
   iocs: string[]
@@ -170,6 +175,15 @@ function ActorCard({ actor, onSelect }: { actor: ThreatActor; onSelect: () => vo
 /* --- Detail slide-over ----------------------------------------------- */
 function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => void }) {
   const threat = threatCfg(actor.threatLevel)
+  // The two malware relationships come from the detail endpoint, because they
+  // are computed against the live store rather than stored on the actor row.
+  const [detail, setDetail] = useState<ActorDetail | null>(null)
+  useEffect(() => {
+    let alive = true
+    setDetail(null)
+    fetchActor(actor.id).then((d) => { if (alive) setDetail(d) }).catch(() => {})
+    return () => { alive = false }
+  }, [actor.id])
   return (
     <motion.div
       key={actor.id}
@@ -271,9 +285,32 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           )
         })()}
 
+        {/* This used to render `actor.description` a second time under a
+            heading that promised activity - two identical paragraphs, one of
+            them mislabelled. What this deployment has actually seen IS
+            available, so say that instead, including when the answer is
+            nothing. */}
         <section>
-          <SectionHead icon={Activity} title="Recent Activity" />
-          <p className="text-xs text-ink-300 leading-relaxed mt-2">{actor.recentActivity}</p>
+          <SectionHead icon={Activity} title="Activity in this deployment" />
+          <p className="text-xs text-ink-300 leading-relaxed mt-2">
+            {actor.iocCount > 0 ? (
+              <>
+                <b className="text-white tabular-nums">{actor.iocCount.toLocaleString()}</b>{' '}
+                indicators in this store are attributed to this group
+                {detail && detail.operatedMalware.length > 0 && (
+                  <> — all of them through the {detail.operatedMalware.map((m) => m.label).join(', ')}{' '}
+                    {detail.operatedMalware.length === 1 ? 'family it operates' : 'families it operates'}</>
+                )}
+                {actor.lastSeen && <>, most recently asserted in {actor.lastSeen}</>}.
+              </>
+            ) : (
+              <>
+                Nothing in this store is attributed to this group. Blocklists publish values
+                without naming an adversary, so an actor stays at zero until a source names
+                it or it is linked through a malware family it operates.
+              </>
+            )}
+          </p>
         </section>
 
         <section>
@@ -293,16 +330,79 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           </div>
         </section>
 
+        {/* Two relationships that look identical on a card and mean opposite
+            amounts. Operating a family makes its indicators this group's
+            infrastructure; being reported to USE one says nothing about who
+            owns any particular value, because most families are sold, leaked,
+            open-source or cracked. They are shown apart and never summed. */}
+        {(detail?.operatedMalware.length ?? 0) > 0 && (
+          <section>
+            <SectionHead icon={Bug} title="Infrastructure we hold" />
+            <p className="text-[10px] text-ink-600 mt-1 leading-snug">
+              Families this group operates. Every indicator below is counted as theirs,
+              and nothing else on this page is.
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {detail!.operatedMalware.map((m) => (
+                <Link key={m.family} href={`/dashboard/cti/malware/${encodeURIComponent(m.family)}`}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-magenta/25 bg-magenta/8 hover:bg-magenta/15 transition-colors">
+                  <span className="text-[11px] font-semibold text-white">{m.label}</span>
+                  <span className="text-[10px] text-ink-500">{m.role}</span>
+                  <span className="ml-auto text-[10px] text-magenta tabular-nums">
+                    {m.indicators.toLocaleString()} indicators here
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {(() => {
+          // A family already shown above - as theirs, or as a row with a count -
+          // is not also a bare chip. Saying it twice reads as two separate
+          // pieces of evidence, and an empty heading reads as a broken panel.
+          const shown = new Set([
+            ...(detail?.operatedMalware ?? []).map((o) => o.family),
+            ...(detail?.reportedMalware ?? []).map((o) => o.family),
+          ])
+          const chips = actor.malware.filter(
+            (m) => !shown.has(m.toLowerCase().replace(/[\s-]/g, '')))
+          if (chips.length === 0 && (detail?.reportedMalware.length ?? 0) === 0) return null
+          return (
         <section>
-          <SectionHead icon={Bug} title="Tools &amp; Malware" />
+          <SectionHead icon={Bug} title="Reported to use" />
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {actor.malware.map((m) => (
-              <a key={m} href={`https://attack.mitre.org/software/?search=${encodeURIComponent(m)}`}
-                target="_blank" rel="noopener noreferrer" title={`${m} on MITRE ATT&CK`}
-                className="text-[10px] px-2 py-0.5 rounded-sm bg-threat/10 text-threat border border-threat/20 hover:bg-threat/20 hover:text-white transition-colors">{m}</a>
-            ))}
+            {chips
+              .map((m) => (
+                <a key={m} href={`https://attack.mitre.org/software/?search=${encodeURIComponent(m)}`}
+                  target="_blank" rel="noopener noreferrer" title={`${m} on MITRE ATT&CK`}
+                  className="text-[10px] px-2 py-0.5 rounded-sm bg-threat/10 text-threat border border-threat/20 hover:bg-threat/20 hover:text-white transition-colors">{m}</a>
+              ))}
           </div>
+          {(detail?.reportedMalware.length ?? 0) > 0 && (
+            <>
+              <div className="mt-2 space-y-1.5">
+                {detail!.reportedMalware.map((m) => (
+                  <Link key={m.family} href={`/dashboard/cti/malware/${encodeURIComponent(m.family)}`}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/10 bg-surface-2 hover:border-white/25 transition-colors">
+                    <span className="text-[11px] text-ink-200">{m.label}</span>
+                    <span className="text-[10px] text-ink-600">{m.role}</span>
+                    <span className="ml-auto text-[10px] text-ink-400 tabular-nums">
+                      {m.indicators.toLocaleString()} in the store
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              <p className="text-[10px] text-ink-600 mt-2 leading-snug">
+                Held, but <b className="text-ink-400">not counted as this group&apos;s</b>. These
+                families were distributed by several crews, so an indicator carrying one says
+                which malware it is, not whose campaign it belongs to.
+              </p>
+            </>
+          )}
         </section>
+          )
+        })()}
 
         <section>
           <SectionHead icon={Building2} title="Target Sectors" />
@@ -313,6 +413,11 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           </div>
         </section>
 
+        {/* An empty heading reads as a broken panel, not as "we have none".
+            The live actor library carries no campaign records - only the demo
+            seeder adds illustrative ones - so on a real deployment this section
+            was a title with nothing under it on every actor. */}
+        {actor.campaigns.length > 0 && (
         <section>
           <SectionHead icon={Clock} title="Known Campaigns" />
           <div className="mt-3 space-y-3 relative before:absolute before:left-[5px] before:top-1 before:bottom-1 before:w-px before:bg-white/8">
@@ -330,7 +435,9 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
             ))}
           </div>
         </section>
+        )}
 
+        {(actor.iocs.length > 0 || (detail?.operatedMalware.length ?? 0) > 0) && (
         <section>
           <SectionHead icon={Crosshair} title="Associated IOCs" />
           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -340,7 +447,26 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
                 className="text-[10px] px-2 py-0.5 rounded-sm bg-magenta/10 text-magenta font-mono border border-magenta/20 hover:bg-magenta/20 hover:text-white transition-colors">{ioc}</a>
             ))}
           </div>
+          {/* The record itself carries a handful at most; the thousands reached
+              through an operated family live on that family's page, which is
+              where the ranking and the sources are. */}
+          {actor.iocs.length === 0 && (detail?.operatedMalware.length ?? 0) > 0 && (
+            <p className="text-[11px] text-ink-500 mt-1 leading-snug">
+              None are pinned to this record. The{' '}
+              {detail!.operatedMalware.reduce((n, m) => n + m.indicators, 0).toLocaleString()}{' '}
+              held through{' '}
+              {detail!.operatedMalware.map((m, i, arr) => (
+                <span key={m.family}>
+                  <Link href={`/dashboard/cti/malware/${encodeURIComponent(m.family)}`}
+                    className="text-magenta hover:underline">{m.label}</Link>
+                  {i < arr.length - 2 ? ', ' : i === arr.length - 2 ? ' and ' : ''}
+                </span>
+              ))}{' '}
+              are ranked and sourced on the family page.
+            </p>
+          )}
         </section>
+        )}
       </div>
     </motion.div>
   )
@@ -404,6 +530,13 @@ export default function ActorProfilesPage() {
   const [filterSector, setFilterSector] = useState<string>('all')
   const [filterSoph, setFilterSoph] = useState<string>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Deep-link: ?actor=<id> opens that actor directly. A malware family page
+  // names its operator; without this the link would land on an unfiltered list
+  // and leave the reader to find the row themselves.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('actor')
+    if (id) setSelectedId(id)
+  }, [])
   // Empty until the API answers, and it stays empty if the API does not. The
   // actor library is a backend record: whatever it holds is what this
   // deployment knows, including the gaps.
@@ -439,7 +572,10 @@ export default function ActorProfilesPage() {
         active: !!a.active,
         malware: Array.isArray(a.malware) ? a.malware : [],
         ttps: Array.isArray(a.ttps) ? a.ttps : [],
-        recentActivity: a.description,
+        // `recentActivity` is no longer read from the row - the section that
+        // used it now derives from what the store actually holds.
+        recentActivity: a.recentActivity ?? '',
+        iocCount: a.iocCount ?? 0,
         description: a.description,
         campaigns: (Array.isArray(a.campaigns) ? a.campaigns : [])
           .map((c) => ({ year: '', name: c, note: '' })),

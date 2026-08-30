@@ -1264,6 +1264,47 @@ change - every unattributed family already carries one, and it is a reason not
 to attribute, so inheriting it would leave the record explaining the opposite of
 what it now claims.
 
+**Actors stopped being decoration (2026-08-26).** Ten tracked actors sat at zero
+indicators, because nothing in a blocklist names an adversary - and every one of
+them carried `first_seen = 2014-01-01`, a constant written in live deployments
+as well as demo, so the platform asserted that Volt Typhoon (first reported
+2021) and Scattered Spider (2022) had both been active since January 2014. The
+demo seeder then overwrote it with a RANDOM year. A constant presented as a date
+is not a placeholder a reader can see through; it is a fact the platform made
+up. Each actor now carries the year it was first publicly reported, existing rows
+holding the constant are repaired on boot, and the demo seeder no longer touches
+the field.
+
+Three crimeware operators were added - TA542, Wizard Spider and Evil Corp -
+because the malware catalogue can evidence them: **TA542 7,997 indicators,
+Wizard Spider 2,591, Evil Corp 1,666**, all through operating Emotet, TrickBot
+and Dridex respectively. The other ten still read zero, honestly.
+
+The count comes from exactly one link, and the endpoint returns the other one
+separately rather than adding it in. `operatedMalware` is a family whose SOLE
+named operator is the group, so its indicators are that group's infrastructure.
+`reportedMalware` is a family they are publicly reported to USE - Black Basta
+used QakBot, and this store holds 7,611 QakBot indicators of which almost none
+are theirs, because several affiliates distributed it. Summing the second into
+the first is how an actor page acquires a large, confident, wrong number.
+
+Three empty headings went with it. The live actor library carries no campaign
+records and no pinned indicators, so "Known Campaigns" and "Associated IOCs"
+rendered as bare titles on every actor - and "Recent Activity" printed the
+description a second time under a label promising something else. The first two
+are hidden when empty, Associated IOCs points at the family page that holds the
+thousands, and the third now reports what this deployment actually holds,
+including when the answer is nothing.
+
+Two time bombs fell out of the same work, neither caused by it. A lookup
+fixture carried `last_seen = 2026-07-01` as a literal; a URL decays on a 21-day
+half-life and is revoked below score 15, so on **2026-08-27 - with nothing in
+the code changed** - the lookup started answering "expired" instead of
+"malicious" and the suite went red for calendar reasons. And a ranking test
+asked for the top 10 actors and assumed its actor would be on the page, which
+held only while the library was no bigger than the limit. Both are now relative
+to what they are actually testing, and the freshness invariant has its own test.
+
 Still open in this phase: TLS certificate observation (the other half of (4)),
 (6) keyed enrichers, and reports - **0% of the store is linked to an intel
 report**, which the family trails do not fix because a trail is a list, not a

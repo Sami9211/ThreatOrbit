@@ -1874,6 +1874,19 @@ def init_db():
             import logging
             logging.getLogger("dashboard_api.db").exception("ip_hex backfill failed")
         try:
+            from dashboard_api.threat_actor_library import (
+                correct_placeholder_first_seen, seed_actor_library)
+            seed_actor_library(conn)
+            fixed = correct_placeholder_first_seen(conn)
+            if fixed:
+                import logging
+                logging.getLogger("dashboard_api.db").info(
+                    "Replaced the placeholder first-seen date on %d threat actors "
+                    "with the year each was first publicly reported", fixed)
+        except Exception:
+            import logging
+            logging.getLogger("dashboard_api.db").exception("actor library seed failed")
+        try:
             named = _seed_malware_catalogue(conn)
             if named:
                 import logging
