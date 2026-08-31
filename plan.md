@@ -1736,6 +1736,17 @@ Removal is half the work and usually skipped. Each of these actively costs us:
 - [ ] **Normal/Power mode duality** - two information architectures maintained in
       parallel, and the reason the SIEM funnel fix was invisible until I found
       the right tab. Pick one IA with progressive disclosure.
+      **2026-08-31: the same failure happened again, and is fixed for CTI.** The
+      store-composition panel was Power-only, so the answer to "is this
+      intelligence any good" - corroboration, belief distribution, how much of
+      it is NAMED, and how much has been seen on this network - was hidden
+      behind a toggle most people never flip, in the mode the app defaults to.
+      That is what progressive disclosure should mean here: the 500k-row list
+      belongs behind the toggle, the verdict on it does not. The Normal strip
+      also dropped its "Campaigns" tile, which read 0 on every live deployment
+      because the actor library carries no campaign records, in favour of how
+      much the store can name. `test_default_mode_shows_the_work.py` fences it.
+      The wider duality is still open.
 - [ ] **`plan.md` itself** - 3,900 lines with completed items inline. Split into
       `plan.md` (open) and `CHANGELOG.md` (done) properly.
 

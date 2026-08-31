@@ -462,10 +462,15 @@ function NormalCTI() {
   // TTPs, sectors and IOC counts, no hardcoded brief text.
   const briefs = actors.filter((a) => a.active).sort((a, b) => b.iocCount - a.iocCount).slice(0, 4)
 
+  // "Campaigns" was here and reads 0 on every live deployment - the actor
+  // library carries no campaign records, so the tile was a zero that never
+  // moved. What DOES move, and is the difference between an indicator you can
+  // investigate and one you can only block, is how much of the store carries
+  // the malware family a source named for it.
   const SUMMARY = [
     { label: 'Tracked Actors', value: (sum?.trackedActors ?? 0).toLocaleString(), icon: Target, color: tk('magenta') },
     { label: 'Total IOCs',     value: (sum?.totalIocs ?? 0).toLocaleString(),     icon: Hash,   color: tk('violet') },
-    { label: 'Campaigns',      value: (sum?.activeCampaigns ?? 0).toLocaleString(), icon: Shield, color: tk('amber') },
+    { label: 'Named to a family', value: (sum?.attributedToFamily ?? 0).toLocaleString(), icon: Shield, color: tk('amber') },
     { label: 'Active IOCs',    value: (sum?.activeIocs ?? 0).toLocaleString(),    icon: Globe,  color: tk('teal') },
   ]
 
@@ -621,6 +626,15 @@ function NormalCTI() {
           )
         })}
       </div>
+
+      {/* What is actually in the store.
+          This was Power-only, which meant the answer to "is this intelligence
+          any good" - corroboration, belief distribution, how much of it is
+          named, and how much has been seen on your own network - was hidden
+          behind a toggle most people never flip, in the mode the app DEFAULTS
+          to. It is a summary, not a power tool: the 500k-row list belongs
+          behind the toggle, the verdict on it does not. */}
+      <StoreCompositionPanel />
 
       {/* Power mode CTA */}
       <div className="glass border border-white/5 rounded-xl p-5 flex items-center gap-4">
