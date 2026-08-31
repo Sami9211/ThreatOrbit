@@ -63,6 +63,25 @@ SIGHTING_CAP = 44
 # Arrived with a report/actor attached rather than as a bare row in a list.
 ATTRIBUTION_BONUS = 8
 
+# The source could NAME what this is. Smaller than a report or an actor, because
+# a family is a class and an actor is a specific adversary - but it is the
+# difference between an indicator you can investigate and one you can only
+# block, and it is a fact about THIS value rather than about the feed it came
+# from.
+#
+# That last part is why it matters here. Measured on a 499,501-indicator store
+# before this term existed: **14 distinct scores, none above 73.** `confidence`
+# is a per-feed constant, every row was imported within minutes of the others so
+# the age decay is near-identical, and there are three reliability grades in
+# play - so the composite was, in practice, a ranking of FEEDS rather than of
+# indicators, with 177,067 values sharing the single score 59. Nothing in the
+# store had been seen locally and nothing carried an actor, so the two terms
+# meant to separate indicators from each other were both flat zero.
+#
+# 178,873 of those indicators carry a malware family and were scored as though
+# they were anonymous rows on a blocklist.
+FAMILY_BONUS = 5
+
 
 def _corroboration_bonus(source_count: int) -> int:
     """2 -> 16, 3 -> 20, 4 -> 24, 5 -> 26 (capped), flat thereafter."""
@@ -100,7 +119,15 @@ def score_indicator(ioc: dict, *, source_count: int = 1,
 
     corroboration = _corroboration_bonus(max(1, source_count))
     sighting = _sighting_bonus(local_sightings)
-    attribution = ATTRIBUTION_BONUS if (ioc.get("report_id") or ioc.get("actor")) else 0
+    # Not additive with a report or an actor: those already imply the value
+    # arrived attached to something, and paying twice for one fact would make a
+    # fully-attributed indicator look better than the evidence supports.
+    if ioc.get("report_id") or ioc.get("actor"):
+        attribution = ATTRIBUTION_BONUS
+    elif (ioc.get("malware_family") or "").strip():
+        attribution = FAMILY_BONUS
+    else:
+        attribution = 0
 
     raw = base + corroboration + sighting + attribution + verdict_shift
     total = max(0, min(100, raw))
@@ -124,11 +151,12 @@ def score_indicator(ioc: dict, *, source_count: int = 1,
             "why": f"observed {local_sightings}x in this deployment's own telemetry",
         })
     if attribution:
-        components.append({
-            "label": "Attributed",
-            "delta": attribution,
-            "why": f"arrived with {'a report' if ioc.get('report_id') else 'an actor'} attached",
-        })
+        if ioc.get("report_id") or ioc.get("actor"):
+            why = f"arrived with {'a report' if ioc.get('report_id') else 'an actor'} attached"
+        else:
+            why = (f"the source named it as {ioc['malware_family']} rather than "
+                   f"listing it as a bare value")
+        components.append({"label": "Attributed", "delta": attribution, "why": why})
     if verdict_shift:
         # Named as an analyst conclusion rather than folded into the base, so a
         # score that dropped 35 points overnight is explainable to the analyst

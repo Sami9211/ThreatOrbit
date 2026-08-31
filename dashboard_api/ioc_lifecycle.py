@@ -141,7 +141,10 @@ def decay_iocs(conn, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     rows = conn.execute(
         "SELECT id, type, value, confidence, last_seen, status, sightings, "
-        "source, actor, report_id, intel_score, valid_until FROM iocs "
+        # `malware_family` reads into the score (see intel_scoring.FAMILY_BONUS);
+        # omitted here, the maintenance pass would quietly undo it on the next
+        # sweep by rescoring every named indicator as though it were anonymous.
+        "source, actor, malware_family, report_id, intel_score, valid_until FROM iocs "
         "WHERE status != 'known-good'").fetchall()
 
     # Corroboration and reliability for the whole pass, read once rather than

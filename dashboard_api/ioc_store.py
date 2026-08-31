@@ -51,7 +51,7 @@ def _now() -> str:
 
 
 def initial_score(*, type: str, confidence: int, last_seen: str,
-                  report_id=None, actor: str = "") -> int:
+                  report_id=None, actor: str = "", malware_family: str = "") -> int:
     """The score a brand-new indicator deserves before anyone corroborates it.
 
     Scored at insert so it ranks immediately instead of sitting at zero until the
@@ -61,7 +61,7 @@ def initial_score(*, type: str, confidence: int, last_seen: str,
     from dashboard_api.intel_scoring import score_indicator
     return score_indicator(
         {"type": type, "confidence": confidence, "last_seen": last_seen,
-         "report_id": report_id, "actor": actor},
+         "report_id": report_id, "actor": actor, "malware_family": malware_family},
         source_count=1)["score"]
 
 
@@ -81,7 +81,7 @@ def ioc_row(*, type: str, value: str, threat_type: str = "malicious-activity",
     ls = last_seen or now
     score = intel_score if intel_score is not None else initial_score(
         type=type, confidence=confidence, last_seen=ls,
-        report_id=report_id, actor=actor)
+        report_id=report_id, actor=actor, malware_family=malware_family)
     return (
         id or str(uuid.uuid4()), type, value, threat_type, confidence, severity,
         # `actor` and `malware_family` are separate on purpose. A family is what

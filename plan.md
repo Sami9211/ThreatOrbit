@@ -1407,6 +1407,28 @@ other two phases are for.
 
 ---
 
+
+**The score was ranking FEEDS, not indicators (measured + fixed 2026-08-31).**
+On the live 499,501-indicator store the composite produced **24 distinct values
+across the whole library**, with 101,755 indicators sharing one of them. The
+reason is structural: `confidence` is a per-feed constant, every row was
+imported within minutes of the others so the age decay is near-identical, and
+three reliability grades are in play - so the composite reduced to
+`feed_confidence x feed_grade`. The two terms meant to tell indicators apart
+were both flat zero, because nothing in the store had been seen locally and
+nothing carried an actor.
+
+Meanwhile 178,873 indicators carried a malware family - a fact about THAT value,
+published by the source - and were scored as though they were anonymous rows on
+a blocklist. `FAMILY_BONUS` is worth less than a report or an actor (a family is
+a class, an actor is a specific adversary, and most of this catalogue is
+commodity) and is not additive with them.
+
+Isolated on the same data, term off vs on: 24 -> 27 distinct scores, top 77 ->
+82, and **the high band goes from 10 indicators to 1,724** - the values that are
+both corroborated by a second source AND named by one of them, which is exactly
+the population an analyst should open first.
+
 ### Phase 4 · Ingestion screen as a live system
 
 OpenCTI's Data → Ingestion shows **messages/sec, queue depth, in-flight work with
