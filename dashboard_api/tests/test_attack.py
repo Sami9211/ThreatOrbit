@@ -323,3 +323,32 @@ def test_an_actor_only_lists_families_this_engine_imports(loaded):
         a = actor_attack(conn, "Wizard Spider")
     assert set(a["families"]) <= set(FAMILIES)
     assert "emotet" in a["families"] and "cobaltstrike" in a["families"]
+
+
+# -- the triage view -----------------------------------------------------------
+
+def test_the_indicator_brief_is_compact_and_ordered(loaded):
+    """An analyst triaging one value is deciding what to do in the next minute.
+    Handing them the full technique list there is the same mistake as handing
+    them the raw feed - complete, and operationally useless - so the brief
+    answers the smaller question: what is going on, and in what order."""
+    from dashboard_api.attack import family_brief
+    with get_conn() as conn:
+        b = family_brief(conn, "emotet")
+    assert b is not None
+    assert b["id"] == "S0367"
+    assert [t["shortname"] for t in b["tactics"]] == ["initial-access", "execution"]
+    assert all("techniques" in t and t["techniques"] > 0 for t in b["tactics"])
+    # Compact: tactic counts, not the techniques themselves.
+    assert not any("techniques" in t and isinstance(t["techniques"], list)
+                   for t in b["tactics"])
+
+
+def test_an_untracked_family_has_no_brief_at_all(loaded):
+    """None rather than an empty shape, so the page can stay silent instead of
+    rendering a heading with nothing under it."""
+    from dashboard_api.attack import family_brief
+    with get_conn() as conn:
+        assert family_brief(conn, "redline") is None
+        assert family_brief(conn, "") is None
+        assert family_brief(conn, None) is None

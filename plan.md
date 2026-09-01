@@ -2202,6 +2202,29 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · "xinlou.info is Emotet" is a label. "Emotet phishes in, runs
+  PowerShell, persists, moves laterally over SMB" is a lead.** The indicator
+  drawer is where an analyst decides what to do in the next minute, and it named
+  the family without saying what the family does - the same inertness as the raw
+  feed one level up, just with a nicer chip.
+
+  It now opens with the family's ATT&CK footprint in kill-chain order:
+
+  ```
+  If this is real, it is Emotet activity   S0367        all 47 techniques →
+  Initial Access 3 › Execution 8 › Persistence 4 › Privilege Escalation 7 ›
+  Stealth 13 › Credential Access 5 › Discovery 6 › Lateral Movement 3 ›
+  Collection 2 › Command and Control 6 › Exfiltration 1
+  ```
+
+  Deliberately the COMPACT form. Forty-seven techniques in a triage surface is
+  the same error as the raw feed: technically complete, operationally useless.
+  The sequence answers the question the moment actually poses - if this is real,
+  where does it start and where do I look next - and the full list is one click
+  away. `family_brief` returns None rather than an empty shape when MITRE does
+  not track the family, so the page stays silent instead of rendering a heading
+  with nothing under it.
+
 - **2026-09-01 · The actor library held five techniques per group. MITRE holds
   sixty-four.** With ATT&CK loaded, the same treatment extends to the threat
   actors: **10 of the 13** shipped actors resolve to an ATT&CK group and gain

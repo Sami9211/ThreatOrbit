@@ -450,6 +450,47 @@ def actor_attack(conn, name: str, aliases: list[str] | None = None) -> dict[str,
     }
 
 
+def family_brief(conn, family: str) -> dict[str, Any] | None:
+    """The compact form, for a single indicator's triage view.
+
+    An analyst looking at one value is deciding what to do in the next minute,
+    not reading a reference page. Handing them forty-seven techniques there would
+    be the same mistake as handing them the raw feed: technically complete,
+    operationally useless. So this answers the smaller question the moment
+    actually poses - *if this is real, what is going on and where else do I
+    look?* - as the family's role and the tactics ATT&CK records for it, in
+    kill-chain order, with the full page one click away.
+
+    Returns None when ATT&CK does not track the family, so the caller can stay
+    silent rather than render an empty heading.
+    """
+    key = (family or "").strip().lower()
+    if not key:
+        return None
+    soft = conn.execute(
+        "SELECT id,name,url,kind FROM attack_software WHERE family=?", (key,)).fetchone()
+    if soft is None:
+        return None
+    rows = conn.execute(
+        "SELECT t.tactics FROM attack_family_technique ft "
+        "JOIN attack_technique t ON t.id = ft.technique_id WHERE ft.family=?",
+        (key,)).fetchall()
+    names = {r["shortname"]: (r["name"], r["position"]) for r in conn.execute(
+        "SELECT shortname,name,position FROM attack_tactic").fetchall()}
+    counts: dict[str, int] = {}
+    total = 0
+    for r in rows:
+        total += 1
+        for short in [x for x in (r["tactics"] or "").split(",") if x]:
+            counts[short] = counts.get(short, 0) + 1
+    tactics = [{"shortname": k,
+                "name": names.get(k, (k.replace("-", " ").title(), 99))[0],
+                "techniques": v} for k, v in counts.items()]
+    tactics.sort(key=lambda t: names.get(t["shortname"], ("", 99))[1])
+    return {"id": soft["id"], "name": soft["name"], "url": soft["url"],
+            "kind": soft["kind"], "techniqueCount": total, "tactics": tactics}
+
+
 def release(conn) -> dict[str, Any] | None:
     r = conn.execute("SELECT version,url,fetched_at FROM attack_release").fetchone()
     return None if r is None else {

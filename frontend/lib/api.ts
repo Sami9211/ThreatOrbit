@@ -458,6 +458,16 @@ export interface Ioc {
    *  a family is a fact the feed published, an operator is a claim somebody has
    *  to defend, and most families are commodity. */
   malwareFamily?: string | null
+  /** What this value means if it is real: the family's ATT&CK footprint, in
+   *  kill-chain order. Compact on purpose - an analyst triaging one indicator is
+   *  deciding what to do in the next minute, and forty-seven techniques there
+   *  would be as useless as the raw feed. Null when MITRE does not track the
+   *  family, so the page can stay silent rather than show an empty heading. */
+  familyBrief?: {
+    id: string; name: string; url: string | null; kind: string
+    techniqueCount: number
+    tactics: Array<{ shortname: string; name: string; techniques: number }>
+  } | null
   source: string
   firstSeen: string
   lastSeen: string

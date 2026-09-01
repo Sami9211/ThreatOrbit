@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Loader2, Share2, Layers, Activity, Sparkles, ShieldCheck,
-  AlertTriangle, Radio, Eye, Gavel, UserCog, Bell, Bug,
+  AlertTriangle, Radio, Eye, Gavel, UserCog, Bell, Bug, Crosshair,
 } from 'lucide-react'
 import { tk } from '@/lib/colors'
 import { cn } from '@/lib/utils'
@@ -230,6 +230,57 @@ export default function IndicatorPage({ params }: { params: Promise<{ value: str
             only that nobody we listen to has said otherwise.
           </p>
         </div>
+      )}
+
+      {/* What this value MEANS if it is real.
+          The family chip in the header names a thing without saying what the
+          thing does, which is the same inertness as the raw feed one level up:
+          "xinlou.info is Emotet" is only actionable next to "Emotet phishes in,
+          runs PowerShell, persists, moves laterally over SMB". This is the
+          compact form on purpose - an analyst here is deciding what to do in the
+          next minute, and the full technique list is one click away. */}
+      {state === 'found' && detail?.familyBrief && (
+        <motion.div variants={fadeInUp} initial="hidden" animate="show"
+          className="rounded-xl border border-violet/20 bg-violet/[0.06] p-3.5 mb-4">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <Crosshair className="w-3.5 h-3.5 shrink-0" style={{ color: tk('violet') }} />
+            <span className="text-[11px] text-white">
+              If this is real, it is <b className="capitalize">{detail.familyBrief.name}</b> activity
+            </span>
+            <a href={detail.familyBrief.url ?? '#'} target="_blank" rel="noopener noreferrer"
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-teal/25 bg-teal/10
+                         text-teal hover:bg-teal/20 transition-colors">
+              {detail.familyBrief.id}
+            </a>
+            <Link href={`/dashboard/cti/malware/${encodeURIComponent(detail.malwareFamily ?? '')}`}
+              className="ml-auto text-[10px] text-ink-500 hover:text-white transition-colors">
+              all {detail.familyBrief.techniqueCount} techniques →
+            </Link>
+          </div>
+          {/* Kill-chain order, so it reads as a sequence rather than a tag cloud:
+              where the intrusion starts, and where to look next if it did. */}
+          <div className="flex items-center gap-1 flex-wrap">
+            {detail.familyBrief.tactics.map((t, i, arr) => (
+              // The chevron TRAILS its chip rather than leading the next one:
+              // this list wraps, and a leading separator leaves a stray glyph
+              // hanging at the start of the second line.
+              <span key={t.shortname} className="flex items-center gap-1">
+                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/8 text-[10px]
+                                 text-ink-300 hover:text-white hover:border-violet/30 transition-all
+                                 cursor-default"
+                  title={`MITRE records ${t.techniques} ${detail.familyBrief!.name} technique${t.techniques === 1 ? '' : 's'} under ${t.name}`}>
+                  {t.name}
+                  <span className="ml-1 text-ink-600 tabular-nums">{t.techniques}</span>
+                </span>
+                {i < arr.length - 1 && <span className="text-ink-700 text-[10px]">›</span>}
+              </span>
+            ))}
+          </div>
+          <p className="text-[10px] text-ink-600 mt-2 leading-snug">
+            MITRE ATT&amp;CK&apos;s record for this family, in kill-chain order — not a claim about
+            this particular value beyond the family a source assigned it.
+          </p>
+        </motion.div>
       )}
 
       {state === 'found' && detail && (

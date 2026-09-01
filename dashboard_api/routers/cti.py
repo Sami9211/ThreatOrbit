@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
-from dashboard_api.attack import actor_attack, family_attack, release
+from dashboard_api.attack import (actor_attack, family_attack, family_brief,
+                                   release)
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.connectors import bulk_feed_source_ids
 from dashboard_api.db import (audit, get_conn, host_of, ip_hex_of, row_to_dict,
@@ -655,7 +656,14 @@ def get_ioc(ioc_id: str, user: dict = Depends(current_user)):
         # "expires in 12 days" rather than presenting it as a law of nature.
         from dashboard_api.decay import rule_for
         rule = rule_for(conn, ioc.get("type"))
+        # What this value means if it is real. The family name alone is inert -
+        # it names a thing without saying what the thing does - and an analyst
+        # deciding in the next minute needs "spearphishing, then PowerShell,
+        # then SMB lateral movement", not a label. Compact deliberately: the
+        # full technique list is a page, not a triage surface.
+        brief = family_brief(conn, ioc.get("malware_family") or "")
     return {**ioc, "lifecycle": lifecycle_of(ioc, rule=rule), "sightingsHistory": sightings,
+            "familyBrief": brief,
             # The drawer is where an analyst decides whether to act, so it gets
             # the full derivation rather than a bare number.
             "sources": srcs, "sourceCount": len(srcs) or 1,
