@@ -227,7 +227,8 @@ def store(conn, parsed: dict[str, Any]) -> dict[str, int]:
     """
     for table in ("attack_family_technique", "attack_family_group",
                   "attack_group_technique", "attack_software",
-                  "attack_technique", "attack_group", "attack_tactic"):
+                  "attack_technique", "attack_group", "attack_group_name",
+                  "attack_tactic"):
         conn.execute(f"DELETE FROM {table}")
     conn.executemany(
         "INSERT INTO attack_tactic (shortname,name,position) VALUES (?,?,?)",
@@ -237,10 +238,19 @@ def store(conn, parsed: dict[str, Any]) -> dict[str, int]:
         "VALUES (?,?,?,?,?,?)",
         [(t["id"], t["name"], t["tactics"], t["url"], t["description"],
           1 if t["is_subtechnique"] else 0) for t in parsed["techniques"]])
+    # One row per (group, name-or-alias). ATT&CK's names and the library's names
+    # rarely match exactly - "Sandworm" is "Sandworm Team", "Evil Corp" is
+    # "Indrik Spider" - so the alias set is the join, and a normalised key makes
+    # it an indexed lookup rather than a scan that parses 176 JSON blobs.
     conn.executemany(
         "INSERT INTO attack_group (id,name,aliases,url,description) VALUES (?,?,?,?,?)",
         [(g["id"], g["name"], g["aliases"], g["url"], g["description"])
          for g in parsed["groups"]])
+    conn.executemany(
+        "INSERT INTO attack_group_name (norm_key,group_id) VALUES (?,?) "
+        "ON CONFLICT(norm_key) DO NOTHING",
+        sorted({(_norm(n), g["id"]) for g in parsed["groups"]
+                for n in [g["name"]] + json.loads(g["aliases"] or "[]") if _norm(n)}))
     conn.executemany(
         "INSERT INTO attack_software (family,id,name,url,kind,description) "
         "VALUES (?,?,?,?,?,?)",
@@ -373,6 +383,70 @@ def family_attack(conn, family: str) -> dict[str, Any]:
             "isSubtechnique": bool(t["is_subtechnique"]),
         } for t in techniques],
         "groups": [{"id": g["id"], "name": g["name"], "url": g["url"]} for g in groups],
+    }
+
+
+def actor_attack(conn, name: str, aliases: list[str] | None = None) -> dict[str, Any]:
+    """Everything ATT&CK says about one threat actor, matched by name or alias.
+
+    Ten of the thirteen actors in the shipped library resolve to an ATT&CK group,
+    and each gains between 33 and 93 sourced techniques where the library holds
+    four or five. The library's own entries are a hand-written summary; these are
+    MITRE's, with a link per technique.
+
+    The three that do not resolve are not an error and are not padded over.
+    ATT&CK does not track LockBit or Black Basta as intrusion sets at all, and it
+    does not track TA542 - it attributes Emotet to Wizard Spider instead. That is
+    a real disagreement between two sources about who runs a botnet, and a
+    platform that silently picked one has destroyed the more useful fact.
+    """
+    candidates = [name] + list(aliases or [])
+    row = None
+    for cand in candidates:
+        key = _norm(cand)
+        if not key:
+            continue
+        row = conn.execute(
+            "SELECT g.id,g.name,g.aliases,g.url,g.description FROM attack_group_name n "
+            "JOIN attack_group g ON g.id = n.group_id WHERE n.norm_key=?",
+            (key,)).fetchone()
+        if row is not None:
+            break
+    if row is None:
+        return {"tracked": False, "techniqueCount": 0, "byTactic": [], "families": []}
+
+    techniques = conn.execute(
+        "SELECT t.id, t.name, t.tactics, t.url, t.is_subtechnique "
+        "FROM attack_group_technique gt JOIN attack_technique t ON t.id = gt.technique_id "
+        "WHERE gt.group_id=? ORDER BY t.id", (row["id"],)).fetchall()
+    names = {r["shortname"]: (r["name"], r["position"]) for r in conn.execute(
+        "SELECT shortname,name,position FROM attack_tactic").fetchall()}
+    buckets: dict[str, list] = {}
+    for t in techniques:
+        entry = {"id": t["id"], "name": t["name"], "url": t["url"],
+                 "isSubtechnique": bool(t["is_subtechnique"])}
+        for short in [x for x in (t["tactics"] or "").split(",") if x]:
+            buckets.setdefault(short, []).append(entry)
+    by_tactic = [{
+        "shortname": short,
+        "name": names.get(short, (short.replace("-", " ").title(), 99))[0],
+        "techniques": sorted(items, key=lambda x: x["id"]),
+    } for short, items in buckets.items()]
+    by_tactic.sort(key=lambda b: names.get(b["shortname"], ("", 99))[1])
+
+    # Families MITRE reports this group using, restricted to families this engine
+    # actually imports - so every one of them is a page the reader can open,
+    # rather than a name that leads nowhere.
+    families = [r["family"] for r in conn.execute(
+        "SELECT family FROM attack_family_group WHERE group_id=? ORDER BY family",
+        (row["id"],)).fetchall()]
+    return {
+        "tracked": True, "id": row["id"], "name": row["name"], "url": row["url"],
+        "description": row["description"],
+        "aliases": json.loads(row["aliases"] or "[]"),
+        "techniqueCount": len(techniques),
+        "byTactic": by_tactic,
+        "families": families,
     }
 
 

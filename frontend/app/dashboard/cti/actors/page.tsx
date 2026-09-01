@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { fetchActors, fetchActor, fetchCtiSummary,
-  type Actor as ApiActor, type ActorDetail, type CtiSummary } from '@/lib/api'
+  type Actor as ApiActor, type ActorDetail, type CtiSummary,
+  type AttackProfile } from '@/lib/api'
 import {
   UserSearch, Search, X, ExternalLink, Shield,
   Crosshair, Bug, Clock, Activity, Building2, Filter,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react'
 import { tk, withAlpha } from '@/lib/colors'
 import ApiUnavailable from '@/components/dashboard/ApiUnavailable'
+import AttackPanel from '@/components/dashboard/AttackPanel'
 
 /* --- Types ----------------------------------------------------------- */
 type Motivation = 'Espionage' | 'Financial' | 'Hacktivism' | 'Destruction' | 'Disruption'
@@ -65,12 +67,21 @@ interface ThreatActor {
  * independent signals (named origin, cross-vendor aliases, mapped TTPs,
  * attributed tooling, documented campaigns) = higher confidence. The reasons
  * are shown alongside the band so the assessment is auditable, not asserted. */
-function attributionAssessment(actor: ThreatActor): { band: 'High' | 'Moderate' | 'Low'; color: string; reasons: string[] } {
+function attributionAssessment(actor: ThreatActor, attack?: AttackProfile | null): { band: 'High' | 'Moderate' | 'Low'; color: string; reasons: string[] } {
   const reasons: string[] = []
   const named = actor.origin && !/unknown|^n\/?a$/i.test(actor.origin.trim())
   if (named) reasons.push(`Named origin (${actor.origin})`)
   if (actor.aliases.length >= 2) reasons.push(`${actor.aliases.length} cross-vendor aliases`)
-  if (actor.ttps.length >= 3) reasons.push(`${actor.ttps.length} mapped ATT&CK techniques`)
+  // Count MITRE's techniques when MITRE has this group, because that is the
+  // number rendered a few inches further down the same drawer. The library's
+  // hand-written four or five sitting above ATT&CK's sixty-four does not read as
+  // two sources - it reads as the page contradicting itself.
+  const ttps = attack?.tracked ? attack.techniqueCount : actor.ttps.length
+  if (ttps >= 3) {
+    reasons.push(attack?.tracked
+      ? `${ttps} ATT&CK techniques mapped by MITRE (${attack.id})`
+      : `${ttps} mapped ATT&CK techniques`)
+  }
   if (actor.malware.length >= 1) reasons.push(`${actor.malware.length} attributed tool${actor.malware.length === 1 ? '' : 's'}`)
   if (actor.campaignCount >= 1) reasons.push(`${actor.campaignCount} documented campaign${actor.campaignCount === 1 ? '' : 's'}`)
   const score = reasons.length
@@ -274,7 +285,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
 
         {/* Attribution assessment - transparent, evidence-based confidence band */}
         {(() => {
-          const att = attributionAssessment(actor)
+          const att = attributionAssessment(actor, detail?.attack)
           return (
             <section>
               <SectionHead icon={Fingerprint} title="Attribution Assessment" />
@@ -324,22 +335,45 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           </p>
         </section>
 
-        <section>
-          <SectionHead icon={Shield} title="MITRE ATT&CK Techniques" />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {actor.ttps.map((t) => (
-              <a
-                key={t}
-                href={`https://attack.mitre.org/techniques/${t.replace('.', '/')}/`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 transition-colors"
-              >
-                {t}
-              </a>
-            ))}
-          </div>
-        </section>
+        {/* MITRE's own reading of this group, when MITRE has one.
+            The library ships four or five techniques per actor as a hand-written
+            summary; ATT&CK carries between 33 and 93 for the same groups, in
+            kill-chain order and each with a link. Where the two exist, MITRE's
+            wins - it is sourced and ours is a paraphrase. Where MITRE has
+            nothing, the library's summary is still shown and labelled as ours,
+            because a page that hides what it knows to avoid an awkward caveat is
+            the wrong trade. */}
+        {detail?.attack?.tracked ? (
+          <AttackPanel a={detail.attack} release={detail.attackRelease} subject="actor"
+            title="What they do"
+            hint="MITRE ATT&CK, quoted. Every technique links to MITRE, so none of this rests on our say-so."
+            untracked={null} />
+        ) : (
+          <section>
+            <SectionHead icon={Shield} title="MITRE ATT&CK Techniques" />
+            {detail && (
+              <p className="text-[10px] text-ink-600 mt-1.5 leading-snug max-w-2xl">
+                MITRE ATT&amp;CK does not track a group under this name, so these are this
+                library&apos;s own summary rather than MITRE&apos;s. ATT&amp;CK models 10 of the
+                13 actors shipped here; the ones it leaves out are mostly ransomware brands
+                and operator names other vendors use.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {actor.ttps.map((t) => (
+                <a
+                  key={t}
+                  href={`https://attack.mitre.org/techniques/${t.replace('.', '/')}/`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] px-2 py-0.5 rounded-sm bg-violet/15 text-violet font-mono border border-violet/20 hover:bg-violet/25 transition-colors"
+                >
+                  {t}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Two relationships that look identical on a card and mean opposite
             amounts. Operating a family makes its indicators this group's

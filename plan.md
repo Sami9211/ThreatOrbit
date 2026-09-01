@@ -2202,6 +2202,49 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · The actor library held five techniques per group. MITRE holds
+  sixty-four.** With ATT&CK loaded, the same treatment extends to the threat
+  actors: **10 of the 13** shipped actors resolve to an ATT&CK group and gain
+  between **33 and 93** sourced techniques where the library carried four or
+  five hand-written ones.
+
+  ```
+  APT29            -> G0016 APT29             66 techniques / 13 tactics
+  APT41            -> G0096 APT41             82  (njRAT, Cobalt Strike)
+  Lazarus Group    -> G0032 Lazarus Group     93
+  Volt Typhoon     -> G1017 Volt Typhoon      81
+  Sandworm         -> G0034 Sandworm Team     79
+  Charming Kitten  -> G0059 Magic Hound       78
+  Wizard Spider    -> G0102 Wizard Spider     64  (Emotet, TrickBot, Cobalt Strike)
+  Evil Corp        -> G0119 Indrik Spider     33  (Dridex, Cobalt Strike)
+  LockBit / Black Basta / TA542  -> MITRE tracks no group under these names
+  ```
+
+  The names almost never match: "Sandworm" is ATT&CK's "Sandworm Team",
+  "Evil Corp" is "Indrik Spider", "Charming Kitten" is "Magic Hound". So the
+  join is the full alias set, normalised, in its own indexed table.
+
+  **The three that do not resolve are the interesting ones.** ATT&CK does not
+  model LockBit or Black Basta as intrusion sets, and it does not track TA542 at
+  all - it attributes Emotet to *Wizard Spider*. This catalogue names TA542
+  (Mummy Spider), on the reporting that has followed the botnet's operator since
+  2014. Two sources genuinely disagree about who runs Emotet, and a platform that
+  silently picked one would have destroyed the more useful fact. So the actor
+  page keeps the library's own summary, labelled as the library's, and says
+  plainly that MITRE tracks no group under that name.
+
+  The attribution-confidence panel now counts MITRE's techniques when MITRE has
+  the group. It was saying "5 mapped ATT&CK techniques" three inches above a
+  panel rendering 64 - which does not read as two sources, it reads as the page
+  contradicting itself.
+
+  One `AttackPanel` component serves both pages, because it is the same question
+  asked of two subjects - on a family "what does this malware do", on a group
+  "what does this crew do". What differs is what hangs off the bottom: a family
+  lists the groups reported to use it, a group lists the families it uses, and
+  each of those families is a link to a page in this platform rather than a name
+  that leads nowhere.
+
 - **2026-09-01 · "What does it actually do?" - the answer the store could not
   give.** The engine can name 178,911 indicators to a malware family. On its own
   that stops one step short of useful: an analyst who learns a domain is Emotet

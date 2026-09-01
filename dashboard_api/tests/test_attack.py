@@ -273,3 +273,53 @@ def test_release_is_none_before_anything_is_loaded():
         conn.execute("DELETE FROM attack_release")
         conn.commit()
         assert release(conn) is None
+
+
+# -- actors ---------------------------------------------------------------------
+
+def test_an_actor_resolves_through_an_alias(loaded):
+    """ATT&CK's names and this library's names rarely match exactly: what the
+    library calls "Sandworm" ATT&CK calls "Sandworm Team", and "Evil Corp" is
+    "Indrik Spider". Matching on the primary name alone loses most of the
+    library, so the alias set is the join."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        # Wizard Spider's own name matches; the alias path is what needs proving,
+        # so ask under a name that is only ever an alias.
+        direct = actor_attack(conn, "Wizard Spider")
+        assert direct["tracked"] and direct["id"] == "G0102"
+        # An unrelated primary name plus a matching alias must still resolve.
+        aliased = actor_attack(conn, "Some Vendor Codename", ["Wizard Spider"])
+        assert aliased["tracked"] and aliased["id"] == "G0102"
+
+
+def test_an_actor_mitre_does_not_track_says_so(loaded):
+    """ATT&CK models 10 of the 13 shipped actors. It does not track LockBit or
+    Black Basta as intrusion sets, and it does not track TA542 at all - it
+    attributes Emotet to Wizard Spider instead. That is a real disagreement
+    between two sources about who runs a botnet, and a platform that silently
+    picked one has destroyed the more useful fact."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        a = actor_attack(conn, "TA542", ["Mummy Spider", "Gold Crestwood"])
+    assert a["tracked"] is False
+    assert a["byTactic"] == [] and a["techniqueCount"] == 0
+
+
+def test_an_actors_techniques_are_in_kill_chain_order(loaded):
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        a = actor_attack(conn, "APT29")
+    assert a["tracked"]
+    assert [b["shortname"] for b in a["byTactic"]] == ["initial-access"]
+
+
+def test_an_actor_only_lists_families_this_engine_imports(loaded):
+    """A name that leads nowhere teaches nobody. The families on an actor are
+    restricted to the ones the engine actually pulls, so each is a page the
+    reader can open rather than a chip that does nothing."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        a = actor_attack(conn, "Wizard Spider")
+    assert set(a["families"]) <= set(FAMILIES)
+    assert "emotet" in a["families"] and "cobaltstrike" in a["families"]

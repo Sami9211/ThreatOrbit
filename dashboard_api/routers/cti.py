@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
-from dashboard_api.attack import family_attack, release
+from dashboard_api.attack import actor_attack, family_attack, release
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.connectors import bulk_feed_source_ids
 from dashboard_api.db import (audit, get_conn, host_of, ip_hex_of, row_to_dict,
@@ -126,8 +126,16 @@ def get_actor(actor_id: str, user: dict = Depends(current_user)):
             if held and held["indicators"]:
                 held["reportedAs"] = name
                 reported.append(held)
+        # What MITRE says this group does. Ten of thirteen shipped actors resolve
+        # to an ATT&CK group and gain 33-93 sourced techniques where the library
+        # holds four or five - and each carries a link, so the page stops asking
+        # to be taken on trust.
+        attack = actor_attack(conn, d["name"], d.get("aliases") or [])
+        attack_rel = release(conn)
     d["operatedMalware"] = operated
     d["reportedMalware"] = reported
+    d["attack"] = attack
+    d["attackRelease"] = attack_rel
     return d
 
 

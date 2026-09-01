@@ -805,6 +805,15 @@ CREATE TABLE IF NOT EXISTS attack_group_technique (
     PRIMARY KEY (group_id, technique_id)
 );
 
+-- Every name and alias ATT&CK publishes for a group, normalised, so the shipped
+-- actor library can be joined to it. The names rarely match exactly: what this
+-- platform calls "Sandworm" ATT&CK calls "Sandworm Team", and "Evil Corp" is
+-- "Indrik Spider". Matching on the primary name alone loses most of the library.
+CREATE TABLE IF NOT EXISTS attack_group_name (
+    norm_key TEXT PRIMARY KEY,        -- lowercased, punctuation stripped
+    group_id TEXT NOT NULL
+);
+
 -- Tactic display names and kill-chain order, from the matrix object rather than
 -- hardcoded anywhere. ATT&CK renames tactics between releases (v19 replaced
 -- "Defense Evasion" with "Stealth"), so a hardcoded list renders last year's
