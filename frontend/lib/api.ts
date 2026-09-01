@@ -1217,16 +1217,32 @@ export const ingestLogs = (lines: string[], format = 'auto', source = 'collector
 
 export interface AttackTechnique {
   technique: string; name: string; rules: number; alerts: number; covered: boolean
-  /** Adversaries that imported intel says use this technique. */
-  intelActors?: string[]
-  /** Intel attributes it to a tracked adversary, but no enabled rule covers it. */
-  intelGap?: boolean
+  /** Set when a rule on the PARENT technique is what covers this one, so
+   *  "covered" is never a claim the reader cannot check. */
+  coveredBy?: string | null
+  /** Malware families IN THIS STORE that MITRE records using this technique.
+   *  Carries the key as well as the label, so a link never has to reconstruct
+   *  one from the other. */
+  families?: Array<{ key: string; label: string }>
+  familyCount?: number
+  /** Indicators those families account for. The only prevalence signal available
+   *  short of local sightings, and what ranks the cells within a tactic. */
+  indicators?: number
+  /** This store's own threats use it and no enabled rule would see it. The cell
+   *  worth looking at first. */
+  threatGap?: boolean
 }
 export interface AttackCoverage {
-  tactics: Array<{ tactic: string; techniques: AttackTechnique[] }>
+  tactics: Array<{ tactic: string; shortname?: string; techniques: AttackTechnique[] }>
   summary: {
     techniques: number; covered: number; gaps: number; coveragePct: number
-    intelTechniques?: number; intelGaps?: number
+    /** Techniques used by families this store holds. */
+    threatTechniques?: number
+    /** ...of which no enabled rule covers. The number to act on. */
+    threatGaps?: number
+    /** False until the ATT&CK reference has been fetched; the matrix is then
+     *  rules and alerts only, and says so rather than looking broken. */
+    attackLoaded?: boolean
   }
 }
 export const fetchAttackCoverage = () => api<AttackCoverage>('/siem/attack-coverage')

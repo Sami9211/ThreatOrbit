@@ -1103,79 +1103,205 @@ def log_listeners_status():
 
 @router.get("/attack-coverage")
 def attack_coverage():
-    """ATT&CK navigator data: per-technique rule coverage + observed alert
-    volume, grouped by tactic, with coverage gaps highlighted."""
+    """ATT&CK navigator: real technique coverage, weighted by what this store holds.
+
+    This used to be a hand-written dictionary of FOURTEEN techniques and their
+    tactics, presented as "the ATT&CK Navigator". It was wrong as well as small -
+    it filed T1078 under "Defense Evasion", a tactic ATT&CK renamed to Stealth -
+    and it could only ever go further out of date, because nothing about it was
+    connected to MITRE.
+
+    It now runs on the loaded ATT&CK release: 697 techniques, 15 tactics, real
+    names, and MITRE's own kill-chain order. Three dimensions per cell:
+
+      rules    - do we have an enabled detection for it (or for its parent)?
+      alerts   - has it actually fired here?
+      threat   - how many malware families IN THIS STORE use it, and how many
+                 indicators those families account for
+
+    The third is the one that turns a heatmap into a priority list. A blank cell
+    for a technique nothing in the store uses is a gap of no consequence; a blank
+    cell for T1547.001, which 15 families in this store use across 85,057
+    indicators, is the next rule somebody should write.
+
+    Falls back to rules and alerts alone when ATT&CK has not been fetched yet -
+    an empty matrix would read as a broken page rather than as "reference data
+    is still loading".
+    """
     import json as _json
-    # MITRE technique → human name (the subset our rules/alerts use, extensible).
-    TECH_NAME = {
-        "T1110": "Brute Force", "T1078": "Valid Accounts", "T1059.001": "PowerShell",
-        "T1190": "Exploit Public-Facing App", "T1083": "File & Directory Discovery",
-        "T1071.001": "Web Protocols", "T1041": "Exfiltration Over C2", "T1566.002": "Spearphishing Link",
-        "T1046": "Network Service Discovery", "T1204": "User Execution", "T1505.003": "Web Shell",
-        "T1003": "OS Credential Dumping", "T1021": "Remote Services", "T1486": "Data Encrypted for Impact",
-    }
-    TACTIC = {
-        "T1110": "Credential Access", "T1003": "Credential Access", "T1078": "Defense Evasion",
-        "T1059.001": "Execution", "T1204": "Execution", "T1190": "Initial Access",
-        "T1566.002": "Initial Access", "T1505.003": "Persistence", "T1083": "Discovery",
-        "T1046": "Discovery", "T1071.001": "Command and Control", "T1041": "Exfiltration",
-        "T1021": "Lateral Movement", "T1486": "Impact",
-    }
+    import re as _re
+
+    from dashboard_api.coverage import _covered_by
     with get_conn() as conn:
         rules = conn.execute(
-            "SELECT mitre_tech_id, status FROM detection_rules WHERE mitre_tech_id IS NOT NULL"
-        ).fetchall()
+            "SELECT mitre_tech_id, status FROM detection_rules "
+            "WHERE mitre_tech_id IS NOT NULL AND mitre_tech_id<>''").fetchall()
         alerts = conn.execute(
-            "SELECT mitre_tech_id, COUNT(*) AS n FROM alerts WHERE mitre_tech_id IS NOT NULL GROUP BY mitre_tech_id"
-        ).fetchall()
-        # Third dimension: techniques our imported THREAT INTEL attributes to
-        # tracked adversaries. Coverage against rules alone answers "what do I
-        # detect"; adding intel answers the question a SOC actually asks - "what
-        # will I face, and do I detect it?" These techniques arrive from pulse
-        # attack_ids via the connector import, so the navigator now learns from
-        # real intel instead of only the built-in rule set.
+            "SELECT mitre_tech_id, COUNT(*) AS n FROM alerts "
+            "WHERE mitre_tech_id IS NOT NULL GROUP BY mitre_tech_id").fetchall()
+        tech_rows = conn.execute(
+            "SELECT id, name, tactics FROM attack_technique").fetchall()
+        tactic_rows = conn.execute(
+            "SELECT shortname, name, position FROM attack_tactic").fetchall()
+        fam_rows = conn.execute(
+            "SELECT family, technique_id FROM attack_family_technique").fetchall()
+        held = {r["malware_family"]: r["n"] for r in conn.execute(
+            "SELECT malware_family, COUNT(*) AS n FROM iocs "
+            "WHERE malware_family IS NOT NULL AND malware_family<>'' "
+            "GROUP BY malware_family").fetchall()}
+        labels = {r["family"]: r["name"] for r in conn.execute(
+            "SELECT family, name FROM attack_software").fetchall()}
         actor_rows = conn.execute(
-            "SELECT name, ttps FROM threat_actors WHERE active=1 AND ttps IS NOT NULL"
-        ).fetchall()
+            "SELECT name, aliases, ttps FROM threat_actors WHERE active=1").fetchall()
+        # Resolve each tracked actor to its ATT&CK group, so "an adversary we
+        # track uses this" is backed by MITRE's 33-93 techniques per group rather
+        # than by the four or five the library carries by hand.
+        actor_tech: dict[str, list[str]] = {}
+        for a in actor_rows:
+            try:
+                aliases = _json.loads(a["aliases"] or "[]")
+            except (ValueError, TypeError):
+                aliases = []
+            gid = None
+            for cand in [a["name"], *aliases]:
+                key = _re.sub(r"[^a-z0-9]", "", str(cand).lower())
+                if not key:
+                    continue
+                hit = conn.execute(
+                    "SELECT group_id FROM attack_group_name WHERE norm_key=?",
+                    (key,)).fetchone()
+                if hit:
+                    gid = hit["group_id"]
+                    break
+            if gid:
+                tids = [r["technique_id"] for r in conn.execute(
+                    "SELECT technique_id FROM attack_group_technique WHERE group_id=?",
+                    (gid,)).fetchall()]
+            else:
+                # MITRE tracks no group under this name (LockBit, Black Basta,
+                # TA542). The library's own summary is what there is, and saying
+                # nothing would drop three tracked adversaries off the page.
+                try:
+                    tids = [str(t).strip() for t in (_json.loads(a["ttps"] or "[]") or [])
+                            if str(t).strip().upper().startswith("T")]
+                except (ValueError, TypeError):
+                    tids = []
+            for t in tids:
+                actor_tech.setdefault(t, [])
+                if a["name"] not in actor_tech[t]:
+                    actor_tech[t].append(a["name"])
+
     rule_cov: dict[str, int] = {}
     for r in rules:
         if r["status"] == "enabled":
             rule_cov[r["mitre_tech_id"]] = rule_cov.get(r["mitre_tech_id"], 0) + 1
+    rule_set = set(rule_cov)
     alert_cnt = {a["mitre_tech_id"]: a["n"] for a in alerts}
-    # technique -> adversaries known to use it (from imported intel)
-    intel_actors: dict[str, list[str]] = {}
-    for a in actor_rows:
-        try:
-            for t in (_json.loads(a["ttps"]) or []):
-                t = str(t).strip()
-                if t.upper().startswith("T"):
-                    intel_actors.setdefault(t, [])
-                    if a["name"] not in intel_actors[t]:
-                        intel_actors[t].append(a["name"])
-        except (ValueError, TypeError):
-            continue
-    techniques = set(TECH_NAME) | set(rule_cov) | set(alert_cnt) | set(intel_actors)
+
+    fams_by_tech: dict[str, list[str]] = {}
+    vol_by_tech: dict[str, int] = {}
+    for r in fam_rows:
+        fams_by_tech.setdefault(r["technique_id"], []).append(r["family"])
+        vol_by_tech[r["technique_id"]] = (vol_by_tech.get(r["technique_id"], 0)
+                                          + held.get(r["family"], 0))
+
+    tactic_name = {r["shortname"]: r["name"] for r in tactic_rows}
+    tactic_pos = {r["shortname"]: r["position"] for r in tactic_rows}
+
+    if not tech_rows:
+        # ATT&CK has not been loaded. Report what we do know rather than an empty
+        # grid, and say why it is thin.
+        # The adversary dimension does not need ATT&CK loaded - a tracked actor
+        # whose own record names a technique is still "we know somebody uses this
+        # and we have no rule", which is the question this page exists to answer.
+        known = sorted(set(rule_cov) | set(alert_cnt) | set(actor_tech))
+        cells = [{
+            "technique": t, "name": t, "rules": rule_cov.get(t, 0),
+            "alerts": alert_cnt.get(t, 0), "covered": _covered_by(t, rule_set) is not None,
+            "coveredBy": None, "families": [], "familyCount": 0,
+            "indicators": 0, "threatGap": False,
+            "intelActors": actor_tech.get(t, []),
+            "intelGap": bool(actor_tech.get(t)) and _covered_by(t, rule_set) is None,
+        } for t in known]
+        n_cov = sum(1 for t in known if _covered_by(t, rule_set) is not None)
+        return {
+            "tactics": ([{"tactic": "Techniques in use here", "shortname": "other",
+                          "techniques": cells}] if cells else []),
+            "summary": {"techniques": len(known), "covered": n_cov,
+                        "gaps": len(known) - n_cov,
+                        "coveragePct": round(n_cov / len(known) * 100) if known else 0,
+                        "threatTechniques": 0, "threatGaps": 0,
+                        "intelTechniques": len(actor_tech),
+                        "intelGaps": sum(1 for t in actor_tech
+                                         if _covered_by(t, rule_set) is None),
+                        "attackLoaded": False},
+        }
+
     by_tactic: dict[str, list] = {}
-    for t in sorted(techniques):
-        tactic = TACTIC.get(t.split(".")[0]) or TACTIC.get(t) or "Other"
-        by_tactic.setdefault(tactic, []).append({
-            "technique": t, "name": TECH_NAME.get(t, t),
-            "rules": rule_cov.get(t, 0), "alerts": alert_cnt.get(t, 0),
-            "covered": rule_cov.get(t, 0) > 0,
-            # Who intel says uses this, and whether we're blind to it.
-            "intelActors": intel_actors.get(t, []),
-            "intelGap": bool(intel_actors.get(t)) and rule_cov.get(t, 0) == 0,
-        })
-    covered = sum(1 for t in techniques if rule_cov.get(t, 0) > 0)
+    for t in tech_rows:
+        tid = t["id"]
+        fams = fams_by_tech.get(tid, [])
+        # Only techniques something in this deployment touches: a rule, an alert,
+        # or a family the store holds. The full 697 is a reference document, not
+        # a screen - and a wall of grey cells for techniques nothing here uses
+        # buries the ones that matter.
+        if not (tid in rule_set or tid in alert_cnt or fams or tid in actor_tech):
+            continue
+        covered_by = _covered_by(tid, rule_set)
+        cell = {
+            "technique": tid, "name": t["name"],
+            "rules": rule_cov.get(tid, 0),
+            "alerts": alert_cnt.get(tid, 0),
+            "covered": covered_by is not None,
+            # Named when a PARENT rule is doing the covering, so "covered" is
+            # never a claim the reader cannot check.
+            "coveredBy": covered_by if covered_by != tid else None,
+            # key AND label: the page links each family to its own page, and
+            # reconstructing the key from the display name ("Smoke Loader" ->
+            # "smokeloader") happens to work today and breaks the first time
+            # MITRE names one differently.
+            "families": [{"key": f, "label": labels.get(f, f.title())}
+                         for f in sorted(fams)],
+            "familyCount": len(fams),
+            "indicators": vol_by_tech.get(tid, 0),
+            # The actionable cell: this store's own threats use it and nothing
+            # here would see it.
+            "threatGap": bool(fams) and covered_by is None,
+            # The same question asked of the adversaries this library tracks,
+            # now answered from MITRE's technique set for their group rather
+            # than the four or five the library carried by hand.
+            "intelActors": actor_tech.get(tid, []),
+            "intelGap": bool(actor_tech.get(tid)) and covered_by is None,
+        }
+        for short in (t["tactics"] or "").split(",") or [""]:
+            by_tactic.setdefault(short or "other", []).append(cell)
+
+    ordered = sorted(by_tactic.items(), key=lambda kv: tactic_pos.get(kv[0], 99))
+    techniques = {c["technique"] for cells in by_tactic.values() for c in cells}
+    covered = {c["technique"] for cells in by_tactic.values() for c in cells if c["covered"]}
+    threat_tech = {c["technique"] for cells in by_tactic.values() for c in cells
+                   if c["familyCount"]}
+    threat_gaps = {c["technique"] for cells in by_tactic.values() for c in cells
+                   if c["threatGap"]}
     return {
-        "tactics": [{"tactic": k, "techniques": v} for k, v in by_tactic.items()],
-        "summary": {"techniques": len(techniques), "covered": covered,
-                    "gaps": len(techniques) - covered,
-                    "coveragePct": round(covered / len(techniques) * 100) if techniques else 0,
-                    # The actionable number: techniques real intel attributes to
-                    # adversaries that no enabled rule covers.
-                    "intelTechniques": len(intel_actors),
-                    "intelGaps": sum(1 for t in intel_actors if rule_cov.get(t, 0) == 0)},
+        "tactics": [{
+            "tactic": tactic_name.get(k, k.replace("-", " ").title()),
+            "shortname": k,
+            # Biggest threat first within a column, so the top of every tactic is
+            # the technique most of this store's malware actually uses.
+            "techniques": sorted(v, key=lambda c: (-c["indicators"], c["technique"])),
+        } for k, v in ordered],
+        "summary": {
+            "techniques": len(techniques), "covered": len(covered),
+            "gaps": len(techniques) - len(covered),
+            "coveragePct": round(len(covered) / len(techniques) * 100) if techniques else 0,
+            # The number worth acting on: techniques the families in THIS store
+            # use that no enabled rule covers.
+            "threatTechniques": len(threat_tech), "threatGaps": len(threat_gaps),
+            "intelTechniques": len(actor_tech),
+            "intelGaps": sum(1 for t in actor_tech if _covered_by(t, rule_set) is None),
+            "attackLoaded": True,
+        },
     }
 
 

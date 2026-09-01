@@ -43,10 +43,14 @@ export default function AttackNavigatorPage() {
   const kpis = [
     { label: 'Techniques', value: cov?.summary.techniques ?? 0, color: 'text-white' },
     { label: 'Covered', value: cov?.summary.covered ?? 0, color: 'text-safe' },
-    { label: 'Coverage gaps', value: cov?.summary.gaps ?? 0, color: 'text-amber' },
-    // The actionable number: techniques real intel attributes to adversaries we
-    // track, that no enabled rule covers. "What will I face and am I blind to it?"
-    { label: 'Intel gaps', value: cov?.summary.intelGaps ?? 0, color: 'text-threat' },
+    // The actionable number, and the reason this page is worth opening: not
+    // "which of ATT&CK's 697 techniques do we miss" - almost all of them, for
+    // every SOC that has ever existed - but "which techniques do the malware
+    // families in OUR OWN STORE use, that nothing here would see". A separate
+    // "coverage gaps" KPI sat beside it reading the same number, because every
+    // technique on this grid is one something here touches: two labels, one
+    // measure, and a reader left wondering which one was broken.
+    { label: 'Blind to our own threats', value: cov?.summary.threatGaps ?? 0, color: 'text-threat' },
     { label: 'Coverage', value: `${cov?.summary.coveragePct ?? 0}%`, color: 'text-violet' },
   ]
 
@@ -58,7 +62,10 @@ export default function AttackNavigatorPage() {
             <Crosshair className="w-4 h-4 text-magenta" />
             <h1 className="text-lg font-display font-semibold text-white">ATT&amp;CK Navigator</h1>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">Detection coverage by MITRE technique - green = covered, brighter = more alerts, dim = gap</p>
+          <p className="text-xs text-ink-500 mt-0.5">
+            Detection coverage by MITRE technique, ranked within each tactic by how much of
+            <em> this store </em> uses it — green = covered, brighter = more alerts, dim = gap
+          </p>
         </div>
         <div className="flex items-center gap-3 text-[9px] text-ink-500">
           {[['Gap', 'rgba(255,255,255,0.12)'], ['Covered', tk('safe')], ['Active', tk('amber')], ['Hot', tk('magenta')]].map(([l, c]) => (
@@ -94,13 +101,20 @@ export default function AttackNavigatorPage() {
                       </div>
                       <p className="text-[10px] text-ink-300 leading-tight mt-0.5 truncate">{t.name}</p>
                       <p className="text-[9px] text-ink-600 mt-0.5">{t.rules} rule{t.rules === 1 ? '' : 's'} · {t.alerts} alerts</p>
-                      {/* Intel-driven gap: a tracked adversary uses this and no
-                          enabled rule covers it. This is the cell an analyst
-                          should look at first. */}
-                      {t.intelGap && (
+                      {/* The cell that matters: families in THIS store use this
+                          technique and nothing here would see it. A blank cell
+                          for a technique none of our threats use is a gap of no
+                          consequence; this one is the next rule to write. */}
+                      {t.threatGap && (t.familyCount ?? 0) > 0 && (
                         <p className="text-[9px] text-threat mt-0.5 font-semibold truncate"
-                          title={`Used by: ${(t.intelActors ?? []).join(', ')} - no rule covers it`}>
-                          ⚠ intel gap · {(t.intelActors ?? []).length} actor{(t.intelActors ?? []).length === 1 ? '' : 's'}
+                          title={`${(t.families ?? []).map((f) => f.label).join(', ')} — ${(t.indicators ?? 0).toLocaleString()} indicators in this store, and no enabled rule covers it`}>
+                          ⚠ {t.familyCount} famil{t.familyCount === 1 ? 'y' : 'ies'} here · {(t.indicators ?? 0).toLocaleString()}
+                        </p>
+                      )}
+                      {!t.threatGap && (t.familyCount ?? 0) > 0 && (
+                        <p className="text-[9px] text-ink-600 mt-0.5 truncate"
+                          title={(t.families ?? []).map((f) => f.label).join(', ')}>
+                          {t.familyCount} famil{t.familyCount === 1 ? 'y' : 'ies'} here
                         </p>
                       )}
                     </button>
@@ -127,8 +141,42 @@ export default function AttackNavigatorPage() {
               </div>
               <div className={cn('px-3 py-2.5 rounded-xl border text-xs',
                 selected.covered ? 'border-safe/25 bg-safe/10 text-safe' : 'border-amber/25 bg-amber/10 text-amber')}>
-                {selected.covered ? `Covered by ${selected.rules} detection rule${selected.rules === 1 ? '' : 's'}.` : 'Coverage gap - no enabled rule maps to this technique.'}
+                {selected.covered
+                  ? (selected.coveredBy
+                      // Inherited from a parent: detecting "command interpreter
+                      // execution" catches PowerShell and cmd alike. Said out
+                      // loud, because "covered" the reader cannot check is not
+                      // a claim worth making.
+                      ? `Covered through ${selected.coveredBy}, the parent technique — a rule there sees this one too.`
+                      : `Covered by ${selected.rules} detection rule${selected.rules === 1 ? '' : 's'}.`)
+                  : 'Coverage gap — no enabled rule maps to this technique.'}
               </div>
+
+              {/* Whose problem this is. A gap matters in proportion to what your
+                  own feeds say is out there using it. */}
+              {(selected.familyCount ?? 0) > 0 && (
+                <div className={cn('px-3 py-2.5 rounded-xl border',
+                  selected.threatGap ? 'border-threat/25 bg-threat/8' : 'border-white/8 bg-surface-2/40')}>
+                  <p className="text-[11px] text-ink-200">
+                    <b className="tabular-nums">{selected.familyCount}</b>{' '}
+                    famil{selected.familyCount === 1 ? 'y' : 'ies'} in this store use{selected.familyCount === 1 ? 's' : ''} it,
+                    across <b className="tabular-nums">{(selected.indicators ?? 0).toLocaleString()}</b> indicators.
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {(selected.families ?? []).map((f) => (
+                      <a key={f.key} href={`/dashboard/cti/malware/${encodeURIComponent(f.key)}`}
+                        className="px-1.5 py-0.5 rounded border border-magenta/25 bg-magenta/10 text-[10px]
+                                   text-magenta hover:bg-magenta/20 transition-all hover:scale-105">
+                        {f.label}
+                      </a>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-ink-600 mt-2 leading-snug">
+                    From MITRE&apos;s record of what these families do. It says these threats use this
+                    technique — not that any of them has been on this network.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <div className="px-3 py-2 rounded-lg bg-surface-2/60 border border-white/8"><div className="text-lg font-bold font-mono text-white">{selected.rules}</div><div className="text-[10px] text-ink-500">rules</div></div>
                 <div className="px-3 py-2 rounded-lg bg-surface-2/60 border border-white/8"><div className="text-lg font-bold font-mono text-magenta">{selected.alerts}</div><div className="text-[10px] text-ink-500">alerts observed</div></div>

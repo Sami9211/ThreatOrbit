@@ -2202,6 +2202,67 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · The ATT&CK Navigator was fourteen techniques in a hand-written
+  dictionary.** A page whose entire purpose is answering *"are we blind to
+  this?"* was built from a literal `TECH_NAME = {...}` of 14 entries with a
+  matching `TACTIC = {...}` - and it was wrong as well as small, filing T1078
+  under "Defense Evasion", a tactic ATT&CK renamed to Stealth. Nothing about it
+  was connected to MITRE, so it could only go further out of date.
+
+  Three things existed in this platform and had never been introduced to each
+  other: the store knows which family each indicator belongs to, ATT&CK knows
+  what each family does, and every detection rule names the technique it fires
+  on. Joined:
+
+  ```
+  enabled rules cover 61 of 628 technique instances used by the
+  families in this store  ->  9.7%
+
+  AsyncRAT       18,355 indicators    1/20   blind: Initial Access, Execution,
+                                             Persistence, Privilege Escalation
+  Remcos         14,024 indicators    1/38
+  Cobalt Strike  11,265 indicators    6/73
+  Emotet          7,997 indicators    7/47   blind: Discovery, Lateral Movement,
+                                             Collection
+  ```
+
+  And the ranked answer to "what should we write next?", which is the output
+  worth having:
+
+  ```
+  T1059.003  Windows Command Shell               11 families    90,320 indicators
+  T1106      Native API                          13 families    89,015
+  T1547.001  Registry Run Keys / Startup Folder  15 families    85,057
+  T1057      Process Discovery                   11 families    84,732
+  T1033      System Owner/User Discovery         12 families    81,222
+  ```
+
+  The navigator now runs on the loaded release: 209 techniques in play here, 13
+  tactic columns in MITRE's kill-chain order, real names, and every cell ranked
+  within its column by how much of THIS store's malware uses it. **166 of them
+  are techniques our own threats use that nothing here would see.** That is the
+  KPI, and it replaced a "coverage gaps" tile sitting beside it reading the same
+  number - two labels for one measure, leaving a reader to wonder which was
+  broken.
+
+  Two pieces of arithmetic keep it honest rather than flattering:
+
+  - **Sub-techniques inherit downward, never sideways.** A rule on T1059 covers
+    T1059.001 and T1059.003, because detecting "command interpreter execution"
+    catches PowerShell and cmd alike. A rule on T1059.001 covers neither its
+    parent nor T1059.005: PowerShell logging says nothing about VBScript.
+    Getting that backwards inflates coverage by exactly the amount that would
+    make the number useless. Where coverage IS inherited the drawer says so, by
+    name, so "covered" is never a claim the reader cannot check.
+  - **Only enabled rules count.** A disabled rule is a rule that does not fire,
+    and counting one is the same self-flattery as counting a dead feed's
+    historical value count - a mistake this platform made earlier the same day.
+
+  The "adversaries we track use this" dimension was kept and upgraded rather than
+  dropped: it read from the library's hand-written four or five techniques per
+  actor and now reads MITRE's 33-93 for the group, falling back to the library's
+  own list for the three actors MITRE does not track.
+
 - **2026-09-01 · "xinlou.info is Emotet" is a label. "Emotet phishes in, runs
   PowerShell, persists, moves laterally over SMB" is a lead.** The indicator
   drawer is where an analyst decides what to do in the next minute, and it named

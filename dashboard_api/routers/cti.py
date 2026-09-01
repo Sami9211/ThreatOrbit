@@ -1392,6 +1392,28 @@ def malware_family(name: str, user: dict = Depends(current_user)):
     return d
 
 
+@router.get("/coverage")
+def detection_coverage_view(user: dict = Depends(current_user)):
+    """Would we see it? Answered from this deployment's own data.
+
+    The store knows which families its indicators belong to, ATT&CK knows what
+    those families do, and the detection rules each name the technique they fire
+    on. Nothing joined the three, so the only available answer was somebody's
+    memory - and the joined answer is that enabled rules cover 9.7% of the
+    technique instances used by the families this store holds.
+
+    It is a CONDITIONAL, not an exposure report: if the threats these feeds
+    describe turned up here, this is the fraction of their behaviour the rules
+    would see. Whether any of it has been near this network is the sightings
+    ledger's question, not this one.
+    """
+    from dashboard_api.coverage import detection_coverage
+    with get_conn() as conn:
+        data = detection_coverage(conn, tenancy.org_of(user) if tenancy.enforced() else None)
+        data["attackRelease"] = release(conn)
+    return data
+
+
 class MalwareFamilyUpdate(BaseModel):
     label: str | None = None
     role: str | None = None

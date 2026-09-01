@@ -4260,29 +4260,42 @@ def test_attack_coverage_surfaces_intel_driven_gaps(client, auth):
     from dashboard_api.db import get_conn
 
     actor = "IntelGapActor-" + _uuid.uuid4().hex[:6]
-    technique = "T1560.001"          # deliberately outside the built-in rule set
+    # Outside the rule set AND outside every rule's PARENT. That second half
+    # matters since coverage began inheriting downward: T1560.001 used to be a
+    # gap here and is now correctly covered by the T1560 rule, because detecting
+    # "archive collected data" catches the sub-technique too. The second actor
+    # below pins that inheritance so this test proves both halves.
+    technique = "T1614.001"
+    inherited = "T1560.001"          # parent T1560 IS in the shipped rule set
     try:
         with get_conn() as c:
             c.execute(
                 "INSERT INTO threat_actors (id,name,aliases,type,motivations,active,"
                 "sophistication,threat_level,sectors,ttps,malware,ioc_count,campaign_count) "
                 "VALUES (?,?,'[]','apt','[]',1,4,'high','[]',?,'[]',0,0)",
-                (str(_uuid.uuid4()), actor, _json.dumps([technique])))
+                (str(_uuid.uuid4()), actor, _json.dumps([technique, inherited])))
             c.commit()
 
         cov = client.get("/siem/attack-coverage", headers=auth).json()
         assert cov["summary"]["intelTechniques"] >= 1
         assert cov["summary"]["intelGaps"] >= 1, "an uncovered intel technique is a gap"
 
-        found = None
-        for tac in cov["tactics"]:
-            for t in tac["techniques"]:
-                if t["technique"] == technique:
-                    found = t
+        cells = {t["technique"]: t
+                 for tac in cov["tactics"] for t in tac["techniques"]}
+        found = cells.get(technique)
         assert found is not None, f"{technique} from intel must appear in the navigator"
         assert actor in found["intelActors"], "the attributing adversary must be named"
         assert found["intelGap"] is True, "no rule covers it, so it is a gap"
         assert found["covered"] is False
+
+        # ...and a technique whose PARENT has a rule is not a gap. Detecting
+        # "archive collected data" catches the sub-technique, and reporting it as
+        # a hole would send somebody to write a rule they already have.
+        parent_covered = cells.get(inherited)
+        assert parent_covered is not None
+        assert parent_covered["covered"] is True, \
+            f"{inherited} should be covered through its parent"
+        assert parent_covered["intelGap"] is False
     finally:
         with get_conn() as c:
             c.execute("DELETE FROM threat_actors WHERE name=?", (actor,))
