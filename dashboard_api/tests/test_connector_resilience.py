@@ -761,8 +761,19 @@ def test_bulk_osint_is_parallel_and_survives_a_dead_feed(monkeypatch):
 
     # Blocklists AND the per-family attribution trails: both go through this
     # aggregator, and a family that 404s upstream must cost only itself.
-    expected = len(conn_mod._BULK_FEEDS) + len(conn_mod.family_feeds())
-    assert len(calls) == expected, "every feed must be attempted"
+    configured = ([f[1] for f in conn_mod._BULK_FEEDS]
+                  + [f[1] for f in conn_mod.family_feeds()])
+    assert set(configured) <= set(calls), (
+        "not every feed was attempted: "
+        f"{sorted(set(configured) - set(calls))}")
+    # A feed whose origin refuses is retried against a mirror republishing the
+    # same list, so the count is a floor rather than an equality - but every
+    # EXTRA call has to be one of those mirrors, never a second attempt at
+    # something already fetched.
+    extra = [u for u in calls if u not in set(configured)]
+    mirrors = {m for m, _ in conn_mod.feed_mirrors().values()}
+    assert set(extra) <= mirrors, f"unexpected fetches: {sorted(set(extra) - mirrors)}"
+    assert len(calls) == len(set(calls)), "a feed was fetched twice"
     values = {o["value"] for o in out}
     assert "203.0.113.9" in values and "http://bad.test/x.exe" in values
     assert "198.51.100.7" in values

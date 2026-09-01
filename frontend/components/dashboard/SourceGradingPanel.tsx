@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Award, Loader2, Check, Info } from 'lucide-react'
+import { Award, Loader2, Check, Info, AlertTriangle, Radio, CloudOff } from 'lucide-react'
 import { tk } from '@/lib/colors'
 import { cn } from '@/lib/utils'
 import { fadeInUp } from '@/lib/motion'
@@ -24,6 +24,71 @@ import { fetchIntelSources, gradeIntelSource, type IntelSource, type IntelSource
  * grading is recorded against their name and is never overwritten by a later
  * revision of ours.
  */
+/**
+ * A second thing this panel now has to say, learned the hard way.
+ *
+ * `values` is history. A feed that died last week still shows the 200,000 values
+ * it contributed before it died, so the row looks healthy - and that is exactly
+ * how all thirty-five malware-family trails returned 404 for days after the
+ * upstream project moved them, while every sync reported success and this panel
+ * showed nothing wrong. A dead feed and a quiet feed look identical at the count.
+ *
+ * So the LAST FETCH is now the first thing a row says, failing sources sort to
+ * the top regardless of size, and "failing" carries the date it started.
+ */
+/** Reachability, not correctness. A feed can be perfectly reachable and wrong;
+ *  that is what the Admiralty grade below is for. */
+const HEALTH: Record<string, { label: string; color: string; icon: typeof Radio; hint: string }> = {
+  failed: { label: 'not answering', color: tk('magenta'), icon: AlertTriangle,
+    hint: 'The last fetch failed. The store keeps this source\u2019s existing values but is learning nothing new from it.' },
+  mirrored: { label: 'via mirror', color: tk('amber'), icon: CloudOff,
+    hint: 'This source\u2019s own host refused the connection, so the same list was fetched from somewhere that republishes it. Same source, different host.' },
+  ok: { label: 'answering', color: tk('safe'), icon: Radio, hint: 'The last fetch returned content.' },
+  unchanged: { label: 'no change', color: tk('safe'), icon: Radio,
+    hint: 'The source answered and had nothing new. That is a healthy feed, not a silent one.' },
+}
+
+/** "failing since Tuesday" beats "failing". */
+function sinceLabel(iso: string | null): string | null {
+  if (!iso) return null
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return null
+  const days = Math.floor((Date.now() - then) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 31) return `${days} days ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+/** The detail worth showing. A source that fetched everything it was asked for
+ *  has nothing to report, and printing "all 35 family trails fetched" on a green
+ *  row trains people to skip the line that matters when one is missing. */
+function detailOf(s: IntelSource): string | null {
+  if (!s.statusDetail) return null
+  if (s.status !== 'failed' && !/unavailable|unreachable/i.test(s.statusDetail)) return null
+  return s.statusDetail
+}
+
+function HealthPill({ s }: { s: IntelSource }) {
+  const h = s.status ? HEALTH[s.status] : null
+  if (!h) return null
+  const Icon = h.icon
+  const since = sinceLabel(s.lastOk)
+  return (
+    <span
+      title={`${h.hint}${since ? `\n\nLast answered: ${since}.` : ''}${s.servedVia ? `\n\nServed from: ${s.servedVia}` : ''}`}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium
+                 transition-transform hover:scale-105 cursor-default shrink-0"
+      style={{ color: h.color, borderColor: `${h.color}40`, background: `${h.color}12` }}>
+      <Icon className="w-2.5 h-2.5" />
+      {h.label}
+      {s.status === 'failed' && since && (
+        <span className="opacity-70">· last ok {since}</span>
+      )}
+    </span>
+  )
+}
+
 const GRADE_COLOR: Record<string, string> = {
   A: tk('safe'), B: tk('safe'), C: tk('amber'), D: tk('violet'),
   E: tk('magenta'), F: tk('magenta'),
@@ -56,11 +121,21 @@ export default function SourceGradingPanel() {
   // pattern React's lint rule is right to object to.
   const load = useCallback(() => {
     fetchIntelSources()
-      .then((r) => { setSources(r.items); setScale(r.scale); setErr(null) })
+      .then((r) => {
+        // Failing sources first, whatever their size. The API sorts by value
+        // count, which is precisely the order that hides an outage: the feeds
+        // that contributed most before they died sort to the top and look like
+        // the healthiest rows on the page.
+        const rank = (x: IntelSource) => (x.status === 'failed' ? 0 : x.status === 'mirrored' ? 1 : 2)
+        setSources([...r.items].sort((a, b) => rank(a) - rank(b) || b.values - a.values))
+        setScale(r.scale); setErr(null)
+      })
       .catch(() => setErr('Could not load intel sources.'))
       .finally(() => setLoading(false))
   }, [])
   useEffect(load, [load])
+
+  const broken = sources.filter((s) => s.status === 'failed')
 
   const grade = async (s: IntelSource, g: string) => {
     if (g === s.reliability) return
@@ -100,6 +175,24 @@ export default function SourceGradingPanel() {
 
       {err && <p className="px-5 py-3 text-[11px]" style={{ color: tk('magenta') }}>{err}</p>}
 
+      {/* Reachability before reliability. There is no point weighing how much to
+          trust a source that is not answering. */}
+      {broken.length > 0 && (
+        <div className="px-5 py-2.5 border-b flex items-start gap-2"
+          style={{ borderColor: `${tk('magenta')}25`, background: `${tk('magenta')}0d` }}>
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" style={{ color: tk('magenta') }} />
+          <p className="text-[10px] leading-snug" style={{ color: tk('magenta') }}>
+            <span className="font-semibold">
+              {broken.length} source{broken.length > 1 ? 's are' : ' is'} not answering
+            </span>
+            <span className="text-ink-400">
+              {' — '}{broken.map((b) => b.name).join(', ')}. Their existing values are still
+              in the store and still scored; they are simply not learning anything new.
+            </span>
+          </p>
+        </div>
+      )}
+
       {!loading && sources.length === 0 && (
         <p className="px-5 py-6 text-[11px] text-ink-600 text-center">
           No source has asserted a value yet. Sources appear here after the first sync.
@@ -123,7 +216,10 @@ export default function SourceGradingPanel() {
               <div key={s.id} className="px-5 py-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-[11px] text-white truncate" title={s.id}>{s.name}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-[11px] text-white truncate" title={s.id}>{s.name}</p>
+                      <HealthPill s={s} />
+                    </div>
                     <p className="text-[10px] text-ink-600">
                       <span className="tabular-nums">{s.values.toLocaleString()}</span> values
                       {' · '}
@@ -148,6 +244,18 @@ export default function SourceGradingPanel() {
                     ))}
                   </div>
                 </div>
+                {/* What went wrong, in the words it arrived in - or, on a
+                    source that is answering but no longer complete, exactly what
+                    is missing. "4 of 35 family trails unavailable: redline, ..."
+                    is a coverage decision somebody should get to make; a green
+                    row saying nothing is not. A clean success has nothing to add
+                    here, so it stays quiet. */}
+                {detailOf(s) && (
+                  <p className="text-[10px] mt-1.5 leading-snug max-w-2xl"
+                    style={{ color: s.status === 'failed' ? tk('magenta') : tk('amber') }}>
+                    {detailOf(s)}
+                  </p>
+                )}
                 {s.reason && (
                   <p className="text-[10px] text-ink-600 mt-1.5 leading-snug max-w-2xl">
                     {s.reason}

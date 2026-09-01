@@ -87,12 +87,18 @@ def test_an_operator_grading_is_never_overwritten_by_a_shipped_default():
             "reliability_set_by='analyst@example.test' WHERE id=?",
             ("burned us twice", sid))
         conn.commit()
-        assert _apply_feed_reliability_defaults(conn) == 0, (
-            "the defaults pass must skip a source an operator has graded")
+        # Scoped to THIS source rather than to a global count. A count of zero
+        # assumed no other source row was ungraded, which stopped being true
+        # once feeds began recording their fetch health BEFORE they had
+        # contributed a value - a source that exists but has asserted nothing is
+        # now a normal state, and it is the state a broken feed is in.
+        _apply_feed_reliability_defaults(conn)
         after = conn.execute(
             "SELECT reliability FROM intel_sources WHERE id=?", (sid,)).fetchone()
         assert after["reliability"] == "F"
         # ...and once the operator's mark is cleared, the default applies again.
+        # Every other row was just moved to its default by the pass above, so
+        # this one is the only thing left that can change.
         conn.execute("UPDATE intel_sources SET reliability_set_by=NULL WHERE id=?", (sid,))
         conn.commit()
         assert _apply_feed_reliability_defaults(conn) == 1

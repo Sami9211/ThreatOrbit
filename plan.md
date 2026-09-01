@@ -2202,6 +2202,65 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · Every malware-family trail had been 404ing for days and every
+  sync reported success.** The Maltrail project moved its detection content into
+  a separate repository (`stamparm/maltrail/trails/static/malware/` →
+  `stamparm/trails/malware/`), so all **35** family files returned 404. Nothing
+  said so. A feed that fails logs a warning nobody reads and contributes an
+  empty list, and an empty list is exactly what a feed with nothing new
+  contributes too - so at the tally a dead source and a quiet source are the
+  same source. The single most valuable thing this engine does, naming the
+  family behind a value, had stopped and the platform looked healthy.
+
+  The URL was one line. The silence was the defect, so the fix is
+  `_record_feed_health`: every fetch now records its outcome against the source.
+
+  | column | says |
+  |---|---|
+  | `last_status` | `ok` / `unchanged` / `mirrored` / `failed` |
+  | `last_status_detail` | the error in the words it arrived in |
+  | `last_ok` | when it last actually answered - only ever moves forward |
+  | `served_via` | the mirror that answered when the origin would not |
+
+  Measured on the live store after the fix - all 35 trails fetch again,
+  **213,555 attributed rows across 35 families**, and the feed panel now reports
+  what was previously invisible:
+
+  ```
+       ok  Maltrail malware trails      all 35 family trails fetched
+ mirrored  blocklist.de, CINS Army, Emerging Threats, Tor exit nodes
+             origin unreachable: 403 Forbidden
+   failed  abuse.ch URLhaus / Feodo Tracker / ThreatFox   403 Forbidden
+  ```
+
+  Three abuse.ch feeds are refused outright by this host's egress policy. That
+  was true before today; the difference is that the platform now says so instead
+  of showing three healthy-looking rows. `values` is history, and a feed that
+  died last week still shows everything it contributed before it died - which is
+  precisely the ordering that hides an outage, so failing sources now sort above
+  large ones and "failing" carries the date it started.
+
+  Three smaller corrections fell out of the same work, each a way the record
+  could have gone quietly wrong:
+
+  - **A mirrored feed that answered `304 Not Modified` recorded itself as
+    direct.** So provenance was true on the first sync and a lie on every one
+    after. A mirror with nothing new is still the host that answered.
+  - **The provenance write was a bare `UPDATE`**, which matches zero rows for a
+    source that has never contributed - the one case where an operator most
+    needs to know whether a new feed works. It is an upsert now.
+  - **Every writer set `name = id`**, so the panel headed "how much each source
+    is trusted" listed `osint:abuse.ch URLhaus`. A name only the code uses is a
+    name an analyst has to decode.
+
+  A mirror keeps the ORIGINAL `source_id` throughout - fetching blocklist.de's
+  list from FireHOL does not make it two independent opinions, and manufacturing
+  corroboration is the error this store has already made twice. A test now pins
+  the rule that makes that safe: a mirror may republish a different PATH on the
+  source's own host (the Tor Project publishes its exit nodes at two endpoints),
+  never a different host. It caught a real mismatch on the Tor entry while being
+  written.
+
 - **2026-07-30 · "What is in the store": the first aggregate worth having, and it
   is unflattering.** "315,185 indicators" is a number that flatters and explains
   nothing. `GET /cti/store-summary` answers the questions that decide whether the

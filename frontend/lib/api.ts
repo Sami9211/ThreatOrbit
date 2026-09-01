@@ -663,6 +663,22 @@ export interface IntelSource {
    *  shipped default, so this is load-bearing rather than cosmetic. */
   gradedBy: string
   isDefault: boolean
+  /** How the LAST fetch went: 'ok' | 'unchanged' | 'mirrored' | 'failed'.
+   *  Null for a source that predates health tracking, or one nothing fetches.
+   *
+   *  `values` is history and a dead feed keeps it, which is exactly how
+   *  thirty-five malware-family trails 404ed for days while the panel showed
+   *  healthy rows with large counts. */
+  status: 'ok' | 'unchanged' | 'mirrored' | 'failed' | null
+  /** The error in the words it arrived in, or - on a partly-degraded source -
+   *  what is missing. "4 of 35 family trails unavailable: redline, ..." */
+  statusDetail: string | null
+  /** When this source last actually answered. Turns "failing" into "failing
+   *  since Tuesday", which is the difference between a blip and an outage. */
+  lastOk: string | null
+  /** Set when the source's own host refused and a mirror republishing the same
+   *  list answered instead. The source is unchanged; only the host is. */
+  servedVia: string | null
   firstSeen: string | null
   lastSeen: string | null
   values: number

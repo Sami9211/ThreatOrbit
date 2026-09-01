@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 19
 
 
 class SchemaVersionError(RuntimeError):
@@ -486,6 +486,10 @@ CREATE TABLE IF NOT EXISTS intel_sources (
     reliability_reason TEXT,        -- why, in words an analyst can argue with
     reliability_set_by TEXT,        -- NULL = shipped default, else the operator's email
     url          TEXT,
+    served_via   TEXT,              -- mirror that answered when the origin would not
+    last_status  TEXT,              -- ok | unchanged | mirrored | failed
+    last_status_detail TEXT,        -- the error, in the words the exception used
+    last_ok      TEXT,              -- when this source last actually answered
     first_seen   TEXT,
     last_seen    TEXT,
     value_count  INTEGER NOT NULL DEFAULT 0
@@ -1192,6 +1196,22 @@ _MIGRATIONS = [
     # nobody can interrogate is one they are right to distrust. NULL `set_by`
     # means the shipped default is in force and may be revised on upgrade; an
     # operator's own grading is never overwritten.
+    # The URL that actually served this source's data, when it was not the
+    # source's own. Set when a feed's origin is unreachable from this host and a
+    # mirror republishing the same list was used instead - the source_id is
+    # deliberately unchanged, so without this the operator would be told the
+    # origin is healthy while it is refusing the connection. NULL = fetched
+    # directly, which is also what a recovered origin resets it to.
+    ("intel_sources", "served_via", "TEXT"),
+    # How this source's LAST fetch actually went, and when it last answered.
+    # A feed that dies is otherwise invisible: it logs a warning nobody reads and
+    # contributes an empty list, which at the tally is indistinguishable from a
+    # feed with nothing new. Thirty-five malware-family trails 404ed for days
+    # that way. `last_ok` only moves forward, so a failing feed keeps the
+    # timestamp that turns "failing" into "failing since Tuesday".
+    ("intel_sources", "last_status", "TEXT"),
+    ("intel_sources", "last_status_detail", "TEXT"),
+    ("intel_sources", "last_ok", "TEXT"),
     ("intel_sources", "reliability_reason", "TEXT"),
     ("intel_sources", "reliability_set_by", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429

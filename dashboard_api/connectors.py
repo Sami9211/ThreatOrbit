@@ -1543,8 +1543,20 @@ _BULK_FEEDS = [
 # feeds were producing one opinion because duplicates were dropped instead of
 # recorded.
 _MALTRAIL_SOURCE = "Maltrail malware trails"
+# The Maltrail project split its detection content out of the engine repository:
+# the static trails now live in stamparm/trails, and the old
+# maltrail/trails/static/malware/ path returns 404 for EVERY family.
+#
+# That is worth stating plainly, because of how it was found. The store had
+# 35 families configured and every one of them had been 404ing since the split;
+# the sync still reported success, because a feed that fails is logged at
+# WARNING and contributes an empty list. The single most valuable thing this
+# engine does - naming the family behind a value, which took attribution from
+# 0% to 35.8% of the store - had been dead for days and nothing said so. The URL
+# below is the fix; `_record_feed_health` is the reason it cannot happen quietly
+# again.
 _MALTRAIL_FAMILY_URL = (
-    "https://raw.githubusercontent.com/stamparm/maltrail/master/trails/static/malware/{}.txt")
+    "https://raw.githubusercontent.com/stamparm/trails/master/malware/{}.txt")
 
 # family -> (what it DOES, the threat_type that follows from it). The role is
 # public, uncontroversial classification - the kind of thing every vendor write-up
@@ -1611,6 +1623,58 @@ def family_feeds() -> list[tuple[str, str, str, str]]:
     """(family, url, role, threat_type) for every tracked family."""
     return [(f, _MALTRAIL_FAMILY_URL.format(f), role, threat)
             for f, (role, threat) in _MALWARE_FAMILIES.items()]
+
+
+# -- Reachability: the same source, from somewhere this host can reach ----------
+#
+# Measured on a live deployment: **9 of 16 configured feeds had ever
+# contributed a value.** The other seven were not misconfigured - the host's
+# egress policy refuses the CONNECT, so abuse.ch, blocklist.de, CINS Army,
+# Emerging Threats and the Tor Project were unreachable, and every one of those
+# is a feed graded B or C. What was left was the bulk aggregations graded D.
+#
+# That is not only a coverage problem, it is a SCORING problem: corroboration is
+# the one signal a multi-feed platform exists to produce, and the store measured
+# 1.6% of values backed by more than one source. Feeds that cannot be fetched
+# cannot corroborate anything.
+#
+# The FireHOL project republishes several of these lists on GitHub, which this
+# environment can reach, and each mirror file declares the upstream URL it was
+# built from - the same URLs already in _BULK_FEEDS. So the fallback is honest:
+# **the source is unchanged, only the host is.**
+#
+# That distinction is load-bearing. A mirror keeps the ORIGINAL source_id,
+# because fetching blocklist.de's list from a mirror does not make it two
+# independent sources - manufacturing corroboration out of one opinion is the
+# exact error this store has already made twice, and it is the reason the
+# thirty-five Maltrail family files share a single id.
+#
+# name -> (mirror url, the upstream URL that mirror declares it republishes)
+_FEED_MIRROR: dict[str, tuple[str, str]] = {
+    # NOTE the upstream here is check.torproject.org/exit-addresses, while the
+    # feed itself is configured with .../torbulkexitlist. Same publisher, same
+    # fact - the set of addresses Tor exits from - published at two endpoints in
+    # two formats. That is the loosest this fallback is allowed to get: a
+    # different PATH on the source's own host is the same source's opinion, a
+    # different HOST is somebody else's, and treating somebody else's as this
+    # one's is how a store invents corroboration.
+    "Tor exit nodes": (
+        "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/tor_exits.ipset",
+        "https://check.torproject.org/exit-addresses"),
+    "blocklist.de": (
+        "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/blocklist_de.ipset",
+        "http://lists.blocklist.de/lists/all.txt"),
+    "CINS Army": (
+        "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/ciarmy.ipset",
+        "http://cinsscore.com/list/ci-badguys.txt"),
+    "Emerging Threats": (
+        "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/et_compromised.ipset",
+        "http://rules.emergingthreats.net/blockrules/compromised-ips.txt"),
+}
+
+
+def feed_mirrors() -> dict[str, tuple[str, str]]:
+    return dict(_FEED_MIRROR)
 
 
 def _bulk_source_id(name: str) -> str:
@@ -1729,6 +1793,113 @@ _BULK_FEED_MAX_BYTES = int(os.environ.get(
     "DASHBOARD_BULK_FEED_MAX_BYTES", str(max(4 * 1024 * 1024, _BULK_MAX_PER_FEED * 120))))
 
 
+# What happened to a feed on its last fetch. `unchanged` is a SUCCESS - a 304
+# means the origin answered and had nothing new - and `mirrored` means the
+# origin refused but the same list was served from somewhere else.
+FEED_OK, FEED_UNCHANGED, FEED_MIRRORED, FEED_FAILED = (
+    "ok", "unchanged", "mirrored", "failed")
+_FEED_HEALTHY = {FEED_OK, FEED_UNCHANGED, FEED_MIRRORED}
+
+
+def _record_feed_health(health: dict[str, dict], now: str | None = None) -> list[str]:
+    """Persist how each feed's last fetch actually went. Returns the feeds that
+    have JUST broken - healthy on the previous sync, failing on this one.
+
+    This exists because of a failure it would have caught. All thirty-five
+    malware-family trails 404ed for days after the upstream project moved them,
+    and every sync in that window reported success: a dead feed logs a warning
+    and contributes an empty list, which is indistinguishable at the tally from
+    a feed with nothing new to say. The store simply stopped learning family
+    names and said nothing.
+
+    So the outcome is recorded per source rather than inferred from the totals:
+
+      last_status         ok | unchanged | mirrored | failed
+      last_status_detail  the error, in the words the exception used
+      last_ok             when this source last actually answered - the number
+                          that turns "failing" into "failing since Tuesday"
+      served_via          the mirror that answered, when the origin would not
+
+    `last_ok` only ever moves forward, so a failing feed keeps the timestamp
+    that says how long it has been failing. `served_via` is cleared the moment a
+    feed is served directly again, so a recovered origin stops being described
+    as mirrored - and is deliberately NOT cleared when a mirrored feed answers
+    304, because a mirror that has nothing new is still the host that answered.
+
+    Best-effort: bookkeeping must never fail a sync that imported.
+    """
+    if not health:
+        return []
+    now = now or _now()
+    broken: list[str] = []
+    try:
+        with get_conn() as conn:
+            prior = {r["id"]: r["last_status"] for r in conn.execute(
+                "SELECT id, last_status FROM intel_sources").fetchall()}
+            for name, h in health.items():
+                sid = _bulk_source_id(name)
+                status = h.get("status") or FEED_FAILED
+                detail = (h.get("detail") or "")[:500] or None
+                served = h.get("served_via")
+                ok_at = now if status in _FEED_HEALTHY else None
+                was = prior.get(sid)
+                # Only a TRANSITION is news. A feed that was already failing on
+                # the last sync does not get to interrupt anybody again, and a
+                # source we have never successfully fetched (no prior row) is a
+                # configuration question, not an outage.
+                if status == FEED_FAILED and was in _FEED_HEALTHY:
+                    broken.append(name)
+                # The feed's own name, not its slug. Everything that writes a
+                # source row writes `name = id`, so the panel headed "how much
+                # each source is trusted" listed "osint:abuse.ch URLhaus" - and
+                # a name only the code uses is a name an analyst has to decode.
+                # Only ever an upgrade: a row already carrying a real name (an
+                # operator's, or a better one) keeps it.
+                conn.execute(
+                    "INSERT INTO intel_sources (id,name,first_seen,last_seen,"
+                    "last_status,last_status_detail,served_via,last_ok) "
+                    "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                    "last_status=?, last_status_detail=?, served_via=?, "
+                    "last_ok=COALESCE(?, intel_sources.last_ok), "
+                    "name=CASE WHEN intel_sources.name=intel_sources.id "
+                    "THEN ? ELSE intel_sources.name END",
+                    (sid, name, now, now, status, detail, served, ok_at,
+                     status, detail, served, ok_at, name))
+            conn.commit()
+    except Exception:
+        logging.debug("recording feed health failed", exc_info=True)
+        return []
+    return broken
+
+
+def _announce_broken_feeds(broken: list[str]) -> None:
+    """Tell somebody when a feed that was working stops working.
+
+    Grouped, because "the internet is down" breaks sixteen feeds at once and
+    sixteen rows is the same information as one row that says sixteen - except
+    that sixteen rows also evicts everything else from a thirty-row bell.
+    """
+    if not broken:
+        return
+    try:
+        from dashboard_api.routers.platform import notify
+        with get_conn() as conn:
+            for name in sorted(broken):
+                notify(conn, type="connector.failed", severity="warning",
+                       title=f"Feed stopped working: {name}",
+                       detail=("This source answered on the previous sync and "
+                               "refused on this one. Until it recovers the "
+                               "store keeps its old values but learns nothing "
+                               "new from it."),
+                       link="/dashboard/config?tab=sources",
+                       group_key="feed:broken",
+                       rollup_title="{n} intel feeds stopped working",
+                       rollup_link="/dashboard/config?tab=sources")
+            conn.commit()
+    except Exception:
+        logging.debug("announcing broken feeds failed", exc_info=True)
+
+
 def _fetch_bulk_osint(c: dict) -> list[dict]:
     """Pull every curated public blocklist in parallel and normalise the lot.
 
@@ -1751,6 +1922,15 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
             state = {}
     new_state: dict = {}
     unchanged: list[str] = []
+    # feed name -> how its fetch went, for _record_feed_health. Written from
+    # inside the pool, so it is a plain dict assigned under distinct keys - one
+    # writer per key, which CPython's dict makes safe without a lock.
+    health: dict[str, dict] = {}
+    # The family trails share ONE source_id, so their health is one verdict.
+    # Kept per family first, because "4 of 35 are gone" is the useful sentence
+    # and a single boolean cannot say it.
+    fam_ok: set[str] = set()
+    fam_failed: dict[str, str] = {}
 
     def one(feed):
         name, url, parser, forced, conf, threat = feed
@@ -1765,16 +1945,62 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
             if getattr(resp, "not_modified", False):
                 new_state[url] = prev            # keep the validator; feed unchanged
                 unchanged.append(name)
+                health[name] = {"status": FEED_UNCHANGED}
                 return []
             h = getattr(resp, "headers", {}) or {}
             if h.get("etag") or h.get("last-modified"):
                 new_state[url] = {"etag": h.get("etag"),
                                   "last_modified": h.get("last-modified")}
             pairs = _BULK_PARSERS[parser](resp.text)
+            health[name] = {"status": FEED_OK}
         except Exception as e:                    # one dead feed must not zero the sync
-            logging.warning("bulk OSINT feed %s failed: %s", name, e)
-            new_state[url] = prev                 # don't lose a good validator on a blip
-            return []
+            mirror = _FEED_MIRROR.get(name)
+            if not mirror:
+                logging.warning("bulk OSINT feed %s failed: %s", name, e)
+                new_state[url] = prev             # don't lose a good validator on a blip
+                health[name] = {"status": FEED_FAILED, "detail": str(e)}
+                return []
+            # The origin is unreachable from this host. The same list is
+            # republished somewhere we CAN reach, so fetch it there - keeping
+            # the original source_id, because it is the same source's data.
+            murl, upstream = mirror
+            try:
+                mprev = state.get(murl) or {}
+                mcond = {}
+                if mprev.get("etag"):
+                    mcond["If-None-Match"] = mprev["etag"]
+                if mprev.get("last_modified"):
+                    mcond["If-Modified-Since"] = mprev["last_modified"]
+                resp = _http_get(murl, headers=mcond or None,
+                                 truncate_at=_BULK_FEED_MAX_BYTES)
+                if getattr(resp, "not_modified", False):
+                    new_state[url] = prev
+                    new_state[murl] = mprev
+                    unchanged.append(name)
+                    # Still mirrored. A mirror with nothing new to say is not a
+                    # recovered origin, and recording it as one would have this
+                    # feed describe itself as healthy on every sync after the
+                    # first - which is the opposite of what the column is for.
+                    health[name] = {"status": FEED_MIRRORED, "served_via": murl,
+                                    "detail": f"origin unreachable: {e}"}
+                    return []
+                h = getattr(resp, "headers", {}) or {}
+                if h.get("etag") or h.get("last-modified"):
+                    new_state[murl] = {"etag": h.get("etag"),
+                                       "last_modified": h.get("last-modified")}
+                pairs = _BULK_PARSERS[parser](resp.text)
+            except Exception as me:
+                logging.warning("bulk OSINT feed %s failed (%s) and its mirror "
+                                "failed too (%s)", name, e, me)
+                new_state[url] = prev
+                health[name] = {"status": FEED_FAILED,
+                                "detail": f"{e}; mirror also failed: {me}"}
+                return []
+            new_state[url] = prev
+            health[name] = {"status": FEED_MIRRORED, "served_via": murl,
+                            "detail": f"origin unreachable: {e}"}
+            logging.info("bulk OSINT feed %s: origin unreachable (%s), served "
+                         "from the mirror of %s at %s", name, e, upstream, murl)
         rows = []
         for value, note in pairs:
             t = forced or guess_type(value)
@@ -1811,17 +2037,22 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
             if getattr(resp, "not_modified", False):
                 new_state[url] = prev
                 unchanged.append(family)
+                fam_ok.add(family)
                 return []
             h = getattr(resp, "headers", {}) or {}
             if h.get("etag") or h.get("last-modified"):
                 new_state[url] = {"etag": h.get("etag"),
                                   "last_modified": h.get("last-modified")}
             pairs = _p_iplist(resp.text)
+            fam_ok.add(family)
         except Exception as e:
             # A family that 404s (renamed or retired upstream) must not cost the
-            # other thirty-five, and must not look like a failed sync.
+            # other thirty-four, and must not look like a failed sync. It must
+            # not look like a HEALTHY one either: the families share one
+            # source_id, so their health is reported together below.
             logging.warning("malware family trail %s failed: %s", family, e)
             new_state[url] = prev
+            fam_failed[family] = str(e)
             return []
         rows = []
         for value, _ in pairs:
@@ -1858,8 +2089,33 @@ def _fetch_bulk_osint(c: dict) -> list[dict]:
     if unchanged:
         logging.info("bulk OSINT: %d/%d feeds unchanged since last sync (%s)",
                      len(unchanged), total_feeds, ", ".join(unchanged))
+    # One verdict for the family trails, which are one source however many files
+    # they span. Partial loss is reported rather than rounded away: a catalogue
+    # that quietly stops covering a third of its families still looks healthy at
+    # the tally, and that is exactly how thirty-five dead trails went unnoticed.
+    if fam_failed:
+        missing = ", ".join(sorted(fam_failed))
+        detail = (f"{len(fam_failed)} of {len(fam_ok) + len(fam_failed)} family "
+                  f"trails unavailable: {missing}")
+        logging.warning("bulk OSINT: %s", detail)
+    else:
+        detail = None
+    if fam_ok or fam_failed:
+        health[_MALTRAIL_SOURCE] = {
+            "status": FEED_OK if fam_ok else FEED_FAILED,
+            "detail": detail or (f"all {len(fam_ok)} family trails fetched"),
+        }
+    broken = _record_feed_health(health)
+    served_via = {n: h["served_via"] for n, h in health.items() if h.get("served_via")}
+    if served_via:
+        logging.info("bulk OSINT: %d feed(s) served from a mirror because their "
+                     "origin is unreachable from this host (%s)",
+                     len(served_via), ", ".join(sorted(served_via)))
+    _announce_broken_feeds(broken)
     # Hand the refreshed validators back so run_connector can persist them.
     _fetch_bulk_osint.last_state = new_state
+    _fetch_bulk_osint.last_served_via = served_via
+    _fetch_bulk_osint.last_health = health
     return out
 
 

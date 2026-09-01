@@ -1090,7 +1090,8 @@ def list_intel_sources(user: dict = Depends(current_user)):
             "GROUP BY source_id").fetchall()}
         rows = conn.execute(
             "SELECT id, name, kind, reliability, reliability_reason, "
-            "reliability_set_by, first_seen, last_seen FROM intel_sources").fetchall()
+            "reliability_set_by, served_via, last_status, last_status_detail, "
+            "last_ok, first_seen, last_seen FROM intel_sources").fetchall()
     out = [{
         "id": r["id"], "name": r["name"], "kind": r["kind"],
         "reliability": r["reliability"],
@@ -1101,6 +1102,18 @@ def list_intel_sources(user: dict = Depends(current_user)):
         # overwritten by a shipped default, so this is load-bearing, not cosmetic.
         "gradedBy": r["reliability_set_by"] or "shipped default",
         "isDefault": not r["reliability_set_by"],
+        # Non-null when this source's own host refused the connection and a
+        # mirror republishing the same list answered instead. The source is
+        # unchanged; only the host is - and an operator has to be able to see
+        # the difference between a healthy origin and a working fallback.
+        "servedVia": r["served_via"],
+        # How the LAST fetch went, not how the source has done historically.
+        # A source with values in the store and a failing fetch is the case the
+        # panel existed to make visible and could not: the row looked healthy
+        # because the count was high, and the count is history.
+        "status": r["last_status"],
+        "statusDetail": r["last_status_detail"],
+        "lastOk": r["last_ok"],
         "firstSeen": r["first_seen"], "lastSeen": r["last_seen"],
         "values": counts.get(r["id"], 0),
     } for r in rows]
