@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 22
 
 
 class SchemaVersionError(RuntimeError):
@@ -768,7 +768,11 @@ CREATE TABLE IF NOT EXISTS attack_group (
     name        TEXT NOT NULL,
     aliases     TEXT NOT NULL DEFAULT '[]',
     url         TEXT,
-    description TEXT
+    description TEXT,
+    -- Who reported it. ATT&CK writes these inline as (Citation: Vendor-Year)
+    -- markers; they are pulled out of the prose rather than deleted from it,
+    -- because they are the evidence.
+    citations   TEXT NOT NULL DEFAULT '[]'
 );
 
 -- The bridge from what a feed told us (a family name) to what MITRE tracks.
@@ -812,6 +816,37 @@ CREATE TABLE IF NOT EXISTS attack_group_technique (
 CREATE TABLE IF NOT EXISTS attack_group_name (
     norm_key TEXT PRIMARY KEY,        -- lowercased, punctuation stripped
     group_id TEXT NOT NULL
+);
+
+-- Real, dated, named operations. The actor page has carried a "Known Campaigns"
+-- section since it was written and rendered a heading with nothing under it on
+-- every actor of every live deployment: the library holds no campaign records,
+-- and only the demo seeder ever added illustrative ones. Six of the thirteen
+-- shipped actors have MITRE campaigns - SolarWinds Compromise, Operation Dream
+-- Job, the three Ukraine electric power attacks - and now show them.
+CREATE TABLE IF NOT EXISTS attack_campaign (
+    id          TEXT PRIMARY KEY,     -- C0024
+    name        TEXT NOT NULL,
+    aliases     TEXT NOT NULL DEFAULT '[]',
+    url         TEXT,
+    description TEXT,
+    citations   TEXT NOT NULL DEFAULT '[]',
+    -- Dates, not timestamps: "June 2024" is the resolution the reporting
+    -- behind these actually supports.
+    first_seen  TEXT,
+    last_seen   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS attack_campaign_group (
+    campaign_id TEXT NOT NULL,
+    group_id    TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, group_id)
+);
+
+CREATE TABLE IF NOT EXISTS attack_campaign_family (
+    campaign_id TEXT NOT NULL,
+    family      TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, family)
 );
 
 -- Tactic display names and kill-chain order, from the matrix object rather than
@@ -1114,6 +1149,7 @@ CREATE INDEX IF NOT EXISTS idx_saml_replay_exp ON saml_replay(expires_at);
 -- 4,628 rows by group without it.
 CREATE INDEX IF NOT EXISTS idx_attack_group_tech ON attack_group_technique(group_id);
 CREATE INDEX IF NOT EXISTS idx_attack_family_group ON attack_family_group(group_id);
+CREATE INDEX IF NOT EXISTS idx_attack_camp_group ON attack_campaign_group(group_id);
 """
 
 
@@ -1298,6 +1334,11 @@ _MIGRATIONS = [
     ("intel_sources", "last_status", "TEXT"),
     ("intel_sources", "last_status_detail", "TEXT"),
     ("intel_sources", "last_ok", "TEXT"),
+    # Who reported an ATT&CK group or campaign. Pulled out of MITRE's prose,
+    # where it arrives inline as (Citation: Vendor-Report-Year), rather than
+    # deleted from it: the citations are the evidence behind the paragraph.
+    ("attack_group", "citations", "TEXT NOT NULL DEFAULT '[]'"),
+    ("attack_campaign", "citations", "TEXT NOT NULL DEFAULT '[]'"),
     ("intel_sources", "reliability_reason", "TEXT"),
     ("intel_sources", "reliability_set_by", "TEXT"),
     # Earliest time a rate-limited provider will accept us again. Set from a 429

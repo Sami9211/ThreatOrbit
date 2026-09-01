@@ -352,3 +352,133 @@ def test_an_untracked_family_has_no_brief_at_all(loaded):
         assert family_brief(conn, "redline") is None
         assert family_brief(conn, "") is None
         assert family_brief(conn, None) is None
+
+
+# -- campaigns ------------------------------------------------------------------
+
+CAMPAIGN_FIXTURE = _bundle(FIXTURE["objects"] + [
+    {"type": "campaign", "id": "campaign--C0024", "name": "SolarWinds Compromise",
+     "aliases": ["SolarWinds Compromise"], "description": "A supply chain intrusion.",
+     "first_seen": "2019-08-01T04:00:00.000Z", "last_seen": "2021-01-01T05:00:00.000Z",
+     "external_references": [{"source_name": "mitre-attack", "external_id": "C0024",
+                              "url": "https://attack.mitre.org/campaigns/C0024"}]},
+    {"type": "campaign", "id": "campaign--C9999", "name": "Retired Operation",
+     "external_references": [{"source_name": "mitre-attack", "external_id": "C9999",
+                              "url": "https://attack.mitre.org/campaigns/C9999"}],
+     "x_mitre_deprecated": True},
+    {"type": "relationship", "id": "relationship--c1", "relationship_type": "attributed-to",
+     "source_ref": "campaign--C0024", "target_ref": "intrusion-set--G0016"},
+    {"type": "relationship", "id": "relationship--c2", "relationship_type": "uses",
+     "source_ref": "campaign--C0024", "target_ref": "tool--S0154"},
+])
+
+
+@pytest.fixture()
+def campaigns():
+    parsed = parse_bundle(CAMPAIGN_FIXTURE, FAMILIES)
+    with get_conn() as conn:
+        store(conn, parsed)
+        conn.commit()
+    yield parsed
+    with get_conn() as conn:
+        for t in ("attack_family_technique", "attack_family_group",
+                  "attack_group_technique", "attack_software", "attack_technique",
+                  "attack_group", "attack_group_name", "attack_campaign_group",
+                  "attack_campaign_family", "attack_campaign", "attack_tactic",
+                  "attack_release"):
+            conn.execute(f"DELETE FROM {t}")
+        conn.commit()
+
+
+def test_an_actor_gets_the_campaigns_mitre_attributes_to_them(campaigns):
+    """The section this fills rendered a heading with nothing under it on every
+    actor of every live deployment: the library carries no campaign records, and
+    only the demo seeder ever added illustrative ones."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        a = actor_attack(conn, "APT29")
+    assert a["tracked"]
+    assert [c["id"] for c in a["campaigns"]] == ["C0024"]
+    c = a["campaigns"][0]
+    assert c["name"] == "SolarWinds Compromise"
+    assert c["url"].startswith("https://attack.mitre.org/")
+
+
+def test_a_campaign_carries_a_span_not_a_year(campaigns):
+    """A campaign that ran from December 2015 into January 2016 is not a 2015
+    campaign, and the reporting behind these supports a month, not a day."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        c = actor_attack(conn, "APT29")["campaigns"][0]
+    assert c["firstSeen"] == "2019-08-01"
+    assert c["lastSeen"] == "2021-01-01"
+    assert "T" not in c["firstSeen"], "a date, not a timestamp"
+
+
+def test_a_campaign_links_to_the_families_this_engine_imports(campaigns):
+    """So a campaign is a way into the store rather than a paragraph."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        c = actor_attack(conn, "APT29")["campaigns"][0]
+    assert c["families"] == ["cobaltstrike"]
+
+
+def test_a_deprecated_campaign_is_not_published(campaigns):
+    ids = {c["id"] for c in campaigns["campaigns"]}
+    assert "C9999" not in ids
+
+
+def test_an_actor_with_no_campaigns_gets_an_empty_list_not_an_error(campaigns):
+    """Seven of the thirteen shipped actors have none. That is a fact about
+    MITRE's coverage, and the page shows the section only when there is
+    something in it."""
+    from dashboard_api.attack import actor_attack
+    with get_conn() as conn:
+        assert actor_attack(conn, "Wizard Spider")["campaigns"] == []
+        assert actor_attack(conn, "LockBit")["campaigns"] == []
+
+
+# -- MITRE's prose is STIX, not text --------------------------------------------
+
+def test_a_description_is_not_rendered_as_source_code():
+    """ATT&CK descriptions are STIX prose: Markdown links to other ATT&CK pages
+    and a trail of (Citation: Vendor-Year) markers. Rendered raw they read as
+    source code - "The [2022 Ukraine Electric Power Attack](https://attack.mitre.
+    org/campaigns/C0034) was a [Sandworm Team](...) campaign(Citation: X)"."""
+    from dashboard_api.attack import _describe
+    raw = ("The [2022 Ukraine Electric Power Attack]"
+           "(https://attack.mitre.org/campaigns/C0034) was a "
+           "[Sandworm Team](https://attack.mitre.org/groups/G0034) campaign."
+           "(Citation: Mandiant-2022)(Citation: Dragos-2022)")
+    prose, cites = _describe(raw)
+    assert prose == ("The 2022 Ukraine Electric Power Attack was a Sandworm Team "
+                     "campaign.")
+    assert "http" not in prose and "[" not in prose
+    assert cites == ["Mandiant-2022", "Dragos-2022"]
+
+
+def test_the_citations_are_kept_rather_than_deleted():
+    """Stripping them outright would be the wrong fix. They are the evidence, and
+    a claim without its source is what this platform exists not to publish."""
+    from dashboard_api.attack import _describe
+    _, cites = _describe("Something happened.(Citation: ESET Industroyer)")
+    assert cites == ["ESET Industroyer"]
+
+
+def test_a_citation_repeated_is_listed_once():
+    from dashboard_api.attack import _describe
+    _, cites = _describe("A.(Citation: X) B.(Citation: X) C.(Citation: Y)")
+    assert cites == ["X", "Y"]
+
+
+def test_a_description_with_no_citations_yields_none():
+    from dashboard_api.attack import _describe
+    prose, cites = _describe("Plain sentence with no markers.")
+    assert prose == "Plain sentence with no markers."
+    assert cites == []
+
+
+def test_an_empty_description_is_handled():
+    from dashboard_api.attack import _describe
+    assert _describe(None) == ("", [])
+    assert _describe("") == ("", [])

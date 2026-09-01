@@ -67,7 +67,7 @@ interface ThreatActor {
  * independent signals (named origin, cross-vendor aliases, mapped TTPs,
  * attributed tooling, documented campaigns) = higher confidence. The reasons
  * are shown alongside the band so the assessment is auditable, not asserted. */
-function attributionAssessment(actor: ThreatActor, attack?: AttackProfile | null): { band: 'High' | 'Moderate' | 'Low'; color: string; reasons: string[] } {
+function attributionAssessment(actor: ThreatActor, attack?: AttackProfile | null, campaignCount?: number): { band: 'High' | 'Moderate' | 'Low'; color: string; reasons: string[] } {
   const reasons: string[] = []
   const named = actor.origin && !/unknown|^n\/?a$/i.test(actor.origin.trim())
   if (named) reasons.push(`Named origin (${actor.origin})`)
@@ -83,7 +83,10 @@ function attributionAssessment(actor: ThreatActor, attack?: AttackProfile | null
       : `${ttps} mapped ATT&CK techniques`)
   }
   if (actor.malware.length >= 1) reasons.push(`${actor.malware.length} attributed tool${actor.malware.length === 1 ? '' : 's'}`)
-  if (actor.campaignCount >= 1) reasons.push(`${actor.campaignCount} documented campaign${actor.campaignCount === 1 ? '' : 's'}`)
+  // Same rule as the technique count above: what the drawer shows is what the
+  // assessment counts, or the page argues with itself.
+  const campaigns = campaignCount ?? actor.campaignCount
+  if (campaigns >= 1) reasons.push(`${campaigns} documented campaign${campaigns === 1 ? '' : 's'}`)
   const score = reasons.length
   if (score >= 4) return { band: 'High', color: tk('safe'), reasons }
   if (score >= 2) return { band: 'Moderate', color: tk('amber'), reasons }
@@ -206,6 +209,10 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
     fetchActor(actor.id).then((d) => { if (alive) setDetail(d) }).catch(() => {})
     return () => { alive = false }
   }, [actor.id])
+  // Both sources, because both are rendered below. The stored count is 0 on
+  // every actor of every live deployment - the library carries no campaign
+  // records - and it sat directly above a section listing three of MITRE's.
+  const campaignCount = (detail?.attack?.campaigns?.length ?? 0) + actor.campaigns.length
   return (
     <motion.div
       key={actor.id}
@@ -248,7 +255,10 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           </div>
           <div className="flex flex-col px-3 py-1.5 rounded-lg bg-surface-2 border border-white/6">
             <span className="text-[9px] text-ink-600 uppercase tracking-wide">Campaigns</span>
-            <span className="text-sm font-semibold text-white mt-0.5">{actor.campaignCount}</span>
+            {/* Count what the drawer actually lists. This read 0 on every actor
+                of every live deployment - the library carries no campaign
+                records - directly above a section listing three of MITRE's. */}
+            <span className="text-sm font-semibold text-white mt-0.5">{campaignCount}</span>
           </div>
           <div className="flex flex-col px-3 py-1.5 rounded-lg bg-surface-2 border border-white/6">
             <span className="text-[9px] text-ink-600 uppercase tracking-wide">Active</span>
@@ -285,7 +295,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
 
         {/* Attribution assessment - transparent, evidence-based confidence band */}
         {(() => {
-          const att = attributionAssessment(actor, detail?.attack)
+          const att = attributionAssessment(actor, detail?.attack, campaignCount)
           return (
             <section>
               <SectionHead icon={Fingerprint} title="Attribution Assessment" />
@@ -458,14 +468,70 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
           </div>
         </section>
 
-        {/* An empty heading reads as a broken panel, not as "we have none".
-            The live actor library carries no campaign records - only the demo
-            seeder adds illustrative ones - so on a real deployment this section
-            was a title with nothing under it on every actor. */}
-        {actor.campaigns.length > 0 && (
+        {/* An empty heading reads as a broken panel, not as "we have none". This
+            section was a title with nothing under it on every actor of every
+            live deployment - the library carries no campaign records, and only
+            the demo seeder ever added illustrative ones.
+
+            MITRE publishes real ones: dated, named, attributed, cited. Six of
+            the thirteen shipped actors have them, and they are the campaigns an
+            analyst already knows by name - SolarWinds Compromise, Operation
+            Dream Job, the three Ukraine electric power attacks. */}
+        {((detail?.attack?.campaigns?.length ?? 0) > 0 || actor.campaigns.length > 0) && (
         <section>
           <SectionHead icon={Clock} title="Known Campaigns" />
           <div className="mt-3 space-y-3 relative before:absolute before:left-[5px] before:top-1 before:bottom-1 before:w-px before:bg-white/8">
+            {(detail?.attack?.campaigns ?? []).map((c) => (
+              <div key={c.id} className="flex items-start gap-3 pl-5 relative group">
+                <span className="absolute left-px top-1 w-2.5 h-2.5 rounded-full border border-white/20
+                                 transition-transform group-hover:scale-125"
+                  style={{ background: threat.color }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* A span, not a year: "2015-12 → 2016-01" is what the
+                        reporting supports, and a campaign that ran across a
+                        new year is not a 2015 campaign. */}
+                    <span className="text-[10px] font-mono text-magenta whitespace-nowrap">
+                      {c.firstSeen?.slice(0, 7)}
+                      {c.lastSeen && c.lastSeen.slice(0, 7) !== c.firstSeen?.slice(0, 7) && (
+                        <> → {c.lastSeen.slice(0, 7)}</>
+                      )}
+                    </span>
+                    <a href={c.url ?? '#'} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-ink-200 font-medium hover:text-white transition-colors">
+                      {c.name}
+                    </a>
+                    <span className="text-[9px] font-mono text-ink-600">{c.id}</span>
+                  </div>
+                  {c.description && (
+                    <p className="text-[11px] text-ink-500 mt-0.5 leading-snug line-clamp-3">
+                      {c.description}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    {c.families.map((f) => (
+                      <Link key={f} href={`/dashboard/cti/malware/${encodeURIComponent(f)}`}
+                        className="px-1.5 py-0.5 rounded border border-magenta/25 bg-magenta/10
+                                   text-[9px] text-magenta hover:bg-magenta/20 transition-all hover:scale-105">
+                        {f}
+                      </Link>
+                    ))}
+                    {/* Who reported it. MITRE writes these inline in the prose;
+                        they are lifted out rather than deleted, because a claim
+                        without its source is the thing this platform exists not
+                        to publish. */}
+                    {c.citations.length > 0 && (
+                      <span className="text-[9px] text-ink-600"
+                        title={c.citations.join(' · ')}>
+                        reported by {c.citations.slice(0, 2).join(', ')}
+                        {c.citations.length > 2 && ` +${c.citations.length - 2}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* Anything the library itself carries, kept below MITRE's. */}
             {actor.campaigns.map((c) => (
               <div key={c.name} className="flex items-start gap-3 pl-5 relative">
                 <span className="absolute left-px top-1 w-2.5 h-2.5 rounded-full border border-white/20" style={{ background: threat.color }} />

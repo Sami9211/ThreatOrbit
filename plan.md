@@ -2202,6 +2202,46 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · "Known Campaigns" was a heading with nothing under it, on every
+  actor of every live deployment.** The section had existed since the actor page
+  was written; the library carries no campaign records, and only the demo seeder
+  ever added illustrative ones. The stat at the top of the same drawer read
+  **Campaigns 0** while the section below it was blank - consistent, and
+  consistently useless.
+
+  ATT&CK publishes 56 real ones, 26 attributed to a group, and six of the
+  thirteen shipped actors have them - the campaigns an analyst already knows by
+  name:
+
+  ```
+  APT29         C0024  2019-08 → 2021-01  SolarWinds Compromise   (Cobalt Strike)
+                C0023  2013-09 → 2019-10  Operation Ghost
+  Sandworm      C0034  2022-06 → 2022-10  2022 Ukraine Electric Power Attack
+                C0025  2016-12            2016 Ukraine Electric Power Attack
+                C0028  2015-12 → 2016-01  2015 Ukraine Electric Power Attack
+  Volt Typhoon  C0039  2024-06 → 2024-08  Versa Director Zero Day Exploitation
+                C0035  2022-10 → 2024-01  KV Botnet Activity
+  ```
+
+  A span, not a year: a campaign that ran from December 2015 into January 2016
+  is not a 2015 campaign, and month is the resolution the reporting supports.
+  Families named in a campaign link straight to their page here, so a campaign is
+  a way into the store rather than a paragraph. And the Campaigns stat now counts
+  what the drawer actually lists - the same correction the technique count needed
+  earlier today, for the same reason: a page that disagrees with itself is worse
+  than a page that says nothing.
+
+  **MITRE's prose is STIX, not text.** Rendered raw the first draft read as
+  source code: *"The [2022 Ukraine Electric Power Attack](https://attack.mitre.
+  org/campaigns/C0034) was a [Sandworm Team](https://attack.mitre.org/groups/
+  G0034) campaign...(Citation: Mandiant-Sandworm-Ukraine-2022)(Citation:
+  Dragos-Sandworm-Ukraine-2022)"*. Stripping the citations would have been the
+  wrong fix - they are the evidence, and a claim without its source is the thing
+  this platform exists not to publish - so they are lifted OUT of the prose and
+  rendered as what they are: *reported by Mandiant-Sandworm-Ukraine-2022,
+  Dragos-Sandworm-Ukraine-2022*. Applies to every ATT&CK description in the
+  platform: techniques, groups, software and campaigns.
+
 - **2026-09-01 · The ATT&CK Navigator was fourteen techniques in a hand-written
   dictionary.** A page whose entire purpose is answering *"are we blind to
   this?"* was built from a literal `TECH_NAME = {...}` of 14 entries with a

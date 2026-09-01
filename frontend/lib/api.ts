@@ -675,6 +675,19 @@ export interface AttackProfile {
   /** On a GROUP: the families MITRE reports them using, restricted to families
    *  this engine imports, so each one is a page the reader can open. */
   families?: string[]
+  /** On a GROUP: real, dated, named operations MITRE attributes to them.
+   *  The actor page's "Known Campaigns" section rendered a heading with nothing
+   *  under it on every actor of every live deployment before this. */
+  campaigns?: Array<{
+    id: string; name: string; url: string | null; description: string
+    firstSeen: string; lastSeen: string; aliases: string[]
+    /** Who reported it. ATT&CK writes these inline as (Citation: Vendor-Year)
+     *  markers; they are lifted out of the prose rather than deleted from it,
+     *  because they are the evidence behind the paragraph. */
+    citations: string[]
+    /** Families this engine imports that MITRE records in the campaign. */
+    families: string[]
+  }>
   aliases?: string[]
 }
 /** Kept as the old name so existing call sites read the same. */

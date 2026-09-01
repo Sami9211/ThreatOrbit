@@ -242,8 +242,13 @@ def test_the_panel_shows_no_empty_headings():
     import pathlib
     page = (pathlib.Path(__file__).resolve().parents[2]
             / "frontend/app/dashboard/cti/actors/page.tsx").read_text()
-    assert "{actor.campaigns.length > 0 && (" in page, \
+    # The guard now also admits MITRE's campaigns, which is why it is asserted as
+    # a property rather than as one exact string: both sources have to be empty
+    # before the heading disappears, and either one alone must bring it back.
+    assert "actor.campaigns.length > 0) && (" in page, \
         "Known Campaigns renders even when there are none"
+    assert "detail?.attack?.campaigns?.length" in page, \
+        "MITRE's campaigns must count toward whether the section has anything in it"
     assert "actor.iocs.length > 0 ||" in page, \
         "Associated IOCs renders even when there are none"
     assert "recentActivity: a.description" not in page, \

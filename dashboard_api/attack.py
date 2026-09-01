@@ -91,6 +91,39 @@ def _attack_url(o: dict) -> str | None:
     return None
 
 
+# ATT&CK descriptions are STIX prose: Markdown links to other ATT&CK pages, and
+# a trail of (Citation: Vendor-Report-Year) markers where the evidence is.
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_CITATION = re.compile(r"\s*\(Citation:\s*([^)]*)\)")
+
+
+def _describe(text: str | None) -> tuple[str, list[str]]:
+    """Split an ATT&CK description into readable prose and its citations.
+
+    Rendered raw, these read as source code: "The [2022 Ukraine Electric Power
+    Attack](https://attack.mitre.org/campaigns/C0034) was a [Sandworm
+    Team](https://attack.mitre.org/groups/G0034) campaign ...(Citation:
+    Mandiant-Sandworm-Ukraine-2022)(Citation: Dragos-Sandworm-Ukraine-2022)".
+
+    Stripping the citations outright would be the wrong fix - they are the
+    evidence, and this platform's whole argument is that a claim travels with its
+    source. So they come out of the prose and are returned alongside it, for the
+    page to render as what they are: who reported this.
+    """
+    if not text:
+        return "", []
+    cites = [c.strip() for c in _CITATION.findall(text) if c.strip()]
+    prose = _CITATION.sub("", text)
+    prose = _MD_LINK.sub(r"\1", prose)
+    # Deduplicate, keeping the order they were cited in.
+    seen, ordered = set(), []
+    for c in cites:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+    return prose.strip(), ordered
+
+
 def _tactics(o: dict) -> str:
     """The kill-chain phases a technique belongs to, comma-separated.
 
@@ -156,13 +189,51 @@ def parse_bundle(bundle: dict, families: list[str]) -> dict[str, Any]:
     } for o in objs if o["type"] == "x-mitre-tactic" and o.get("x_mitre_shortname")]
     tactics.sort(key=lambda t: t["position"])
 
+    # Campaigns: real, dated, named operations, attributed where MITRE attributes
+    # them. The actor page has had a "Known Campaigns" section since it was
+    # written, and on a live deployment it rendered a heading with nothing under
+    # it on every actor - the library carries no campaign records, and only the
+    # demo seeder ever added illustrative ones. Six of the thirteen shipped
+    # actors have MITRE campaigns; those six now have the real thing.
+    campaigns = {o["id"]: o for o in objs if o["type"] == "campaign"}
+    camp_group: list[tuple[str, str]] = []
+    camp_soft: list[tuple[str, str]] = []
+    for r in objs:
+        if r["type"] != "relationship":
+            continue
+        src, dst = r.get("source_ref"), r.get("target_ref")
+        if src not in campaigns:
+            continue
+        if r.get("relationship_type") == "attributed-to" and dst in groups:
+            camp_group.append((src, dst))
+        elif r.get("relationship_type") == "uses" and dst in fam_by_ref:
+            camp_soft.append((src, fam_by_ref[dst]))
+
     return {
         "version": (bundle.get("objects") and _collection_version(bundle)) or "",
         "tactics": tactics,
+        "campaigns": [{
+            "id": _attack_id(o), "stix_id": o["id"], "name": o.get("name") or "",
+            "aliases": json.dumps([a for a in (o.get("aliases") or [])
+                                   if a != o.get("name")]),
+            "url": _attack_url(o),
+            "description": _describe(o.get("description"))[0],
+            "citations": json.dumps(_describe(o.get("description"))[1]),
+            # Dates as ATT&CK publishes them: a date, not a timestamp, because
+            # "June 2024" is the resolution the reporting actually supports.
+            "first_seen": str(o.get("first_seen") or "")[:10],
+            "last_seen": str(o.get("last_seen") or "")[:10],
+        } for o in campaigns.values() if _attack_id(o)],
+        "campaign_groups": sorted({
+            (_attack_id(campaigns[c]), _attack_id(by_id[g])) for c, g in camp_group
+            if _attack_id(campaigns[c]) and _attack_id(by_id[g])}),
+        "campaign_families": sorted({
+            (_attack_id(campaigns[c]), f) for c, f in camp_soft
+            if _attack_id(campaigns[c])}),
         "techniques": [{
             "id": _attack_id(o), "stix_id": o["id"], "name": o.get("name") or "",
             "tactics": _tactics(o), "url": _attack_url(o),
-            "description": (o.get("description") or "").strip(),
+            "description": _describe(o.get("description"))[0],
             # A sub-technique (T1055.011) is a specific way of doing its parent.
             # Worth marking so a page can lead with the parents rather than
             # opening on forty near-identical variants.
@@ -173,12 +244,13 @@ def parse_bundle(bundle: dict, families: list[str]) -> dict[str, Any]:
             "aliases": json.dumps([a for a in (o.get("aliases") or [])
                                    if a != o.get("name")]),
             "url": _attack_url(o),
-            "description": (o.get("description") or "").strip(),
+            "description": _describe(o.get("description"))[0],
+            "citations": json.dumps(_describe(o.get("description"))[1]),
         } for o in groups.values() if _attack_id(o)],
         "software": [{
             "family": f, "id": _attack_id(o), "name": o.get("name") or "",
             "url": _attack_url(o), "kind": o["type"],
-            "description": (o.get("description") or "").strip(),
+            "description": _describe(o.get("description"))[0],
         } for f, o in fam_obj.items() if _attack_id(o)],
         "family_techniques": sorted({
             (f, _attack_id(by_id[t])) for f, t in fam_tech if _attack_id(by_id[t])}),
@@ -228,7 +300,8 @@ def store(conn, parsed: dict[str, Any]) -> dict[str, int]:
     for table in ("attack_family_technique", "attack_family_group",
                   "attack_group_technique", "attack_software",
                   "attack_technique", "attack_group", "attack_group_name",
-                  "attack_tactic"):
+                  "attack_campaign_group", "attack_campaign_family",
+                  "attack_campaign", "attack_tactic"):
         conn.execute(f"DELETE FROM {table}")
     conn.executemany(
         "INSERT INTO attack_tactic (shortname,name,position) VALUES (?,?,?)",
@@ -243,8 +316,9 @@ def store(conn, parsed: dict[str, Any]) -> dict[str, int]:
     # "Indrik Spider" - so the alias set is the join, and a normalised key makes
     # it an indexed lookup rather than a scan that parses 176 JSON blobs.
     conn.executemany(
-        "INSERT INTO attack_group (id,name,aliases,url,description) VALUES (?,?,?,?,?)",
-        [(g["id"], g["name"], g["aliases"], g["url"], g["description"])
+        "INSERT INTO attack_group (id,name,aliases,url,description,citations) "
+        "VALUES (?,?,?,?,?,?)",
+        [(g["id"], g["name"], g["aliases"], g["url"], g["description"], g["citations"])
          for g in parsed["groups"]])
     conn.executemany(
         "INSERT INTO attack_group_name (norm_key,group_id) VALUES (?,?) "
@@ -265,10 +339,24 @@ def store(conn, parsed: dict[str, Any]) -> dict[str, int]:
     conn.executemany(
         "INSERT INTO attack_group_technique (group_id,technique_id) VALUES (?,?)",
         parsed["group_techniques"])
+    conn.executemany(
+        "INSERT INTO attack_campaign (id,name,aliases,url,description,citations,"
+        "first_seen,last_seen) VALUES (?,?,?,?,?,?,?,?)",
+        [(c["id"], c["name"], c["aliases"], c["url"], c["description"],
+          c["citations"], c["first_seen"], c["last_seen"])
+         for c in parsed["campaigns"]])
+    conn.executemany(
+        "INSERT INTO attack_campaign_group (campaign_id,group_id) VALUES (?,?)",
+        parsed["campaign_groups"])
+    conn.executemany(
+        "INSERT INTO attack_campaign_family (campaign_id,family) VALUES (?,?)",
+        parsed["campaign_families"])
     return {
         "tactics": len(parsed["tactics"]),
         "techniques": len(parsed["techniques"]),
         "groups": len(parsed["groups"]),
+        "campaigns": len(parsed["campaigns"]),
+        "attributedCampaigns": len(parsed["campaign_groups"]),
         "families": len(parsed["software"]),
         "familyTechniques": len(parsed["family_techniques"]),
         "familyGroups": len(parsed["family_groups"]),
@@ -413,7 +501,8 @@ def actor_attack(conn, name: str, aliases: list[str] | None = None) -> dict[str,
         if row is not None:
             break
     if row is None:
-        return {"tracked": False, "techniqueCount": 0, "byTactic": [], "families": []}
+        return {"tracked": False, "techniqueCount": 0, "byTactic": [],
+                "families": [], "campaigns": []}
 
     techniques = conn.execute(
         "SELECT t.id, t.name, t.tactics, t.url, t.is_subtechnique "
@@ -440,6 +529,24 @@ def actor_attack(conn, name: str, aliases: list[str] | None = None) -> dict[str,
     families = [r["family"] for r in conn.execute(
         "SELECT family FROM attack_family_group WHERE group_id=? ORDER BY family",
         (row["id"],)).fetchall()]
+    campaigns = [{
+        "id": r["id"], "name": r["name"], "url": r["url"],
+        "description": r["description"],
+        "firstSeen": r["first_seen"], "lastSeen": r["last_seen"],
+        "aliases": json.loads(r["aliases"] or "[]"),
+        # Who reported it. Pulled out of the prose rather than deleted from it:
+        # the citations are the evidence, and a claim without its source is the
+        # thing this platform exists not to publish.
+        "citations": json.loads(r["citations"] or "[]"),
+        "families": [x["family"] for x in conn.execute(
+            "SELECT family FROM attack_campaign_family WHERE campaign_id=? "
+            "ORDER BY family", (r["id"],)).fetchall()],
+    } for r in conn.execute(
+        "SELECT c.id,c.name,c.url,c.description,c.citations,c.first_seen,"
+        "c.last_seen,c.aliases "
+        "FROM attack_campaign_group cg JOIN attack_campaign c ON c.id = cg.campaign_id "
+        "WHERE cg.group_id=? ORDER BY c.first_seen DESC, c.id DESC",
+        (row["id"],)).fetchall()]
     return {
         "tracked": True, "id": row["id"], "name": row["name"], "url": row["url"],
         "description": row["description"],
@@ -447,6 +554,7 @@ def actor_attack(conn, name: str, aliases: list[str] | None = None) -> dict[str,
         "techniqueCount": len(techniques),
         "byTactic": by_tactic,
         "families": families,
+        "campaigns": campaigns,
     }
 
 
