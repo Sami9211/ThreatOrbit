@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 
 class SchemaVersionError(RuntimeError):
@@ -749,6 +749,79 @@ CREATE TABLE IF NOT EXISTS malware_families (
     edited_at        TEXT
 );
 
+-- MITRE ATT&CK, reduced to the answers the family and actor pages ask of it.
+-- See dashboard_api/attack.py; the full release is ~26,000 STIX objects and this
+-- keeps a few thousand. Replaced wholesale on refresh rather than merged,
+-- because ATT&CK revokes and deprecates in place: merging leaves retired
+-- techniques attached to families forever, indistinguishable from current ones.
+CREATE TABLE IF NOT EXISTS attack_technique (
+    id             TEXT PRIMARY KEY,   -- T1055, T1055.011
+    name           TEXT NOT NULL,
+    tactics        TEXT NOT NULL DEFAULT '',  -- comma-separated kill-chain phases
+    url            TEXT,               -- attack.mitre.org, so nothing here is unsourced
+    description    TEXT,
+    is_subtechnique INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS attack_group (
+    id          TEXT PRIMARY KEY,      -- G0008
+    name        TEXT NOT NULL,
+    aliases     TEXT NOT NULL DEFAULT '[]',
+    url         TEXT,
+    description TEXT
+);
+
+-- The bridge from what a feed told us (a family name) to what MITRE tracks.
+-- Matched by name and alias; 20 of the 35 imported families resolve, and the
+-- other fifteen are told they are untracked rather than shown a blank panel.
+CREATE TABLE IF NOT EXISTS attack_software (
+    family      TEXT PRIMARY KEY,      -- our key, matches iocs.malware_family
+    id          TEXT NOT NULL,         -- S0154
+    name        TEXT NOT NULL,
+    url         TEXT,
+    kind        TEXT NOT NULL DEFAULT 'malware',  -- ATT&CK files Cobalt Strike as a tool
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS attack_family_technique (
+    family       TEXT NOT NULL,
+    technique_id TEXT NOT NULL,
+    PRIMARY KEY (family, technique_id)
+);
+
+-- Every group ATT&CK reports using a family. Deliberately NOT written to
+-- `iocs.actor`: thirty groups use Cobalt Strike, so the family supports no claim
+-- about who is behind a given indicator. The list is shown as the argument
+-- against attributing from a family, not as an attribution.
+CREATE TABLE IF NOT EXISTS attack_family_group (
+    family   TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    PRIMARY KEY (family, group_id)
+);
+
+CREATE TABLE IF NOT EXISTS attack_group_technique (
+    group_id     TEXT NOT NULL,
+    technique_id TEXT NOT NULL,
+    PRIMARY KEY (group_id, technique_id)
+);
+
+-- Tactic display names and kill-chain order, from the matrix object rather than
+-- hardcoded anywhere. ATT&CK renames tactics between releases (v19 replaced
+-- "Defense Evasion" with "Stealth"), so a hardcoded list renders last year's
+-- kill chain while claiming to quote MITRE.
+CREATE TABLE IF NOT EXISTS attack_tactic (
+    shortname TEXT PRIMARY KEY,       -- command-and-control
+    name      TEXT NOT NULL,          -- Command and Control
+    position  INTEGER NOT NULL DEFAULT 99
+);
+
+-- Which ATT&CK release is on the page. One row.
+CREATE TABLE IF NOT EXISTS attack_release (
+    version    TEXT,
+    url        TEXT,
+    fetched_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
     id        TEXT PRIMARY KEY,
     ts        TEXT NOT NULL,
@@ -1028,6 +1101,10 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, revoked);
 CREATE INDEX IF NOT EXISTS idx_break_glass_user ON break_glass(user_id, deactivated_at);
 CREATE INDEX IF NOT EXISTS idx_user_org_roles_org ON user_org_roles(org_id);
 CREATE INDEX IF NOT EXISTS idx_saml_replay_exp ON saml_replay(expires_at);
+-- The actor page asks "what does this group do?", which is a scan of
+-- 4,628 rows by group without it.
+CREATE INDEX IF NOT EXISTS idx_attack_group_tech ON attack_group_technique(group_id);
+CREATE INDEX IF NOT EXISTS idx_attack_family_group ON attack_family_group(group_id);
 """
 
 

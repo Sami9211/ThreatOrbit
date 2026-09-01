@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard_api import tenancy
+from dashboard_api.attack import family_attack, release
 from dashboard_api.auth import current_user, require_perm
 from dashboard_api.connectors import bulk_feed_source_ids
 from dashboard_api.db import (audit, get_conn, host_of, ip_hex_of, row_to_dict,
@@ -1356,6 +1357,13 @@ def malware_family(name: str, user: dict = Depends(current_user)):
         seen = conn.execute(
             "SELECT COUNT(DISTINCT s.ioc_id) AS n FROM ioc_sightings s "
             "JOIN iocs i ON i.id = s.ioc_id WHERE i.malware_family=?", (key,)).fetchone()["n"]
+        # What MITRE says the family DOES, and everyone MITRE reports using it.
+        # The group list is context, never attribution: thirty groups use Cobalt
+        # Strike, so knowing an indicator is Cobalt Strike infrastructure
+        # supports no claim about who is behind it. Rendering those thirty names
+        # makes that argument better than a warning could.
+        attack = family_attack(conn, key)
+        attack_release = release(conn)
     d = _family_public(row) if row is not None else {
         "name": key, "label": key.title(), "role": "", "aliases": [],
         "description": "", "operator": None, "operator_aliases": [],
@@ -1363,7 +1371,8 @@ def malware_family(name: str, user: dict = Depends(current_user)):
         "isDefault": True, "uncatalogued": True}
     d.update({"indicators": counts, "byType": by_type, "bySeverity": by_severity,
               "sources": sources, "topIndicators": top, "seenLocally": seen,
-              "operatorActorId": op_row["id"] if op_row else None})
+              "operatorActorId": op_row["id"] if op_row else None,
+              "attack": attack, "attackRelease": attack_release})
     return d
 
 

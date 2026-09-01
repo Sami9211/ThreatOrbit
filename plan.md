@@ -2202,6 +2202,69 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · "What does it actually do?" - the answer the store could not
+  give.** The engine can name 178,911 indicators to a malware family. On its own
+  that stops one step short of useful: an analyst who learns a domain is Emotet
+  infrastructure still had to leave the platform to find out what Emotet does on
+  a host. *"They are just IOCs, I can go to a public CTI library and it would
+  have more than this engine can import"* is a fair description of a store that
+  cannot answer that, and the public library answers it for free.
+
+  MITRE ATT&CK now loads into the platform - Enterprise v19.2, resolved from the
+  collection index rather than a pinned path, refreshed weekly on the leader:
+
+  | | |
+  |---|---|
+  | tactics | 15, with MITRE's own kill-chain ORDER |
+  | techniques | 697 |
+  | groups | 176 |
+  | families mapped | **20 of 35**, by name and alias |
+  | family → technique | 628 |
+  | family → group | 74 |
+  | group → technique | 4,628 |
+
+  Every technique on the page carries its `Txxxx` and its attack.mitre.org URL,
+  so nothing there is this platform's opinion. Emotet reads: Initial Access (3),
+  Execution (8), Persistence (4), Privilege Escalation (7), Stealth (13),
+  Credential Access (5), Discovery (6), Lateral Movement (3), Collection (2),
+  Command and Control (6), Exfiltration (1).
+
+  **The group list is context, and is never allowed to become attribution.**
+  ATT&CK records `intrusion-set --uses--> malware`, and it is one join from there
+  to writing group names onto every indicator of a family - the store's
+  attribution column would fill up overnight and every entry would be unfounded.
+  Cobalt Strike is used by **thirty** groups in this data, because it is licensed
+  software Fortra sells to red teams and cracked by nearly everyone else. So the
+  page renders all thirty, directly under the card that refuses to name an
+  operator, and says why: *"30 different groups are reported using Cobalt Strike,
+  so knowing an indicator belongs to this family says nothing about who is behind
+  it. None of these names is written onto any indicator here."* Thirty names
+  against one family makes that argument better than any warning text. A test
+  pins it behaviourally - an indicator goes in with no actor, ATT&CK loads on top
+  of it, and it comes back out with no actor.
+
+  Two things are deliberately taken from the data rather than held in code, both
+  because of the failure fixed earlier the same day:
+
+  - **Tactic names and their order** come from ATT&CK's matrix object. v19
+    renamed "Defense Evasion" to "Stealth" and added "Defense Impairment"; a
+    hardcoded list would render last year's kill chain while claiming to quote
+    MITRE. Sorting alphabetically would put command-and-control first, which is
+    not a kill chain but a word list.
+  - **The bundle URL** is resolved from the published index. A pinned path is a
+    URL that silently 404s the moment MITRE ships a release - which is exactly
+    how all 35 family trails died this week.
+
+  ATT&CK covers 20 of the 35 families; the other fifteen are mostly commodity
+  stealers (RedLine, Raccoon, Vidar, Arkei, Formbook) and older botnets. Those
+  pages say "MITRE ATT&CK does not track this family" and explain that this is a
+  fact about the coverage of a public dataset. A blank panel would read as a
+  failed request.
+
+  A refresh REPLACES rather than merges, because ATT&CK revokes and deprecates
+  in place: merging leaves retired techniques attached to families forever,
+  indistinguishable from current ones.
+
 - **2026-09-01 · Every malware-family trail had been 404ing for days and every
   sync reported success.** The Maltrail project moved its detection content into
   a separate repository (`stamparm/maltrail/trails/static/malware/` →

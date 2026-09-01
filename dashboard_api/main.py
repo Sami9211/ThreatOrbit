@@ -261,6 +261,55 @@ def _engine_loop():
         time.sleep(ENGINE_TICK_SECONDS)
 
 
+def _attack_loop():
+    """Background loop: keep the MITRE ATT&CK reference current.
+
+    Weekly, not per sync. ATT&CK publishes a numbered release a few times a year
+    and the bundle is ~54 MB, so pulling it on the connector cadence would be
+    tens of gigabytes a year to learn nothing. Runs on the leader only, for the
+    same reason every other periodic job does.
+
+    Skipped entirely when the tables are already populated and the release is
+    recent, so a restart does not re-download 54 MB.
+    """
+    import time
+    from dashboard_api import attack, leader
+    if attack.REFRESH_SECONDS <= 0:
+        logger.info("ATT&CK refresh disabled (DASHBOARD_ATTACK_REFRESH_SECONDS<=0)")
+        return
+    time.sleep(20)   # let boot settle; this is reference data, nothing waits on it
+    while True:
+        try:
+            if leader.is_leader() and _attack_is_stale():
+                r = attack.refresh()
+                if r.get("error"):
+                    logger.warning("ATT&CK refresh failed: %s", r["error"])
+                else:
+                    logger.info("ATT&CK %s loaded: %d techniques, %d groups, "
+                                "%d families mapped", r.get("version"),
+                                r["techniques"], r["groups"], r["families"])
+        except Exception:
+            logger.exception("ATT&CK refresh tick failed")
+        time.sleep(min(attack.REFRESH_SECONDS, 3600))
+
+
+def _attack_is_stale() -> bool:
+    """True when the ATT&CK tables are empty or older than the refresh window."""
+    from datetime import datetime, timezone
+
+    from dashboard_api import attack
+    try:
+        with get_conn() as conn:
+            row = conn.execute("SELECT fetched_at FROM attack_release").fetchone()
+        if row is None or not row["fetched_at"]:
+            return True
+        age = (datetime.now(timezone.utc)
+               - datetime.fromisoformat(row["fetched_at"])).total_seconds()
+        return age >= attack.REFRESH_SECONDS
+    except Exception:
+        return True
+
+
 def _health_monitor():
     """Background loop (live mode): watch the platform's *own* health and alert
     the notification centre on a verdict transition (ok→degraded→down and
@@ -367,6 +416,7 @@ def _startup():
         threading.Thread(target=_connector_scheduler, daemon=True).start()
         threading.Thread(target=_engine_loop, daemon=True).start()
         threading.Thread(target=_health_monitor, daemon=True).start()
+        threading.Thread(target=_attack_loop, daemon=True).start()
         # Long-running log collectors (syslog UDP + file/dir watcher), if configured.
         try:
             from dashboard_api.log_listeners import start_listeners

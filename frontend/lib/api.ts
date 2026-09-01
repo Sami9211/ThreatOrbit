@@ -625,7 +625,43 @@ export interface MalwareFamily {
   uncatalogued?: boolean
   editedBy?: string | null
 }
+/** What MITRE ATT&CK says a family does, and everyone MITRE reports using it.
+ *
+ *  `tracked: false` is a real answer, not a loading state: ATT&CK covers 20 of
+ *  the 35 families this engine imports, and the fifteen it does not are mostly
+ *  commodity stealers. A page that says "MITRE does not track this family" is
+ *  more useful than a blank panel that reads like a failed request. */
+export interface FamilyAttack {
+  tracked: boolean
+  /** S0154 */
+  id?: string
+  name?: string
+  url?: string
+  /** ATT&CK files Cobalt Strike as a 'tool', because it is one. */
+  kind?: string
+  description?: string
+  techniqueCount: number
+  /** Grouped by tactic in ATT&CK's own kill-chain order - reconnaissance to
+   *  impact. The order is the information; sorting these alphabetically throws
+   *  away what a kill chain is for. */
+  byTactic: Array<{
+    shortname: string; name: string
+    techniques: Array<{ id: string; name: string; url: string | null; isSubtechnique: boolean }>
+  }>
+  techniques: Array<{
+    id: string; name: string; url: string | null
+    tactics: string[]; isSubtechnique: boolean
+  }>
+  /** Every group ATT&CK reports using this family. NOT an attribution of any
+   *  indicator - thirty groups use Cobalt Strike, which is precisely why a
+   *  family cannot name an adversary on its own. */
+  groups: Array<{ id: string; name: string; url: string | null }>
+}
 export interface MalwareFamilyDetail extends MalwareFamily {
+  /** MITRE's answer to "what does this actually do?", quoted with its links. */
+  attack: FamilyAttack
+  /** Which ATT&CK release is on the page, so current can be told from stale. */
+  attackRelease: { version: string; url: string; fetchedAt: string } | null
   /** The actor record for `operator`, when the library tracks them - so the
    *  name is a link rather than something to go and search for. */
   operatorActorId: string | null
