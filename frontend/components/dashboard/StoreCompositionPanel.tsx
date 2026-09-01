@@ -191,6 +191,24 @@ export default function StoreCompositionPanel() {
                 </>
               )}
             </p>
+            {/* Naming a family is half the job. The half that decides whether an
+                indicator is investigable is whether the platform can then say
+                what that family DOES - and for the families MITRE describes it
+                can, in kill-chain order, with a link per technique. A value with
+                a kill chain attached is a different object from a string on a
+                blocklist, so the store says how much of it is which. */}
+            {s.profiledByAttack > 0 && (
+              <div className="mt-2 pt-2 border-t border-white/6 flex items-baseline gap-2 flex-wrap">
+                <span className="text-sm font-semibold tabular-nums" style={{ color: tk('violet') }}>
+                  {s.profiledShare}%
+                </span>
+                <span className="text-[10px] text-ink-500">
+                  of the store — {s.profiledByAttack.toLocaleString()} values across{' '}
+                  {s.profiledFamilies} families — also carries MITRE ATT&amp;CK&apos;s record
+                  of what that malware does.
+                </span>
+              </div>
+            )}
             {s.families.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {s.families.slice(0, 8).map((f) => (

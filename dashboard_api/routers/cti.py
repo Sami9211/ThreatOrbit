@@ -1224,6 +1224,18 @@ def store_summary(user: dict = Depends(current_user)):
         attributed = conn.execute(
             "SELECT COUNT(*) AS n FROM iocs WHERE malware_family IS NOT NULL "
             "AND malware_family <> ''").fetchone()["n"]
+        # The share of the store that comes with a BEHAVIOURAL profile - a family
+        # MITRE describes, so the indicator carries what it does, in what order,
+        # and where to look next. This is the number that answers "they are just
+        # IOCs, a public library has more than this engine can import": a value
+        # with a kill chain attached is a different object from a string on a
+        # blocklist, and this says how much of the store is which.
+        described = conn.execute(
+            "SELECT COUNT(*) AS n FROM iocs i "
+            "JOIN attack_software s ON s.family = i.malware_family").fetchone()["n"]
+        described_families = conn.execute(
+            "SELECT COUNT(DISTINCT i.malware_family) AS n FROM iocs i "
+            "JOIN attack_software s ON s.family = i.malware_family").fetchone()["n"]
         sources_all = conn.execute(
             "SELECT source_id, COUNT(*) AS n FROM observable_sources "
             "GROUP BY source_id ORDER BY n DESC").fetchall()
@@ -1276,6 +1288,9 @@ def store_summary(user: dict = Depends(current_user)):
         "families": families,
         "attributedToFamily": attributed,
         "attributedShare": round(100 * attributed / total, 1) if total else 0.0,
+        "profiledByAttack": described,
+        "profiledShare": round(100 * described / total, 1) if total else 0.0,
+        "profiledFamilies": described_families,
         "sources": sources,
         "expiringWithin7Days": expiring,
         "verdicts": verdicts,

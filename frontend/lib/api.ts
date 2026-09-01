@@ -613,6 +613,12 @@ export interface StoreSummary {
   families: Array<{ family: string; count: number }>
   attributedToFamily: number
   attributedShare: number
+  /** How much of the store carries a full BEHAVIOURAL profile: a family MITRE
+   *  describes, so the indicator arrives with what it does, in what order, and
+   *  where to look next. The answer to "they are just IOCs". */
+  profiledByAttack: number
+  profiledShare: number
+  profiledFamilies: number
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
 

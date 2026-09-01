@@ -2202,6 +2202,23 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-01 · The store can now say how much of itself it can explain.**
+  Naming a family was half the job; the half that decides whether an indicator is
+  investigable is whether the platform can then say what that family DOES.
+
+  ```
+  store                 530,238
+  named to a family     178,911   33.7%   across 35 families
+  with a kill chain     122,436   23.1%   across 20 families
+  ```
+
+  **23.1% of this store carries MITRE's full behavioural record** - what the
+  malware does, in what order, with a link per technique. That is the honest
+  answer to *"they are just IOCs, I can go to a public CTI library and it would
+  have more than this engine can import"*: a value with a kill chain attached is
+  a different object from a string on a blocklist, and the store now states the
+  ratio rather than leaving it to be guessed.
+
 - **2026-09-01 · "Known Campaigns" was a heading with nothing under it, on every
   actor of every live deployment.** The section had existed since the actor page
   was written; the library carries no campaign records, and only the demo seeder

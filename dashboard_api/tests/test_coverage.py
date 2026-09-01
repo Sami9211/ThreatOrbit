@@ -170,3 +170,24 @@ def test_coverage_never_exceeds_what_there_is_to_cover(world):
     assert 0 <= cov["covered"] <= cov["techniqueInstances"]
     assert cov["techniqueInstances"] == sum(f["techniques"] for f in cov["families"])
     assert cov["covered"] == sum(f["covered"] for f in cov["families"])
+
+
+# -- what the store says about itself ------------------------------------------
+
+def test_the_store_summary_reports_how_much_carries_a_behavioural_profile(client, auth):
+    """The number that answers "they are just IOCs, a public library has more
+    than this engine can import".
+
+    Naming a family is half the job. The half that decides whether an indicator
+    is investigable is whether the platform can then say what that family DOES,
+    and for the families MITRE describes it can. A value with a kill chain
+    attached is a different object from a string on a blocklist, so the store has
+    to be able to say how much of it is which.
+    """
+    s = client.get("/cti/store-summary", headers=auth).json()
+    for key in ("profiledByAttack", "profiledShare", "profiledFamilies"):
+        assert key in s, f"{key} missing - the store cannot say how much it can explain"
+    # A subset of what is named, which is a subset of the store. ATT&CK covers 20
+    # of the 35 families the engine imports, so it can never be all of it.
+    assert s["profiledByAttack"] <= s["attributedToFamily"] <= s["total"]
+    assert 0 <= s["profiledShare"] <= 100
