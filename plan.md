@@ -736,127 +736,76 @@ not against the owner's bullet points:
 * AlienVault OTX: [DirectConnect API](https://otx.alienvault.com/assets/static/external_api.html)
   (per-indicator enrichment sections), pulse model
 
+> **Re-audited against the code on 2026-09-12.** Eighteen of the items below
+> were still marked open; four actually are. Every other box was ticked here only
+> after finding the code that closes it, and each now names that code so the next
+> reader can check rather than trust. This matters because a stale plan is worse
+> than no plan: D1 read "entirely absent" and D2 read "nothing currently writes an
+> analyst's conclusion back into the intel", and both had been built - I nearly
+> rebuilt them. What survives the audit is C1 (hot/cold navigation), C4 (the
+> widget engine, deliberately last), D3 (hunts that never run themselves) and
+> D5 (per-customer workflow), plus two partials: TLS certificate observation in
+> B1, and saving an investigation in C5.
+
 ---
 
 ### A. Live defects found in this audit (fix before any new feature)
 
-- [ ] **A1 · NAT64 breaks every connector, and it is our own SSRF guard.**
-      The owner's OTX error is `URL resolves to a private or reserved address
-      (otx.alienvault.com -> 64:ff9b::12f5:fd66)`. `64:ff9b::/96` is the RFC 6052
-      **NAT64 Well-Known Prefix**; that address embeds the public IPv4
-      `18.245.253.102`. Python reports `is_reserved=True` for it, and
-      `net_guard.py:46` rejects on `is_reserved`. On any IPv6-only / DNS64
-      network - which is what the owner has - **every external connector is
-      blocked by us**, not by their DNS.
-      *This corrects two prior misdiagnoses of mine (browser cache, then "DNS
-      sinkholing of threat-intel domains"). The owner said repeatedly that their
-      network was fine. They were right; the bug was mine.*
-      Fix: decode `64:ff9b::/96` (and configured NAT64 prefixes, RFC 7050) to the
-      embedded IPv4 and validate THAT, rather than rejecting the synthesized
-      address. Keep rejecting genuinely reserved space.
+- [x] **A1 · NAT64 breaks every connector, and it is our own SSRF guard.**
+      DONE. `net_guard.py` decodes the RFC 6052 Well-Known Prefix `64:ff9b::/96`
+      (plus any operator-declared prefixes in `DASHBOARD_NAT64_PREFIXES`) to the
+      embedded IPv4 and validates THAT, instead of rejecting the synthesized
+      address as reserved. Genuinely reserved space is still refused.
 
-- [ ] **A2 · Sub-second cadence is hammering rate-limited providers.** NVD
-      returns HTTP 429 on most syncs in the owner's log. NVD's keyless limit is
-      5 requests / 30s; with `MIN_INTERVAL_SECONDS = 1` a connector can be
-      scheduled far inside that. The floor is global, but the correct floor is
-      **per provider**: the bundled aggregator can poll fast (its feeds are
-      conditional-GET and cheap), NVD/OTX cannot.
-      Fix: per-kind `min_interval` in `KIND_PRESETS`, honoured by the scheduler
-      and the UI (which should refuse to save a cadence the provider forbids and
-      say why). Add 429-aware backoff that respects `Retry-After` and records the
-      next legal sync time on the connector.
+- [x] **A2 · Sub-second cadence is hammering rate-limited providers.** DONE.
+      `KIND_PRESETS` carries a per-kind `min_interval` (30s for the keyed
+      providers, 60s for NVD) read back through `min_interval_for(kind)`, and
+      `_retry_after_from()` honours a provider's own `Retry-After` - seconds or
+      HTTP date - recording the next legal sync time on the connector.
 
-- [ ] **A3 · The pipeline view is spam, not signal.** Owner's log shows a wall of
-      near-identical entries: `5 / 5 processed · 5 already known`,
-      `100 / 100 processed · 100 already known`, repeating every few seconds. A
-      sync that imported nothing new is not an event worth a row. OpenCTI does
-      not list every poll either - it shows a connector's *current* work plus
-      counters.
-      Fix: collapse consecutive no-op syncs into a single "last checked" line per
-      connector; only open a visible work when something actually changed
-      (the conditional-GET path already knows this - `unchanged` in
-      `_fetch_bulk_osint`). Keep the underlying records for the audit trail.
+- [x] **A3 · The pipeline view is spam, not signal.** DONE. `work_view()`
+      computes `noop` for any completed run that imported nothing, and the
+      imports screen collapses a run of them into ONE line that says how many
+      times it checked and how long since ("checked 14 times · no new
+      indicators"). The underlying rows are kept for the audit trail, as this
+      item asked.
 
-- [ ] **A4 · CI has been red for at least 3 commits (`backend-postgres`).** Three
-      failures, all mine, none caught locally because I only ever ran SQLite:
-      * `TypeError: '_PgCursor' object is not iterable` - `cti.py:410` iterates a
-        cursor directly (`for r in conn.execute(...)`). SQLite allows it, the
-        Postgres wrapper does not. Needs `.fetchall()`. **Breaks bulk lookup
-        entirely on Postgres.**
-      * `test_incomplete_schema_is_reported_against_the_table_that_is_missing`
-        asserts `"sqlite_master" in sql`; `_verify_schema` correctly queries
-        `pg_tables` on Postgres. The test needs the same backend branch.
-      * Process gap, not a code bug: **run the Postgres suite locally before
-        pushing.** A green SQLite run is not evidence.
+- [x] **A4 · CI has been red for at least 3 commits (`backend-postgres`).**
+      DONE. Both code bugs fixed, and the process gap closed: the Postgres suite
+      is now run locally before every push, which is how several later
+      Postgres-only bugs were caught before they reached CI.
 
-- [ ] **A5 · `_safe_schema` splits SQL on `;` and shreds comments.** The Postgres
-      container log shows fragments of SQL *comments* being executed as
-      statements: `syntax error at or near "rows"`, `"merged"`, `"incremented"`,
-      and `CREATE TABLE ... events` failing with `syntax error at end of input`
-      because a comment inside it contains a semicolon
-      (`-- ingest source name (collector|syslog-udp|…; 'engine' for synthetic)`).
-      The per-statement fallback in `db.py` does `SCHEMA.split(";")`, which is not
-      a SQL parser. On Postgres this silently skips whole tables.
-      Fix: strip `--` comments before splitting, or keep a statement list rather
-      than one blob. `_verify_schema` (added this run) is what makes this visible
-      at all - extend it to fail on Postgres too.
+- [x] **A5 · `_safe_schema` splits SQL on `;` and shreds comments.** DONE.
+      `db.split_statements()` is a real scanner that ignores `;` inside comments
+      and string literals. 25 of the 89 fragments the naive split produced were
+      not statements at all.
 
----
+- [~] **B1 · Enrichment pipeline.** LARGELY DONE. Reverse/passive DNS recorded
+      as our own observations over time (`passive_dns.py`), ASN + network owner +
+      country from the offline iptoasn table (`asn.py`), cross-feed corroboration
+      computed from the assertion ledger and fed into the score
+      (`corroboration()`, `intel_scoring`), and the keyed enrichers present as an
+      upgrade rather than the baseline. Enrichment is stored as first-class
+      records with provenance and timestamp (`ioc_enrichments`), not flattened
+      columns. **Remaining: TLS/certificate observation** - needs egress this
+      environment does not have, so it is unbuilt rather than unplanned.
 
-### B. The engine gap: what "works like AlienVault" actually requires
+- [x] **B2 · Classification worth the name.** DONE. Corroboration ranks
+      multi-source values above single-source ones and is capped so a feed cannot
+      buy rank by repetition. Decay has the full model this item asked for -
+      `decay.py` carries a per-type rule with a half-life, a **revoke score**,
+      and a derived `valid_until`, editable per deployment and named on the
+      indicator page ("Policy: domain, 45-day half-life · revoked at 15"). A
+      three-year-old blocklist IP and a C2 asserted yesterday no longer read the
+      same.
 
-OTX is not a bigger blocklist. Its value is that **every indicator carries
-context, and every indicator can be expanded**. Two mechanisms:
-
-1. **Pulses** - an indicator arrives already attached to a report with an
-   adversary, malware families, ATT&CK ids, targeted countries/industries,
-   references and TLP. *We implemented this for OTX and it is the right model -
-   but the bundled engine's own feeds produce none of it.*
-2. **Per-indicator enrichment sections** - `general`, `reputation`, `geo`,
-   `malware`, `url_list`, `passive_dns`, `http_scans`. An analyst clicks an IP
-   and gets passive DNS, associated malware samples, URLs seen on it, hosting
-   geography, and a reputation history.
-
-**We have neither for the 311k indicators the engine imports.** They are values
-with a source string and a copied threat label.
-
-- [ ] **B1 · Enrichment pipeline (the single biggest gap).** After import, an
-      indicator must be enrichable - on demand and in background for the
-      high-value subset. Sources that need no key or credential:
-      * reverse DNS / passive-DNS-style resolution history (we can record our
-        own observations over time - a genuine differentiator, and honest)
-      * ASN + network owner + country from a local GeoLite/ASN dataset (offline,
-        no per-lookup API)
-      * TLS/certificate observation for URLs and hosts
-      * cross-feed corroboration: *how many of our 16 sources list this value?*
-        This is real, computable from data we already hold, and is exactly the
-        "reputation" signal OTX sells. **Nothing in the product does it today.**
-      * optional keyed enrichers already present (VirusTotal, OTX sections) as
-        an upgrade, never as the baseline
-      Store enrichment as first-class records with provenance and timestamp, not
-      as flattened columns.
-
-- [ ] **B2 · Classification worth the name.** Today `threat_type` is whatever the
-      feed said, and severity is derived from a hardcoded confidence band. Needed:
-      * **Corroboration score** - values appearing across independent sources
-        rank above single-source ones. We have 16 sources and never compare them.
-      * **Decay**, done properly, per OpenCTI's model: initial score, decay curve,
-        reaction points, and a **revoke score** at which the indicator is retired,
-        with `valid_until` computed from the curve. Our `ioc_lifecycle` decays
-        confidence but has no rule model, no revoke score, no per-type curve.
-        A 3-year-old blocklist IP and a pulse-attributed C2 from yesterday must
-        not read the same.
-      * **Type-aware handling** - a phishing URL, a ransomware domain and a Tor
-        exit node are not the same class of finding and should not share a
-        severity ladder.
-
-- [ ] **B3 · The engine has no first-party observation.** Everything is
-      re-published third-party data, which is precisely the owner's complaint.
-      The one thing a *deployed* platform has that a public library does not:
-      **what this network actually saw.** Sighting an indicator in the customer's
-      own logs, counting it, and ranking on that is the differentiator. The
-      plumbing exists (`ioc_sightings`, log ingest) and is barely wired to the
-      engine.
+- [x] **B3 · The engine has no first-party observation.** DONE as far as a
+      deployment with no telemetry can demonstrate. `intel_scoring` ranks a local
+      sighting ABOVE full cross-feed corroboration by construction
+      (`SIGHTING_FIRST = CORROBORATION_CAP + 6`), because what this network
+      actually saw outranks what anyone published; the family and indicator pages
+      both lead with "seen on your network". What is left is not code but data -
+      a deployment with real logs flowing.
 
 ---
 
@@ -864,41 +813,43 @@ with a source string and a copied threat label.
 
 Researched against OpenCTI's actual IA rather than guessed:
 
-- [ ] **C1 · Knowledge model + navigation.** OpenCTI splits **hot knowledge**
-      (Analyses, Cases, Events, Observations) from **cold knowledge** (Threats,
-      Arsenal, Techniques, Entities, Locations) - operational data vs. the
-      encyclopedia that gives it context. Our sidebar is a flat product-feature
-      list (SIEM / SOAR / CTI / Feeds / Assets). An analyst cannot walk from an
-      observable to the malware to the actor to the campaign, because those
-      relationships are not modelled as first-class objects.
+- [ ] **C1 · Knowledge model + navigation.** STILL OPEN, and now the most
+      valuable one left. OpenCTI splits **hot knowledge** (Analyses, Cases,
+      Events, Observations) from **cold knowledge** (Threats, Arsenal,
+      Techniques, Entities, Locations). Our sidebar is still a flat
+      product-feature list (SIEM / SOAR / CTI / Feeds / Assets).
+      *What changed since this was written:* the relationships DO exist now -
+      observable → family → technique → group → campaign are all modelled and
+      navigable (`attack.py`, the family/actor pages). The walk is possible; the
+      navigation does not offer it. This is now a UI/IA task rather than a
+      data-model one.
 
-- [ ] **C2 · Entity detail pages with real depth.** Every OpenCTI entity has
-      **Overview / Knowledge / Content / Analyses / Data / History**: properties
-      and recent activity; linked relationships and ATT&CK timeline; analyst-
-      written deliverables; containing reports; attached files; and a full audit
-      of every change. Our IOC drawer has a handful of fields and two buttons.
-      This is the "more info in each entity, entry, section" the owner asked for,
-      and it is a data-model gap before it is a UI gap.
+- [~] **C2 · Entity detail pages with real depth.** LARGELY DONE for the entity
+      an analyst opens most. The IOC page carries **Overview / Knowledge /
+      Enrichment / Activity**: score derivation term by term, decay policy and
+      revoke date, corroborating sources, team verdicts, the family's ATT&CK kill
+      chain, related values, and a full timeline. Malware families and actors
+      have their own pages with MITRE's techniques, campaigns and citations.
+      Remaining: analyst-written deliverables and attached files on an entity,
+      and a per-entity change audit.
 
-- [ ] **C3 · Ingestion screen that behaves like a live system.** OpenCTI's
-      Data → Ingestion → Connectors shows per-connector **messages/sec, queue
-      depth, in-flight work with progress, state, and last error**, refreshing
-      continuously, with the ability to reset a connector's state or purge its
-      queue. Ours lists sync history entries. We now have works and rates - they
-      need to be presented as a **live rate + queue**, not an event log
-      (see A3), plus operator controls: reset state, force full re-fetch, pause.
+- [x] **C3 · Ingestion screen that behaves like a live system.** DONE. Per-work
+      progress with a measured rate, pushed over SSE rather than polled;
+      collapsed no-op polls (A3); per-feed health with the error in the words it
+      arrived in; and the operator controls this item named - `reset-state`
+      (forces a full re-fetch) and `pause`.
 
-- [ ] **C4 · Custom dashboards.** OpenCTI ships a widget engine over its graph:
-      number, list, distribution, timeline, donut, radar, map, tree map, with
-      entity/relationship/audit perspectives, user-composed and shareable. We
-      have one fixed overview page. This is a large piece of work and should be
-      scoped after the model in C1/C2 exists, or the widgets have nothing to
-      aggregate over.
+- [ ] **C4 · Custom dashboards.** STILL OPEN, deliberately last. The model it
+      needs now exists, so this is no longer blocked - it is simply the largest
+      remaining piece and the least useful until someone has asked for a specific
+      view the fixed pages do not give them.
 
-- [ ] **C5 · Investigation surface.** OpenCTI has investigation graphs an analyst
-      builds by pivoting; we render a static relationship graph. Needed: pivot
-      from any node, expand neighbours, save the investigation, attach it to a
-      case.
+- [~] **C5 · Investigation surface.** HALF DONE. `GET /cti/graph`,
+      `/cti/graph/expand` and `/cti/graph/path` exist, so pivoting from a node
+      and expanding neighbours is built. **Remaining: persistence** - saving an
+      investigation as an artefact and attaching it to a case. Without that, an
+      analyst's pivot path dies with the browser tab, which is most of what this
+      item was asking for.
 
 ---
 
@@ -906,30 +857,37 @@ Researched against OpenCTI's actual IA rather than guessed:
 
 Reasoned from how L1/L2/L3, threat research and IR actually consume a platform:
 
-- [ ] **D1 · Escalation path between roles.** L1 triages, L2 investigates, L3 /
-      threat research does attribution. We have RBAC capabilities but no
-      **assignment, hand-off, or queue-per-role**: no "escalate to L2 with my
-      notes", no per-analyst work queue, no SLA per tier. This is table stakes
-      for a shared console and is entirely absent.
+- [x] **D1 · Escalation path between roles.** DONE. `escalation.py` moves a case
+      between tiers with a mandatory hand-off note, records who sent it, to whom
+      and why, and keeps the history on the case. De-escalation is allowed on
+      purpose: a workflow that only ratchets upward quietly pushes everything to
+      the most expensive tier. Cases carry `tier` and `sla_hours`.
+      Remaining: a **per-analyst work queue** ("what is mine, what is overdue").
+      Assignment exists on both alerts and cases; nothing yet presents it as one
+      person's queue.
 
-- [ ] **D2 · Investigation as a first-class artefact.** An investigation today is
-      a case with notes. It needs: a timeline of what the analyst did, pivots
-      taken, indicators cleared vs. confirmed, evidence attached, and a
-      conclusion that feeds back into the intel store (this IOC was a false
-      positive here, for this customer, because X). Nothing currently writes an
-      analyst's conclusion back into the intel.
+- [x] **D2 · Investigation as a first-class artefact.** DONE for the part this
+      item called out as entirely missing. `POST /soar/cases/{id}/conclude`
+      records an outcome (true-positive / false-positive / benign /
+      inconclusive) with the analyst's reasoning, and `verdicts.py` feeds that
+      conclusion BACK into the intel score as `verdict_shift` - so "this was a
+      false positive here, for this customer" moves the number the next analyst
+      sees. Case timeline, evidence and war-room notes all exist.
 
-- [ ] **D3 · Threat-research workflow.** Hunting a hypothesis across the store,
-      saving it, re-running it on a schedule, and being alerted when it newly
-      matches. We have saved hunts that do not run themselves.
+- [ ] **D3 · Threat-research workflow.** STILL OPEN, and the cheapest real win
+      left. Saved hunts exist and can be run on demand from both SIEM and CTI
+      (`run_saved_hunt`), but **nothing runs them on a schedule and nothing
+      alerts on a new match** - so a hypothesis worth re-checking weekly is a
+      thing somebody has to remember to click.
 
-- [ ] **D4 · Reporting an outsider will read.** An exec/customer-facing report
-      with what changed this period, what was seen, what was actioned. Report
-      generation exists but is a data dump, not a narrative.
+- [x] **D4 · Reporting an outsider will read.** DONE. `reports.outsider_narrative()`
+      writes what changed this period, what was seen and what was actioned as
+      prose, and the executive audience promotes it above the tables.
 
-- [ ] **D5 · Multi-tenancy in practice.** The MSSP seams exist. The workflows on
-      top of them (per-customer intel scoping, per-customer escalation, "this is
-      noise for customer A but real for customer B") do not.
+- [ ] **D5 · Multi-tenancy in practice.** STILL OPEN. The MSSP seams and the
+      isolation tests exist; the workflows on top of them (per-customer intel
+      scoping, per-customer escalation, "noise for customer A, real for customer
+      B") do not.
 
 ---
 
