@@ -76,7 +76,10 @@ function attributionAssessment(actor: ThreatActor, attack?: AttackProfile | null
   // number rendered a few inches further down the same drawer. The library's
   // hand-written four or five sitting above ATT&CK's sixty-four does not read as
   // two sources - it reads as the page contradicting itself.
-  const ttps = attack?.tracked ? attack.techniqueCount : actor.ttps.length
+  // `?? 0` rather than a non-null assertion: a tracked group whose technique
+  // count did not survive the wire should fall back to saying nothing, not to
+  // asserting a number that is not there.
+  const ttps = attack?.tracked ? (attack.techniqueCount ?? 0) : actor.ttps.length
   if (ttps >= 3) {
     reasons.push(attack?.tracked
       ? `${ttps} ATT&CK techniques mapped by MITRE (${attack.id})`
@@ -509,7 +512,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
                     </p>
                   )}
                   <div className="flex flex-wrap items-center gap-1 mt-1">
-                    {c.families.map((f) => (
+                    {(c.families ?? []).map((f) => (
                       <Link key={f} href={`/dashboard/cti/malware/${encodeURIComponent(f)}`}
                         className="px-1.5 py-0.5 rounded border border-magenta/25 bg-magenta/10
                                    text-[9px] text-magenta hover:bg-magenta/20 transition-all hover:scale-105">
@@ -520,7 +523,7 @@ function ActorPanel({ actor, onClose }: { actor: ThreatActor; onClose: () => voi
                         they are lifted out rather than deleted, because a claim
                         without its source is the thing this platform exists not
                         to publish. */}
-                    {c.citations.length > 0 && (
+                    {(c.citations?.length ?? 0) > 0 && (
                       <span className="text-[9px] text-ink-600"
                         title={c.citations.join(' · ')}>
                         reported by {c.citations.slice(0, 2).join(', ')}

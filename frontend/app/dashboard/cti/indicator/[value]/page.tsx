@@ -239,7 +239,7 @@ export default function IndicatorPage({ params }: { params: Promise<{ value: str
           runs PowerShell, persists, moves laterally over SMB". This is the
           compact form on purpose - an analyst here is deciding what to do in the
           next minute, and the full technique list is one click away. */}
-      {state === 'found' && detail?.familyBrief && (
+      {state === 'found' && detail?.familyBrief?.tactics?.length ? (
         <motion.div variants={fadeInUp} initial="hidden" animate="show"
           className="rounded-xl border border-violet/20 bg-violet/[0.06] p-3.5 mb-4">
           <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -281,7 +281,7 @@ export default function IndicatorPage({ params }: { params: Promise<{ value: str
             this particular value beyond the family a source assigned it.
           </p>
         </motion.div>
-      )}
+      ) : null}
 
       {state === 'found' && detail && (
         <>

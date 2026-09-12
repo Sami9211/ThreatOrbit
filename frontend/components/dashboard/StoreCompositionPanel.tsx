@@ -197,14 +197,14 @@ export default function StoreCompositionPanel() {
                 can, in kill-chain order, with a link per technique. A value with
                 a kill chain attached is a different object from a string on a
                 blocklist, so the store says how much of it is which. */}
-            {s.profiledByAttack > 0 && (
+            {(s.profiledByAttack ?? 0) > 0 && (
               <div className="mt-2 pt-2 border-t border-white/6 flex items-baseline gap-2 flex-wrap">
                 <span className="text-sm font-semibold tabular-nums" style={{ color: tk('violet') }}>
                   {s.profiledShare}%
                 </span>
                 <span className="text-[10px] text-ink-500">
-                  of the store — {s.profiledByAttack.toLocaleString()} values across{' '}
-                  {s.profiledFamilies} families — also carries MITRE ATT&amp;CK&apos;s record
+                  of the store — {(s.profiledByAttack ?? 0).toLocaleString()} values across{' '}
+                  {s.profiledFamilies ?? 0} families — also carries MITRE ATT&amp;CK&apos;s record
                   of what that malware does.
                 </span>
               </div>

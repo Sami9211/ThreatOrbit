@@ -87,7 +87,7 @@ export default function AttackNavigatorPage() {
         {loading && <p className="text-xs text-ink-600 py-10 text-center animate-pulse">Loading coverage…</p>}
         {!loading && cov && (
           <div className="flex gap-3 min-w-max">
-            {cov.tactics.map((tac) => (
+            {(cov.tactics ?? []).map((tac) => (
               <div key={tac.tactic} className="w-44 shrink-0">
                 <div className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-2 h-8 leading-tight">{tac.tactic}</div>
                 <div className="space-y-1.5">

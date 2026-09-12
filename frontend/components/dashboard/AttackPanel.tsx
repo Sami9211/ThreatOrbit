@@ -25,8 +25,14 @@ import type { AttackProfile, AttackRelease } from '@/lib/api'
  * lists the groups reported to use it, a group lists the families it uses.
  */
 export interface AttackPanelProps {
-  a: AttackProfile
-  release: AttackRelease | null
+  /** Optional on purpose. TypeScript guarantees this field exists in the code
+   *  that calls the API; it guarantees nothing about the JSON that arrives. A
+   *  deployed frontend is routinely newer than the backend it talks to - a
+   *  preview build against production, a rolling deploy, a cached response - and
+   *  when `attack` is simply absent, dereferencing it white-screens the whole
+   *  page instead of degrading to "MITRE does not track this". */
+  a?: AttackProfile | null
+  release?: AttackRelease | null
   /** 'family' | 'actor' - decides the wording and what the footer links to. */
   subject: 'family' | 'actor'
   /** Shown when MITRE tracks nothing under this name. */
@@ -56,10 +62,14 @@ export default function AttackPanel({
 }: AttackPanelProps) {
   const [openTactic, setOpenTactic] = useState<string | null>(null)
 
-  if (!a.tracked) return <Card title={title} hint={hint}>{untracked}</Card>
+  // An absent profile and an untracked one are the same thing to a reader: this
+  // platform has nothing from MITRE to show. They differ only in whose fault it
+  // is, which is not the reader's problem.
+  if (!a?.tracked) return <Card title={title} hint={hint}>{untracked}</Card>
 
   const groups = a.groups ?? []
   const families = a.families ?? []
+  const byTactic = a.byTactic ?? []
 
   return (
     <Card title={title} hint={hint}>
@@ -71,8 +81,8 @@ export default function AttackPanel({
           {a.kind === 'tool' && <span className="opacity-70">(tool)</span>}
         </a>
         <span className="text-[10px] text-ink-500">
-          <span className="tabular-nums text-ink-300">{a.techniqueCount}</span> techniques
-          across <span className="tabular-nums text-ink-300">{a.byTactic.length}</span> tactics
+          <span className="tabular-nums text-ink-300">{a.techniqueCount ?? 0}</span> techniques
+          across <span className="tabular-nums text-ink-300">{byTactic.length}</span> tactics
         </span>
         {release && (
           <span className="ml-auto text-[10px] text-ink-600" title={`Fetched ${release.fetchedAt}`}>
@@ -83,7 +93,7 @@ export default function AttackPanel({
 
       {/* Kill-chain order, top to bottom as MITRE publishes it. */}
       <div className="space-y-1.5">
-        {a.byTactic.map((b) => {
+        {byTactic.map((b) => {
           const open = openTactic === b.shortname
           return (
             <div key={b.shortname}

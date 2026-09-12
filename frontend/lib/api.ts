@@ -425,9 +425,10 @@ export interface ActorDetail extends Actor {
   reportedMalware: ActorMalware[]
   /** What MITRE says this group does. Ten of the thirteen shipped actors resolve
    *  to an ATT&CK group and gain 33-93 sourced techniques where the library
-   *  holds four or five, each with a link. */
-  attack: AttackProfile
-  attackRelease: AttackRelease | null
+   *  holds four or five, each with a link. Optional for the same reason as on
+   *  MalwareFamilyDetail: an older backend simply will not send it. */
+  attack?: AttackProfile
+  attackRelease?: AttackRelease | null
 }
 
 /** One term of an intel score, and why it applied. The number on its own is a
@@ -616,9 +617,9 @@ export interface StoreSummary {
   /** How much of the store carries a full BEHAVIOURAL profile: a family MITRE
    *  describes, so the indicator arrives with what it does, in what order, and
    *  where to look next. The answer to "they are just IOCs". */
-  profiledByAttack: number
-  profiledShare: number
-  profiledFamilies: number
+  profiledByAttack?: number
+  profiledShare?: number
+  profiledFamilies?: number
 }
 export const fetchStoreSummary = () => api<StoreSummary>('/cti/store-summary')
 
@@ -662,11 +663,11 @@ export interface AttackProfile {
   /** ATT&CK files Cobalt Strike as a 'tool', because it is one. Software only. */
   kind?: string
   description?: string
-  techniqueCount: number
+  techniqueCount?: number
   /** Grouped by tactic in ATT&CK's own kill-chain order - reconnaissance to
    *  impact. The order is the information; sorting these alphabetically throws
    *  away what a kill chain is for. */
-  byTactic: Array<{
+  byTactic?: Array<{
     shortname: string; name: string
     techniques: Array<{ id: string; name: string; url: string | null; isSubtechnique: boolean }>
   }>
@@ -701,9 +702,17 @@ export type FamilyAttack = AttackProfile
 /** Which ATT&CK release is on the page, so current can be told from stale. */
 export interface AttackRelease { version: string; url: string; fetchedAt: string }
 export interface MalwareFamilyDetail extends MalwareFamily {
-  /** MITRE's answer to "what does this actually do?", quoted with its links. */
-  attack: AttackProfile
-  attackRelease: AttackRelease | null
+  /** MITRE's answer to "what does this actually do?", quoted with its links.
+   *
+   *  OPTIONAL on purpose, and this is not pedantry. TypeScript describes the
+   *  code that calls the API; it says nothing about the JSON that arrives. A
+   *  deployed frontend is routinely newer than the backend it talks to - a
+   *  preview build pointed at production, a rolling deploy, a cached response -
+   *  and a field typed as required is a field nobody guards, which turns a
+   *  missing key into a white screen. Marked optional so the compiler insists on
+   *  the guard that keeps the page rendering. */
+  attack?: AttackProfile
+  attackRelease?: AttackRelease | null
   /** The actor record for `operator`, when the library tracks them - so the
    *  name is a link rather than something to go and search for. */
   operatorActorId: string | null

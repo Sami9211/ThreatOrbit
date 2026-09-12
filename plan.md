@@ -2202,6 +2202,44 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-12 · The family page white-screened against any backend a release
+  behind.** Reported as failing previews on Vercel, and reproducible: serve the
+  built frontend against a proxy that strips every field added in the ATT&CK
+  work, and both malware family pages throw
+
+  ```
+  Cannot read properties of undefined (reading 'tracked')
+  ```
+
+  A blank route, on the page with the most to say. `AttackPanel` did
+  `if (!a.tracked)` on a prop the page passed as `d.attack` - a field the API
+  only started sending that day. Any deployment whose frontend is newer than its
+  backend sends `undefined` into that dereference, and a preview build pointed at
+  production is precisely that arrangement.
+
+  **The type was the root cause, not the panel.** TypeScript describes the code
+  that CALLS the API; it says nothing about the JSON that ARRIVES, so a field
+  typed as required is a field nobody guards. Marking the new fields optional
+  turned the compiler into the thing that insists on the guard - and it
+  immediately found two more unguarded reads that had already shipped
+  (`attack.techniqueCount` on the actor drawer, `s.profiledByAttack` on the
+  composition panel).
+
+  Verified the way the bug was found: seven pages against a stripped API, crash
+  before, clean after.
+
+  ```
+  before                                    after
+  ERRORS /dashboard/cti/malware/emotet   ->  ok
+  ERRORS /dashboard/cti/malware/redline  ->  ok
+  ```
+
+  Also checked and dismissed while looking: a clean checkout with a fresh
+  `npm install` builds, `npm ci` agrees with the lockfile, and framer-motion 13,
+  TypeScript 7 and @types/node 26 all typecheck and build against current main -
+  the dependabot previews fail because those branches are stale, not because the
+  bumps are bad.
+
 - **2026-09-01 · The store can now say how much of itself it can explain.**
   Naming a family was half the job; the half that decides whether an indicator is
   investigable is whether the platform can then say what that family DOES.
