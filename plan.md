@@ -874,11 +874,10 @@ Reasoned from how L1/L2/L3, threat research and IR actually consume a platform:
       false positive here, for this customer" moves the number the next analyst
       sees. Case timeline, evidence and war-room notes all exist.
 
-- [ ] **D3 · Threat-research workflow.** STILL OPEN, and the cheapest real win
-      left. Saved hunts exist and can be run on demand from both SIEM and CTI
-      (`run_saved_hunt`), but **nothing runs them on a schedule and nothing
-      alerts on a new match** - so a hypothesis worth re-checking weekly is a
-      thing somebody has to remember to click.
+- [~] **D3 · Threat-research workflow.** MOSTLY DONE (2026-09-12). Saved SIEM
+      hunts now run on their own schedule and alert when they NEWLY match.
+      Remaining: CTI hunts (over the indicator store) still cannot be scheduled -
+      only SIEM hunts can.
 
 - [x] **D4 · Reporting an outsider will read.** DONE. `reports.outsider_narrative()`
       writes what changed this period, what was seen and what was actioned as
@@ -2159,6 +2158,42 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-09-12 · The hunt schedule was a control that lies.** `POST
+  /siem/hunts/{id}/schedule` accepted a cadence, stored it, showed it in the UI -
+  and on a real deployment nothing ever ran it. `run_due_scheduled_hunts` was a
+  step inside `process_tick`, which `main` calls only when `SYNTHETIC_ALLOWED`.
+  In real-data mode, the mode with real logs and real hunts in it, a scheduled
+  hunt was inert. It has its own leader-gated loop now, started in every mode.
+
+  The second defect was noisier. It alerted whenever the query had hits, so a
+  hunt matching the same twelve events raised an identical alert every fifteen
+  minutes, forever - the same failure as reporting a poll as an event, which this
+  platform has spent a lot of effort not doing everywhere else. A saved hunt is a
+  standing hypothesis: the news is that something matched it that was not there
+  last time.
+
+  ```
+  run 1  first ever, 3 events present   ->  1 alert   "3 hits"
+  run 2  nothing new, same 3 match      ->  0 alerts
+  run 3  1 genuinely new event          ->  1 alert   "1 new"
+  run 4  five minutes later, not due    ->  did not run
+  ```
+
+  The first run still alerts, deliberately: someone who has just put a hunt on a
+  schedule should be told it matches something NOW rather than waiting a cadence
+  to find out, and it costs exactly one alert ever. Every run after it compares
+  against the last look. `event_search` gained an optional `since_iso` that
+  counts new matches over the FULL match list rather than the display-capped
+  page, so "new" is a real number and not an artefact of `LIMIT 200`.
+
+  Two things the tests caught about themselves, worth recording. The first
+  version inserted fixture events on a connection it had not committed, while
+  `event_search` opens its own - so the "nothing changed" cases passed for the
+  wrong reason, proving only that a hunt matching nothing alerts about nothing.
+  And the alert lookup embedded `LIKE '%newly matched%'` inline: psycopg reads a
+  literal `%` in query text as a placeholder marker, so it passed on SQLite and
+  failed on Postgres. Both are patterns this session has now hit twice.
 
 - **2026-09-12 · `authedPage` meant "the URL changed", not "the dashboard is
   there".** The overview accessibility check went red in CI on mobile-safari -

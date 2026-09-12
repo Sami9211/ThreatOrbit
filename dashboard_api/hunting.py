@@ -6,6 +6,7 @@ actually pivot on - MITRE technique ids, IPv4 addresses, severities, and
 quoted/bare keywords - and matches them against stored alerts (SIEM domain)
 or IOCs (CTI domain). Every result row is a real stored record.
 """
+import os
 import re
 import shlex
 import time
@@ -29,6 +30,11 @@ _STOPWORDS = {
     "action", "direction", "outbound", "inbound", "connection", "start",
     "timestamp", "lookup", "hour",
 }
+
+# How often to check whether a saved hunt's schedule is due. A minute is the
+# finest cadence the schedule API accepts, so a one-minute check honours any of
+# them; 0 disables scheduled hunts entirely.
+HUNT_TICK_SECONDS = int(os.environ.get("DASHBOARD_HUNT_TICK_SECONDS", "60"))
 
 RANGE_HOURS = {"1h": 1, "6h": 6, "24h": 24, "7d": 168}
 
@@ -250,9 +256,16 @@ def parse_query(q: str) -> dict:
     return {"conditions": conditions, "freetext": freetext, "stats": stats, "join": join}
 
 
-def event_search(query: str, time_range: str = "24h", limit: int = 200) -> dict:
+def event_search(query: str, time_range: str = "24h", limit: int = 200,
+                 since_iso: str | None = None) -> dict:
     """Run a field-operator search over the raw event stream. Returns matching
-    events, or grouped counts when the query ends in `| stats count by <field>`."""
+    events, or grouped counts when the query ends in `| stats count by <field>`.
+
+    `since_iso` adds a `newHits` count: how many of the matches are newer than
+    that timestamp. A scheduled hunt needs the difference between "this query
+    matches twelve things" and "twelve things matched that were not there when I
+    last looked" - the first is true every time it runs and is not news.
+    """
     started = time.perf_counter()
     parsed = parse_query(query)
     conds = list(parsed["conditions"])
@@ -305,14 +318,37 @@ def event_search(query: str, time_range: str = "24h", limit: int = 200) -> dict:
     keep = ("id", "ts", "category", "event_type", "src_ip", "dest_ip", "dest_port",
             "username", "hostname", "process_name", "action", "bytes_out", "mitre_tech_id", "raw")
     results = [{k: e.get(k) for k in keep} for e in matched[:limit]]
-    return {"scanned": scanned, "hits": len(matched), "elapsed_ms": elapsed,
-            "interpreted": interpreted, "stats": None, "results": results}
+    out = {"scanned": scanned, "hits": len(matched), "elapsed_ms": elapsed,
+           "interpreted": interpreted, "stats": None, "results": results}
+    if since_iso:
+        # Counted over the FULL match list rather than the capped `results`, so
+        # "new" is a real count and not an artefact of the display limit.
+        fresh = [e for e in matched if str(e.get("ts") or "") > since_iso]
+        out["newHits"] = len(fresh)
+        out["newResults"] = [{k: e.get(k) for k in keep} for e in fresh[:limit]]
+    return out
 
 
 def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
-    """Run any saved SIEM hunt whose schedule is due (event-stream search), and
-    raise a SIEM alert when it has hits and auto_alert is on. Returns a summary.
-    Called by the live engine; the hunt becomes a real detection-over-time."""
+    """Run any saved SIEM hunt whose schedule is due, and raise an alert when it
+    NEWLY matches. Returns a summary.
+
+    Two things this used to get wrong, both of which made the feature a control
+    that lies:
+
+    **It alerted on every run with hits.** A hunt matching the same twelve events
+    raised an identical alert every fifteen minutes forever. A saved hunt is a
+    standing hypothesis; the news is that something matched it that was not there
+    last time, not that the query still returns rows. So the alert now fires on
+    matches newer than the last scheduled run, and says both numbers - what is
+    new, and what the window holds in total.
+
+    **It only ran inside the synthetic telemetry loop.** `process_tick` is gated
+    on SYNTHETIC_ALLOWED, so on a real deployment - the one with real logs and
+    real hunts - the schedule was accepted by the API, displayed in the UI, and
+    never honoured by anything. It is driven by its own loop now (`main._hunt_loop`),
+    which runs in every mode.
+    """
     from dashboard_api.detections import _insert_alert
     now = now or datetime.now(timezone.utc)
     rows = conn.execute(
@@ -332,21 +368,37 @@ def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
         if not due:
             continue
         query = " ".join(filter(None, [h["query"], h["technique"]]))
-        result = event_search(query, "24h", limit=200)
+        # The first scheduled run has no previous look to compare against, so
+        # everything the window holds counts as new. That is deliberate: an
+        # analyst who has just put a hunt on a schedule should be told if it
+        # matches something NOW rather than waiting a cadence to find out, and it
+        # costs exactly one alert ever. Every run after it compares against the
+        # last look, which is where the repetition came from.
+        result = event_search(query, "24h", limit=200, since_iso=str(last) if last else None)
+        new_hits = result.get("newHits", 0) if last else result["hits"]
         nowiso = now.replace(microsecond=0).isoformat()
         conn.execute(
             "UPDATE saved_hunts SET last_scheduled=?, last_run=?, hit_count=?, status='scheduled' "
             "WHERE id=?", (nowiso, nowiso, result["hits"], h["id"]))
         ran += 1
-        if result["hits"] > 0 and h["auto_alert"]:
-            ev = result["results"][0] if result["results"] else {}
+        if new_hits > 0 and h["auto_alert"]:
+            fresh = result.get("newResults") or result.get("results") or []
+            ev = fresh[0] if fresh else {}
+            first = not last
             _insert_alert(
-                conn, title=f"Scheduled hunt matched: {h['name']} ({result['hits']} hits)",
+                conn,
+                title=(f"Scheduled hunt matched: {h['name']} ({new_hits} hits)" if first
+                       else f"Scheduled hunt newly matched: {h['name']} ({new_hits} new)"),
                 severity="medium", risk=52, rule_name=f"Hunt · {h['name']}",
                 src_ip=ev.get("src_ip"), hostname=ev.get("hostname"), username=ev.get("username"),
                 mitre_tech_id=h["technique"] or ev.get("mitre_tech_id"),
-                description=f"Saved hunt '{h['name']}' ({query}) returned {result['hits']} events on its schedule.",
-                raw_log=ev.get("raw"), event_count=result["hits"])
+                description=(
+                    f"Saved hunt '{h['name']}' ({query}) returned {new_hits} event(s) "
+                    f"on its first scheduled run." if first else
+                    f"Saved hunt '{h['name']}' ({query}) matched {new_hits} event(s) "
+                    f"that were not there at the last check, out of {result['hits']} "
+                    f"in the last 24h."),
+                raw_log=ev.get("raw"), event_count=new_hits)
             conn.execute("UPDATE alerts SET rule_id='R-HUNT' WHERE id=(SELECT id FROM alerts "
                          "ORDER BY ts DESC LIMIT 1)")
             alerts += 1

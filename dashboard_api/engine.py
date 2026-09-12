@@ -690,12 +690,11 @@ def process_tick(max_events: int = 6) -> dict:
         if dark:
             from dashboard_api.darkweb_logic import match_credential_leaks
             match_credential_leaks(conn)
-        # Scheduled hunts: run any that are due → alerts on hits (detection over time).
-        try:
-            from dashboard_api.hunting import run_due_scheduled_hunts
-            run_due_scheduled_hunts(conn)
-        except Exception:
-            pass
+        # Scheduled hunts used to run from here. They no longer do: this function
+        # is gated on SYNTHETIC_ALLOWED, so on a real deployment the schedule was
+        # accepted by the API, shown in the UI and honoured by nothing. They have
+        # their own leader-gated loop now (`main._hunt_loop`), which runs in every
+        # mode - including the one with real logs in it.
         # SOAR automation: auto-trigger playbooks whose criteria match new alerts.
         from dashboard_api.playbook_engine import auto_trigger_playbooks
         pb_runs, pb_dispatches = auto_trigger_playbooks(conn)

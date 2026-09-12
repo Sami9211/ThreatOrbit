@@ -261,6 +261,41 @@ def _engine_loop():
         time.sleep(ENGINE_TICK_SECONDS)
 
 
+def _hunt_loop():
+    """Background loop: run saved hunts whose schedule is due.
+
+    Its own loop rather than a step inside `process_tick`, because that function
+    only runs when synthetic telemetry generation is enabled. A deployment in
+    real-data mode - the one with real logs and real hunts in it - accepted a
+    cadence through `POST /siem/hunts/{id}/schedule`, displayed it, and never ran
+    anything. A control that lies is worse than a missing one.
+
+    Leader-gated like every other periodic job, so exactly one replica runs a
+    given hunt. A minute is the finest cadence the schedule offers, so checking
+    once a minute is enough to honour any of them.
+    """
+    import time
+    from dashboard_api import leader
+    from dashboard_api.hunting import HUNT_TICK_SECONDS
+    if HUNT_TICK_SECONDS <= 0:
+        logger.info("Scheduled hunts disabled (DASHBOARD_HUNT_TICK_SECONDS<=0)")
+        return
+    time.sleep(25)   # let boot settle; nothing is waiting on the first run
+    while True:
+        try:
+            if leader.is_leader():
+                from dashboard_api.hunting import run_due_scheduled_hunts
+                with get_conn() as conn:
+                    r = run_due_scheduled_hunts(conn)
+                    conn.commit()
+                if r["ran"]:
+                    logger.info("Scheduled hunts: ran %d, raised %d alert(s)",
+                                r["ran"], r["alerts"])
+        except Exception:
+            logger.exception("Scheduled hunt tick failed")
+        time.sleep(HUNT_TICK_SECONDS)
+
+
 def _attack_loop():
     """Background loop: keep the MITRE ATT&CK reference current.
 
@@ -417,6 +452,7 @@ def _startup():
         threading.Thread(target=_engine_loop, daemon=True).start()
         threading.Thread(target=_health_monitor, daemon=True).start()
         threading.Thread(target=_attack_loop, daemon=True).start()
+        threading.Thread(target=_hunt_loop, daemon=True).start()
         # Long-running log collectors (syslog UDP + file/dir watcher), if configured.
         try:
             from dashboard_api.log_listeners import start_listeners
