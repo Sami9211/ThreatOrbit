@@ -2159,6 +2159,41 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-12 · A CTI hunt returned the whole store and reported the page
+  size.** Two bugs wearing each other as cover, found while extending scheduled
+  hunts to the indicator store.
+
+  `extract_tokens` pulled keywords out of QUOTED strings only. Nobody types
+  quotes, so a hunt for `emotet` extracted nothing, built no WHERE clause, and
+  matched every row. And `run_ioc_hunt` reported `hits = len(rows)` AFTER the
+  `LIMIT`, so it always said fifty - and fifty results for `emotet`, ordered by
+  confidence, looks exactly like a hunt that worked. The saved hunt then carried
+  that 50 forward as its recorded artefact count.
+
+  ```
+                  reported    actually
+  cobaltstrike          50      11,253
+  emotet                50       8,001
+  phishing              50     149,747     (store: 530,238)
+  ```
+
+  Bare words are keywords now; quotes still mean "this phrase". Severity words,
+  technique IDs and addresses are not duplicated as free-text terms, and a
+  two-letter allowlist keeps `c2`, which the noise floor was eating.
+
+  The safety property behind the whole thing is now explicit and tested: **a
+  query with nothing searchable in it returns nothing, never everything.** That
+  is the rule that turns a tokeniser gap into an empty result instead of a
+  confident wrong answer.
+
+  Two things fixed alongside, since the query was being rewritten anyway. `hits`
+  is a true count taken from `COUNT(*) OVER ()` riding the same scan the page
+  already pays for - a leading-wildcard LIKE cannot use an index, so a separate
+  COUNT would have doubled the cost of every hunt. And results lead with the
+  composite intel score rather than the feed's own confidence, because "the ones
+  worth opening" is what a hunt is for, and a feed's confidence says nothing
+  about corroboration, local sightings or decay.
+
 - **2026-09-12 · The hunt schedule was a control that lies.** `POST
   /siem/hunts/{id}/schedule` accepted a cadence, stored it, showed it in the UI -
   and on a real deployment nothing ever ran it. `run_due_scheduled_hunts` was a

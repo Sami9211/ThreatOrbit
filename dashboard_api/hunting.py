@@ -20,6 +20,11 @@ IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 QUOTED_RE = re.compile(r'"([^"]{3,64})"')
 SEVERITIES = {"critical", "high", "medium", "low", "info"}
 
+# Two-letter terms that mean something in this domain and would otherwise be
+# dropped by the minimum-length rule. Kept as an explicit allowlist rather than
+# lowering the floor, which would let every English preposition through.
+_SHORT_TERMS = {"c2"}
+
 # Query-language keywords that carry no hunt meaning and should not become
 # free-text search terms.
 _STOPWORDS = {
@@ -40,17 +45,43 @@ RANGE_HOURS = {"1h": 1, "6h": 6, "24h": 24, "7d": 168}
 
 
 def extract_tokens(query: str) -> dict:
-    """Pull techniques, IPs, severities, and keywords out of a query string."""
+    """Pull techniques, IPs, severities, and keywords out of a query string.
+
+    Keywords used to come from QUOTED strings only. Nobody types quotes, so a
+    hunt for `emotet` extracted nothing, produced no WHERE clause, and matched
+    the ENTIRE store - then showed the top fifty, which look exactly like
+    results. Measured on the live 530,238-indicator store, `cobaltstrike`,
+    `emotet` and `phishing` each "found" all 530,238. The capped hit count hid
+    it: every hunt reported the page size, so every hunt looked reasonable.
+
+    Bare words are keywords now. Quotes still mean "this phrase", which is the
+    only thing they ever usefully meant here.
+    """
     techniques = sorted(set(TECHNIQUE_RE.findall(query)))
     ips = sorted(set(IPV4_RE.findall(query)))
     quoted = [q for q in QUOTED_RE.findall(query) if not q.startswith("0x")]
     severities = sorted({w for w in re.findall(r"[a-z]+", query.lower()) if w in SEVERITIES})
-    keywords = []
+
+    def _keep(t: str) -> bool:
+        long_enough = len(t) >= 3 or t in _SHORT_TERMS
+        return (long_enough and t not in _STOPWORDS and t not in SEVERITIES
+                and not IPV4_RE.fullmatch(t) and not TECHNIQUE_RE.fullmatch(t.upper()))
+
+    keywords: list[str] = []
     for term in quoted:
         t = term.strip().lower()
-        if t and t not in _STOPWORDS and not IPV4_RE.fullmatch(t) and len(keywords) < 8:
+        if t and t not in _STOPWORDS and not IPV4_RE.fullmatch(t):
             keywords.append(t)
-    return {"techniques": techniques, "ips": ips, "severities": severities, "keywords": keywords}
+    # Everything the quotes did not already claim. Field-operator syntax
+    # (`event_type=beacon`) is the event-search language's job, not this one's,
+    # so split on non-word characters and take the words.
+    rest = QUOTED_RE.sub(" ", query).lower()
+    for t in re.split(r"[^\w.:-]+", rest):
+        t = t.strip(" .:-")
+        if _keep(t) and t not in keywords:
+            keywords.append(t)
+    return {"techniques": techniques, "ips": ips, "severities": severities,
+            "keywords": keywords[:8]}
 
 
 def _window_start(time_range: str) -> str:
@@ -406,7 +437,15 @@ def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
 
 
 def run_ioc_hunt(query: str, limit: int = 50) -> dict:
-    """Match extracted tokens against the IOC store. Returns real IOCs."""
+    """Match extracted tokens against the IOC store. Returns real IOCs.
+
+    `hits` is a real COUNT over the whole store, not the length of the page.
+    It used to be `len(rows)` AFTER the `LIMIT`, so every hunt reported exactly
+    the page size and no more: measured on a 530,238-indicator store, a hunt for
+    "phishing" reported **50 hits against 149,747 matches**, and the saved hunt
+    carried that 50 forward as its recorded result. A number that is the page
+    size dressed up as a finding is worse than no number.
+    """
     started = time.perf_counter()
     tokens = extract_tokens(query)
 
@@ -426,18 +465,40 @@ def run_ioc_hunt(query: str, limit: int = 50) -> dict:
     if tokens["severities"]:
         clauses.append(f"severity IN ({','.join('?' * len(tokens['severities']))})")
         params.extend(tokens["severities"])
-    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    if not clauses:
+        # Nothing searchable was typed. Returning the whole store here is how a
+        # hunt for a term this tokeniser could not use came back looking like a
+        # confident answer; an empty result is the honest one.
+        with get_conn() as conn:
+            scanned = conn.execute("SELECT COUNT(*) AS n FROM iocs").fetchone()["n"]
+        return {"scanned": scanned, "hits": 0, "shown": 0,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                "tokens": tokens, "results": []}
+    where = "WHERE " + " AND ".join(clauses)
 
     with get_conn() as conn:
         scanned = conn.execute("SELECT COUNT(*) AS n FROM iocs").fetchone()["n"]
+        # One scan, not two. A leading-wildcard LIKE cannot use an index, so a
+        # separate COUNT doubles the cost of every hunt over a half-million-row
+        # store; `COUNT(*) OVER ()` rides the scan the page is already paying
+        # for and is supported by both backends.
+        #
+        # Ordered by the composite intel score, not raw confidence: "the ones
+        # worth opening" is what a hunt is for, and a feed's own confidence says
+        # nothing about corroboration, local sightings or decay.
         rows = conn.execute(
-            f"SELECT * FROM iocs {where} ORDER BY confidence DESC LIMIT ?", params + [limit]
-        ).fetchall()
+            f"SELECT *, COUNT(*) OVER () AS _total FROM iocs {where} "
+            f"ORDER BY intel_score DESC, confidence DESC LIMIT ?",
+            params + [limit]).fetchall()
+        hits = rows[0]["_total"] if rows else 0
 
     return {
         "scanned": scanned,
-        "hits": len(rows),
+        "hits": hits,
+        "shown": len(rows),
         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
         "tokens": tokens,
-        "results": rows_to_dicts(rows),
+        # `_total` is the window-function column, not part of an indicator.
+        "results": [{k: v for k, v in r.items() if k != "_total"}
+                    for r in rows_to_dicts(rows)],
     }
