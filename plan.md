@@ -2202,6 +2202,26 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-12 · The security gate went red on a new `sharp` advisory, and the
+  fix was a fix rather than an allowlist entry.** GHSA-rgj7-g3m4-5g8c (high,
+  libheif vulnerabilities reachable through `sharp`) landed untriaged, so
+  `audit-gate.mjs` failed the build exactly as designed - a new high/critical
+  advisory must either be fixed or consciously triaged with a reason and an
+  expiry.
+
+  `sharp` was already pinned by an override at `^0.35.0` and resolving to
+  0.35.3; the advisory is fixed in 0.35.4. Moving the override to `^0.35.4`
+  resolves it at source, which is the outcome the allowlist's own doc-string
+  asks for - an entry there would have been a note saying we chose not to run a
+  one-line upgrade.
+
+  One thing worth recording about the lockfile: npm 10.9.x drops the `libc`
+  constraint from the `@next/swc-linux-*` entries whenever it rewrites the file.
+  Those arrays are what lets `npm ci` pick the glibc binary on Vercel and the
+  musl one in Alpine, so they were restored by hand - a `sharp` bump should
+  contain a `sharp` bump and nothing else. Verified by building a clean copy
+  with `npm ci`: sharp 0.35.4, gate green, build green.
+
 - **2026-09-12 · The family page white-screened against any backend a release
   behind.** Reported as failing previews on Vercel, and reproducible: serve the
   built frontend against a proxy that strips every field added in the ATT&CK
