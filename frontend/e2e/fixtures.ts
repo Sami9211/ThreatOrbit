@@ -17,6 +17,19 @@ export async function login(page: Page, creds = ADMIN) {
   // next.config has trailingSlash: true, so the app lands on /dashboard/ -
   // match with or without the trailing slash.
   await page.waitForURL(/\/dashboard\/?$/, { timeout: 20_000 })
+  // ...and then wait for the dashboard to actually BE there. A URL change is
+  // not a rendered page: the overview a11y check ran axe-core straight after
+  // this and intermittently caught a half-built DOM on the slowest project,
+  // failing CI on a violation that does not exist once the page settles (15/15
+  // clean locally, three repeats). Every other test in that spec already waits
+  // for a visible element before analysing; this makes `authedPage` mean what
+  // its name says, for those tests and any future one.
+  //
+  // The heading differs by experience mode - "Security Status" in Normal,
+  // "Security Overview" in Power - so match either rather than pinning a mode.
+  await expect(
+    page.getByRole('heading', { name: /security (status|overview)/i }).first(),
+  ).toBeVisible({ timeout: 20_000 })
 }
 
 /** A test that starts already authenticated on the dashboard. */

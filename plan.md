@@ -2202,6 +2202,26 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-12 · `authedPage` meant "the URL changed", not "the dashboard is
+  there".** The overview accessibility check went red in CI on mobile-safari -
+  one failure after two retries, 115 other tests green - on a commit whose only
+  content was a `sharp` version override, which cannot change a rendered DOM.
+
+  The fixture waited for `/dashboard/` to appear in the address bar and handed
+  the page straight to the test, which ran axe-core against whatever DOM existed
+  at that instant. On the slowest project that is sometimes a half-built page,
+  and axe duly reported a violation that does not exist once it settles: fifteen
+  consecutive clean runs locally across three repeats of the whole spec.
+
+  Every other test in that file already waits for a visible element before
+  analysing. The fix puts the wait in the fixture instead, so `authedPage` means
+  what its name says for those tests and for any future one - matching either
+  heading the overview can show, since "Security Status" and "Security Overview"
+  depend on the experience mode and pinning one would just swap a race for a
+  mode assumption.
+
+  Full e2e suite green on chromium afterwards (58 passed).
+
 - **2026-09-12 · The security gate went red on a new `sharp` advisory, and the
   fix was a fix rather than an allowlist entry.** GHSA-rgj7-g3m4-5g8c (high,
   libheif vulnerabilities reachable through `sharp`) landed untriaged, so
