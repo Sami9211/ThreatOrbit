@@ -2162,6 +2162,36 @@ not one-off tasks:
 
 _Move completed items here with the date so the roadmap stays honest._
 
+- **2026-09-13 · The SBOM job went red on two different things wearing one error
+  message.** `cyclonedx-npm` shells out to `npm ls --json --long --all`, which
+  exits non-zero for anything in the ELSPROBLEMS family, so one line of output
+  covered a real problem and a cosmetic one.
+
+  ```
+  invalid:    react@19.3.0, react-dom@19.3.0
+  extraneous: @img/sharp-wasm32@0.35.4, @emnapi/runtime@1.11.3
+  ```
+
+  **The react half was mine and was real.** A dependabot bump moved
+  `package.json` to `^19.3.0`; I restored the committed lockfile afterwards to
+  avoid an unrelated rewrite, which left a lockfile that no longer described the
+  manifest. Regenerating it fixes that, and the four `@next/swc-linux-*` `libc`
+  constraints were put back by hand afterwards, as before - npm 10.9.x drops them
+  on every rewrite, and they are what lets `npm ci` pick the glibc binary on
+  Vercel and the musl one in Alpine.
+
+  **The sharp half is upstream and is not.** sharp 0.35.4 ships an
+  `@img/sharp-wasm32` that npm installs and then cannot attribute to a
+  dependency edge. Verified it is not something this repo chose: it appears on a
+  clean regenerate with the override at `^0.35.0` and at `^0.35.4` alike, and
+  sharp's own `optionalDependencies` do not list it.
+
+  So the inventory job now passes `--ignore-npm-errors`, which is the tool's own
+  option for exactly this, and echoes the `npm ls` problems into the log first so
+  nothing is silently swallowed. Tolerating them there is not the same as
+  ignoring dependency health - that is the npm-audit gate and Trivy, both
+  untouched. Verified locally: 428 components, CycloneDX 1.6, exit 0.
+
 - **2026-09-13 · A saved CTI hunt can now be a watchlist, and "new" means new to
   US.** Scheduling had only ever worked for SIEM hunts, so the one question a
   threat researcher wants re-asked every week - *has anything new landed that
