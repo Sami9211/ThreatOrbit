@@ -874,10 +874,13 @@ Reasoned from how L1/L2/L3, threat research and IR actually consume a platform:
       false positive here, for this customer" moves the number the next analyst
       sees. Case timeline, evidence and war-room notes all exist.
 
-- [~] **D3 · Threat-research workflow.** MOSTLY DONE (2026-09-12). Saved SIEM
-      hunts now run on their own schedule and alert when they NEWLY match.
-      Remaining: CTI hunts (over the indicator store) still cannot be scheduled -
-      only SIEM hunts can.
+- [x] **D3 · Threat-research workflow.** DONE (2026-09-13). Saved hunts run on
+      their own schedule in both domains and report only what is NEW: a SIEM hunt
+      raises an alert when events match that were not there last time, a CTI hunt
+      raises a notification when indicators enter the store that match a standing
+      hypothesis. "New" for the CTI side is keyed on `iocs.imported_at` - our own
+      clock - because `first_seen` is the source's claim and is routinely
+      backdated by years.
 
 - [x] **D4 · Reporting an outsider will read.** DONE. `reports.outsider_narrative()`
       writes what changed this period, what was seen and what was actioned as
@@ -2158,6 +2161,39 @@ not one-off tasks:
 ## CHANGELOG (done)
 
 _Move completed items here with the date so the roadmap stays honest._
+
+- **2026-09-13 · A saved CTI hunt can now be a watchlist, and "new" means new to
+  US.** Scheduling had only ever worked for SIEM hunts, so the one question a
+  threat researcher wants re-asked every week - *has anything new landed that
+  matches my hypothesis?* - was the one thing that could not be.
+
+  The hard part was not the schedule, it was the word "new". `iocs.first_seen`
+  is the SOURCE's claim about the wider world and is routinely backdated by
+  years: a feed publishing a 2019 address today would never register as new to a
+  watchlist that trusted it. Indicators now carry **`imported_at`** - when the
+  value entered THIS store, on our own clock - stamped at the single canonical
+  insert point, so no caller can forget it. NULL on every row that predates the
+  column, which is exactly right: already here before anyone was watching is not
+  new.
+
+  ```
+  run 1  baseline, 2 already present       -> silent
+  run 2  nothing arrived                   -> silent
+  run 3  3 arrived, all backdated to 2019  -> "Watchlist matched: ... (3 new)"
+  run 4  five minutes later, not due       -> did not run
+  ```
+
+  A match raises a **notification, not a SIEM alert**, and that distinction is
+  the point. A SIEM alert says something happened on this network; a new
+  indicator matching a standing hypothesis says the world changed. Filing the
+  second as the first puts intel into the queue an analyst triages as detections.
+  Grouped per hunt, so a feed sync landing two hundred matching indicators is one
+  line that says two hundred.
+
+  Unlike the SIEM path there is deliberately no first-run announcement. A SIEM
+  hunt's window is twenty-four hours, so "what is here now" is worth one alert;
+  the indicator store is half a million rows deep, where the same courtesy would
+  be a backlog dump.
 
 - **2026-09-12 · A CTI hunt returned the whole store and reported the page
   size.** Two bugs wearing each other as cover, found while extending scheduled

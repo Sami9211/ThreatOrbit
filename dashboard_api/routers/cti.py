@@ -1721,6 +1721,45 @@ def run_hunt(hunt_id: str, user: dict = Depends(require_perm("cti.write"))):
     return result
 
 
+class WatchlistSchedule(BaseModel):
+    schedule_minutes: int = 0
+    auto_alert: bool = True
+
+
+@router.post("/hunts/{hunt_id}/schedule")
+def schedule_watchlist(hunt_id: str, body: WatchlistSchedule,
+                       user: dict = Depends(require_perm("cti.write"))):
+    """Put a saved CTI hunt on a schedule, turning it into a watchlist.
+
+    A SIEM hunt on a schedule is a detection over time - it asks what happened
+    on this network. A CTI hunt on a schedule asks a different question: has
+    anything NEW entered the indicator store that matches my standing
+    hypothesis? That is what a threat researcher actually wants re-run weekly,
+    and it is why a match here raises a notification rather than a SIEM alert.
+
+    0 turns it off.
+    """
+    if body.schedule_minutes < 0 or body.schedule_minutes > 10080:
+        raise HTTPException(status_code=400, detail="schedule_minutes must be 0..10080")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE saved_hunts SET schedule_minutes=?, auto_alert=?, "
+            "status=CASE WHEN ?>0 THEN 'scheduled' ELSE 'idle' END "
+            "WHERE id=? AND domain='cti'",
+            (body.schedule_minutes, 1 if body.auto_alert else 0,
+             body.schedule_minutes, hunt_id))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Hunt not found")
+        audit(conn, user["email"], "watchlist.schedule", hunt_id,
+              f"every={body.schedule_minutes}m")
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, name, description AS hypothesis, query, technique, "
+            "schedule_minutes, auto_alert, last_scheduled, status "
+            "FROM saved_hunts WHERE id=?", (hunt_id,)).fetchone()
+    return row_to_dict(row)
+
+
 @router.get("/graph")
 def relationship_graph(limit: int = Query(120, le=600),
                        focus: str | None = None, depth: int = Query(2, ge=1, le=4)):

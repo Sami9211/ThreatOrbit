@@ -43,6 +43,11 @@ COLUMNS = (
     # Derived from `value` + `type` - never passed in, so they cannot be forgotten.
     "host", "ip_hex", "reg_domain",
     "intel_score",
+    # WHEN THIS ENTERED OUR STORE, which `first_seen` is not: that is the
+    # source's claim and is routinely backdated years. A watchlist asking "what
+    # is new since I last looked" has to key off our own clock, or an indicator
+    # imported today carrying a 2019 first_seen is never new to anyone.
+    "imported_at",
 )
 
 
@@ -92,7 +97,7 @@ def ioc_row(*, type: str, value: str, threat_type: str = "malicious-activity",
         tags if isinstance(tags, str) else dumps(list(tags or [])),
         status, sightings, report_id, org_id,
         host_of(value, type), ip_hex_of(value, type), reg_domain_of(value, type),
-        score,
+        score, now,
     )
 
 

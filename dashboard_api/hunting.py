@@ -383,7 +383,7 @@ def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
     from dashboard_api.detections import _insert_alert
     now = now or datetime.now(timezone.utc)
     rows = conn.execute(
-        "SELECT * FROM saved_hunts WHERE domain='siem' AND schedule_minutes > 0").fetchall()
+        "SELECT * FROM saved_hunts WHERE schedule_minutes > 0").fetchall()
     ran = alerts = 0
     for h in rows:
         last = h["last_scheduled"]
@@ -399,6 +399,9 @@ def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
         if not due:
             continue
         query = " ".join(filter(None, [h["query"], h["technique"]]))
+        if h["domain"] == "cti":
+            ran += _run_cti_watchlist(conn, h, query, last, now)
+            continue
         # The first scheduled run has no previous look to compare against, so
         # everything the window holds counts as new. That is deliberate: an
         # analyst who has just put a hunt on a schedule should be told if it
@@ -436,7 +439,49 @@ def run_due_scheduled_hunts(conn, *, now: datetime | None = None) -> dict:
     return {"ran": ran, "alerts": alerts}
 
 
-def run_ioc_hunt(query: str, limit: int = 50) -> dict:
+def _strip_total(rows) -> list[dict]:
+    """Drop the window-function count so it never looks like an indicator field."""
+    return [{k: v for k, v in r.items() if k != "_total"} for r in rows_to_dicts(rows)]
+
+
+def _run_cti_watchlist(conn, h, query: str, last, now: datetime) -> int:
+    """A saved CTI hunt on a schedule is a watchlist over the indicator store.
+
+    It gets a NOTIFICATION rather than a SIEM alert, and that distinction is the
+    point. A SIEM alert says something happened on this network; a new indicator
+    matching a standing hypothesis says the world changed, and filing the second
+    as the first puts intel into the queue an analyst triages as detections.
+
+    Grouped under one key per hunt, so a feed sync that lands two hundred
+    matching indicators at once is one line that says two hundred - the same
+    treatment every other burst in this platform gets.
+    """
+    from dashboard_api.routers.platform import notify
+    result = run_ioc_hunt(query, limit=50, since_iso=str(last) if last else None)
+    nowiso = now.replace(microsecond=0).isoformat()
+    # A watchlist reports what is NEW. Unlike the SIEM path there is no
+    # first-run alert: the indicator store is half a million rows deep, so
+    # "everything matching, ever" is a backlog rather than news.
+    new_hits = result.get("newHits", 0) if last else 0
+    conn.execute(
+        "UPDATE saved_hunts SET last_scheduled=?, last_run=?, hit_count=?, "
+        "status='scheduled' WHERE id=?", (nowiso, nowiso, result["hits"], h["id"]))
+    if new_hits > 0 and h["auto_alert"]:
+        top = (result.get("newResults") or [{}])[0]
+        notify(conn, type="cti.watchlist", severity="info",
+               title=f"Watchlist matched: {h['name']} ({new_hits} new)",
+               detail=(f"{new_hits} new indicator(s) entered the store matching "
+                       f"'{query}'; {result['hits']:,} match in total. "
+                       f"Most recent: {top.get('value', '-')}"),
+               link=f"/dashboard/cti/hunts?hunt={h['id']}",
+               group_key=f"watchlist:{h['id']}",
+               rollup_title="{n} new matches for " + str(h["name"]),
+               rollup_link=f"/dashboard/cti/hunts?hunt={h['id']}",
+               org_id=h["org_id"] or "org-default")
+    return 1
+
+
+def run_ioc_hunt(query: str, limit: int = 50, since_iso: str | None = None) -> dict:
     """Match extracted tokens against the IOC store. Returns real IOCs.
 
     `hits` is a real COUNT over the whole store, not the length of the page.
@@ -445,6 +490,12 @@ def run_ioc_hunt(query: str, limit: int = 50) -> dict:
     "phishing" reported **50 hits against 149,747 matches**, and the saved hunt
     carried that 50 forward as its recorded result. A number that is the page
     size dressed up as a finding is worse than no number.
+
+    `since_iso` adds `newHits`: matches that entered THIS store after that
+    moment. Keyed on `imported_at`, not `first_seen` - the latter is the
+    source's claim about the wider world and is routinely backdated by years, so
+    a feed publishing a 2019 address today would never count as new to a
+    watchlist that trusted it.
     """
     started = time.perf_counter()
     tokens = extract_tokens(query)
@@ -471,9 +522,12 @@ def run_ioc_hunt(query: str, limit: int = 50) -> dict:
         # confident answer; an empty result is the honest one.
         with get_conn() as conn:
             scanned = conn.execute("SELECT COUNT(*) AS n FROM iocs").fetchone()["n"]
-        return {"scanned": scanned, "hits": 0, "shown": 0,
-                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
-                "tokens": tokens, "results": []}
+        out = {"scanned": scanned, "hits": 0, "shown": 0,
+               "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+               "tokens": tokens, "results": []}
+        if since_iso:
+            out["newHits"], out["newResults"] = 0, []
+        return out
     where = "WHERE " + " AND ".join(clauses)
 
     with get_conn() as conn:
@@ -491,6 +545,17 @@ def run_ioc_hunt(query: str, limit: int = 50) -> dict:
             f"ORDER BY intel_score DESC, confidence DESC LIMIT ?",
             params + [limit]).fetchall()
         hits = rows[0]["_total"] if rows else 0
+        new_rows, new_hits = [], 0
+        if since_iso:
+            # The same predicate, narrowed to what arrived since the caller last
+            # looked. A separate query rather than a filter over `rows`: that is
+            # one page ordered by score, and a new arrival is not necessarily on
+            # it.
+            new_rows = conn.execute(
+                f"SELECT *, COUNT(*) OVER () AS _total FROM iocs {where} "
+                f"AND imported_at > ? ORDER BY imported_at DESC LIMIT ?",
+                params + [since_iso, limit]).fetchall()
+            new_hits = new_rows[0]["_total"] if new_rows else 0
 
     return {
         "scanned": scanned,
@@ -499,6 +564,7 @@ def run_ioc_hunt(query: str, limit: int = 50) -> dict:
         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
         "tokens": tokens,
         # `_total` is the window-function column, not part of an indicator.
-        "results": [{k: v for k, v in r.items() if k != "_total"}
-                    for r in rows_to_dicts(rows)],
+        "results": _strip_total(rows),
+        **({"newHits": new_hits, "newResults": _strip_total(new_rows)}
+           if since_iso else {}),
     }

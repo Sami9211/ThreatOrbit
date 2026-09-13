@@ -21,7 +21,7 @@ from dashboard_api.config import DB_PATH
 # against a DB that is NEWER than it understands (an older binary rolled back
 # onto a newer schema) unless DASHBOARD_ALLOW_SCHEMA_DOWNGRADE is set. Migrations
 # are additive-only, so a normal upgrade just applies the new columns and bumps.
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 
 class SchemaVersionError(RuntimeError):
@@ -450,7 +450,13 @@ CREATE TABLE IF NOT EXISTS iocs (
     -- Hostname of a `url` indicator, extracted at insert. Lets "is this domain
     -- known-bad?" find URLs hosted on it with an indexed equality match instead
     -- of three leading-wildcard LIKEs over the whole table.
-    host        TEXT
+    host        TEXT,
+    -- When it entered THIS store, as distinct from `first_seen`, which is the
+    -- source's claim about the wider world and is routinely backdated by years.
+    -- A watchlist asking "what is new since I last looked" has to key off our
+    -- own clock. NULL on rows that predate the column: already here before
+    -- anyone was watching, which is not new.
+    imported_at TEXT
 );
 
 -- Which SOURCES asserted a given indicator value, one row per (value, source).
@@ -1058,6 +1064,8 @@ CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(username);
 CREATE INDEX IF NOT EXISTS idx_alerts_ti_value ON alerts(ti_value);
 CREATE INDEX IF NOT EXISTS idx_iocs_value ON iocs(value);
 CREATE INDEX IF NOT EXISTS idx_iocs_status ON iocs(status);
+-- Scheduled watchlists ask "what arrived since I last looked" on every run.
+CREATE INDEX IF NOT EXISTS idx_iocs_imported_at ON iocs(imported_at);
 CREATE INDEX IF NOT EXISTS idx_iocs_actor ON iocs(actor);
 -- Browse order. The CTI list pages with ORDER BY last_seen, id; without a
 -- matching index every request built a temp B-tree over the WHOLE table, so
@@ -1337,6 +1345,11 @@ _MIGRATIONS = [
     # Who reported an ATT&CK group or campaign. Pulled out of MITRE's prose,
     # where it arrives inline as (Citation: Vendor-Report-Year), rather than
     # deleted from it: the citations are the evidence behind the paragraph.
+    # When an indicator entered THIS store, as distinct from `first_seen`, which
+    # is the source's claim about the wider world and is routinely backdated.
+    # NULL on every row that predates the column, which is exactly right for a
+    # watchlist: "already here before anyone was watching" is not new.
+    ("iocs", "imported_at", "TEXT"),
     ("attack_group", "citations", "TEXT NOT NULL DEFAULT '[]'"),
     ("attack_campaign", "citations", "TEXT NOT NULL DEFAULT '[]'"),
     ("intel_sources", "reliability_reason", "TEXT"),

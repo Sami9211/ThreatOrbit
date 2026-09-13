@@ -98,6 +98,7 @@
     "/cti/graph/path",
     "/cti/hunts",
     "/cti/hunts/{hunt_id}/run",
+    "/cti/hunts/{hunt_id}/schedule",
     "/cti/import-history",
     "/cti/ioc-types",
     "/cti/iocs",
