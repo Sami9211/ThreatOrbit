@@ -1,7 +1,7 @@
 # Base image pinned by digest (supply-chain integrity): the tag is mutable, the
 # digest is not, so a build can't silently pick up a re-pushed base. Dependabot's
 # docker ecosystem bumps both the tag and the digest when a new image ships.
-FROM python:3.11-slim@sha256:ae52c5bef62a6bdd42cd1e8dffef86b9cd284bde9427da79839de7a4b983e7ca
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535
 
 WORKDIR /app
 # Install from the hash-pinned lockfile (reproducible, tamper-evident builds);
